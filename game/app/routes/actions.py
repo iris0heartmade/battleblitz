@@ -403,6 +403,9 @@ async def use_skill(
     body: SkillRequest,
     session: AsyncSession = Depends(get_session),
 ) -> SkillResult:
+    from app.classes.units.skills import get as _get_skill
+    from app.classes.units.skills.base import SkillContext as _SkillCtx
+
     game = await _load_active_game(session, game_id)
     player = await _ensure_current_player(session, game, body.player_id)
     unit = await _load_unit(session, body.unit_id)
@@ -412,90 +415,51 @@ async def use_skill(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
     await _check_action_budget(session, player, unit)
 
-    skill = body.skill
-    if skill not in (unit.skills or []):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unit does not have skill '{skill}'")
+    skill_id = body.skill
+    try:
+        sk = _get_skill(skill_id)
+    except KeyError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown skill '{skill_id}'")
+    if skill_id not in (unit.skills or []):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unit does not have skill '{skill_id}'")
+    if sk.is_passive:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{skill_id}' is passive; use attack endpoint")
 
-    # Skills that cost action: heal, rally. snipe/double_strike are passive.
-    if skill == SKILL_HEAL:
-        if body.target_id is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "heal requires target_id")
-        ally = await _load_unit(session, body.target_id)
-        if ally.player_id != player.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "can only heal your own units")
-        restored = heal_adjacent_ally(unit, ally)
-        if restored == 0:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "target not adjacent / already full HP")
-        unit.has_acted = True
-        unit.mp = 0  # skills consume remaining MP
-        _log(session, game, player, "skill",
-             f"{unit.name} healed {ally.name} for {restored} HP")
-        # Publish to event bus
-        await bus.publish(GameEvent(
-            type="skill", game_id=game_id, turn=game.turn_number,
-            actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
-            target_player_id=ally.player_id, target_unit_id=ally.id, target_name=ally.name,
-            context={"skill": "heal", "restored_hp": restored},
-        ))
-        audit.info(
-            "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
-            "skill=%s | unit=%d | target=%d | restored_hp=%d",
-            player.id, game_id, skill, unit.id, ally.id, restored,
-        )
-        return SkillResult(
-            unit_id=unit.id, skill=skill, target_unit_id=ally.id,
-            restored_hp=restored,
-            description=f"{unit.name} healed {ally.name} for {restored} HP",
-        )
+    # Resolve target
+    target = await _load_unit(session, body.target_id) if body.target_id is not None else None
 
-    if skill == SKILL_RALLY:
-        # +10% ATK to adjacent allies for this turn (apply buff to unit + adjacent allies)
-        affected: List[int] = []
-        adjacent_tiles = [
-            (unit.x + dx, unit.y + dy)
-            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
-            if (dx, dy) != (0, 0)
-        ]
-        tiles = (
-            await session.execute(
-                select(Tile).where(
-                    Tile.game_id == game_id,
-                    Tile.x.in_([c[0] for c in adjacent_tiles]),
-                    Tile.y.in_([c[1] for c in adjacent_tiles]),
-                )
-            )
-        ).scalars().all()
-        affected_ids = [t.occupied_unit_id for t in tiles if t.occupied_unit_id is not None]
-        for uid in affected_ids:
-            u = await session.get(Unit, uid)
-            if u and u.player_id == player.id and u.hp > 0:
-                u.atk = int(round(u.atk * 1.10))
-                affected.append(u.id)
-        unit.has_acted = True
-        unit.mp = 0
-        _log(session, game, player, "skill",
-             f"{unit.name} rallied: buffed {len(affected)} adjacent allies (+10% ATK)")
-        # Publish to event bus
-        await bus.publish(GameEvent(
-            type="skill", game_id=game_id, turn=game.turn_number,
-            actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
-            context={"skill": "rally", "affected_count": len(affected)},
-        ))
-        audit.info(
-            "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
-            "skill=%s | unit=%d | affected_count=%d",
-            player.id, game_id, skill, unit.id, len(affected),
-        )
-        return SkillResult(
-            unit_id=unit.id, skill=skill, target_unit_id=None,
-            restored_hp=0,
-            description=f"{unit.name} rallied {len(affected)} allies",
-        )
+    # Build context
+    all_players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    all_units = (await session.execute(
+        select(Unit).where(Unit.player_id.in_([p.id for p in all_players]))
+    )).scalars().all()
+    ctx = _SkillCtx(
+        user=unit, target=target,
+        ally_units=[u for u in all_units if u.player_id == player.id and u.hp > 0],
+        enemy_units=[u for u in all_units if u.player_id != player.id and u.hp > 0],
+    )
 
-    if skill in (SKILL_DOUBLE_STRIKE, "snipe"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{skill}' is passive; use attack endpoint")
+    if not sk.can_use(ctx):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"skill '{skill_id}' cannot be used right now")
 
-    raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown skill '{skill}'")
+    result = await sk.execute(session, ctx)
+    if not result.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, result.description or "skill failed")
+
+    _log(session, game, player, "skill", result.description)
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
+        "skill=%s | unit=%d",
+        player.id, game_id, skill_id, unit.id,
+    )
+    return SkillResult(
+        unit_id=unit.id, skill=skill_id, target_unit_id=body.target_id,
+        restored_hp=result.restored_hp,
+        description=result.description,
+    )
 
 
 # ============================================================

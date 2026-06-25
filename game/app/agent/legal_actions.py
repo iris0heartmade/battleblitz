@@ -31,8 +31,6 @@ from app.config import (
     TERRAIN_FOREST,
     TERRAIN_MOUNTAIN,
     TERRAIN_RIVER,
-    UNIT_ARCHER,
-    UNIT_HEALER,
 )
 from app.game_logic import (
     calculate_damage,
@@ -205,43 +203,37 @@ def _legal_actions_for_unit(
             dmg_estimate=dmg_est,
         ))
 
-    # 4. Skills
-    for skill in (unit.skills or []):
-        if skill == SKILL_HEAL and unit.unit_type == UNIT_HEALER:
-            # Heal adjacent wounded ally
+    # 4. Active skills (from skill registry)
+    from app.classes.units.skills import get_active_for
+    from app.classes.units.skills.base import SkillContext as _SkillCtx
+    for sk in get_active_for(unit):
+        # Build targets per skill
+        targets = []
+        if sk.skill_id == "heal":
             for a in ally_units:
                 if a.id == unit.id or a.hp <= 0 or a.hp >= a.max_hp:
                     continue
                 if chebyshev((unit.x, unit.y), (a.x, a.y)) != 1:
                     continue
-                deficit = a.max_hp - a.hp
+                ctx = _SkillCtx(user=unit, target=a, ally_units=ally_units)
+                if sk.can_use(ctx):
+                    targets.append(a)
+            for a in targets:
                 actions.append(LegalAction(
                     action_id=f"skill_heal_{unit.id}_{a.id}",
-                    kind="skill",
-                    unit_id=unit.id,
+                    kind="skill", unit_id=unit.id,
                     params={"skill": "heal", "target_id": a.id},
-                    description=f"💚+{min(20, deficit)} {a.name[:4]}",
+                    description=sk.describe(_SkillCtx(user=unit, target=a)),
                 ))
-
-        elif skill == SKILL_RALLY and unit.unit_type == UNIT_HEALER:
-            # Rally adjacent allies (buff ATK)
-            nearby = any(
-                chebyshev((unit.x, unit.y), (a.x, a.y)) == 1
-                for a in ally_units if a.id != unit.id and a.hp > 0
-            )
-            if nearby:
+        elif sk.skill_id == "rally":
+            ctx = _SkillCtx(user=unit, ally_units=ally_units)
+            if sk.can_use(ctx):
                 actions.append(LegalAction(
                     action_id=f"skill_rally_{unit.id}",
-                    kind="skill",
-                    unit_id=unit.id,
+                    kind="skill", unit_id=unit.id,
                     params={"skill": "rally"},
-                    description="📯+10%攻",
+                    description=sk.describe(ctx),
                 ))
-
-        elif skill == SKILL_DOUBLE_STRIKE and unit.unit_type.lower() == "knight":
-            # Already covered by attack; double-strike is auto-applied
-            # in attack_with_double_strike, so no separate action.
-            pass
 
     return actions
 

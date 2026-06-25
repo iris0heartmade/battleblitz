@@ -162,6 +162,24 @@ async function loadPresets() {
   return state.presets;
 }
 
+async function fetchUnitClasses() {
+  if (Object.keys(UNIT_CLASSES).length > 0) return;
+  try {
+    const units = await api("GET", "/games/units");
+    for (const u of units) {
+      UNIT_CLASSES[u.type_id] = u;
+      CAN_MOVE_AFTER[u.type_id] = u.can_move_after_action;
+    }
+    const skills = await api("GET", "/games/skills");
+    for (const s of skills) {
+      SKILL_REF.push({ name: `${s.display_cn} (${s.skill_id})`, desc: `${s.is_passive ? "被动" : "主动"} · 默认拥有: ${(s.default_users||[]).join(",")}` });
+      SKILL_MAP[s.skill_id] = s.display_cn;
+    }
+  } catch (e) {
+    // fallback
+  }
+}
+
 async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
@@ -813,7 +831,7 @@ function showPostMoveBubble(unit) {
   }
   enemyList.sort((a, b) => a.hp - b.hp);
 
-  const canContinue = unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type];
+  const canContinue = unit.mp > 0 && unitCanMoveAfter(unit.unit_type);
   const hasContent = enemyList.length > 0 || canContinue;
   if (!hasContent) {
     hideBubble();
@@ -846,7 +864,7 @@ function showPostMoveBubble(unit) {
 function showPostAttackBubble(unit) {
   // Called after a successful attack. Only offered if class can move after
   // action and MP remains. Otherwise close.
-  if (!(unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type])) {
+  if (!(unit.mp > 0 && unitCanMoveAfter(unit.unit_type))) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
@@ -1291,13 +1309,9 @@ function renderActionLog(st) {
 
 // ----- Reference panel -----
 
-// Mirrors app.config.UNIT_CAN_MOVE_AFTER_ACTION
-const CAN_MOVE_AFTER = {
-  swordsman: false,
-  archer:    true,
-  knight:    true,
-  healer:    false,
-};
+// Unit class metadata — fetched from /units endpoint at startup.
+let UNIT_CLASSES = {};  // type_id → { glyph, display_cn, can_move_after_action, attack_range, ... }
+let CAN_MOVE_AFTER = {};  // built from UNIT_CLASSES
 
 const TERRAIN_REF = [
   { id: "plain",    name: "平地",   color: "#cfe5b6", move: 1, def: 0, note: "通用地形，无加成" },
@@ -1307,23 +1321,7 @@ const TERRAIN_REF = [
   { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "防御+5，需占 1 回合" },
 ];
 
-const UNIT_REF = [
-  { glyph: "剑", color: "var(--p-blue)",  name: "剑士",  hp: 80, atk: 18, def: 15, mov: 3, range: "近战 1",
-    skills: [], desc: "均衡的近战单位" },
-  { glyph: "弓", color: "var(--p-green)", name: "弓箭手", hp: 60, atk: 20, def:  8, mov: 3, range: "远程 2",
-    skills: ["狙击（+1射程）"], desc: "远程输出，怕近身" },
-  { glyph: "骑", color: "var(--p-red)",   name: "骑士",  hp: 90, atk: 22, def: 10, mov: 5, range: "近战 1",
-    skills: ["连击（两次50%伤害）"], desc: "高移速高攻，但防御低" },
-  { glyph: "疗", color: "var(--p-yellow)", name: "治疗师", hp: 70, atk: 5,  def: 10, mov: 3, range: "无",
-    skills: ["治愈（+20HP）", "集结（+10%ATK）"], desc: "辅助型，无攻击力" },
-];
-
-const SKILL_REF = [
-  { name: "连击 (double_strike)", desc: "攻击两次，每次 50% 伤害。骑士默认拥有。" },
-  { name: "狙击 (snipe)", desc: "攻击射程 +1。弓箭手默认拥有。" },
-  { name: "治愈 (heal)", desc: "对相邻友军恢复 20 HP（消耗本回合行动）。治疗师默认拥有。" },
-  { name: "集结 (rally)", desc: "相邻友军本回合攻击 +10%（消耗本回合行动）。治疗师默认拥有。" },
-];
+let SKILL_REF = [];  // fetched from /skills endpoint
 
 function renderRefContent() {
   const el = document.getElementById("ref-content");
@@ -1339,17 +1337,20 @@ function renderRefContent() {
       </div>
     `).join("");
   } else if (state.refTab === "units") {
-    el.innerHTML = UNIT_REF.map(u => `
-      <div class="ref-unit">
-        <div class="glyph" style="background:${u.color}">${u.glyph}</div>
-        <div class="info">
-          <div class="name">${u.name} <span class="muted small">(${u.range})</span></div>
-          <div class="stats">HP ${u.hp} · ATK ${u.atk} · DEF ${u.def} · MOV ${u.mov}</div>
-          <div class="stats" style="margin-top:2px">${u.desc}</div>
-          ${u.skills.length ? `<div class="skills">技能：${u.skills.join("、")}</div>` : ""}
-        </div>
-      </div>
-    `).join("");
+    const colors = { swordsman: "var(--p-blue)", archer: "var(--p-green)", knight: "var(--p-red)", healer: "var(--p-yellow)" };
+    el.innerHTML = Object.values(UNIT_CLASSES).map(u => {
+      const rangeText = u.attack_range === 0 ? "无" : `射程 ${u.attack_range}`;
+      const skillNames = (u.default_skills || []).map(skillName).join("、");
+      return `
+        <div class="ref-unit">
+          <div class="glyph" style="background:${colors[u.type_id] || "#888"}">${u.glyph}</div>
+          <div class="info">
+            <div class="name">${u.display_cn} <span class="muted small">(${rangeText})</span></div>
+            <div class="stats">HP ${u.base_hp} · ATK ${u.base_atk} · DEF ${u.base_def} · MOV ${u.base_mov}</div>
+            ${skillNames ? `<div class="skills">技能：${skillNames}</div>` : ""}
+          </div>
+        </div>`;
+    }).join("");
   } else if (state.refTab === "skills") {
     el.innerHTML = SKILL_REF.map(s => `
       <div class="ref-skill">
@@ -1381,18 +1382,17 @@ function playerColorCss(c) {
 }
 
 function unitGlyph(type) {
-  return ({ swordsman: "剑", archer: "弓", knight: "骑", healer: "疗" })[type] || "?";
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].glyph) || "?";
 }
 function unitTypeName(type) {
-  return ({ swordsman: "剑士", archer: "弓箭手", knight: "骑士", healer: "治疗师" })[type] || type;
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].display_cn) || type;
 }
+function unitCanMoveAfter(type) {
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].can_move_after_action) || false;
+}
+let SKILL_MAP = {};
 function skillName(s) {
-  return ({
-    double_strike: "连击",
-    snipe: "狙击",
-    heal: "治愈",
-    rally: "集结",
-  })[s] || s;
+  return SKILL_MAP[s] || s;
 }
 
 // ============================================================
@@ -1417,8 +1417,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderRefContent();
     });
   });
-  // Settings first
+  // Settings first + fetch unit metadata
   renderSettings();
+  fetchUnitClasses();
 
   // Delegate click handlers via data-action
   document.body.addEventListener("click", async (e) => {

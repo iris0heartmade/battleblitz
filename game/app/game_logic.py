@@ -14,48 +14,26 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.classes.units import get as _get_unit, type_advantage as _type_adv
 from app.config import (
-    AI_AGGRO_RANGE,
-    AI_MAX_ACTIONS_PER_TURN,
-    AI_SKILL_HEAL_THRESHOLD_HP,
-    ARCHER_BASE_RANGE,
-    BASE_CRIT_RATE,
-    CASTLES_PER_GAME,
-    CASTLE_NEIGHBOR_RADIUS,
-    CRIT_MULTIPLIER,
-    CRIT_PER_LEVEL,
-    DEFAULT_MELEE_RANGE,
-    EXP_PER_ASSIST,
-    EXP_PER_KILL,
-    EXP_TO_LEVEL,
-    LEVEL_UP_BONUS_POINTS,
-    LEVEL_UP_STAT_BONUS,
-    MAX_LEVEL,
-    MAP_SIZE,
-    MORALE_ATK_PER_STAR,
-    MORALE_DEF_PER_STAR,
-    MORALE_MAX,
-    SKILL_DOUBLE_STRIKE,
-    SKILL_HEAL,
-    SKILL_RALLY,
-    SKILL_SNIPE,
-    STARTING_ROSTER,
-    TERRAIN_CASTLE,
-    TERRAIN_DEF_BONUS,
-    TERRAIN_FOREST,
-    TERRAIN_MOUNTAIN,
-    TERRAIN_PLAIN,
-    TERRAIN_RIVER,
-    TERRAIN_SPAWN_WEIGHTS,
-    TYPE_ADVANTAGE,
-    UNIT_BASE_STATS,
-    UNIT_CAN_MOVE_AFTER_ACTION,
-    UNIT_DEFAULT_SKILLS,
-    UNIT_DISPLAY_NAMES,
-    UNIT_HEALER,
-    UNIT_KNIGHT,
-    UNIT_MP_POOL,
+    AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN, AI_SKILL_HEAL_THRESHOLD_HP,
+    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS,
+    CRIT_MULTIPLIER, CRIT_PER_LEVEL, DEFAULT_MELEE_RANGE,
+    EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
+    LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAX_LEVEL, MAP_SIZE,
+    MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
+    SKILL_DOUBLE_STRIKE, SKILL_HEAL, SKILL_RALLY, SKILL_SNIPE,
+    TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
+    TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER, TERRAIN_SPAWN_WEIGHTS,
 )
+# Aliases for backward compat (backed by app.classes.units)
+from app.config import (STARTING_ROSTER, UNIT_BASE_STATS,
+    UNIT_CAN_MOVE_AFTER_ACTION, UNIT_DEFAULT_SKILLS, UNIT_DISPLAY_NAMES,
+    UNIT_MP_POOL, TYPE_ADVANTAGE)
+
+UNIT_HEALER = "healer"
+UNIT_KNIGHT = "knight"
+
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.utils import bfs_reachable, chebyshev, has_line_of_sight, pathfind
 
@@ -204,15 +182,16 @@ class DamageResult:
 
 
 def unit_attack_range(unit: Unit) -> int:
-    """Effective attack range for this unit (archer + Snipe bonus)."""
-    base = ARCHER_BASE_RANGE if unit.unit_type == "archer" else DEFAULT_MELEE_RANGE
-    if SKILL_SNIPE in (unit.skills or []):
-        base += 1
+    """Effective attack range (class profile + passive skill modifiers)."""
+    from app.classes.units.skills import get_passive_for
+    base = _get_unit(unit.unit_type).attack_range
+    for sk in get_passive_for(unit):
+        base = sk.modify_attack_range(base, unit)
     return base
 
 
 def _type_multiplier(attacker: Unit, defender: Unit) -> float:
-    return TYPE_ADVANTAGE.get((attacker.unit_type, defender.unit_type), 1.0)
+    return _type_adv(attacker.unit_type, defender.unit_type)
 
 
 def _crit_chance(unit: Unit) -> float:
@@ -710,31 +689,17 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
 # Unit-composition presets
 # ============================================================
 
+# ── Delegated to app.classes.units ──
+from app.classes.units import list_compositions as _list_compositions
+from app.classes.units import get_roster_for_composition as _unit_get_roster
+
 UNIT_COMPOSITIONS: Dict[str, Dict] = {
-    "classic": {
-        "id": "classic", "name": "经典平衡", "description": "2 剑士 / 1 弓 / 1 骑 / 1 治疗",
-        "roster": {"swordsman": 2, "archer": 1, "knight": 1, "healer": 1}
-    },
-    "aggressive": {
-        "id": "aggressive", "name": "进攻阵型", "description": "1 剑士 / 1 弓 / 3 骑 / 0 治疗",
-        "roster": {"swordsman": 1, "archer": 1, "knight": 3, "healer": 0}
-    },
-    "defensive": {
-        "id": "defensive", "name": "防御阵型", "description": "3 剑士 / 1 弓 / 0 骑 / 1 治疗",
-        "roster": {"swordsman": 3, "archer": 1, "knight": 0, "healer": 1}
-    },
-    "ranged": {
-        "id": "ranged", "name": "远程火力", "description": "2 剑士 / 2 弓 / 1 骑 / 0 治疗",
-        "roster": {"swordsman": 2, "archer": 2, "knight": 1, "healer": 0}
-    },
+    c["id"]: {**c, "roster": _unit_get_roster(c["id"])}
+    for c in _list_compositions()
 }
 
-
 def get_roster_for_composition(composition_id: Optional[str]) -> Dict[str, int]:
-    """Return the unit-type -> count dict to use for spawning."""
-    if composition_id and composition_id in UNIT_COMPOSITIONS:
-        return dict(UNIT_COMPOSITIONS[composition_id]["roster"])
-    return dict(STARTING_ROSTER)
+    return _unit_get_roster(composition_id)
 
 
 # Override create_initial_units to honour an explicit roster

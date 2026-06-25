@@ -292,17 +292,59 @@ async def list_games(
 @router.get("/presets", response_model=PresetsResponse)
 async def list_presets() -> PresetsResponse:
     """Return available map and unit-composition presets for the create-game form."""
-    from app.game_logic import MAP_PRESETS, UNIT_COMPOSITIONS
+    from app.classes.units import list_compositions
+    from app.game_logic import MAP_PRESETS
     return PresetsResponse(
         maps=[
             PresetInfo(id=p["id"], name=p["name"], description=p["description"])
             for p in MAP_PRESETS.values()
         ],
         unit_compositions=[
-            PresetInfo(id=p["id"], name=p["name"], description=p["description"])
-            for p in UNIT_COMPOSITIONS.values()
+            PresetInfo(id=c["id"], name=c["name"], description=c["description"])
+            for c in list_compositions()
         ],
     )
+
+
+@router.get("/skills")
+async def list_skills():
+    """Return metadata for all skills (for frontend reference panel)."""
+    from app.classes.units.skills import list_all as _list_all_skills
+    return [
+        {
+            "skill_id": s.skill_id,
+            "display_cn": s.display_cn,
+            "display_en": s.display_en,
+            "is_passive": s.is_passive,
+            "default_users": s.default_users,
+        }
+        for s in _list_all_skills()
+    ]
+
+
+@router.get("/units")
+async def list_unit_classes():
+    """Return metadata for all unit classes (glyph, skills, stats, etc.).
+    The frontend uses this to render units without hardcoding type info."""
+    from app.classes.units import list_all
+    return [
+        {
+            "type_id": u.type_id,
+            "display_cn": u.display_cn,
+            "display_en": u.display_en,
+            "glyph": u.glyph,
+            "base_hp": u.base_hp,
+            "base_atk": u.base_atk,
+            "base_def": u.base_def,
+            "base_mov": u.base_mov,
+            "mp_pool": u.mp_pool,
+            "attack_range": u.attack_range,
+            "can_move_after_action": u.can_move_after_action,
+            "default_skills": list(u.default_skills),
+            "strong_against": list(u.strong_against),
+        }
+        for u in list_all()
+    ]
 
 
 @router.post("/{game_id}/add-ai", response_model=PlayerOut, status_code=status.HTTP_201_CREATED)
