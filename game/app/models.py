@@ -10,6 +10,7 @@ Schema notes:
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -31,6 +32,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -94,6 +97,12 @@ class Player(Base):
     seat: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # True if this slot is controlled by the built-in AI (no real client).
     is_ai: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # "rules" (built-in rule-based AI) or "llm" (LLMAgent from app.agent).
+    # Only meaningful when is_ai=True; humans ignore it.
+    agent_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="rules")
+    # Personality preset name (e.g. "aggressive" / "defensive" / "balanced"
+    # / "trickster"); only used when agent_kind == "llm".
+    agent_personality: Mapped[str] = mapped_column(String(32), nullable=False, default="balanced")
 
     game: Mapped["Game"] = relationship("Game", back_populates="players")
     units: Mapped[List["Unit"]] = relationship(
@@ -147,6 +156,9 @@ class Unit(Base):
     y: Mapped[int] = mapped_column(Integer, nullable=False)
 
     has_acted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # True if the unit has moved this turn. Separate from has_acted so
+    # a unit can move AND then attack/heal within the same turn.
+    has_moved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # JSON array of skill strings, e.g. ["snipe", "rally"].
     skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

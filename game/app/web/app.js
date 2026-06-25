@@ -162,6 +162,24 @@ async function loadPresets() {
   return state.presets;
 }
 
+async function fetchUnitClasses() {
+  if (Object.keys(UNIT_CLASSES).length > 0) return;
+  try {
+    const units = await api("GET", "/games/units");
+    for (const u of units) {
+      UNIT_CLASSES[u.type_id] = u;
+      CAN_MOVE_AFTER[u.type_id] = u.can_move_after_action;
+    }
+    const skills = await api("GET", "/games/skills");
+    for (const s of skills) {
+      SKILL_REF.push({ name: `${s.display_cn} (${s.skill_id})`, desc: `${s.is_passive ? "被动" : "主动"} · 默认拥有: ${(s.default_users||[]).join(",")}` });
+      SKILL_MAP[s.skill_id] = s.display_cn;
+    }
+  } catch (e) {
+    // fallback
+  }
+}
+
 async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
@@ -301,7 +319,14 @@ function renderLobby(st) {
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
       <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}</div>
     `;
-    if (p.is_ai) html += `<span class="ai-badge">AI</span>`;
+    if (p.is_ai) {
+      const kind = p.agent_kind || "rules";
+      const pers = p.agent_personality || "balanced";
+      const badgeText = kind === "llm"
+        ? `LLM (${pers})`
+        : "规则 AI";
+      html += `<span class="ai-badge">${badgeText}</span>`;
+    }
     // Only the room creator (seat 0) can remove AI players
     if (p.is_ai && state.me.seat === 0) {
       html += `<button class="remove-btn" data-action="remove-ai" data-player-id="${p.id}" title="移除 AI">✕</button>`;
@@ -318,9 +343,15 @@ function renderLobby(st) {
 
 async function addAIPlayer() {
   const gid = state.me.game_id;
+  const kind = document.getElementById("lobby-ai-kind")?.value || "rules";
+  const personality = document.getElementById("lobby-ai-personality")?.value || "balanced";
   try {
-    await api("POST", `/games/${gid}/add-ai`, { difficulty: "normal" });
-    toast("已加入 AI 电脑");
+    await api("POST", `/games/${gid}/add-ai`, {
+      difficulty: "normal",
+      agent_kind: kind,
+      personality: personality,
+    });
+    toast(`已加入 ${kind === "llm" ? "LLM Agent" : "规则 AI"}`);
     await refreshLobby(gid);
   } catch (e) {
     toast("加入 AI 失败：" + e.message, 3000);
@@ -379,8 +410,10 @@ function renderGame(st) {
   document.getElementById("game-turn").textContent = st.game.turn_number;
   const cur = st.players.find(p => p.id === st.current_player_id);
   const curIsAI = cur?.is_ai;
-  document.getElementById("game-current-player").textContent = `轮到：${cur ? cur.user_name : "—"}${curIsAI ? " 🤖" : ""}`;
-  document.getElementById("game-map-seed").textContent = `种子：${st.game.map_seed}`;
+  document.getElementById("game-current-player").textContent = cur ? `${cur.user_name}${curIsAI ? " 🤖" : ""}` : "—";
+  document.getElementById("game-map-seed").textContent = st.game.map_seed;
+  const mapNameEl = document.getElementById("game-map-name");
+  if (mapNameEl) mapNameEl.textContent = st.game.map_preset || "经典随机";
 
   // Show "AI thinking" badge when current player is AI and game is playing
   const thinkingEl = document.getElementById("game-thinking");
@@ -452,25 +485,23 @@ function showTurnBanner(player, turnNum) {
 }
 
 function updateActionCounter() {
-  const el = document.getElementById("action-counter");
-  if (!el) return;
-  el.textContent = `${state.actionsTaken}/${state.actionsRequired}`;
-  el.classList.toggle("ready", state.actionsTaken >= state.actionsRequired);
-  el.classList.toggle("short", state.actionsTaken < state.actionsRequired);
-  // Disable end-turn button when not enough actions
+  // No-op: per-player action counter was removed. Each unit acts
+  // independently and the player may end their turn at any time.
+  // The end-turn button is enabled whenever it's the player's turn.
   const endBtn = document.querySelector('[data-action="end-turn"]');
   if (endBtn) {
     const isMyTurn = state.game?.current_player_id === state.me.player_id;
-    const enough = state.actionsTaken >= state.actionsRequired;
-    endBtn.disabled = !(isMyTurn && enough);
-    endBtn.title = isMyTurn && !enough
-      ? `需要操作至少 ${state.actionsRequired} 个单位`
-      : "";
+    endBtn.disabled = !isMyTurn;
+    endBtn.title = isMyTurn ? "" : "还没轮到你";
   }
 }
 
 function renderBoard(st) {
   const board = document.getElementById("board");
+  // Force grid layout via inline style (overrides any CSS issues)
+  board.style.display = "grid";
+  board.style.gridTemplateColumns = "repeat(15, 44px)";
+  board.style.gridTemplateRows = "repeat(15, 44px)";
   // Build cells map for quick lookup
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
@@ -497,6 +528,8 @@ function renderBoard(st) {
       cell.className = "cell t-" + (tile?.terrain || "plain");
       cell.dataset.x = x;
       cell.dataset.y = y;
+      cell.style.gridColumn = String(x + 1);
+      cell.style.gridRow = String(y + 1);
 
       const occupant = unitMap.get(`${x},${y}`);
       if (occupant) {
@@ -533,10 +566,14 @@ function renderBoard(st) {
       if (state.selectedUnit && state.selectedUnit.x === x && state.selectedUnit.y === y) {
         cell.classList.add("selected");
       }
-      if (state.actionMode === "move" && state.reachableTiles?.has(`${x},${y}`)) {
+      // Show reachable tiles (green) whenever a unit bubble is open and
+      // that unit still has movement. This makes the "射程" button work
+      // even before the user clicks "移动".
+      if (state.reachableTiles?.has(`${x},${y}`) && !state.pendingMove) {
         cell.classList.add("move-hint");
       }
-      if (state.actionMode === "attack" && state.attackTargets?.has(`${x},${y}`)) {
+      // Show attackable targets (red) under the same condition.
+      if (state.attackTargets?.has(`${x},${y}`)) {
         cell.classList.add("target");
       }
 
@@ -717,22 +754,16 @@ function showUnitActionBubble(unit) {
   state.actionMode = null;
   state.pendingMove = null;
 
-  const st = state.game;
-  const myPlayer = st.players.find(p => p.id === state.me.player_id);
-  const acted = myPlayer?.units.filter(u => u.hp > 0 && u.has_acted).length || 0;
-  const maxActions = (myPlayer?.seat === 0 && st.game.turn_number === 1) ? 1 : 2;
-  const atMax = acted >= maxActions;
+  // Per-unit capability: each unit acts independently. If THIS unit
+  // has already acted, the caller (onCellClick) shows the read-only
+  // bubble instead. There is no per-player action cap.
+  const canMove = reachable.size > 0;
+  const canAttack = targets.size > 0;
+  const canHeal = (unit.skills || []).includes("heal");
+  const canRally = (unit.skills || []).includes("rally");
+  const canWait = true;
 
-  const canMove = !atMax && reachable.size > 0;
-  const canAttack = !atMax && targets.size > 0;
-  const canHeal = !atMax && (unit.skills || []).includes("heal");
-  const canRally = !atMax && (unit.skills || []).includes("rally");
-  const canWait = !atMax;
-
-  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}${atMax ? " 🚫" : ""}</div>`;
-  if (atMax) {
-    html += `<div class="ab-row" style="font-size:12px;color:var(--text-dim);text-align:center;padding:4px 6px;">本回合已操作 ${acted}/${maxActions}，无法再行动</div>`;
-  }
+  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}</div>`;
   html += `<div class="ab-row">`;
   html += `<button class="ab-btn primary" data-ab="move" ${canMove ? "" : "disabled"}>🚶 移动</button>`;
   html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"}>⚔️ 攻击</button>`;
@@ -800,7 +831,7 @@ function showPostMoveBubble(unit) {
   }
   enemyList.sort((a, b) => a.hp - b.hp);
 
-  const canContinue = unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type];
+  const canContinue = unit.mp > 0 && unitCanMoveAfter(unit.unit_type);
   const hasContent = enemyList.length > 0 || canContinue;
   if (!hasContent) {
     hideBubble();
@@ -833,7 +864,7 @@ function showPostMoveBubble(unit) {
 function showPostAttackBubble(unit) {
   // Called after a successful attack. Only offered if class can move after
   // action and MP remains. Otherwise close.
-  if (!(unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type])) {
+  if (!(unit.mp > 0 && unitCanMoveAfter(unit.unit_type))) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
@@ -896,8 +927,13 @@ async function onBubbleClick(action, unit, targetId) {
       enterAttackMode(unit);
       break;
     case "range":
-      // Just keep bubble open; visual range already shown via highlights
-      toast("射程范围以红色高亮显示");
+      // Re-render the board so reachable tiles (green) and attackable
+      // enemies (red) get highlighted. computeReachable/computeAttackTargets
+      // were already populated when the bubble opened.
+      renderBoard(state.game);
+      const mCount = state.reachableTiles?.size || 0;
+      const aCount = state.attackTargets?.size || 0;
+      toast(`移动范围 ${mCount} 格 · 攻击目标 ${aCount} 个`);
       break;
     case "info":
       // Show full info inline (re-render bubble as info card)
@@ -1236,24 +1272,46 @@ function renderPlayersList(st) {
 
 function renderActionLog(st) {
   const el = document.getElementById("action-log");
+  const chatEl = document.getElementById("chat-float");
   el.innerHTML = "";
+  if (chatEl) chatEl.innerHTML = "";
+  const playerMap = new Map();
+  for (const p of st.players) playerMap.set(p.id, p);
+  const moodEmoji = { joy: "😄", anger: "😠", frustrated: "😤", smug: "😏",
+                      disappointed: "😞", relieved: "😅", neutral: "💬" };
+  const colorMap = { red: "#e74c3c", blue: "#3498db", green: "#27ae60", yellow: "#f1c40f" };
+
   for (const log of st.logs.slice(0, 50)) {
-    const div = document.createElement("div");
-    div.className = "entry " + log.action_type;
-    div.textContent = `T${log.turn_number} · ${log.description}`;
-    el.appendChild(div);
+    if (log.action_type === "ai_commentary" || log.action_type === "ai_turn") {
+      // Route AI speech to the chat box
+      if (!chatEl) continue;
+      const m = log.description.match(/^\[(\w+)\/(\w+)\]\s*(.*)/);
+      if (!m) continue;
+      const emoji = moodEmoji[m[2]] || "💬";
+      const text = m[3];
+      const player = playerMap.get(log.player_id);
+      const avatarBg = (player?.color) ? (colorMap[player.color] || "#888") : "#888";
+      const name = player?.user_name || "AI";
+      const div = document.createElement("div");
+      div.className = "chat-msg";
+      div.innerHTML = `<span class="chat-avatar" style="background:${avatarBg}">${emoji}</span>`
+        + `<span class="chat-name">${escapeHtml(name)}</span>`
+        + `<span class="chat-text">${escapeHtml(text)}</span>`;
+      chatEl.appendChild(div);
+    } else {
+      const div = document.createElement("div");
+      div.className = "entry " + log.action_type;
+      div.textContent = `T${log.turn_number} · ${log.description}`;
+      el.appendChild(div);
+    }
   }
 }
 
 // ----- Reference panel -----
 
-// Mirrors app.config.UNIT_CAN_MOVE_AFTER_ACTION
-const CAN_MOVE_AFTER = {
-  swordsman: false,
-  archer:    true,
-  knight:    true,
-  healer:    false,
-};
+// Unit class metadata — fetched from /units endpoint at startup.
+let UNIT_CLASSES = {};  // type_id → { glyph, display_cn, can_move_after_action, attack_range, ... }
+let CAN_MOVE_AFTER = {};  // built from UNIT_CLASSES
 
 const TERRAIN_REF = [
   { id: "plain",    name: "平地",   color: "#cfe5b6", move: 1, def: 0, note: "通用地形，无加成" },
@@ -1263,23 +1321,7 @@ const TERRAIN_REF = [
   { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "防御+5，需占 1 回合" },
 ];
 
-const UNIT_REF = [
-  { glyph: "剑", color: "var(--p-blue)",  name: "剑士",  hp: 80, atk: 18, def: 15, mov: 3, range: "近战 1",
-    skills: [], desc: "均衡的近战单位" },
-  { glyph: "弓", color: "var(--p-green)", name: "弓箭手", hp: 60, atk: 20, def:  8, mov: 3, range: "远程 2",
-    skills: ["狙击（+1射程）"], desc: "远程输出，怕近身" },
-  { glyph: "骑", color: "var(--p-red)",   name: "骑士",  hp: 90, atk: 22, def: 10, mov: 5, range: "近战 1",
-    skills: ["连击（两次50%伤害）"], desc: "高移速高攻，但防御低" },
-  { glyph: "疗", color: "var(--p-yellow)", name: "治疗师", hp: 70, atk: 5,  def: 10, mov: 3, range: "无",
-    skills: ["治愈（+20HP）", "集结（+10%ATK）"], desc: "辅助型，无攻击力" },
-];
-
-const SKILL_REF = [
-  { name: "连击 (double_strike)", desc: "攻击两次，每次 50% 伤害。骑士默认拥有。" },
-  { name: "狙击 (snipe)", desc: "攻击射程 +1。弓箭手默认拥有。" },
-  { name: "治愈 (heal)", desc: "对相邻友军恢复 20 HP（消耗本回合行动）。治疗师默认拥有。" },
-  { name: "集结 (rally)", desc: "相邻友军本回合攻击 +10%（消耗本回合行动）。治疗师默认拥有。" },
-];
+let SKILL_REF = [];  // fetched from /skills endpoint
 
 function renderRefContent() {
   const el = document.getElementById("ref-content");
@@ -1295,17 +1337,20 @@ function renderRefContent() {
       </div>
     `).join("");
   } else if (state.refTab === "units") {
-    el.innerHTML = UNIT_REF.map(u => `
-      <div class="ref-unit">
-        <div class="glyph" style="background:${u.color}">${u.glyph}</div>
-        <div class="info">
-          <div class="name">${u.name} <span class="muted small">(${u.range})</span></div>
-          <div class="stats">HP ${u.hp} · ATK ${u.atk} · DEF ${u.def} · MOV ${u.mov}</div>
-          <div class="stats" style="margin-top:2px">${u.desc}</div>
-          ${u.skills.length ? `<div class="skills">技能：${u.skills.join("、")}</div>` : ""}
-        </div>
-      </div>
-    `).join("");
+    const colors = { swordsman: "var(--p-blue)", archer: "var(--p-green)", knight: "var(--p-red)", healer: "var(--p-yellow)" };
+    el.innerHTML = Object.values(UNIT_CLASSES).map(u => {
+      const rangeText = u.attack_range === 0 ? "无" : `射程 ${u.attack_range}`;
+      const skillNames = (u.default_skills || []).map(skillName).join("、");
+      return `
+        <div class="ref-unit">
+          <div class="glyph" style="background:${colors[u.type_id] || "#888"}">${u.glyph}</div>
+          <div class="info">
+            <div class="name">${u.display_cn} <span class="muted small">(${rangeText})</span></div>
+            <div class="stats">HP ${u.base_hp} · ATK ${u.base_atk} · DEF ${u.base_def} · MOV ${u.base_mov}</div>
+            ${skillNames ? `<div class="skills">技能：${skillNames}</div>` : ""}
+          </div>
+        </div>`;
+    }).join("");
   } else if (state.refTab === "skills") {
     el.innerHTML = SKILL_REF.map(s => `
       <div class="ref-skill">
@@ -1337,18 +1382,17 @@ function playerColorCss(c) {
 }
 
 function unitGlyph(type) {
-  return ({ swordsman: "剑", archer: "弓", knight: "骑", healer: "疗" })[type] || "?";
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].glyph) || "?";
 }
 function unitTypeName(type) {
-  return ({ swordsman: "剑士", archer: "弓箭手", knight: "骑士", healer: "治疗师" })[type] || type;
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].display_cn) || type;
 }
+function unitCanMoveAfter(type) {
+  return (UNIT_CLASSES[type] && UNIT_CLASSES[type].can_move_after_action) || false;
+}
+let SKILL_MAP = {};
 function skillName(s) {
-  return ({
-    double_strike: "连击",
-    snipe: "狙击",
-    heal: "治愈",
-    rally: "集结",
-  })[s] || s;
+  return SKILL_MAP[s] || s;
 }
 
 // ============================================================
@@ -1373,8 +1417,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderRefContent();
     });
   });
-  // Settings first
+  // Settings first + fetch unit metadata
   renderSettings();
+  fetchUnitClasses();
 
   // Delegate click handlers via data-action
   document.body.addEventListener("click", async (e) => {
@@ -1416,6 +1461,17 @@ document.addEventListener("DOMContentLoaded", () => {
       case "toggle-ref-panel":
         toggleRefPanel();
         break;
+      case "toggle-game-menu":
+        const menu = document.getElementById("game-menu");
+        const overlay = document.getElementById("menu-overlay");
+        const visible = menu.hidden;
+        menu.hidden = !visible;
+        overlay.hidden = !visible;
+        break;
+      case "show-status":
+        // Scroll the side panel's player-list into view
+        document.getElementById("players-list")?.scrollIntoView({ behavior: "smooth" });
+        break;
       case "add-ai":
         await addAIPlayer();
         break;
@@ -1454,6 +1510,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Show resume button if a session is saved (regardless of whether rejoin works)
   updateResumeButton(loadSession());
+
+  // AI type selector: show personality only for LLM
+  const aiKindSel = document.getElementById("lobby-ai-kind");
+  const aiPersSel = document.getElementById("lobby-ai-personality");
+  if (aiKindSel && aiPersSel) {
+    aiKindSel.addEventListener("change", () => {
+      aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+    });
+    aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+  }
 
   // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu
   tryResumeSession().then((resumed) => {
