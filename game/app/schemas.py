@@ -92,6 +92,8 @@ class UnitOut(APIModel):
     atk: int
     def_: int
     mov: int
+    mp: int = 0
+    morale: int = 0
     x: int
     y: int
     has_acted: bool

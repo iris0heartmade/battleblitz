@@ -123,6 +123,8 @@ class Unit(Base):
     unit_type: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
 
+    # Legacy fields (kept for DB compatibility; level is always 1 now,
+    # exp is unused — progression is now morale-based).
     level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     exp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -132,6 +134,14 @@ class Unit(Base):
     # Trailing underscore to avoid clashing with Python `def` keyword.
     def_: Mapped[int] = mapped_column("def_", Integer, nullable=False)
     mov: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Movement points remaining this turn. Reset to `mov` at the start of
+    # each of the unit owner's turns.
+    mp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Morale (0..MORALE_MAX). Awards +1 per kill, capped. Persistent across
+    # turns — represents the unit's battle experience.
+    morale: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)

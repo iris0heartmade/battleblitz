@@ -135,6 +135,7 @@ async def end_turn(
         ).scalars().all()
         for u in all_units:
             u.has_acted = False
+            u.mp = u.mov  # refill MP pool for the next round
 
         if game.status == "playing":
             game.turn_number += 1
@@ -233,6 +234,7 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                     ).scalars().all()
                     for u in all_units:
                         u.has_acted = False
+                        u.mp = u.mov
                     if game.status == "playing":
                         new_alive = sorted(p.seat for p in players if p.is_alive)
                         if new_alive:
@@ -378,6 +380,7 @@ async def _check_stale_turns() -> None:
                     ).scalars().all()
                     for u in all_units:
                         u.has_acted = False
+                        u.mp = u.mov
                     if game.status == "playing":
                         new_alive = sorted(p.seat for p in players if p.is_alive)
                         if new_alive:

@@ -505,7 +505,7 @@ function renderBoard(st) {
         uEl.className = `unit u-${occupant.player.color}` + (u.has_acted ? " acted" : "");
         uEl.dataset.unitId = u.id;
         uEl.textContent = unitGlyph(u.unit_type);
-        uEl.title = `${u.name} (Lv.${u.level}) HP ${u.hp}/${u.max_hp}`;
+        uEl.title = `${u.name} (Lv.${u.level}) HP ${u.hp}/${u.max_hp} MP ${u.mp ?? u.mov}/${u.mov} 士气 ${u.morale ?? 0}/3`;
         const hp = document.createElement("div");
         hp.className = "hpbar";
         const fill = document.createElement("div");
@@ -514,6 +514,18 @@ function renderBoard(st) {
         if (pct < 35) fill.classList.add("low");
         hp.appendChild(fill);
         uEl.appendChild(hp);
+        // MP badge: small "MP x/y" text at top-right corner
+        const mpBadge = document.createElement("div");
+        mpBadge.className = "mp-badge";
+        mpBadge.textContent = `⚡${u.mp ?? u.mov}`;
+        uEl.appendChild(mpBadge);
+        // Morale stars (3 slots)
+        const moraleEl = document.createElement("div");
+        moraleEl.className = "morale-stars";
+        const m = u.morale ?? 0;
+        moraleEl.textContent = "★".repeat(m) + "☆".repeat(Math.max(0, 3 - m));
+        moraleEl.title = `士气 ${m}/3 (攻击 +${(m * 10)}%, 防御 +${(m * 5)}%)`;
+        uEl.appendChild(moraleEl);
         cell.appendChild(uEl);
       }
 
@@ -597,6 +609,7 @@ function findEnemyAt(st, x, y) {
 
 function computeReachable(unit) {
   // Estimate reachable tiles client-side (server pathfind is authoritative).
+  // Budget is the unit's remaining MP (falls back to full MOV if MP is unset).
   const st = state.game;
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
@@ -604,6 +617,7 @@ function computeReachable(unit) {
   for (const p of st.players) for (const u of p.units) {
     if (u.id !== unit.id && u.hp > 0) occupied.add(`${u.x},${u.y}`);
   }
+  const budget = (typeof unit.mp === "number" && unit.mp > 0) ? unit.mp : unit.mov;
   const reachable = new Set();
   const queue = [{ x: unit.x, y: unit.y, cost: 0 }];
   const visited = new Map([[`${unit.x},${unit.y}`, 0]]);
@@ -621,7 +635,7 @@ function computeReachable(unit) {
       if (occupied.has(key)) continue;
       const stepCost = costs[t.terrain] ?? 1;
       const newCost = cur.cost + stepCost;
-      if (newCost > unit.mov) continue;
+      if (newCost > budget) continue;
       if ((visited.get(key) ?? Infinity) <= newCost) continue;
       visited.set(key, newCost);
       reachable.add(key);
@@ -715,7 +729,7 @@ function showUnitActionBubble(unit) {
   const canRally = !atMax && (unit.skills || []).includes("rally");
   const canWait = !atMax;
 
-  let html = `<div class="ab-title">${escapeHtml(unit.name)}${atMax ? " 🚫" : ""}</div>`;
+  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}${atMax ? " 🚫" : ""}</div>`;
   if (atMax) {
     html += `<div class="ab-row" style="font-size:12px;color:var(--text-dim);text-align:center;padding:4px 6px;">本回合已操作 ${acted}/${maxActions}，无法再行动</div>`;
   }
@@ -771,8 +785,10 @@ function showAttackConfirmBubble(attacker, target) {
 }
 
 function showPostMoveBubble(unit) {
-  // Called after a successful move. Show attack options for any enemy in range,
-  // plus a wait button. Unit has NOT yet acted.
+  // Called after a successful move. Decide what to offer:
+  //   - enemies in range → attack options + (continue moving if can_move_after_action) + wait
+  //   - no enemies, MP left and can_move_after_action → "continue moving"
+  //   - otherwise → close bubble (unit is done this turn)
   const targets = computeAttackTargets(unit);
   const enemyList = [];
   for (const p of state.game.players) {
@@ -782,27 +798,57 @@ function showPostMoveBubble(unit) {
       if (targets.has(`${u.x},${u.y}`)) enemyList.push(u);
     }
   }
-  if (enemyList.length === 0) {
+  enemyList.sort((a, b) => a.hp - b.hp);
+
+  const canContinue = unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type];
+  const hasContent = enemyList.length > 0 || canContinue;
+  if (!hasContent) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
     state.pendingMove = null;
     return;
   }
-  // Sort by priority: lowest HP first (likely kill)
-  enemyList.sort((a, b) => a.hp - b.hp);
 
-  const parts = [`<div class="ab-title">📍 ${escapeHtml(unit.name)} 已就位</div>`];
-  parts.push(`<div class="ab-row">`);
-  for (const e of enemyList) {
-    parts.push(`<button class="ab-btn danger" data-target="${e.id}" data-ab="pick-attack">⚔️ ${escapeHtml(e.name)} (${e.hp}HP)</button>`);
+  const parts = [`<div class="ab-title">📍 ${escapeHtml(unit.name)} · ⚡${unit.mp}/${unit.mov}</div>`];
+  if (enemyList.length > 0) {
+    parts.push(`<div class="ab-row">`);
+    for (const e of enemyList) {
+      parts.push(`<button class="ab-btn danger" data-target="${e.id}" data-ab="pick-attack">⚔️ ${escapeHtml(e.name)} (${e.hp}HP)</button>`);
+    }
+    parts.push(`</div>`);
   }
-  parts.push(`</div><div class="ab-row">`);
+  parts.push(`<div class="ab-row">`);
+  if (canContinue) {
+    parts.push(`<button class="ab-btn primary" data-ab="move-more">🚶 继续移动 (${unit.mp} MP)</button>`);
+  }
   parts.push(`<button class="ab-btn cancel" data-ab="wait">⏭ 待机</button>`);
   parts.push(`</div>`);
   showBubbleAt(unit.x, unit.y, parts.join(""));
   document.getElementById("action-bubble").querySelectorAll("[data-ab]").forEach(btn => {
     btn.addEventListener("click", () => onBubbleClick(btn.dataset.ab, unit, btn.dataset.target));
+  });
+}
+
+function showPostAttackBubble(unit) {
+  // Called after a successful attack. Only offered if class can move after
+  // action and MP remains. Otherwise close.
+  if (!(unit.mp > 0 && CAN_MOVE_AFTER[unit.unit_type])) {
+    hideBubble();
+    state.selectedUnit = null;
+    state.actionMode = null;
+    return;
+  }
+  const html = `
+    <div class="ab-title">⚔️ ${escapeHtml(unit.name)} 已攻击 · ⚡${unit.mp}/${unit.mov}</div>
+    <div class="ab-row">
+      <button class="ab-btn primary" data-ab="move-more">🚶 继续移动 (${unit.mp} MP)</button>
+      <button class="ab-btn cancel" data-ab="wait">⏭ 待机</button>
+    </div>
+  `;
+  showBubbleAt(unit.x, unit.y, html, { compact: true });
+  document.getElementById("action-bubble").querySelectorAll("[data-ab]").forEach(btn => {
+    btn.addEventListener("click", () => onBubbleClick(btn.dataset.ab, unit));
   });
 }
 
@@ -877,6 +923,13 @@ async function onBubbleClick(action, unit, targetId) {
       state.pendingMove = null;
       showUnitActionBubble(unit);
       renderBoard(state.game);
+      return;
+    case "move-more":
+      // Re-enter move mode with the unit's remaining MP budget.
+      state.actionMode = "move";
+      state.reachableTiles = computeReachable(unit);
+      state.attackTargets = computeAttackTargets(unit);
+      enterMoveMode(unit);
       return;
     case "confirm-attack": {
       const a = state.pendingAttack;
@@ -1087,11 +1140,22 @@ async function doAttack(attacker, targetId) {
       target_id: targetId,
     });
     const totalDmg = r.hits.reduce((s, h) => s + h.damage, 0);
-    toast(`造成 ${totalDmg} 伤害${r.hits.some(h => h.is_crit) ? "（暴击！）" : ""}`);
+    const crit = r.hits.some(h => h.is_crit);
+    const kill = r.hits.some(h => h.is_kill);
+    const moraleGain = kill ? " ⭐士气+1" : "";
+    toast(`造成 ${totalDmg} 伤害${crit ? "（暴击！）" : ""}${moraleGain}`);
     await refreshGame();
-    // After attack, unit has acted. Hide bubble.
-    hideBubble();
-    state.selectedUnit = null;
+    // After attack: unit has acted. If class can move after AND MP > 0,
+    // offer to keep moving; otherwise close.
+    const st = state.game;
+    const moved = st.players.find(p => p.id === state.me.player_id)?.units?.find(u => u.id === attacker.id);
+    if (moved && CAN_MOVE_AFTER[moved.unit_type] && (moved.mp ?? 0) > 0) {
+      renderBoard(st);
+      showPostAttackBubble(moved);
+    } else {
+      hideBubble();
+      state.selectedUnit = null;
+    }
   } catch (e) {
     toast("攻击失败：" + e.message);
     hideBubble();
@@ -1182,6 +1246,14 @@ function renderActionLog(st) {
 }
 
 // ----- Reference panel -----
+
+// Mirrors app.config.UNIT_CAN_MOVE_AFTER_ACTION
+const CAN_MOVE_AFTER = {
+  swordsman: false,
+  archer:    true,
+  knight:    true,
+  healer:    false,
+};
 
 const TERRAIN_REF = [
   { id: "plain",    name: "平地",   color: "#cfe5b6", move: 1, def: 0, note: "通用地形，无加成" },

@@ -31,6 +31,9 @@ from app.config import (
     LEVEL_UP_STAT_BONUS,
     MAX_LEVEL,
     MAP_SIZE,
+    MORALE_ATK_PER_STAR,
+    MORALE_DEF_PER_STAR,
+    MORALE_MAX,
     SKILL_DOUBLE_STRIKE,
     SKILL_HEAL,
     SKILL_RALLY,
@@ -45,10 +48,12 @@ from app.config import (
     TERRAIN_SPAWN_WEIGHTS,
     TYPE_ADVANTAGE,
     UNIT_BASE_STATS,
+    UNIT_CAN_MOVE_AFTER_ACTION,
     UNIT_DEFAULT_SKILLS,
     UNIT_DISPLAY_NAMES,
     UNIT_HEALER,
     UNIT_KNIGHT,
+    UNIT_MP_POOL,
 )
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.utils import bfs_reachable, chebyshev, has_line_of_sight, pathfind
@@ -140,7 +145,12 @@ def create_initial_units(
     players: Sequence[Player],
     castle_positions_map: Dict[int, Tuple[int, int]],
 ) -> List[Unit]:
-    """Create the starting 5 units for each player (placed near their castle)."""
+    """Create the starting 5 units for each player (placed near their castle).
+
+    The `mov` field on each Unit stores its movement pool (used as MP each
+    turn). Per-unit-type overrides in UNIT_MP_POOL take precedence over the
+    default in UNIT_BASE_STATS so we can tune MP without changing ATK/DEF.
+    """
     units: List[Unit] = []
     for player in players:
         castle_xy = castle_positions_map[player.seat]
@@ -150,6 +160,7 @@ def create_initial_units(
                 base = UNIT_BASE_STATS[unit_type]
                 skills = list(UNIT_DEFAULT_SKILLS.get(unit_type, []))
                 x, y = _spawn_xy_for_castle(castle_xy, unit_index)
+                mp_pool = UNIT_MP_POOL.get(unit_type, base["mov"])
                 units.append(
                     Unit(
                         player_id=player.id,
@@ -161,7 +172,9 @@ def create_initial_units(
                         max_hp=base["hp"],
                         atk=base["atk"],
                         def_=base["def"],
-                        mov=base["mov"],
+                        mov=mp_pool,                # pool value (also shown as MOV)
+                        mp=mp_pool,                  # current MP, refilled each turn
+                        morale=0,
                         x=x,
                         y=y,
                         has_acted=False,
@@ -211,15 +224,22 @@ def calculate_damage(
 ) -> DamageResult:
     """Compute one attack's damage.
 
-    damage = ATK * (ATK / (ATK + DEF + terrain_bonus)) * type_adv * crit_mult
+    Morale modifiers:
+      effective_atk = atk  * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+      effective_def = (def + terrain) * (1 + defender.morale * MORALE_DEF_PER_STAR)
+
+    damage = eff_atk * (eff_atk / (eff_atk + eff_def)) * type_adv * crit_mult
     """
     rng = rng or random.Random()
     if crit is None:
         crit = rng.random() < _crit_chance(attacker)
 
-    atk = attacker.atk
-    df = max(1, defender.def_ + tile_def_bonus)
-    base = atk * (atk / (atk + df))
+    eff_atk = attacker.atk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+    eff_df = (defender.def_ + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
+    eff_atk = max(1, eff_atk)
+    eff_df = max(1, eff_df)
+
+    base = eff_atk * (eff_atk / (eff_atk + eff_df))
 
     mult = _type_multiplier(attacker, defender)
     if crit:
@@ -230,8 +250,8 @@ def calculate_damage(
         damage=dmg,
         is_crit=crit,
         is_kill=dmg >= defender.hp,
-        effective_atk=atk,
-        defense_total=df,
+        effective_atk=int(round(eff_atk)),
+        defense_total=int(round(eff_df)),
     )
 
 
@@ -321,15 +341,25 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
 
 
 def award_exp(unit: Unit, kind: str) -> None:
-    """Award EXP. `kind` is one of: kill | assist | hit."""
+    """Award EXP. `kind` is one of: kill | assist | hit.
+
+    Kept for backward compatibility; only `kill` now also bumps morale.
+    """
     if kind == "kill":
         unit.exp += EXP_PER_KILL
+        award_morale(unit)
     elif kind == "assist":
         unit.exp += EXP_PER_ASSIST
     elif kind == "hit":
         unit.exp += max(1, EXP_PER_ASSIST // 2)
     else:
         raise ValueError(f"unknown exp kind: {kind!r}")
+
+
+def award_morale(unit: Unit) -> None:
+    """Kill-bonus: bump unit morale by 1 (capped at MORALE_MAX)."""
+    if unit.morale < MORALE_MAX:
+        unit.morale += 1
 
 
 # ============================================================
@@ -724,6 +754,7 @@ def create_initial_units_with_roster(
                 base = UNIT_BASE_STATS[unit_type]
                 skills = list(UNIT_DEFAULT_SKILLS.get(unit_type, []))
                 x, y = _spawn_xy_for_castle(castle_xy, unit_index)
+                mp_pool = UNIT_MP_POOL.get(unit_type, base["mov"])
                 units.append(
                     Unit(
                         player_id=player.id,
@@ -735,7 +766,9 @@ def create_initial_units_with_roster(
                         max_hp=base["hp"],
                         atk=base["atk"],
                         def_=base["def"],
-                        mov=base["mov"],
+                        mov=mp_pool,
+                        mp=mp_pool,
+                        morale=0,
                         x=x,
                         y=y,
                         has_acted=False,

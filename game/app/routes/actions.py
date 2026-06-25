@@ -22,6 +22,7 @@ from app.config import (
     SKILL_RALLY,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
+    UNIT_CAN_MOVE_AFTER_ACTION,
 )
 from app.database import get_session
 from app.game_logic import (
@@ -214,6 +215,13 @@ async def move_unit(
     from app.config import TERRAIN_MOVE_COST
     cost = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
 
+    # Enforce MP budget
+    if cost > unit.mp:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"移动力不足（需要 {cost}，剩余 {unit.mp}）",
+        )
+
     # Apply move: free old tile, occupy new tile
     for t in (await session.execute(select(Tile).where(Tile.game_id == game_id))).scalars():
         if (t.x, t.y) == (unit.x, unit.y):
@@ -221,8 +229,9 @@ async def move_unit(
         if (t.x, t.y) == target:
             t.occupied_unit_id = unit.id
     unit.x, unit.y = target
-    # Moving counts as the unit's action this turn (no second move until next turn)
-    unit.has_acted = True
+    # Spend movement points; unit can still attack (or continue moving for
+    # classes with can_move_after_action).
+    unit.mp = max(0, unit.mp - cost)
 
     # Castle capture
     castle_captured = False
@@ -301,8 +310,17 @@ async def attack(
 
     is_kill = target.hp <= 0
 
-    # Mark attacker as having acted
+    # Morale bonus on kill (capped server-side in award_morale).
+    if is_kill:
+        from app.game_logic import award_morale
+        award_morale(attacker)
+
+    # Mark attacker as having acted.
+    # If the attacker's class allows move-after-action AND it still has MP,
+    # keep mp as is; otherwise zero it out (unit is rooted for the turn).
     attacker.has_acted = True
+    if not UNIT_CAN_MOVE_AFTER_ACTION.get(attacker.unit_type, False):
+        attacker.mp = 0
 
     # XP
     exp_gained = 0
@@ -371,6 +389,7 @@ async def use_skill(
         if restored == 0:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "target not adjacent / already full HP")
         unit.has_acted = True
+        unit.mp = 0  # skills consume remaining MP
         _log(session, game, player, "skill",
              f"{unit.name} healed {ally.name} for {restored} HP")
         return SkillResult(
@@ -403,6 +422,7 @@ async def use_skill(
                 u.atk = int(round(u.atk * 1.10))
                 affected.append(u.id)
         unit.has_acted = True
+        unit.mp = 0
         _log(session, game, player, "skill",
              f"{unit.name} rallied: buffed {len(affected)} adjacent allies (+10% ATK)")
         return SkillResult(
@@ -437,5 +457,6 @@ async def wait_action(
     await _check_action_budget(session, player, unit)
 
     unit.has_acted = True
+    unit.mp = 0  # wait consumes remaining MP
     _log(session, game, player, "wait", f"{unit.name} waited")
     return WaitResult(unit_id=unit.id, description=f"{unit.name} ends turn")

@@ -149,6 +149,37 @@ AI_MAX_ACTIONS_PER_TURN: Final[int] = 5      # safety cap so a buggy AI can't lo
 AI_SKILL_HEAL_THRESHOLD_HP: Final[int] = 40  # heal allies below this HP% (relative to max)
 AI_AGGRO_RANGE: Final[int] = 4               # AI prefers targets within this many tiles
 
+# ============================================================
+# Morale system (replaces EXP/Level)
+# ============================================================
+MORALE_MAX: Final[int] = 3
+MORALE_ATK_PER_STAR: Final[float] = 0.10  # +10% ATK per star (max +30% at 3 stars)
+MORALE_DEF_PER_STAR: Final[float] = 0.05  # +5%  DEF per star (max +15% at 3 stars)
+
+
+# ============================================================
+# Movement points (MP) system
+# ============================================================
+# Each unit starts the turn with MP equal to its `mov` value, and each
+# tile entered deducts the terrain's move cost. Attacks cost 0 MP.
+# Whether the unit can MOVE AFTER attacking is per-class:
+UNIT_CAN_MOVE_AFTER_ACTION: Final[Dict[str, bool]] = {
+    "swordsman": False,  # committed melee fighter
+    "archer":    True,   # kiting
+    "knight":    True,   # mobile flanker
+    "healer":    False,  # back-line support
+}
+# MP pool sizes (replaces previous flat-MOV movement). Tuned so that:
+# - swordsman can reach a melee fight in 1-2 moves
+# - knight can swing wide around the map
+# - archer stays mobile enough to reposition
+UNIT_MP_POOL: Final[Dict[str, int]] = {
+    "swordsman": 5,
+    "archer":    5,
+    "knight":    8,
+    "healer":    5,
+}
+
 
 # ============================================================
 # Starting roster per player (validated against game_logic)
