@@ -33,6 +33,14 @@ battleblitz.db
 *.log
 logs/
 
+# ===== Test artifacts =====
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.pytest_tmpdir/
+.tox/
+
 # ===== Local config =====
 .env.local
 .env.*.local
@@ -42,3 +50,8 @@ config.local.py
 build/
 dist/
 *.pyc
+
+# ===== user doc =========
+doc
+/game/agent/.env
+/agent/README.md

@@ -5,6 +5,7 @@ All functions are pure (no DB) so they're easy to unit-test.
 """
 from __future__ import annotations
 
+import logging
 from collections import deque
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
@@ -14,6 +15,9 @@ from app.config import (
     TERRAIN_MOVE_COST,
     TERRAIN_RIVER,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 Coord = Tuple[int, int]

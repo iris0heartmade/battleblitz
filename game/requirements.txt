@@ -9,5 +9,12 @@ pydantic==2.10.3
 sqlalchemy>=2.0.25
 aiosqlite>=0.19.0
 
+# Health monitoring (psutil for HEALTH | line per logging standard §16)
+psutil>=5.9.0
+
 # Optional: env vars for Pydantic settings
 # python-dotenv>=1.0.0
+
+# ─── Development / test dependencies ──────────────────────────
+# Install with:  pip install -r requirements.txt -r requirements-dev.txt
+# (kept in a separate file; pin to the same versions CI uses)

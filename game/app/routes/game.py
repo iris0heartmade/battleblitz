@@ -3,6 +3,7 @@ Game-lifecycle routes: create, join, fetch state, start.
 """
 from __future__ import annotations
 
+import logging
 import random
 from typing import List
 
@@ -42,6 +43,9 @@ from app.schemas import (
     ActionLogOut,
 )
 
+logger = logging.getLogger(__name__)
+audit = logging.getLogger("audit.user")
+
 router = APIRouter(prefix="/games", tags=["game"])
 
 
@@ -74,6 +78,10 @@ async def create_game(
     )
     session.add(game)
     await session.flush()
+    logger.info(
+        "Game created: id=%d name=%r seed=%d max_players=%d map_preset=%s",
+        game.id, game.name, seed, body.max_players, body.map_preset,
+    )
     return GameSummaryOut.model_validate(game)
 
 
@@ -113,7 +121,21 @@ async def join_game(
         await session.flush()
     except IntegrityError:
         await session.rollback()
+        audit.warning(
+            "USER_ACTION | user=%s | game=%d | action=JOIN | result=FAIL | reason=constraint_violation",
+            body.user_name, game_id,
+        )
         raise HTTPException(status.HTTP_409_CONFLICT, "could not join (constraint violation)")
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=JOIN | result=SUCCESS | "
+        "user_name=%s | color=%s | seat=%d",
+        player.id, game_id, player.user_name, player.color, player.seat,
+    )
+    logger.info(
+        "Player joined: id=%d game=%d name=%r color=%s seat=%d",
+        player.id, game_id, player.user_name, player.color, player.seat,
+    )
 
     return PlayerOut(
         id=player.id,
@@ -234,6 +256,17 @@ async def start_game(
         )
     )
 
+    logger.info(
+        "Game started: id=%d players=%d units=%d map_preset=%s seed=%d",
+        game_id, len(players), len(units),
+        getattr(game, "map_preset", None) or "classic", game.map_seed,
+    )
+    audit.info(
+        "USER_ACTION | user=system | game=%d | action=GAME_START | result=SUCCESS | "
+        "players=%d units=%d",
+        game_id, len(players), len(units),
+    )
+
     return await _build_state(session, game)
 
 
@@ -294,16 +327,21 @@ async def add_ai_player(
     seat = max((p.seat for p in players), default=-1) + 1
     # Generate a unique AI name
     ai_count = sum(1 for p in players if p.is_ai)
-    ai_name = f"电脑-{ai_count + 1}-{body.difficulty}"
+    backend_tag = body.agent_kind  # "rules" or "llm"
+    ai_name = f"电脑-{ai_count + 1}-{body.difficulty}-{backend_tag}"
     if any(p.user_name == ai_name for p in players):
         ai_name = f"电脑-{ai_count + 1}-{body.difficulty}-{seat}"
     ai = build_ai_player(game, seat=seat, color=color, name=ai_name)
+    ai.agent_kind = body.agent_kind
+    ai.agent_personality = body.personality
     session.add(ai)
     await session.flush()
     return PlayerOut(
         id=ai.id, user_name=ai.user_name, color=ai.color,
         is_alive=ai.is_alive, has_ended_turn=ai.has_ended_turn,
-        seat=ai.seat, is_ai=ai.is_ai, units=[],
+        seat=ai.seat, is_ai=ai.is_ai,
+        agent_kind=ai.agent_kind, agent_personality=ai.agent_personality,
+        units=[],
     )
 
 
@@ -393,6 +431,8 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 has_ended_turn=p.has_ended_turn,
                 seat=p.seat,
                 is_ai=p.is_ai,
+                agent_kind=p.agent_kind,
+                agent_personality=p.agent_personality,
                 units=[
                     UnitOut.model_validate(u)
                     for u in sorted(units_by_player.get(p.id, []), key=lambda x: (x.unit_type, x.id))

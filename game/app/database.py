@@ -6,6 +6,7 @@ FastAPI dependency and call `init_db` once at app startup.
 """
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -19,6 +20,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import APP_TITLE, DEFAULT_DB_PATH
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -57,9 +60,11 @@ async def init_db() -> None:
     """Create all tables. Safe to call on every startup."""
     # Import models so they register with Base.metadata before create_all.
     from app import models  # noqa: F401
+    from app.progression import models as _progression_models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database initialized: %s", engine.url.render_as_string(hide_password=True))
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -88,6 +93,7 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
 async def dispose_db() -> None:
     """Cleanly dispose of the engine on shutdown."""
     await engine.dispose()
+    logger.info("Database engine disposed")
 
 
 __all__ = [

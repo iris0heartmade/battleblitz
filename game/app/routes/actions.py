@@ -8,6 +8,7 @@ All routes enforce:
 """
 from __future__ import annotations
 
+import logging
 import random
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -47,6 +48,7 @@ from app.schemas import (
     WaitRequest,
     WaitResult,
 )
+from app.events import GameEvent, bus
 from app.utils import (
     Coord,
     bfs_reachable,
@@ -54,6 +56,9 @@ from app.utils import (
     has_line_of_sight,
     pathfind,
 )
+
+logger = logging.getLogger(__name__)
+audit = logging.getLogger("audit.user")
 
 router = APIRouter(prefix="/games", tags=["actions"])
 
@@ -111,25 +116,13 @@ def _actions_per_turn(player: Player, game: Game) -> int:
 
 
 async def _check_action_budget(session: AsyncSession, player: Player, unit: Unit) -> None:
-    """Raise 400 if player has already reached the max units-acted cap this turn
-    AND the unit being acted with hasn't acted yet (i.e. this would be a NEW unit).
+    """No-op stub: each unit acts independently, no per-player cap.
+
+    The per-unit `has_acted` flag (checked in each action handler) is the
+    only constraint. Players may end their turn at any time via
+    /games/{id}/end-turn — no "must do N actions first" rule.
     """
-    game = await session.get(Game, player.game_id)
-    if game is None:
-        return
-    max_actions = _actions_per_turn(player, game)
-    if unit.has_acted:
-        # Already caught by caller; nothing to do here.
-        return
-    units = (
-        await session.execute(select(Unit).where(Unit.player_id == player.id))
-    ).scalars().all()
-    acted = sum(1 for u in units if u.has_acted)
-    if acted >= max_actions:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"本回合最多操作 {max_actions} 个单位（已操作 {acted}）",
-        )
+    return
 
 
 async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coord, str], Dict[Coord, Optional[int]], Dict[Coord, Optional[int]]]:
@@ -179,8 +172,8 @@ async def move_unit(
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
-    if unit.has_acted:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted this turn")
+    if unit.has_moved:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already moved this turn")
     await _check_action_budget(session, player, unit)
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "target out of bounds")
@@ -232,6 +225,10 @@ async def move_unit(
     # Spend movement points; unit can still attack (or continue moving for
     # classes with can_move_after_action).
     unit.mp = max(0, unit.mp - cost)
+    # Track move separately from has_acted so the unit can still attack/heal
+    # this turn after moving. has_moved blocks further moves; has_acted blocks
+    # further non-move actions.
+    unit.has_moved = True
 
     # Castle capture
     castle_captured = False
@@ -245,6 +242,25 @@ async def move_unit(
     _log(session, game, player, "move",
          f"{unit.name} moved to ({target[0]}, {target[1]}) cost={cost}"
          + (" [captured castle]" if castle_captured else ""))
+
+    # Publish to in-process event bus (consumed by AI replay / commentary / WS gateway)
+    await bus.publish(GameEvent(
+        type="move", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+        context={
+            "from_x": path[0][0], "from_y": path[0][1],
+            "to_x": target[0], "to_y": target[1],
+            "mp_cost": cost, "mp_remaining": unit.mp,
+            "castle_captured": castle_captured,
+        },
+    ))
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=MOVE | result=SUCCESS | "
+        "unit=%d | from=(%d,%d) | to=(%d,%d) | cost=%d | castle_captured=%s",
+        player.id, game_id, unit.id, path[0][0], path[0][1],
+        target[0], target[1], cost, castle_captured,
+    )
 
     return MoveResult(
         unit_id=unit.id,
@@ -340,6 +356,28 @@ async def attack(
     if is_kill:
         _log(session, game, player, "death", f"{target.name} was slain")
 
+    # Publish to in-process event bus
+    await bus.publish(GameEvent(
+        type="kill" if is_kill else "attack",
+        game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=attacker.id, actor_name=attacker.name,
+        target_player_id=target.player_id, target_unit_id=target.id, target_name=target.name,
+        context={
+            "damage": total_dmg,
+            "is_crit": hits[0].is_crit if hits else False,
+            "is_kill": is_kill,
+            "attacker_hp": attacker.hp,
+            "target_hp": target.hp,
+        },
+    ))
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=ATTACK | result=SUCCESS | "
+        "attacker=%d | target=%d | total_dmg=%d | is_kill=%s | crit=%s",
+        player.id, game_id, attacker.id, target.id, total_dmg,
+        is_kill, hits[0].is_crit if hits else False,
+    )
+
     return AttackResult(
         hits=[DamageInfo(damage=h.damage, is_crit=h.is_crit, is_kill=is_kill,
                          attacker_unit_id=attacker.id, target_unit_id=target.id) for h in hits],
@@ -392,6 +430,18 @@ async def use_skill(
         unit.mp = 0  # skills consume remaining MP
         _log(session, game, player, "skill",
              f"{unit.name} healed {ally.name} for {restored} HP")
+        # Publish to event bus
+        await bus.publish(GameEvent(
+            type="skill", game_id=game_id, turn=game.turn_number,
+            actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+            target_player_id=ally.player_id, target_unit_id=ally.id, target_name=ally.name,
+            context={"skill": "heal", "restored_hp": restored},
+        ))
+        audit.info(
+            "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
+            "skill=%s | unit=%d | target=%d | restored_hp=%d",
+            player.id, game_id, skill, unit.id, ally.id, restored,
+        )
         return SkillResult(
             unit_id=unit.id, skill=skill, target_unit_id=ally.id,
             restored_hp=restored,
@@ -425,6 +475,17 @@ async def use_skill(
         unit.mp = 0
         _log(session, game, player, "skill",
              f"{unit.name} rallied: buffed {len(affected)} adjacent allies (+10% ATK)")
+        # Publish to event bus
+        await bus.publish(GameEvent(
+            type="skill", game_id=game_id, turn=game.turn_number,
+            actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+            context={"skill": "rally", "affected_count": len(affected)},
+        ))
+        audit.info(
+            "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
+            "skill=%s | unit=%d | affected_count=%d",
+            player.id, game_id, skill, unit.id, len(affected),
+        )
         return SkillResult(
             unit_id=unit.id, skill=skill, target_unit_id=None,
             restored_hp=0,
@@ -459,4 +520,13 @@ async def wait_action(
     unit.has_acted = True
     unit.mp = 0  # wait consumes remaining MP
     _log(session, game, player, "wait", f"{unit.name} waited")
+    # Publish to event bus
+    await bus.publish(GameEvent(
+        type="wait", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+    ))
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=WAIT | result=SUCCESS | unit=%d",
+        player.id, game_id, unit.id,
+    )
     return WaitResult(unit_id=unit.id, description=f"{unit.name} ends turn")

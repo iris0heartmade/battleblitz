@@ -6,6 +6,7 @@ map gen, etc.) are sync so they're easy to test in isolation.
 """
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -57,6 +58,9 @@ from app.config import (
 )
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.utils import bfs_reachable, chebyshev, has_line_of_sight, pathfind
+
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -178,6 +182,7 @@ def create_initial_units(
                         x=x,
                         y=y,
                         has_acted=False,
+                        has_moved=False,
                         skills=skills,
                     )
                 )
@@ -772,6 +777,7 @@ def create_initial_units_with_roster(
                         x=x,
                         y=y,
                         has_acted=False,
+                        has_moved=False,
                         skills=skills,
                     )
                 )
@@ -980,8 +986,9 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
             if t.terrain == TERRAIN_CASTLE:
                 claim_castle_if_present(t, unit)
     unit.x, unit.y = dest
-    # AI: move ends this unit's turn (can't move again this round)
-    unit.has_acted = True
+    # AI: move ends this unit's move (can't move again this round),
+    # but the unit may still attack this turn (matches the human player rules).
+    unit.has_moved = True
     return True
 
 

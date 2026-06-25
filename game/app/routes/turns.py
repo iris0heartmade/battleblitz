@@ -7,11 +7,13 @@ player's seat.
 
 A background asyncio task polls every `TURNS_CHECK_INTERVAL_SECONDS` for
 players who haven't ended their turn within `TURN_TIMEOUT_HOURS` and
-auto-skips them.
+auto-skips them. It also emits periodic `HEALTH |` lines per the project's
+logging standard.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -29,8 +31,19 @@ from app.config import (
 )
 from app.database import AsyncSessionLocal, get_session
 from app.game_logic import ai_take_turn, apply_end_of_turn
+from app.agent.integration import dispatch_ai_turn
+from app.logging_config import (
+    collect_health_metrics,
+    format_health_line,
+    get_audit_logger,
+    get_health_logger,
+)
 from app.models import ActionLog, Game, Player, Unit
 from app.schemas import EndTurnRequest, EndTurnResult, GameStateOut
+
+logger = logging.getLogger(__name__)
+audit = get_audit_logger()
+health = get_health_logger()
 
 router = APIRouter(prefix="/games", tags=["turns"])
 
@@ -89,17 +102,8 @@ async def end_turn(
         )
     ).scalars().all()
     acted_count = sum(1 for u in player_units if u.has_acted)
-
-    if acted_count < required_actions:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"本回合至少需要操作 {required_actions} 个单位（当前已操作 {acted_count}）",
-        )
-    if acted_count > required_actions:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"本回合最多操作 {required_actions} 个单位（已操作 {acted_count}）",
-        )
+    # (No enforcement: any player can end their turn at any time, even
+    # without acting. The action counter is now advisory only.)
 
     # Lock in the first-player handicap after they end their first turn.
     if player.seat == 0 and not game.first_player_done_first_turn:
@@ -114,6 +118,11 @@ async def end_turn(
             action_type="end_turn",
             description=f"{player.user_name} ended their turn",
         )
+    )
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=END_TURN | result=SUCCESS | "
+        "seat=%d | acted_count=%d | required=%d | turn=%d",
+        player.id, game_id, player.seat, acted_count, required_actions, game.turn_number,
     )
 
     # Find next alive seat after the current one (with wrap-around).
@@ -135,6 +144,7 @@ async def end_turn(
         ).scalars().all()
         for u in all_units:
             u.has_acted = False
+            u.has_moved = False
             u.mp = u.mov  # refill MP pool for the next round
 
         if game.status == "playing":
@@ -208,8 +218,8 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                 if current is None or not current.is_ai:
                     return
 
-                # Run the AI's turn
-                actions = await ai_take_turn(session, game, current)
+                # Run the AI's turn (dispatcher picks rules vs LLM)
+                actions = await dispatch_ai_turn(session, game, current)
                 session.add(ActionLog(
                     game_id=game.id,
                     turn_number=game.turn_number,
@@ -234,6 +244,7 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                     ).scalars().all()
                     for u in all_units:
                         u.has_acted = False
+                        u.has_moved = False
                         u.mp = u.mov
                     if game.status == "playing":
                         new_alive = sorted(p.seat for p in players if p.is_alive)
@@ -244,8 +255,8 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                     game.current_player_index = next_seat
                 await session.commit()
                 # Loop continues if the next player is also AI
-    except Exception as exc:  # noqa: BLE001
-        print(f"[ai-turn-chain] error in game {game_id}: {exc!r}")
+    except Exception:  # noqa: BLE001
+        logger.exception("AI turn chain error in game %d", game_id)
 
 
 # ============================================================
@@ -258,22 +269,71 @@ _scheduler_task: Optional[asyncio.Task] = None
 async def _auto_skip_loop(stop_event: asyncio.Event) -> None:
     """Poll for stale turns every TURNS_CHECK_INTERVAL_SECONDS.
 
-    Also runs abandoned-room cleanup on a slower cadence (LOBBY_CLEANUP_INTERVAL_SECONDS).
+    Also runs abandoned-room cleanup on a slower cadence (LOBBY_CLEANUP_INTERVAL_SECONDS),
+    and emits a HEALTH line every ~30-60s so operators can
+    see liveness + memory growth at a glance.
     """
     loop_count = 0
-    while not stop_event.is_set():
+    health_interval = max(TURNS_CHECK_INTERVAL_SECONDS, 30)  # never more often than 30s
+    health_every = max(1, health_interval // TURNS_CHECK_INTERVAL_SECONDS)
+    prev_rss_mb: Optional[float] = None
+    logger.info("Turn scheduler started: poll_interval=%ds health_interval=%ds",
+                TURNS_CHECK_INTERVAL_SECONDS, health_interval)
+    try:
+        while not stop_event.is_set():
+            try:
+                await _check_stale_turns()
+                if loop_count % max(1, LOBBY_CLEANUP_INTERVAL_SECONDS // TURNS_CHECK_INTERVAL_SECONDS) == 0:
+                    await cleanup_abandoned_games()
+            except Exception:  # noqa: BLE001
+                # Log but never kill the scheduler
+                logger.exception("Turn scheduler loop error")
+            # Periodic HEALTH line (per the Agent Logging Standard §4.2 / §16)
+            if loop_count > 0 and loop_count % health_every == 0:
+                try:
+                    playing, waiting = await _count_games_by_status()
+                    metrics = collect_health_metrics(prev_rss_mb=prev_rss_mb)
+                    prev_rss_mb = metrics["rss_mb"]
+                    health.info(format_health_line(
+                        metrics, playing_games=playing, waiting_games=waiting,
+                    ))
+                except Exception:  # noqa: BLE001
+                    logger.exception("HEALTH collection failed")
+            loop_count += 1
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=TURNS_CHECK_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        # Final HEALTH line on shutdown
         try:
-            await _check_stale_turns()
-            if loop_count % max(1, LOBBY_CLEANUP_INTERVAL_SECONDS // TURNS_CHECK_INTERVAL_SECONDS) == 0:
-                await cleanup_abandoned_games()
-        except Exception as exc:  # noqa: BLE001
-            # Log but never kill the scheduler
-            print(f"[turn-scheduler] error: {exc!r}")
-        loop_count += 1
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=TURNS_CHECK_INTERVAL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
+            playing, waiting = await _count_games_by_status()
+            metrics = collect_health_metrics(prev_rss_mb=prev_rss_mb)
+            health.info(format_health_line(
+                metrics, playing_games=playing, waiting_games=waiting, final=True,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.exception("Final HEALTH line failed")
+        logger.info("Turn scheduler stopped")
+
+
+async def _count_games_by_status() -> tuple:
+    """Return (playing_count, waiting_count). Lightweight — no joins."""
+    from sqlalchemy import func
+
+    async with AsyncSessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(Game.status, func.count(Game.id)).group_by(Game.status)
+            )
+        ).all()
+    playing = waiting = 0
+    for status, count in rows:
+        if status == "playing":
+            playing = count
+        elif status == "waiting":
+            waiting = count
+    return playing, waiting
 
 
 async def cleanup_abandoned_games() -> None:
@@ -318,7 +378,9 @@ async def cleanup_abandoned_games() -> None:
                 g = await session.get(Game, gid)
                 if g is not None:
                     await session.delete(g)
-            print(f"[cleanup] removed {len(abandoned_ids)} abandoned game(s): {abandoned_ids}")
+            logger.info(
+                "Abandoned games cleaned up: count=%d ids=%s", len(abandoned_ids), abandoned_ids
+            )
         await session.commit()
 
 
@@ -368,6 +430,11 @@ async def _check_stale_turns() -> None:
                         description=f"{current.user_name} auto-skipped (timeout)",
                     )
                 )
+                audit.warning(
+                    "USER_ACTION | user=player_%d | game=%d | action=AUTO_SKIP | "
+                    "result=SUCCESS | reason=timeout | user_name=%s | seat=%d",
+                    current.id, game.id, current.user_name, current.seat,
+                )
                 # If everyone has ended, resolve the turn
                 if all(p.has_ended_turn or not p.is_alive for p in players):
                     await apply_end_of_turn(session, game)
@@ -380,6 +447,7 @@ async def _check_stale_turns() -> None:
                     ).scalars().all()
                     for u in all_units:
                         u.has_acted = False
+                        u.has_moved = False
                         u.mp = u.mov
                     if game.status == "playing":
                         new_alive = sorted(p.seat for p in players if p.is_alive)

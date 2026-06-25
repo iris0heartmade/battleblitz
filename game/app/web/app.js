@@ -301,7 +301,14 @@ function renderLobby(st) {
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
       <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}</div>
     `;
-    if (p.is_ai) html += `<span class="ai-badge">AI</span>`;
+    if (p.is_ai) {
+      const kind = p.agent_kind || "rules";
+      const pers = p.agent_personality || "balanced";
+      const badgeText = kind === "llm"
+        ? `LLM (${pers})`
+        : "规则 AI";
+      html += `<span class="ai-badge">${badgeText}</span>`;
+    }
     // Only the room creator (seat 0) can remove AI players
     if (p.is_ai && state.me.seat === 0) {
       html += `<button class="remove-btn" data-action="remove-ai" data-player-id="${p.id}" title="移除 AI">✕</button>`;
@@ -318,9 +325,15 @@ function renderLobby(st) {
 
 async function addAIPlayer() {
   const gid = state.me.game_id;
+  const kind = document.getElementById("lobby-ai-kind")?.value || "rules";
+  const personality = document.getElementById("lobby-ai-personality")?.value || "balanced";
   try {
-    await api("POST", `/games/${gid}/add-ai`, { difficulty: "normal" });
-    toast("已加入 AI 电脑");
+    await api("POST", `/games/${gid}/add-ai`, {
+      difficulty: "normal",
+      agent_kind: kind,
+      personality: personality,
+    });
+    toast(`已加入 ${kind === "llm" ? "LLM Agent" : "规则 AI"}`);
     await refreshLobby(gid);
   } catch (e) {
     toast("加入 AI 失败：" + e.message, 3000);
@@ -379,8 +392,10 @@ function renderGame(st) {
   document.getElementById("game-turn").textContent = st.game.turn_number;
   const cur = st.players.find(p => p.id === st.current_player_id);
   const curIsAI = cur?.is_ai;
-  document.getElementById("game-current-player").textContent = `轮到：${cur ? cur.user_name : "—"}${curIsAI ? " 🤖" : ""}`;
-  document.getElementById("game-map-seed").textContent = `种子：${st.game.map_seed}`;
+  document.getElementById("game-current-player").textContent = cur ? `${cur.user_name}${curIsAI ? " 🤖" : ""}` : "—";
+  document.getElementById("game-map-seed").textContent = st.game.map_seed;
+  const mapNameEl = document.getElementById("game-map-name");
+  if (mapNameEl) mapNameEl.textContent = st.game.map_preset || "经典随机";
 
   // Show "AI thinking" badge when current player is AI and game is playing
   const thinkingEl = document.getElementById("game-thinking");
@@ -452,25 +467,23 @@ function showTurnBanner(player, turnNum) {
 }
 
 function updateActionCounter() {
-  const el = document.getElementById("action-counter");
-  if (!el) return;
-  el.textContent = `${state.actionsTaken}/${state.actionsRequired}`;
-  el.classList.toggle("ready", state.actionsTaken >= state.actionsRequired);
-  el.classList.toggle("short", state.actionsTaken < state.actionsRequired);
-  // Disable end-turn button when not enough actions
+  // No-op: per-player action counter was removed. Each unit acts
+  // independently and the player may end their turn at any time.
+  // The end-turn button is enabled whenever it's the player's turn.
   const endBtn = document.querySelector('[data-action="end-turn"]');
   if (endBtn) {
     const isMyTurn = state.game?.current_player_id === state.me.player_id;
-    const enough = state.actionsTaken >= state.actionsRequired;
-    endBtn.disabled = !(isMyTurn && enough);
-    endBtn.title = isMyTurn && !enough
-      ? `需要操作至少 ${state.actionsRequired} 个单位`
-      : "";
+    endBtn.disabled = !isMyTurn;
+    endBtn.title = isMyTurn ? "" : "还没轮到你";
   }
 }
 
 function renderBoard(st) {
   const board = document.getElementById("board");
+  // Force grid layout via inline style (overrides any CSS issues)
+  board.style.display = "grid";
+  board.style.gridTemplateColumns = "repeat(15, 44px)";
+  board.style.gridTemplateRows = "repeat(15, 44px)";
   // Build cells map for quick lookup
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
@@ -497,6 +510,8 @@ function renderBoard(st) {
       cell.className = "cell t-" + (tile?.terrain || "plain");
       cell.dataset.x = x;
       cell.dataset.y = y;
+      cell.style.gridColumn = String(x + 1);
+      cell.style.gridRow = String(y + 1);
 
       const occupant = unitMap.get(`${x},${y}`);
       if (occupant) {
@@ -533,10 +548,14 @@ function renderBoard(st) {
       if (state.selectedUnit && state.selectedUnit.x === x && state.selectedUnit.y === y) {
         cell.classList.add("selected");
       }
-      if (state.actionMode === "move" && state.reachableTiles?.has(`${x},${y}`)) {
+      // Show reachable tiles (green) whenever a unit bubble is open and
+      // that unit still has movement. This makes the "射程" button work
+      // even before the user clicks "移动".
+      if (state.reachableTiles?.has(`${x},${y}`) && !state.pendingMove) {
         cell.classList.add("move-hint");
       }
-      if (state.actionMode === "attack" && state.attackTargets?.has(`${x},${y}`)) {
+      // Show attackable targets (red) under the same condition.
+      if (state.attackTargets?.has(`${x},${y}`)) {
         cell.classList.add("target");
       }
 
@@ -717,22 +736,16 @@ function showUnitActionBubble(unit) {
   state.actionMode = null;
   state.pendingMove = null;
 
-  const st = state.game;
-  const myPlayer = st.players.find(p => p.id === state.me.player_id);
-  const acted = myPlayer?.units.filter(u => u.hp > 0 && u.has_acted).length || 0;
-  const maxActions = (myPlayer?.seat === 0 && st.game.turn_number === 1) ? 1 : 2;
-  const atMax = acted >= maxActions;
+  // Per-unit capability: each unit acts independently. If THIS unit
+  // has already acted, the caller (onCellClick) shows the read-only
+  // bubble instead. There is no per-player action cap.
+  const canMove = reachable.size > 0;
+  const canAttack = targets.size > 0;
+  const canHeal = (unit.skills || []).includes("heal");
+  const canRally = (unit.skills || []).includes("rally");
+  const canWait = true;
 
-  const canMove = !atMax && reachable.size > 0;
-  const canAttack = !atMax && targets.size > 0;
-  const canHeal = !atMax && (unit.skills || []).includes("heal");
-  const canRally = !atMax && (unit.skills || []).includes("rally");
-  const canWait = !atMax;
-
-  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}${atMax ? " 🚫" : ""}</div>`;
-  if (atMax) {
-    html += `<div class="ab-row" style="font-size:12px;color:var(--text-dim);text-align:center;padding:4px 6px;">本回合已操作 ${acted}/${maxActions}，无法再行动</div>`;
-  }
+  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}</div>`;
   html += `<div class="ab-row">`;
   html += `<button class="ab-btn primary" data-ab="move" ${canMove ? "" : "disabled"}>🚶 移动</button>`;
   html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"}>⚔️ 攻击</button>`;
@@ -896,8 +909,13 @@ async function onBubbleClick(action, unit, targetId) {
       enterAttackMode(unit);
       break;
     case "range":
-      // Just keep bubble open; visual range already shown via highlights
-      toast("射程范围以红色高亮显示");
+      // Re-render the board so reachable tiles (green) and attackable
+      // enemies (red) get highlighted. computeReachable/computeAttackTargets
+      // were already populated when the bubble opened.
+      renderBoard(state.game);
+      const mCount = state.reachableTiles?.size || 0;
+      const aCount = state.attackTargets?.size || 0;
+      toast(`移动范围 ${mCount} 格 · 攻击目标 ${aCount} 个`);
       break;
     case "info":
       // Show full info inline (re-render bubble as info card)
@@ -1236,12 +1254,38 @@ function renderPlayersList(st) {
 
 function renderActionLog(st) {
   const el = document.getElementById("action-log");
+  const chatEl = document.getElementById("chat-float");
   el.innerHTML = "";
+  if (chatEl) chatEl.innerHTML = "";
+  const playerMap = new Map();
+  for (const p of st.players) playerMap.set(p.id, p);
+  const moodEmoji = { joy: "😄", anger: "😠", frustrated: "😤", smug: "😏",
+                      disappointed: "😞", relieved: "😅", neutral: "💬" };
+  const colorMap = { red: "#e74c3c", blue: "#3498db", green: "#27ae60", yellow: "#f1c40f" };
+
   for (const log of st.logs.slice(0, 50)) {
-    const div = document.createElement("div");
-    div.className = "entry " + log.action_type;
-    div.textContent = `T${log.turn_number} · ${log.description}`;
-    el.appendChild(div);
+    if (log.action_type === "ai_commentary" || log.action_type === "ai_turn") {
+      // Route AI speech to the chat box
+      if (!chatEl) continue;
+      const m = log.description.match(/^\[(\w+)\/(\w+)\]\s*(.*)/);
+      if (!m) continue;
+      const emoji = moodEmoji[m[2]] || "💬";
+      const text = m[3];
+      const player = playerMap.get(log.player_id);
+      const avatarBg = (player?.color) ? (colorMap[player.color] || "#888") : "#888";
+      const name = player?.user_name || "AI";
+      const div = document.createElement("div");
+      div.className = "chat-msg";
+      div.innerHTML = `<span class="chat-avatar" style="background:${avatarBg}">${emoji}</span>`
+        + `<span class="chat-name">${escapeHtml(name)}</span>`
+        + `<span class="chat-text">${escapeHtml(text)}</span>`;
+      chatEl.appendChild(div);
+    } else {
+      const div = document.createElement("div");
+      div.className = "entry " + log.action_type;
+      div.textContent = `T${log.turn_number} · ${log.description}`;
+      el.appendChild(div);
+    }
   }
 }
 
@@ -1416,6 +1460,17 @@ document.addEventListener("DOMContentLoaded", () => {
       case "toggle-ref-panel":
         toggleRefPanel();
         break;
+      case "toggle-game-menu":
+        const menu = document.getElementById("game-menu");
+        const overlay = document.getElementById("menu-overlay");
+        const visible = menu.hidden;
+        menu.hidden = !visible;
+        overlay.hidden = !visible;
+        break;
+      case "show-status":
+        // Scroll the side panel's player-list into view
+        document.getElementById("players-list")?.scrollIntoView({ behavior: "smooth" });
+        break;
       case "add-ai":
         await addAIPlayer();
         break;
@@ -1454,6 +1509,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Show resume button if a session is saved (regardless of whether rejoin works)
   updateResumeButton(loadSession());
+
+  // AI type selector: show personality only for LLM
+  const aiKindSel = document.getElementById("lobby-ai-kind");
+  const aiPersSel = document.getElementById("lobby-ai-personality");
+  if (aiKindSel && aiPersSel) {
+    aiKindSel.addEventListener("change", () => {
+      aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+    });
+    aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+  }
 
   // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu
   tryResumeSession().then((resumed) => {
