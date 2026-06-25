@@ -98,6 +98,39 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     return player
 
 
+def _actions_per_turn(player: Player, game: Game) -> int:
+    """Max units this player can act with this turn.
+
+    First player (seat 0) is limited to 1 action on their first turn; everyone
+    else (and first player on later turns) gets 2 actions per turn.
+    """
+    if player.seat == 0 and not game.first_player_done_first_turn:
+        return 1
+    return 2
+
+
+async def _check_action_budget(session: AsyncSession, player: Player, unit: Unit) -> None:
+    """Raise 400 if player has already reached the max units-acted cap this turn
+    AND the unit being acted with hasn't acted yet (i.e. this would be a NEW unit).
+    """
+    game = await session.get(Game, player.game_id)
+    if game is None:
+        return
+    max_actions = _actions_per_turn(player, game)
+    if unit.has_acted:
+        # Already caught by caller; nothing to do here.
+        return
+    units = (
+        await session.execute(select(Unit).where(Unit.player_id == player.id))
+    ).scalars().all()
+    acted = sum(1 for u in units if u.has_acted)
+    if acted >= max_actions:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"本回合最多操作 {max_actions} 个单位（已操作 {acted}）",
+        )
+
+
 async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coord, str], Dict[Coord, Optional[int]], Dict[Coord, Optional[int]]]:
     tiles = (
         await session.execute(select(Tile).where(Tile.game_id == game_id))
@@ -147,6 +180,7 @@ async def move_unit(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
     if unit.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted this turn")
+    await _check_action_budget(session, player, unit)
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "target out of bounds")
 
@@ -230,6 +264,7 @@ async def attack(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "attacker does not belong to you")
     if attacker.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "attacker has already acted")
+    await _check_action_budget(session, player, attacker)
 
     target = await _load_unit(session, body.target_id)
     if target.player_id == player.id:
@@ -319,6 +354,7 @@ async def use_skill(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
     if unit.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
+    await _check_action_budget(session, player, unit)
 
     skill = body.skill
     if skill not in (unit.skills or []):
@@ -398,6 +434,7 @@ async def wait_action(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
     if unit.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
+    await _check_action_budget(session, player, unit)
 
     unit.has_acted = True
     _log(session, game, player, "wait", f"{unit.name} waited")

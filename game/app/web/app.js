@@ -480,6 +480,15 @@ function renderBoard(st) {
     for (const u of p.units) unitMap.set(`${u.x},${u.y}`, { unit: u, player: p });
   }
 
+  // FLIP step 1 (First): capture old positions of every unit currently in the DOM
+  const oldPositions = new Map(); // unit_id -> {left, top}
+  for (const u of document.querySelectorAll(".unit")) {
+    const id = u.dataset.unitId;
+    if (!id) continue;
+    const r = u.getBoundingClientRect();
+    oldPositions.set(id, { left: r.left, top: r.top });
+  }
+
   const frag = document.createDocumentFragment();
   for (let y = 0; y < 15; y++) {
     for (let x = 0; x < 15; x++) {
@@ -494,6 +503,7 @@ function renderBoard(st) {
         const u = occupant.unit;
         const uEl = document.createElement("div");
         uEl.className = `unit u-${occupant.player.color}` + (u.has_acted ? " acted" : "");
+        uEl.dataset.unitId = u.id;
         uEl.textContent = unitGlyph(u.unit_type);
         uEl.title = `${u.name} (Lv.${u.level}) HP ${u.hp}/${u.max_hp}`;
         const hp = document.createElement("div");
@@ -524,6 +534,35 @@ function renderBoard(st) {
   }
   board.innerHTML = "";
   board.appendChild(frag);
+
+  // FLIP step 2 (Last -> Invert -> Play): for each unit that moved, animate
+  // from its old screen position back to the new one.
+  const newPositions = new Map();
+  for (const u of document.querySelectorAll(".unit")) {
+    const id = u.dataset.unitId;
+    if (!id) continue;
+    const r = u.getBoundingClientRect();
+    newPositions.set(id, { left: r.left, top: r.top });
+  }
+  for (const [id, newPos] of newPositions) {
+    const old = oldPositions.get(id);
+    if (!old) continue; // brand new unit - no animation
+    const dx = old.left - newPos.left;
+    const dy = old.top - newPos.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+    const el = document.querySelector(`.unit[data-unit-id="${id}"]`);
+    if (!el) continue;
+    // Invert: jump back to old position with no transition
+    el.style.transition = "none";
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    // Play: next frame, animate to natural position
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.style.transition = "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)";
+        el.style.transform = "";
+      });
+    });
+  }
 }
 
 // ============================================================
@@ -664,12 +703,23 @@ function showUnitActionBubble(unit) {
   state.actionMode = null;
   state.pendingMove = null;
 
-  const canMove = reachable.size > 0;
-  const canAttack = targets.size > 0;
-  const canHeal = (unit.skills || []).includes("heal");
-  const canRally = (unit.skills || []).includes("rally");
+  const st = state.game;
+  const myPlayer = st.players.find(p => p.id === state.me.player_id);
+  const acted = myPlayer?.units.filter(u => u.hp > 0 && u.has_acted).length || 0;
+  const maxActions = (myPlayer?.seat === 0 && st.game.turn_number === 1) ? 1 : 2;
+  const atMax = acted >= maxActions;
 
-  let html = `<div class="ab-title">${escapeHtml(unit.name)}</div><div class="ab-row">`;
+  const canMove = !atMax && reachable.size > 0;
+  const canAttack = !atMax && targets.size > 0;
+  const canHeal = !atMax && (unit.skills || []).includes("heal");
+  const canRally = !atMax && (unit.skills || []).includes("rally");
+  const canWait = !atMax;
+
+  let html = `<div class="ab-title">${escapeHtml(unit.name)}${atMax ? " 🚫" : ""}</div>`;
+  if (atMax) {
+    html += `<div class="ab-row" style="font-size:12px;color:var(--text-dim);text-align:center;padding:4px 6px;">本回合已操作 ${acted}/${maxActions}，无法再行动</div>`;
+  }
+  html += `<div class="ab-row">`;
   html += `<button class="ab-btn primary" data-ab="move" ${canMove ? "" : "disabled"}>🚶 移动</button>`;
   html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"}>⚔️ 攻击</button>`;
   html += `<button class="ab-btn" data-ab="range">🎯 射程</button>`;
@@ -677,7 +727,7 @@ function showUnitActionBubble(unit) {
   if (canHeal) html += `<button class="ab-btn heal" data-ab="heal">💚 治疗</button>`;
   if (canRally) html += `<button class="ab-btn rally" data-ab="rally">📯 集结</button>`;
   html += `<button class="ab-btn" data-ab="info">👁 状态</button>`;
-  html += `<button class="ab-btn cancel" data-ab="wait">⏭ 待机</button>`;
+  html += `<button class="ab-btn cancel" data-ab="wait" ${canWait ? "" : "disabled"}>⏭ 待机</button>`;
   html += `</div>`;
 
   showBubbleAt(unit.x, unit.y, html);

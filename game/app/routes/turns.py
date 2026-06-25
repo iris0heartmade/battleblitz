@@ -95,6 +95,11 @@ async def end_turn(
             status.HTTP_400_BAD_REQUEST,
             f"本回合至少需要操作 {required_actions} 个单位（当前已操作 {acted_count}）",
         )
+    if acted_count > required_actions:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"本回合最多操作 {required_actions} 个单位（已操作 {acted_count}）",
+        )
 
     # Lock in the first-player handicap after they end their first turn.
     if player.seat == 0 and not game.first_player_done_first_turn:
