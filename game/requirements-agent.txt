@@ -1,0 +1,14 @@
+# LLM agent dependencies (overlay on top of game/requirements.txt)
+#
+# Install with:
+#   pip install -r requirements.txt -r requirements-agent.txt
+
+# Anthropic SDK — works with any Anthropic-compatible endpoint
+# (Anthropic, minimaxi.com/anthropic, OpenRouter, etc.)
+anthropic>=0.39.0
+
+# Prompt template rendering
+jinja2>=3.1.0
+
+# Fast JSON serialisation for snapshots
+orjson>=3.10.0
