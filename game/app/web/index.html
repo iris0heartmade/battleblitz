@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BattleBlitz · 战棋</title>
+  <link rel="stylesheet" href="/ui/style.css" />
+</head>
+<body>
+  <!-- ====================== 主菜单 ====================== -->
+  <section id="view-menu" class="view view-menu">
+    <div class="menu-card">
+      <h1 class="title">⚔️ BattleBlitz</h1>
+      <p class="subtitle">战棋回合制游戏 · 服务端 v0.1.0</p>
+      <div class="menu-buttons">
+        <button id="resume-btn" class="btn btn-accent btn-lg" data-action="resume-game" hidden>▶ 继续上次的游戏</button>
+        <button class="btn btn-primary btn-lg" data-action="goto-new-game">新建游戏</button>
+        <button class="btn btn-primary btn-lg" data-action="goto-join-game">加入游戏</button>
+        <button class="btn btn-secondary btn-lg" data-action="goto-settings">游戏设置</button>
+        <button class="btn btn-ghost btn-lg" data-action="goto-help">玩法说明</button>
+      </div>
+      <p class="menu-footer">© 2026 · powered by FastAPI + SQLAlchemy</p>
+    </div>
+  </section>
+
+  <!-- ====================== 设置 ====================== -->
+  <section id="view-settings" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>游戏设置</h2>
+      <p class="muted">这些设置会保存在你的浏览器本地（localStorage）。</p>
+      <div class="form-row">
+        <label>玩家昵称</label>
+        <input id="setting-name" type="text" maxlength="20" placeholder="输入你的名字" />
+      </div>
+      <div class="form-row">
+        <label>偏好颜色</label>
+        <select id="setting-color">
+          <option value="">自动分配</option>
+          <option value="red">红色</option>
+          <option value="blue">蓝色</option>
+          <option value="green">绿色</option>
+          <option value="yellow">黄色</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>棋盘主题</label>
+        <select id="setting-theme">
+          <option value="classic">经典</option>
+          <option value="dark">暗夜</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>自动刷新（秒）</label>
+        <input id="setting-refresh" type="number" min="1" max="30" value="3" />
+      </div>
+      <div class="form-row">
+        <label>
+          <input id="setting-sound" type="checkbox" />
+          启用音效
+        </label>
+      </div>
+      <button class="btn btn-primary" data-action="save-settings">保存</button>
+    </div>
+  </section>
+
+  <!-- ====================== 创建游戏 ====================== -->
+  <section id="view-new-game" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>新建游戏</h2>
+      <div class="form-row">
+        <label>房间名</label>
+        <input id="new-name" type="text" maxlength="40" placeholder="例如：练习对局" />
+      </div>
+      <div class="form-row">
+        <label>玩家人数</label>
+        <select id="new-max-players">
+          <option value="2">2 人</option>
+          <option value="3">3 人</option>
+          <option value="4">4 人</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>地图</label>
+        <select id="new-map-preset">
+          <option value="classic">经典随机（按种子生成）</option>
+        </select>
+        <p class="muted small" id="new-map-desc"></p>
+      </div>
+      <div class="form-row">
+        <label>兵种配置</label>
+        <select id="new-unit-composition">
+          <option value="classic">经典平衡（2 剑 1 弓 1 骑 1 治疗）</option>
+        </select>
+        <p class="muted small" id="new-units-desc"></p>
+      </div>
+      <div class="form-row">
+        <label>地图种子（仅经典随机生效）</label>
+        <input id="new-seed" type="number" placeholder="留空使用随机种子" />
+      </div>
+      <div id="new-error" class="error-text" hidden></div>
+      <button class="btn btn-primary btn-lg" data-action="create-game">创建并进入大厅</button>
+    </div>
+  </section>
+
+  <!-- ====================== 加入游戏 ====================== -->
+  <section id="view-join-game" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>加入游戏</h2>
+      <p class="muted">等待中的房间：</p>
+      <div id="join-list" class="join-list">
+        <p class="muted">加载中…</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 玩法说明 ====================== -->
+  <section id="view-help" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>玩法说明</h2>
+      <div class="help-content">
+        <h3>🎯 目标</h3>
+        <ul>
+          <li>消灭敌方所有单位</li>
+          <li>或者占领所有城堡（站在城堡上一回合）</li>
+        </ul>
+        <h3>🗺️ 地形</h3>
+        <ul>
+          <li><b>平地</b>（浅绿）：移动消耗 1，无加成</li>
+          <li><b>森林</b>（深绿）：移动消耗 2，防御 +2</li>
+          <li><b>山地</b>（灰）：移动消耗 3，防御 +3</li>
+          <li><b>河流</b>（蓝）：移动消耗 3，无加成</li>
+          <li><b>城堡</b>（金）：防御 +5，不可被敌方占领后踏入</li>
+        </ul>
+        <h3>⚔️ 单位</h3>
+        <ul>
+          <li><b>剑士 ×2</b>：攻防均衡，近战，移动 3</li>
+          <li><b>弓箭手 ×1</b>：远程（射程 2），低防，移动 3，技能【狙击】（+1 射程）</li>
+          <li><b>骑士 ×1</b>：高移速（5），高攻，低防，技能【连击】（攻击 2 次，每次 50% 伤害）</li>
+          <li><b>治疗师 ×1</b>：可治疗相邻友军 20HP，技能【集结】（相邻友军 +10% 攻击）</li>
+        </ul>
+        <h3>📐 回合流程</h3>
+        <ol>
+          <li>服务器生成地图和单位</li>
+          <li>当前玩家可无限次移动/攻击/技能/待命</li>
+          <li>点「结束回合」→ 下一玩家</li>
+          <li>所有玩家结束 → 服务器结算（升级、清除阵亡）→ 下一回合</li>
+        </ol>
+        <h3>💥 战斗公式</h3>
+        <p><code>伤害 = ATK × (ATK / (ATK + DEF + 地形)) × 兵种克制 × 暴击</code></p>
+        <ul>
+          <li>克制：剑士→骑士(+20%)，骑士→弓箭手(+20%)</li>
+          <li>暴击：基础 5% + 每级 1%，伤害 1.5 倍</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 大厅 ====================== -->
+  <section id="view-lobby" class="view" hidden>
+    <div class="panel lobby-panel">
+      <button class="btn btn-back" data-action="goto-menu">← 退出房间</button>
+      <h2>房间 #<span id="lobby-id">?</span></h2>
+      <p class="muted" id="lobby-status">等待玩家加入…</p>
+      <div id="lobby-players" class="lobby-players"></div>
+      <div class="lobby-actions">
+        <button class="btn btn-secondary" id="lobby-add-ai-btn" data-action="add-ai">🤖 加入 AI</button>
+        <button class="btn btn-primary btn-lg" id="lobby-start-btn" disabled data-action="start-game">▶ 开始游戏</button>
+      </div>
+      <p class="muted small">提示：作为房主（座位 0），可以加入 AI 电脑填补空位，AI 会自动行动。</p>
+    </div>
+  </section>
+
+  <!-- ====================== 棋盘 ====================== -->
+  <section id="view-game" class="view view-game" hidden>
+    <div class="game-layout">
+      <header class="game-header">
+        <div class="game-info">
+          <span class="badge">回合 <b id="game-turn">1</b></span>
+          <span class="badge" id="game-current-player">轮到：…</span>
+          <span class="badge" id="game-map-seed">种子：…</span>
+          <span class="badge" id="game-thinking" hidden>🤖 电脑思考中…</span>
+        </div>
+        <div class="game-actions">
+          <button class="btn btn-secondary" data-action="toggle-ref-panel">📖 参考</button>
+          <button class="btn btn-secondary" data-action="refresh-state">🔄 刷新</button>
+          <button class="btn btn-danger" data-action="end-turn">结束回合 →</button>
+        </div>
+      </header>
+
+      <main class="game-main">
+        <div id="board" class="board"></div>
+        <aside class="side-panel">
+          <div class="panel-card">
+            <h3>本回合操作 <span id="action-counter" class="action-counter">0/2</span></h3>
+            <div id="unit-info"><p class="muted">点击单位查看详情</p></div>
+          </div>
+          <div class="panel-card">
+            <h3>参战玩家</h3>
+            <div id="players-list"></div>
+          </div>
+          <div class="panel-card">
+            <h3>战报</h3>
+            <div id="action-log" class="action-log"></div>
+          </div>
+        </aside>
+      </main>
+
+      <!-- 气泡式操作菜单（在棋盘上方浮层） -->
+      <div id="action-bubble" class="action-bubble" hidden></div>
+
+      <!-- 回合切换横幅 -->
+      <div id="turn-banner" class="turn-banner" hidden>
+        <div class="banner-content">
+          <div class="banner-icon" id="banner-icon">⚔️</div>
+          <div class="banner-text">
+            <div class="banner-title" id="banner-title">玩家名 的回合</div>
+            <div class="banner-sub" id="banner-sub">第 1 回合</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 参考面板（地形 / 单位） -->
+      <aside id="ref-panel" class="ref-panel" hidden>
+        <div class="ref-panel-header">
+          <h2>📖 参考</h2>
+          <button class="btn btn-back" data-action="toggle-ref-panel">✕ 关闭</button>
+        </div>
+        <div class="ref-tabs">
+          <button class="ref-tab active" data-ref-tab="terrain">地形</button>
+          <button class="ref-tab" data-ref-tab="units">单位</button>
+          <button class="ref-tab" data-ref-tab="skills">技能</button>
+        </div>
+        <div class="ref-content" id="ref-content"></div>
+      </aside>
+
+      <div id="game-toast" class="toast" hidden></div>
+      <div id="game-over-modal" class="modal" hidden>
+        <div class="modal-card">
+          <h2 id="game-over-title">游戏结束</h2>
+          <p id="game-over-body"></p>
+          <button class="btn btn-primary" data-action="goto-menu">返回主菜单</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

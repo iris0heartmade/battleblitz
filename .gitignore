@@ -1,0 +1,44 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+
+# ===== Virtual environment =====
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== Database (auto-generated at runtime) =====
+*.db
+*.sqlite
+*.sqlite3
+battleblitz.db
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== Local config =====
+.env.local
+.env.*.local
+config.local.py
+
+# ===== Build / dist =====
+build/
+dist/
+*.pyc
