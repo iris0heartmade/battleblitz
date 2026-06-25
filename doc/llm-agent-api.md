@@ -1,9 +1,16 @@
 # BattleBlitz LLM Agent — 接口规范
 
-> 版本：v0.1.0 · 适用代码：`game/app/agent/`
+> 版本：v0.1.0 · 适用代码：`game/app/agent/` · `game/app/classes/units/`
 >
 > 本文档定义 LLM 对手层的全部公共接口：Python API、HTTP 端点变更、数据契约、配置项。
 > 目标读者：希望集成、扩展或测试该模块的开发者。
+>
+> **v0.1.0 → 实施记录**：
+> - ✅ 双协议支持（`LLM_PROTOCOL=anthropic|openai`），可走 llama.cpp 本地
+> - ✅ 随机性格切换（每回合选一种）
+> - ✅ 模板库扩到 80+ 条，覆盖所有动作类型
+> - ✅ 详细耗时日志（snapshot / prompt / LLM / execute 各阶段）
+> - 🆕 **新加** `GET /games/units` `GET /games/skills` 端点（前端不再硬编码）
 
 ---
 
@@ -623,22 +630,17 @@ class AddAIRequest(BaseModel):
 
 ### 8.2 切换后端到 OpenAI 兼容 API
 
-实现一个新的 client 类（继承或替换 `LLMClient`）：
+**已实现**（`app/agent/openai_client.py`）。无需自己写——`.env` 设 `LLM_PROTOCOL=openai` 即可：
 
-```python
-class OpenAIClient(LLMClient):
-    async def chat(self, *, system, user, **kwargs):
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=..., base_url=...)
-        resp = await client.chat.completions.create(
-            model=self.model,
-            messages=[{"role":"system","content":system},
-                     {"role":"user","content":user}],
-            tools=[{"type":"function","function":openai_tool_schema}],
-            tool_choice="required",
-        )
-        # 转 LLMResponse ...
+```bash
+# .env
+LLM_PROTOCOL=openai
+OPENAI_API_KEY=not-needed             # llama.cpp 不需要
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1
+OPENAI_MODEL=local-model
 ```
+
+实现细节见 `app/agent/openai_client.py`（Anthropic → OpenAI 工具 schema 转换、function calling 解析）。
 
 ### 8.3 加 ReAct 工具（沙盘推演）
 

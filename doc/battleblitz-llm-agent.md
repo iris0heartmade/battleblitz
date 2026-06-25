@@ -4,6 +4,9 @@
 > **硬件**：单卡 RTX 3080 10GB（vRAM 预算 9.5GB 上限）。
 > **形态**：单步决策 agent（LLM 选动作 → 脚本校验执行）。
 > **范围**：MVP 上 ReAct 升级是可选第二阶段，不在本文档硬性要求内。
+>
+> **更新记录**：
+> - 2026-06-26: §4 加状态列；实施情况、prompt 优化、客户端双协议
 
 ---
 
@@ -540,17 +543,17 @@ curl http://localhost:8000/metrics | grep agent_
 
 ## 4. 实施路线
 
-| 阶段 | 任务 | 验收 |
-|------|------|------|
-| **0. 准备** | 装 llama.cpp，下载 Q4_K_M，curl 测试通 | 1 分钟内首 token 出来 |
-| **1. 数据结构** | schemas.py + snapshot.py + legal_actions.py + 单元测试 | 覆盖率 > 90% |
-| **2. Prompt** | prompt.py + jinja 模板 + 用真实 DB 数据肉眼检查渲染 | 100 局回放，reason 文本无乱码 |
-| **3. LLM 客户端** | llm_client.py + retry.py + 三层校验 | mock server 集成测试 100% |
-| **4. 真实接入** | 跑通 1 完整回合（GPU）| 烟囱测试通过 |
-| **5. 前端 SSE** | reason 推前端 | 前端能看到 AI 内心独白 |
-| **6. 对战评估** | 50 局 LLM AI vs 规则 AI | 胜率 ≥ 30%（先稳）→ 调 prompt → ≥ 50% |
-| **7. 性格预设** | aggressive / defensive / trickster | 前端可切换 |
-| **8. ReAct 升级 (可选)** | 加 simulate 工具 | 胜率提升 > 10% 才保留 |
+| 阶段 | 任务 | 验收 | 状态 (2026-06-26) |
+|------|------|------|-------------------|
+| **0. 准备** | 装 llama.cpp，下载 Q4_K_M，curl 测试通 | 1 分钟内首 token 出来 | ✅ llama.cpp 已配，`.env` 设 `LLM_PROTOCOL=openai` |
+| **1. 数据结构** | schemas.py + snapshot.py + legal_actions.py + 单元测试 | 覆盖率 > 90% | ✅ 完成 |
+| **2. Prompt** | prompt.py + jinja 模板 + 用真实 DB 数据肉眼检查渲染 | 100 局回放，reason 文本无乱码 | ✅ 完成（多次优化：精简模板、随机人格、行为自定义）|
+| **3. LLM 客户端** | llm_client.py + retry.py + 三层校验 | mock server 集成测试 100% | ✅ 完成（双协议：Anthropic + OpenAI 兼容）|
+| **4. 真实接入** | 跑通 1 完整回合（GPU）| 烟囱测试通过 | ✅ 完成（实测 MiniMax M3 每次 ~1-3s）|
+| **5. 前端 SSE** | reason 推前端 | 前端能看到 AI 内心独白 | 🚧 **部分**（用 3s 轮询替代 SSE，左下角有 chat-float 浮层）|
+| **6. 对战评估** | 50 局 LLM AI vs 规则 AI | 胜率 ≥ 30%（先稳）→ 调 prompt → ≥ 50% | ⬜ 未做 |
+| **7. 性格预设** | aggressive / defensive / trickster | 前端可切换 | ✅ **部分**（后端每回合随机切人格，前端不能选）|
+| **8. ReAct 升级 (可选)** | 加 simulate 工具 | 胜率提升 > 10% 才保留 | ⬜ 未做 |
 
 **预估工时**：
 - 阶段 0-3：~3-5 天（纯写代码 + 单测）
