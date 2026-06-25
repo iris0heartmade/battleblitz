@@ -3,6 +3,7 @@ Game-lifecycle routes: create, join, fetch state, start.
 """
 from __future__ import annotations
 
+import logging
 import random
 from typing import List
 
@@ -42,6 +43,9 @@ from app.schemas import (
     ActionLogOut,
 )
 
+logger = logging.getLogger(__name__)
+audit = logging.getLogger("audit.user")
+
 router = APIRouter(prefix="/games", tags=["game"])
 
 
@@ -74,6 +78,10 @@ async def create_game(
     )
     session.add(game)
     await session.flush()
+    logger.info(
+        "Game created: id=%d name=%r seed=%d max_players=%d map_preset=%s",
+        game.id, game.name, seed, body.max_players, body.map_preset,
+    )
     return GameSummaryOut.model_validate(game)
 
 
@@ -113,7 +121,21 @@ async def join_game(
         await session.flush()
     except IntegrityError:
         await session.rollback()
+        audit.warning(
+            "USER_ACTION | user=%s | game=%d | action=JOIN | result=FAIL | reason=constraint_violation",
+            body.user_name, game_id,
+        )
         raise HTTPException(status.HTTP_409_CONFLICT, "could not join (constraint violation)")
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=JOIN | result=SUCCESS | "
+        "user_name=%s | color=%s | seat=%d",
+        player.id, game_id, player.user_name, player.color, player.seat,
+    )
+    logger.info(
+        "Player joined: id=%d game=%d name=%r color=%s seat=%d",
+        player.id, game_id, player.user_name, player.color, player.seat,
+    )
 
     return PlayerOut(
         id=player.id,
@@ -234,6 +256,17 @@ async def start_game(
         )
     )
 
+    logger.info(
+        "Game started: id=%d players=%d units=%d map_preset=%s seed=%d",
+        game_id, len(players), len(units),
+        getattr(game, "map_preset", None) or "classic", game.map_seed,
+    )
+    audit.info(
+        "USER_ACTION | user=system | game=%d | action=GAME_START | result=SUCCESS | "
+        "players=%d units=%d",
+        game_id, len(players), len(units),
+    )
+
     return await _build_state(session, game)
 
 
@@ -259,17 +292,59 @@ async def list_games(
 @router.get("/presets", response_model=PresetsResponse)
 async def list_presets() -> PresetsResponse:
     """Return available map and unit-composition presets for the create-game form."""
-    from app.game_logic import MAP_PRESETS, UNIT_COMPOSITIONS
+    from app.classes.units import list_compositions
+    from app.game_logic import MAP_PRESETS
     return PresetsResponse(
         maps=[
             PresetInfo(id=p["id"], name=p["name"], description=p["description"])
             for p in MAP_PRESETS.values()
         ],
         unit_compositions=[
-            PresetInfo(id=p["id"], name=p["name"], description=p["description"])
-            for p in UNIT_COMPOSITIONS.values()
+            PresetInfo(id=c["id"], name=c["name"], description=c["description"])
+            for c in list_compositions()
         ],
     )
+
+
+@router.get("/skills")
+async def list_skills():
+    """Return metadata for all skills (for frontend reference panel)."""
+    from app.classes.units.skills import list_all as _list_all_skills
+    return [
+        {
+            "skill_id": s.skill_id,
+            "display_cn": s.display_cn,
+            "display_en": s.display_en,
+            "is_passive": s.is_passive,
+            "default_users": s.default_users,
+        }
+        for s in _list_all_skills()
+    ]
+
+
+@router.get("/units")
+async def list_unit_classes():
+    """Return metadata for all unit classes (glyph, skills, stats, etc.).
+    The frontend uses this to render units without hardcoding type info."""
+    from app.classes.units import list_all
+    return [
+        {
+            "type_id": u.type_id,
+            "display_cn": u.display_cn,
+            "display_en": u.display_en,
+            "glyph": u.glyph,
+            "base_hp": u.base_hp,
+            "base_atk": u.base_atk,
+            "base_def": u.base_def,
+            "base_mov": u.base_mov,
+            "mp_pool": u.mp_pool,
+            "attack_range": u.attack_range,
+            "can_move_after_action": u.can_move_after_action,
+            "default_skills": list(u.default_skills),
+            "strong_against": list(u.strong_against),
+        }
+        for u in list_all()
+    ]
 
 
 @router.post("/{game_id}/add-ai", response_model=PlayerOut, status_code=status.HTTP_201_CREATED)
@@ -294,16 +369,21 @@ async def add_ai_player(
     seat = max((p.seat for p in players), default=-1) + 1
     # Generate a unique AI name
     ai_count = sum(1 for p in players if p.is_ai)
-    ai_name = f"电脑-{ai_count + 1}-{body.difficulty}"
+    backend_tag = body.agent_kind  # "rules" or "llm"
+    ai_name = f"电脑-{ai_count + 1}-{body.difficulty}-{backend_tag}"
     if any(p.user_name == ai_name for p in players):
         ai_name = f"电脑-{ai_count + 1}-{body.difficulty}-{seat}"
     ai = build_ai_player(game, seat=seat, color=color, name=ai_name)
+    ai.agent_kind = body.agent_kind
+    ai.agent_personality = body.personality
     session.add(ai)
     await session.flush()
     return PlayerOut(
         id=ai.id, user_name=ai.user_name, color=ai.color,
         is_alive=ai.is_alive, has_ended_turn=ai.has_ended_turn,
-        seat=ai.seat, is_ai=ai.is_ai, units=[],
+        seat=ai.seat, is_ai=ai.is_ai,
+        agent_kind=ai.agent_kind, agent_personality=ai.agent_personality,
+        units=[],
     )
 
 
@@ -393,6 +473,8 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 has_ended_turn=p.has_ended_turn,
                 seat=p.seat,
                 is_ai=p.is_ai,
+                agent_kind=p.agent_kind,
+                agent_personality=p.agent_personality,
                 units=[
                     UnitOut.model_validate(u)
                     for u in sorted(units_by_player.get(p.id, []), key=lambda x: (x.unit_type, x.id))

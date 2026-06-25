@@ -1,0 +1,478 @@
+# BattleBlitz 架构文档
+
+> v0.1.0 — 回合制战棋游戏服务器 (Fire Emblem / Advance Wars 风格)
+
+---
+
+## 一、项目概览
+
+BattleBlitz 是一个基于浏览器的多人回合制战棋游戏。后端使用 **FastAPI + SQLAlchemy (async) + SQLite**，前端为**原生 HTML/CSS/JS 单页应用 (SPA)**，无需任何前端构建工具。
+
+### 技术栈
+
+| 层 | 技术 | 说明 |
+|---|------|------|
+| HTTP 框架 | FastAPI 0.110+ | 异步路由，自动 OpenAPI 文档 |
+| ASGI 服务器 | Uvicorn | 开发/生产均用，支持 `--reload` |
+| ORM | SQLAlchemy 2.0+ | 异步引擎，声明式模型 |
+| 数据库 | SQLite (aiosqlite) | 单文件零配置，适合小型部署 |
+| 数据校验 | Pydantic v2.10.3 | 请求/响应序列化与验证 |
+| 前端 | Vanilla JS | 无框架，~1500 行 ES6，localStorage 持久化 |
+| 样式 | CSS 变量 + 暗色主题 | 支持 class/dark 双主题 |
+
+### 部署目标
+
+- **开发**：Windows / macOS / Linux，`uvicorn --reload` 热重载
+- **生产**：Raspberry Pi，systemd 服务自动启停
+
+---
+
+## 二、目录结构
+
+```
+BattleBlitz/
+├── doc/
+│   └── architecture.md          # 本文档
+├── game/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py              # FastAPI 应用入口 + lifespan 管理
+│   │   ├── config.py            # 所有游戏常量（地图、单位、战斗、回合）
+│   │   ├── database.py          # 异步引擎、Session 工厂、表初始化
+│   │   ├── models.py            # ORM 模型：Game / Player / Unit / Tile / ActionLog
+│   │   ├── schemas.py           # Pydantic v2 请求体 / 响应体
+│   │   ├── game_logic.py        # 地图生成、战斗计算、升级、AI、回合结算
+│   │   ├── utils.py             # 寻路 (BFS/Dijkstra)、视野、距离计算
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── game.py          # /games 生命周期：创建、加入、开始、状态、预设
+│   │   │   ├── actions.py       # /move, /attack, /skill, /wait
+│   │   │   └── turns.py         # /end-turn + 后台定时器（超时、AI 链、清理）
+│   │   └── web/
+│   │       ├── index.html       # SPA 骨架（菜单/大厅/棋盘/气泡菜单）
+│   │       ├── app.js           # 客户端逻辑（API、视图切换、棋盘渲染、FLIP 动画）
+│   │       └── style.css        # CSS 变量主题、棋盘格子、气泡菜单、横幅动画
+│   ├── requirements.txt
+│   ├── start.bat                # Windows 启动脚本
+│   └── stop.bat                 # Windows 停止脚本
+├── tools/
+│   ├── git_ssh.py               # Git SSH 辅助
+│   └── ssh_askpass.py           # SSH askpass 辅助
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 三、核心数据模型
+
+### ER 关系
+
+```
+Game (1) ──< (N) Player ──< (N) Unit
+  │
+  ├──< (N) Tile         (15×15 = 225 行/局)
+  └──< (N) ActionLog    (战报日志)
+```
+
+### 表结构摘要
+
+#### `games`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | 自增 |
+| name | VARCHAR(64) | 房间名 |
+| status | VARCHAR(16) | `waiting` / `playing` / `finished` |
+| turn_number | INT | 当前回合编号 |
+| current_player_index | INT | 当前行动玩家 seat |
+| map_seed | INT | 地图随机种子 |
+| map_preset | VARCHAR(32) | 地图预设 ID（如 `classic`、`mountain_pass`） |
+| unit_composition | VARCHAR(32) | 兵种配置 ID（如 `classic`、`aggressive`） |
+| first_player_done_first_turn | BOOL | 公平性标记：seat 0 的玩家是否完成了首回合 |
+
+#### `players`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | 自增 |
+| game_id | INT FK | 所属游戏 |
+| user_name | VARCHAR(64) | 玩家名（同局唯一） |
+| color | VARCHAR(16) | 颜色（red/blue/green/yellow，同局唯一） |
+| seat | INT | 回合顺序（0-N，同局唯一） |
+| is_alive | BOOL | 是否存活 |
+| has_ended_turn | BOOL | 本回合是否已结束 |
+| is_ai | BOOL | 是否 AI 控制 |
+
+#### `units`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | 自增 |
+| player_id | INT FK → players | 所属玩家 |
+| unit_type | VARCHAR(16) | `swordsman` / `archer` / `knight` / `healer` |
+| hp / max_hp / atk / def_ / mov | INT | 战斗属性 |
+| mp | INT | **当前 MP**（每回合重置为 mov） |
+| morale | INT | 士气 (0-3)，击杀+1，提供 ATK/DEF 加成 |
+| x / y | INT | 棋盘坐标 |
+| has_acted | BOOL | 本回合是否已行动 |
+| skills | JSON LIST | 技能列表（如 `["snipe"]`、`["heal", "rally"]`） |
+
+#### `tiles`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | 自增 |
+| game_id | INT FK | 所属游戏 |
+| x / y | INT | 坐标（同局唯一对） |
+| terrain | VARCHAR(16) | 地形类型 |
+| owner_id | INT FK? | 城堡所有者 |
+| occupied_unit_id | INT FK? | 占据此格的单位 |
+
+#### `action_logs`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | 自增 |
+| game_id | INT FK | 所属游戏 |
+| turn_number | INT | 回合编号 |
+| player_id | INT FK? | 执行者 |
+| action_type | VARCHAR(16) | `move` / `attack` / `skill` / `wait` / `turn_end` / `death` / `victory` / `system` / `ai_turn` / `auto_skip` |
+| description | VARCHAR(512) | 人类可读描述 |
+
+---
+
+## 四、模块职责
+
+### 4.1 `config.py` — 游戏常量
+
+所有可调参数均定义于此，无魔术数字散落于逻辑代码中：
+
+| 类别 | 关键常量 |
+|------|---------|
+| **地图** | `MAP_SIZE=15`, 5 种地形及其移速消耗/防御加成/生成权重 |
+| **地形** | 平地(1/0), 森林(2/+2), 山地(3/+3), 河流(3/0), 城堡(1/+5) |
+| **单位** | 4 种类型，基础属性（HP/ATK/DEF/MOV），默认技能，初始 5 单位/玩家 |
+| **战斗** | 暴击率 5%+1%/级，暴击倍率 1.5×，兵种克制 1.2× |
+| **MP 系统** | `UNIT_MP_POOL`（剑5/弓5/骑8/疗5），`UNIT_CAN_MOVE_AFTER_ACTION` |
+| **士气** | `MORALE_MAX=3`，每星 +10% ATK / +5% DEF |
+| **回合** | 超时 24h，首玩家首回合 1 行动，之后每回合 2 行动 |
+| **AI** | 思考延迟 1.2s，最大行动 5 次，治疗阈值 40%HP，攻击范围 4 格 |
+
+### 4.2 `database.py` — 数据访问层
+
+- 基于 `SQLAlchemy 2.0` 异步引擎（`aiosqlite` 驱动）
+- `init_db()`: 启动时自动建表
+- `get_session()`: FastAPI 依赖注入用，自动 commit/rollback
+- `session_scope()`: 后台任务/AI/定时器用
+- `dispose_db()`: 关闭时释放连接
+- 可通过 `DATABASE_URL` 环境变量覆盖数据库路径
+
+### 4.3 `models.py` — ORM 模型
+
+标准 SQLAlchemy 声明式模型，特点：
+- `def_` 字段用 `mapped_column("def_", Integer)` 规避 Python 关键字冲突
+- `Unit.skills` 为 JSON 列（SQLite 以 TEXT 兜底）
+- 所有 FK 列有索引 (`index=True`)
+- `Tile` 有 `(game_id, x, y)` 联合唯一约束
+- `Player` 有 `(game_id, user_name/color/seat)` 联合唯一约束
+- 所有时间戳使用 UTC 感知的 `datetime`
+
+### 4.4 `schemas.py` — API 契约
+
+Pydantic v2 模型，与 ORM 分离：
+
+- **请求体**：`CreateGameRequest`, `JoinGameRequest`, `MoveRequest`, `AttackRequest`, `SkillRequest`, `WaitRequest`, `EndTurnRequest`, `AddAIRequest`
+- **响应体**：`GameStateOut`（包含游戏、地图块、玩家、单位、战报的完整快照）
+- **结果体**：`MoveResult`, `AttackResult`, `SkillResult`, `WaitResult`, `EndTurnResult`
+- `APIModel` 基类配置 `from_attributes=True` 以支持 ORM 对象直接转 Pydantic
+
+### 4.5 `utils.py` — 网格工具函数
+
+纯函数，无 DB 依赖，易于单元测试：
+
+| 函数 | 用途 |
+|------|------|
+| `chebyshev(a, b)` | 棋盘距离（8 方向，对角线=1） |
+| `manhattan(a, b)` | 曼哈顿距离 |
+| `has_line_of_sight(a, b, blocked)` | 轴对齐直线视野（远程攻击用） |
+| `bfs_reachable(start, terrain, owners, mov)` | BFS 计算可达格（考虑地形消耗） |
+| `pathfind(start, goal, ...)` | Dijkstra 最短路径（带地形权重） |
+| `terrain_passable(...)` | 判断某格是否可通过（城堡仅拥有者可通过） |
+
+### 4.6 `game_logic.py` — 核心游戏逻辑
+
+#### 地图生成
+- `generate_map(seed, num_castles)`: 基于种子的过程化生成
+- 5 个手绘预设地图：`classic`（随机）、`open_plains`、`mountain_pass`、`river_crossing`、`forest_ambush`、`four_lakes`
+- 城堡固定于对称角落（支持 2/3/4 人布局）
+- 4 种兵种配置：`classic`（平衡）、`aggressive`（进攻）、`defensive`（防御）、`ranged`（远程）
+
+#### 战斗系统
+```
+damage = ATK_eff × (ATK_eff / (ATK_eff + DEF_eff)) × type_adv × crit_mult
+```
+- `ATK_eff = ATK × (1 + morale × 0.10)`
+- `DEF_eff = (DEF + terrain_bonus) × (1 + morale × 0.05)`
+- 最低伤害为 1
+- 连击技能：两次 50% 伤害
+- 克制的兵种相克：剑士→骑士(+20%)，骑士→弓手(+20%)
+
+#### 升级与士气
+- EXP 系统（兼容保留）：击杀+10，助攻+5，命中+5
+- 每 60 EXP 升一级，最多 10 级，每级 +5% 全属性 + 2 额外属性点
+- **士气系统**（主要）：击杀+1（上限 3），每星 +10% ATK / +5% DEF
+
+#### AI 玩家
+- 规则驱动，非机器学习
+- 优先级：治疗师治疗 → 攻击（低血量优先） → 移动（靠近敌人/占城堡/利用地形） → 待命
+- 评估函数考虑：距离、目标价值、地形防御、兵种克制
+- 连续 AI 玩家会自动链式执行
+
+### 4.7 路由层
+
+#### `routes/game.py` — 游戏生命周期
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/games` | POST | 创建房间 |
+| `/games` | GET | 列出所有游戏 |
+| `/games/presets` | GET | 获取地图&兵种预设 |
+| `/games/{id}/join` | POST | 加入房间 |
+| `/games/{id}/rejoin` | POST | 断线重连 |
+| `/games/{id}/start` | POST | 开始游戏（生成地图+单位） |
+| `/games/{id}/state` | GET | 获取完整游戏状态 |
+| `/games/{id}/add-ai` | POST | 添加 AI 玩家 |
+| `/games/{id}/players/{pid}` | DELETE | 移除玩家 |
+
+#### `routes/actions.py` — 玩家操作
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/games/{id}/move` | POST | 移动单位（路径验证 + MP 消耗） |
+| `/games/{id}/attack` | POST | 攻击（射程/LOS 检查 + 伤害结算） |
+| `/games/{id}/skill` | POST | 使用技能（heal/rally） |
+| `/games/{id}/wait` | POST | 待命（跳过单位） |
+
+所有操作都校验：游戏状态、当前玩家、行动预算、单位归属与状态。
+
+#### `routes/turns.py` — 回合管理
+- `POST /games/{id}/end-turn`: 结束当前玩家回合
+  - 验证行动数（2 个，首玩家首回合 1 个）
+  - 标记 was_done_first_turn 公平性标记
+  - 全员结束 → 调用 `apply_end_of_turn()` 结算
+  - 检测下一位玩家 → 如果是 AI，启动 `_run_ai_turn_chain()`
+- **后台定时器**：
+  - 每 10s 检查超时玩家（24h）→ 自动跳过
+  - 每 60s 清理废弃房间（空大厅 30min / 已结束 24h）
+
+---
+
+## 五、前端架构
+
+### 5.1 视图系统
+
+单页应用，7 个视图 (`<section class="view">`)：
+- **menu** — 主菜单（新建/加入/设置/玩法说明/继续游戏）
+- **settings** — 玩家设置（昵称、颜色、主题、刷新间隔）
+- **new-game** — 创建房间表单（地图预设、兵种配置、种子）
+- **join-game** — 等待中房间列表
+- **help** — 玩法说明
+- **lobby** — 等待大厅（玩家列表、添加 AI、开始按钮）
+- **game** — 主游戏界面（棋盘 + 侧边栏）
+
+### 5.2 状态管理
+
+前端 `state` 对象集中管理：
+- `me`: 当前玩家身份（game_id, player_id, user_name, color, seat）
+- `game`: 最新 `GameStateOut` 快照
+- `selectedUnit` / `actionMode` / `pendingMove`: 交互状态
+- `refreshTimer` / `lobbyTimer`: 轮询定时器
+- `refPanelOpen` / `refTab`: 参考面板状态
+
+### 5.3 棋盘渲染
+
+- 375 个 CSS `grid` 格（15×15），`var(--cell)` = 44px
+- 每个格子通过 CSS class 显示地形颜色
+- 单位渲染为彩色 glyph（剑/弓/骑/疗）
+- HP 条：底部细条，<35% 变红
+- MP 徽章：右上角橙色数字
+- 士气星标：底部 ⭐/☆（金色）
+
+### 5.4 气泡式交互
+
+核心交互模式：点击单位 → 弹出气泡菜单 → 选择行动 → 确认执行
+
+流程链：
+```
+点击己方单位（未行动）
+  ├─ 🚶 移动 → 绿色高亮 → 点击目标格 → 确认 ✅/❌ → 攻击选项 or 继续移动
+  ├─ ⚔️ 攻击 → 红色高亮 → 点击敌人 → 确认 → 战后继续移动选项
+  ├─ 💚 治疗 → 点击相邻友军 → 确认
+  ├─ 📯 集结 → 立即生效
+  ├─ 🎯 射程 → 显示攻击范围
+  ├─ 👁 状态 → 查看详细信息
+  └─ ⏭ 待机 → 结束此单位行动
+```
+
+### 5.5 FLIP 动画
+
+单位移动采用 First-Last-Invert-Play 技术：
+1. First: 记录旧位置
+2. Last: 记录新位置
+3. Invert: `transform: translate(dx, dy)` 瞬间跳回旧位置
+4. Play: 下一帧 `transform: translate(0, 0)` 加 320ms transition 平滑归位
+
+### 5.6 客户端寻路（预览用）
+
+客户端实现简化的 BFS 可达格计算（`computeReachable`），用于显示移动范围高亮。实际验证由服务端 `pathfind()` 完成。
+
+### 5.7 持久化
+
+- `localStorage` 存储：
+  - 设置（玩家名、颜色、主题、刷新间隔）
+  - 会话（game_id, player_id, user_name）— 支持页面刷新后自动重连
+- `/games/{id}/rejoin` API 用于恢复会话
+
+---
+
+## 六、数据流
+
+### 6.1 典型游戏流程
+
+```
+客户端                         服务端
+  │                              │
+  ├─ POST /games ──────────────> 创建 Game(status=waiting)
+  ├─ POST /games/{id}/join ────> 创建 Player
+  ├─ POST /games/{id}/add-ai ──> 创建 AI Player
+  ├─ POST /games/{id}/start ───> 生成地图 Tile + 初始 Unit
+  │                              game.status = "playing"
+  │                              │
+  ├─ GET /games/{id}/state ────> 返回完整 GameStateOut
+  ├─ 渲染棋盘                     │
+  │                              │
+  │  [玩家 0 的回合]              │
+  ├─ POST .../move ────────────> 路径验证 + MP 消耗 + 城堡占领
+  ├─ POST .../attack ──────────> 伤害计算 + EXP/士气 + 击杀标记
+  ├─ POST .../skill ───────────> 治疗/集结
+  ├─ POST .../wait ────────────> 标记 has_acted
+  ├─ POST .../end-turn ────────> 验证行动数 → 切换玩家
+  │                              │
+  │  [如果是 AI 玩家]              │
+  │                              ├─ ai_take_turn()
+  │                              ├─ 行动 1-5 次
+  │                              ├─ 自动 end-turn
+  │                              └─ 链式处理下一个 AI
+  │                              │
+  │  [所有玩家结束回合]            │
+  │                              ├─ apply_end_of_turn()
+  │                              ├─ 升级 / 清除死单位 / 淘汰玩家
+  │                              ├─ 胜利检查
+  │                              ├─ turn_number += 1
+  │                              └─ 重置 has_acted + MP
+  │                              │
+  ├─ 轮询 GET /state (每 3s) ───> 获取最新状态
+  └─ 重新渲染棋盘                  │
+```
+
+### 6.2 后台任务
+
+```
+main.py lifespan:
+  ┌─ start_scheduler() ──────────────────────────┐
+  │  _auto_skip_loop (asyncio.Task)               │
+  │    ├─ 每 10s: _check_stale_turns()            │
+  │    │    └─ 超过 24h 未行动的玩家自动跳过       │
+  │    └─ 每 60s: cleanup_abandoned_games()       │
+  │         ├─ 空大厅 > 30min → 删除               │
+  │         └─ 已结束 > 24h → 删除                 │
+  └──────────────────────────────────────────────┘
+  
+  AI 链（单独 Task）:
+  ┌─ _run_ai_turn_chain(game_id) ────────────────┐
+  │  while 当前玩家是 AI:                         │
+  │    sleep(1.2s)                                │
+  │    ai_take_turn()                             │
+  │    切换到下一位玩家                            │
+  │    如果全员结束 → apply_end_of_turn()          │
+  └──────────────────────────────────────────────┘
+```
+
+---
+
+## 七、关键设计决策
+
+### 7.1 MP 系统（替代简单 MOV）
+- 每个单位每回合获得 MP 等于其 `mov` 值
+- 进入格子消耗地形移动成本（平地 1 / 森林 2 / 山地&河流 3 / 城堡 1）
+- 攻击无需 MP，但攻击后是否能继续移动取决于兵种（`UNIT_CAN_MOVE_AFTER_ACTION`）
+- 使骑士（高 MP）和弓兵（可动后移）有独特战术
+
+### 7.2 士气系统（替代纯 EXP/Level）
+- 击杀即获得 1 星士气（上限 3），永久保留
+- 士气提供百分比攻防加成（每星 +10% ATK / +5% DEF），比线性的等级系统更有"滚雪球"叙事感
+- EXP/Level 系统仍保留用于向后兼容
+
+### 7.3 公平性规则
+- **首玩家首回合限制**：座位 0 的玩家第一回合只能操作 1 个单位（而非 2），防止先手优势过大
+- 该限制通过 `first_player_done_first_turn` 标记实现，第二回合起恢复正常
+
+### 7.4 行动预算
+- 每回合最多操作用 `_actions_per_turn()` 计算
+- 端到端验证：前端阻止再点击 + 后端 API 层验证
+
+### 7.5 城堡机制
+- 城堡仅拥有者可通过，敌方不可踏入
+- 站在城堡上的单位获得 +5 防御
+- 占领所有城堡 = 胜利条件之一
+- 城堡地形不对远程攻击构成视野阻挡
+
+### 7.6 AI 延迟
+- 每次 AI 操作间 `sleep(1.2s)`，让人类玩家能看到 AI 行动过程
+- AI 行动链在独立 asyncio Task 中运行，不阻塞 HTTP 请求
+
+---
+
+## 八、API 设计原则
+
+- **RESTful 风格**：资源在 URL 中，动作通过 HTTP 方法表达
+- **全量状态返回**：`GET /state` 返回完整快照（地图 + 单位 + 玩家 + 日志），避免 N+1 请求
+- **操作即验证**：每次 move/attack 都实时验证权限和合法性，不留"校验队列"
+- **player_id 双重校验**：请求体中的 `player_id` 与路由逻辑交叉验证，防止伪造
+- **中文错误消息**：面向中文玩家，错误返回使用中文
+
+---
+
+## 九、当前版本局限与未来方向
+
+### 局限
+- 仅支持单服务器实例（SQLite 无分布式能力）
+- 无用户认证系统（仅凭 player_id + 同源策略）
+- 无 WebSocket 实时推送（依赖客户端轮询，默认 3s）
+- AI 为简单规则引擎，无战略性规划
+- 无音效实现（设置中有开关但未实现）
+- "法师"兵种在配置中预留但未实装
+
+### 可扩展方向
+- WebSocket 实时通知替代轮询
+- 用户账号系统 + 历史战绩
+- 更智能的 AI（Minimax / MCTS）
+- 新增兵种（法师、刺客、投石车等）
+- 战役模式 / 地图编辑器
+- 国际化 (i18n)
+
+---
+
+## 十、开发命令速查
+
+```bash
+cd game
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 开发模式启动
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 访问
+#   游戏界面:  http://localhost:8000/
+#   API 文档:  http://localhost:8000/docs
+#   健康检查:  http://localhost:8000/healthz
+
+# 测试（未来）
+# pytest
+```

@@ -51,6 +51,14 @@ class RejoinGameResponse(BaseModel):
 class AddAIRequest(BaseModel):
     """Body of POST /games/{id}/add-ai. AI name auto-generated if missing."""
     difficulty: str = Field(default="normal", pattern="^(easy|normal|hard)$")
+    # "rules" (built-in) or "llm" (LLMAgent). Defaults to "rules" to keep
+    # existing behaviour; set to "llm" to opt in to LLM-driven opponent.
+    agent_kind: str = Field(default="rules", pattern="^(rules|llm)$")
+    # Personality for LLM agents (ignored when agent_kind == "rules").
+    personality: str = Field(
+        default="balanced",
+        pattern="^(aggressive|defensive|balanced|trickster)$",
+    )
 
 
 class PresetInfo(BaseModel):
@@ -97,6 +105,7 @@ class UnitOut(APIModel):
     x: int
     y: int
     has_acted: bool
+    has_moved: bool = False
     skills: List[str]
 
 
@@ -108,6 +117,8 @@ class PlayerOut(APIModel):
     has_ended_turn: bool
     seat: int
     is_ai: bool = False
+    agent_kind: str = "rules"
+    agent_personality: str = "balanced"
     units: List[UnitOut] = []
 
 

@@ -73,26 +73,52 @@ DEFAULT_PLAYER_COLORS: Final[Tuple[str, ...]] = ("red", "blue", "green", "yellow
 
 
 # ============================================================
-# Unit configuration
+# Unit configuration — delegated to app.classes.units
 # ============================================================
+# All unit-type data (stats, skills, range, move-after-action, type advantage)
+# now lives in `game/app/classes/units/<id>.py`.
+# Import from `app.classes.units` instead of referencing the old dicts below.
+# Kept as aliases for backward compatibility during migration.
 
-UNIT_SWORDSMAN: Final[str] = "swordsman"
-UNIT_ARCHER: Final[str] = "archer"
-UNIT_KNIGHT: Final[str] = "knight"
-UNIT_HEALER: Final[str] = "healer"
-
-UNIT_TYPES: Final[Tuple[str, ...]] = (
-    UNIT_SWORDSMAN,
-    UNIT_ARCHER,
-    UNIT_KNIGHT,
-    UNIT_HEALER,
+from app.classes.units import (
+    default_roster as _default_roster,
+    get as _get_unit_class,
+    get_or_none as _get_unit_class_or_none,
+    get_roster_for_composition,
+    list_all as _list_all_unit_classes,
+    list_compositions,
+    type_advantage as _unit_type_advantage,
+    type_ids as _unit_type_ids,
 )
 
+# Expose stable names for existing importers
+_STARTING_ROSTER = _default_roster()
+
+def _unit_base_stats() -> Dict[str, Dict[str, int]]:
+    return {p.type_id: {"hp": p.base_hp, "atk": p.base_atk, "def": p.base_def, "mov": p.base_mov}
+            for p in _list_all_unit_classes()}
+
+def _unit_mp_pool() -> Dict[str, int]:
+    return {p.type_id: p.mp_pool for p in _list_all_unit_classes()}
+
+def _unit_move_after() -> Dict[str, bool]:
+    return {p.type_id: p.can_move_after_action for p in _list_all_unit_classes()}
+
+def _unit_default_skills() -> Dict[str, List[str]]:
+    return {p.type_id: list(p.default_skills) for p in _list_all_unit_classes()}
+
+def _unit_display_names() -> Dict[str, str]:
+    return {p.type_id: p.display_en for p in _list_all_unit_classes()}
+
+# Type advantage: kept empty dict for backward compat (use _unit_type_advantage instead)
+TYPE_ADVANTAGE: Final[Dict[Tuple[str, str], float]] = {}
+
 # Skill identifiers (stored in Unit.skills JSON list)
-SKILL_DOUBLE_STRIKE: Final[str] = "double_strike"  # attack twice at 50% damage each
-SKILL_SNIPE: Final[str] = "snipe"                  # +1 attack range
-SKILL_HEAL: Final[str] = "heal"                    # restore 20 HP to adjacent ally
-SKILL_RALLY: Final[str] = "rally"                  # +10% ATK to adjacent allies this turn
+# Skill identifiers — canonical string constants matching app.classes.units.skills
+SKILL_DOUBLE_STRIKE: Final[str] = "double_strike"
+SKILL_SNIPE: Final[str] = "snipe"
+SKILL_HEAL: Final[str] = "heal"
+SKILL_RALLY: Final[str] = "rally"
 
 
 # ============================================================
@@ -103,20 +129,7 @@ BASE_CRIT_RATE: Final[float] = 0.05       # 5%
 CRIT_PER_LEVEL: Final[float] = 0.01       # +1% per level
 CRIT_MULTIPLIER: Final[float] = 1.5
 
-# Type-advantage multipliers.
-# swordsman -> knight (+20%), knight -> archer (+20%),
-# archer -> mage (+20%), mage -> swordsman (+20%)
-# (mage omitted from current roster; hook reserved for future expansion)
-TYPE_ADVANTAGE: Final[Dict[Tuple[str, str], float]] = {
-    (UNIT_SWORDSMAN, UNIT_KNIGHT): 1.20,
-    (UNIT_KNIGHT, UNIT_ARCHER): 1.20,
-    # (UNIT_ARCHER, "mage"): 1.20,   # reserved
-    # ("mage", UNIT_SWORDSMAN): 1.20, # reserved
-}
-
-# Archer range bonus; other melee units default to 1.
 DEFAULT_MELEE_RANGE: Final[int] = 1
-ARCHER_BASE_RANGE: Final[int] = 2
 
 
 # ============================================================
@@ -162,61 +175,14 @@ MORALE_DEF_PER_STAR: Final[float] = 0.05  # +5%  DEF per star (max +15% at 3 sta
 # ============================================================
 # Each unit starts the turn with MP equal to its `mov` value, and each
 # tile entered deducts the terrain's move cost. Attacks cost 0 MP.
-# Whether the unit can MOVE AFTER attacking is per-class:
-UNIT_CAN_MOVE_AFTER_ACTION: Final[Dict[str, bool]] = {
-    "swordsman": False,  # committed melee fighter
-    "archer":    True,   # kiting
-    "knight":    True,   # mobile flanker
-    "healer":    False,  # back-line support
-}
-# MP pool sizes (replaces previous flat-MOV movement). Tuned so that:
-# - swordsman can reach a melee fight in 1-2 moves
-# - knight can swing wide around the map
-# - archer stays mobile enough to reposition
-UNIT_MP_POOL: Final[Dict[str, int]] = {
-    "swordsman": 5,
-    "archer":    5,
-    "knight":    8,
-    "healer":    5,
-}
-
-
-# ============================================================
-# Starting roster per player (validated against game_logic)
-# ============================================================
-
-# unit_type -> count (always 5 total per player)
-STARTING_ROSTER: Final[Dict[str, int]] = {
-    UNIT_SWORDSMAN: 2,
-    UNIT_ARCHER: 1,
-    UNIT_KNIGHT: 1,
-    UNIT_HEALER: 1,
-}
-
-# Base stats per unit type. Level scaling handled in game_logic.
-# HP is intentionally low so fights resolve in 2-4 exchanges.
-UNIT_BASE_STATS: Final[Dict[str, Dict[str, int]]] = {
-    UNIT_SWORDSMAN: {"hp": 45, "atk": 18, "def": 12, "mov": 3},
-    UNIT_ARCHER:    {"hp": 35, "atk": 20, "def":  6, "mov": 3},
-    UNIT_KNIGHT:    {"hp": 55, "atk": 22, "def":  8, "mov": 5},
-    UNIT_HEALER:    {"hp": 40, "atk":  5, "def":  9, "mov": 3},
-}
-
-# Default skills each unit type starts with.
-UNIT_DEFAULT_SKILLS: Final[Dict[str, List[str]]] = {
-    UNIT_SWORDSMAN: [],
-    UNIT_ARCHER:    [SKILL_SNIPE],
-    UNIT_KNIGHT:    [SKILL_DOUBLE_STRIKE],
-    UNIT_HEALER:    [SKILL_HEAL, SKILL_RALLY],
-}
-
-# Pretty display names (used when auto-generating unit names like "剑士甲").
-UNIT_DISPLAY_NAMES: Final[Dict[str, str]] = {
-    UNIT_SWORDSMAN: "Swordsman",
-    UNIT_ARCHER:    "Archer",
-    UNIT_KNIGHT:    "Knight",
-    UNIT_HEALER:    "Healer",
-}
+# Backward-compat aliases — all unit data lives in app.classes.units
+UNIT_CAN_MOVE_AFTER_ACTION: Final[Dict[str, bool]] = _unit_move_after()
+UNIT_MP_POOL: Final[Dict[str, int]] = _unit_mp_pool()
+STARTING_ROSTER: Final[Dict[str, int]] = dict(_STARTING_ROSTER)
+UNIT_BASE_STATS: Final[Dict[str, Dict[str, int]]] = _unit_base_stats()
+UNIT_DEFAULT_SKILLS: Final[Dict[str, List[str]]] = _unit_default_skills()
+UNIT_DISPLAY_NAMES: Final[Dict[str, str]] = _unit_display_names()
+UNIT_TYPES: Final[Tuple[str, ...]] = tuple(_unit_type_ids())
 
 
 # ============================================================
