@@ -90,7 +90,7 @@ async def enumerate_legal_actions(
         action_id="end_turn",
         kind="end_turn",
         unit_id=None,
-        description="结束本回合行动",
+        description="结束",
     ))
 
     return actions
@@ -115,7 +115,7 @@ def _legal_actions_for_unit(
         action_id=f"wait_{unit.id}",
         kind="wait",
         unit_id=unit.id,
-        description=f"{unit.name} 原地待命 (保留行动点)",
+        description="待命",
     ))
 
     # 2. Move — enumerate reachable tiles
@@ -151,7 +151,7 @@ def _legal_actions_for_unit(
                     kind="move",
                     unit_id=unit.id,
                     params={"to": [tx, ty]},
-                    description=f"{unit.name} 移动到 ({tx},{ty})",
+                    description=f"→{tx},{ty}",
                 ))
 
     # 3. Attack — enemies in range
@@ -181,9 +181,8 @@ def _legal_actions_for_unit(
 
         can_kill = e.hp <= dmg_est
         desc = (
-            f"{unit.name} 攻击 {e.name}"
-            f" ({def_tile_terrain}, 预计 {dmg_est} 伤害"
-            f"{', 可击杀' if can_kill else ''})"
+            f"⚔{e.name[:4]} {dmg_est}伤"
+            f"{' 杀' if can_kill else ''}"
         )
 
         # Snipe skill: if unit has it, also offer a "skill:snipe" variant
@@ -193,7 +192,7 @@ def _legal_actions_for_unit(
                 kind="skill",
                 unit_id=unit.id,
                 params={"skill": "snipe", "target_id": e.id},
-                description=f"{unit.name} 狙击 {e.name} (技能, +1 射程)",
+                description=f"🎯{e.name[:4]}",
                 dmg_estimate=dmg_est,
             ))
 
@@ -221,7 +220,7 @@ def _legal_actions_for_unit(
                     kind="skill",
                     unit_id=unit.id,
                     params={"skill": "heal", "target_id": a.id},
-                    description=f"{unit.name} 治疗 {a.name} (恢复 {min(20, deficit)} HP)",
+                    description=f"💚+{min(20, deficit)} {a.name[:4]}",
                 ))
 
         elif skill == SKILL_RALLY and unit.unit_type == UNIT_HEALER:
@@ -236,7 +235,7 @@ def _legal_actions_for_unit(
                     kind="skill",
                     unit_id=unit.id,
                     params={"skill": "rally"},
-                    description=f"{unit.name} 集结 (+10% ATK 给相邻友军)",
+                    description="📯+10%攻",
                 ))
 
         elif skill == SKILL_DOUBLE_STRIKE and unit.unit_type.lower() == "knight":

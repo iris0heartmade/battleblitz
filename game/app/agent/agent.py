@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -152,26 +153,34 @@ class LLMAgent:
         try:
             unit_count = len(my_units_pre)
             alive = sum(1 for u in my_units_pre if u.hp > 0)
-            opener = self._speak(
-                "turn_start",
-                context=f"回合 {game.turn_number} 开始，你有 {alive}/{unit_count} 个单位存活，{budget_left} 次行动机会",
-            )
+            opener = self._speak("turn_start")
             metrics.reactions.append(opener)
         except Exception:  # noqa: BLE001
             pass
 
         # ── Batch decision: one LLM call for the whole turn ──
+        t1 = time.perf_counter()
         snapshot = await build_snapshot(
             session, game, player,
             budget_left=budget_left, action_count=0,
         )
         legal = await enumerate_legal_actions(session, game, player)
+        t2 = time.perf_counter()
+        logger.info(
+            "Phase [snapshot+legal]: %dms, %d legal actions, %d visible enemies",
+            int((t2 - t1) * 1000), len(legal), len(snapshot.visible_enemies),
+        )
         if not legal:
             metrics.actions_taken = 0
             return metrics
 
         system = build_system_prompt(self.personality, map_size=snapshot.map_size)
         user = build_user_prompt(snapshot, legal)
+        t3 = time.perf_counter()
+        logger.info(
+            "Phase [prompt build]: %dms, system=%d chars, user=%d chars",
+            int((t3 - t2) * 1000), len(system), len(user),
+        )
 
         # Inject passive hits so the LLM can react to them
         hits = self.state.get("passive_hits", [])
@@ -186,6 +195,7 @@ class LLMAgent:
             if self.think_delay > 0:
                 await asyncio.sleep(self.think_delay)
 
+            t_exec = time.perf_counter()
             enemy_hp_pre = await _load_enemy_hp(session, game, player)
 
             metrics.decisions.append(plan)
@@ -207,6 +217,16 @@ class LLMAgent:
             )
             plan.reactions.extend(outcome_reactions)
             metrics.reactions.extend(plan.reactions)
+
+            exec_ms = int((time.perf_counter() - t_exec) * 1000)
+            logger.info(
+                "Action #%d/%d: %s %s (%s) → %dms",
+                actions_taken, budget_left,
+                plan.legal_action.kind,
+                plan.reason[:40] if plan.reason else "",
+                "fallback" if plan.fallback else "llm",
+                exec_ms,
+            )
 
             if plan.legal_action.kind == "end_turn":
                 break
@@ -296,7 +316,13 @@ class LLMAgent:
                         + "。请只输出一个 action_id（必须从合法动作列表原文复制）和 reason。"
                     )
 
+                t_llm = time.perf_counter()
                 response = await self.llm.chat(system=system, user=user_msg)
+                logger.info(
+                    "LLM chat round-trip (attempt %d/%d): %dms",
+                    attempt + 1, self.max_retries + 1,
+                    int((time.perf_counter() - t_llm) * 1000),
+                )
                 last_response = response
 
                 action = self._parse_response(response)
@@ -416,6 +442,7 @@ class LLMAgent:
         """
         from app.game_logic import _ai_attack, _ai_move, _ai_use_skill
 
+        t0 = time.perf_counter()
         a = plan.legal_action
         if a.kind == "end_turn":
             return True
@@ -428,6 +455,8 @@ class LLMAgent:
                 return False
             unit.has_acted = True
             unit.mp = 0
+            logger.info("  execute wait: unit_id=%d → %dms", unit_id,
+                        int((time.perf_counter() - t0) * 1000))
             return True
         if a.kind == "move":
             unit = await session.get(Unit, a.unit_id) if a.unit_id else None
@@ -435,6 +464,9 @@ class LLMAgent:
                 return False
             tx, ty = a.params["to"]
             ok = await _ai_move(session, game, unit, (int(tx), int(ty)))
+            logger.info("  execute move: unit_id=%d to=(%d,%d) ok=%s → %dms",
+                        a.unit_id, int(tx), int(ty), ok,
+                        int((time.perf_counter() - t0) * 1000))
             return bool(ok)
         if a.kind == "attack":
             unit = await session.get(Unit, a.unit_id) if a.unit_id else None
@@ -443,6 +475,9 @@ class LLMAgent:
             if unit is None or target is None or unit.has_acted:
                 return False
             ok = await _ai_attack(session, unit, target)
+            logger.info("  execute attack: unit_id=%d target=%d ok=%s → %dms",
+                        a.unit_id, a.params.get("target_id"), ok,
+                        int((time.perf_counter() - t0) * 1000))
             return bool(ok)
         if a.kind == "skill":
             unit = await session.get(Unit, a.unit_id) if a.unit_id else None
@@ -452,20 +487,18 @@ class LLMAgent:
             from app.game_logic import _load_ai_snapshot
             snap = await _load_ai_snapshot(session, game, player)
             ok = await _ai_use_skill(session, game, unit, snap)
+            logger.info("  execute skill: unit_id=%d skill=%s ok=%s → %dms",
+                        a.unit_id, a.params.get("skill"), ok,
+                        int((time.perf_counter() - t0) * 1000))
             return bool(ok)
         return False
 
     # ── Reaction helpers ────────────────────────────────────────
 
-    def _speak(self, event: str, *, context: str = "") -> Reaction:
-        """Pick a template reaction matching the agent's personality.
-
-        Primary reactions now come from the LLM alongside each decision
-        (see `reaction` field in LLM_TOOL_SCHEMA). This method serves as
-        fallback for system-generated events (turn openers, passive HP diffs).
-        """
+    def _speak(self, event: str, *, ctx: dict | None = None) -> Reaction:
+        """Pick a template reaction with context-filled placeholders."""
         return generate_reaction(
-            self.personality, event, rng=self._reaction_rng
+            self.personality, event, ctx=ctx, rng=self._reaction_rng
         )
 
     async def _detect_passive_reactions(
@@ -522,30 +555,34 @@ class LLMAgent:
         plan: ActionPlan,
         enemy_hp_pre: dict[int, int],
     ) -> list[Reaction]:
-        """Detect reactions triggered by the action we just executed.
-
-        Looks at:
-          - target HP after `attack`     → "kill" if it dropped to 0
-          - tile ownership after `move`  → "castled" if we landed on a castle
-          - skill name from params        → "skill_use"
-        """
+        """Detect reactions triggered by the action we just executed — every
+        action gets at least one reaction so the agent never goes silent."""
         a = plan.legal_action
         reactions: list[Reaction] = []
+        my_unit = await session.get(Unit, a.unit_id) if a.unit_id else None
+        u_name = (my_unit.name if my_unit else "")[:6]
 
         if a.kind == "attack" and a.params.get("target_id") is not None:
             target = await session.get(Unit, a.params["target_id"])
-            if target is not None and target.hp <= 0 and enemy_hp_pre.get(target.id, 0) > 0:
-                unit_name = ""
-                if a.unit_id:
-                    my_unit = await session.get(Unit, a.unit_id)
-                    if my_unit:
-                        unit_name = my_unit.name
+            e_name = (target.name if target else "?")[:6]
+            target_hp = target.hp if target else 0
+            prev_hp = enemy_hp_pre.get(a.params["target_id"], 0)
+            dmg_dealt = prev_hp - target_hp if target else 0
+
+            if target is not None and target_hp <= 0 and prev_hp > 0:
                 reactions.append(self._speak(
-                    "kill",
-                    context=f"你的{unit_name}击杀了敌方{target.name}",
+                    "kill", ctx={"u": u_name, "e": e_name, "dmg": str(prev_hp)},
+                ))
+            elif target is not None and 0 < target_hp <= 5:
+                reactions.append(self._speak(
+                    "near_miss", ctx={"e": e_name, "hp": str(target_hp)},
+                ))
+            else:
+                reactions.append(self._speak(
+                    "attack_hit", ctx={"u": u_name, "e": e_name, "dmg": str(dmg_dealt)},
                 ))
 
-        elif a.kind == "move" and a.unit_id is not None and a.params.get("to"):
+        elif a.kind == "move" and a.params.get("to"):
             tx, ty = int(a.params["to"][0]), int(a.params["to"][1])
             from sqlalchemy import select
             from app.models import Tile
@@ -556,16 +593,22 @@ class LLMAgent:
             )).scalars().first()
             if tile and tile.terrain == "castle" and tile.owner_id != player.id:
                 reactions.append(self._speak(
-                    "castled",
-                    context=f"你占领了坐标({tx},{ty})的城堡",
+                    "castled", ctx={"u": u_name},
+                ))
+            else:
+                reactions.append(self._speak(
+                    "move", ctx={"u": u_name},
                 ))
 
-        elif a.kind == "skill" and a.params.get("skill"):
-            skill_name = str(a.params["skill"])
-            reactions.append(self._speak(
-                "skill_use",
-                context=f"你使用了技能「{skill_name}」",
-            ))
+        elif a.kind == "skill":
+            skill = a.params.get("skill", "")
+            if skill == "heal":
+                reactions.append(self._speak("heal", ctx={"u": u_name}))
+            else:
+                reactions.append(self._speak("skill_use", ctx={"u": u_name}))
+
+        elif a.kind == "wait":
+            reactions.append(self._speak("wait", ctx={"u": u_name}))
 
         return reactions
 

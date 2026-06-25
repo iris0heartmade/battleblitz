@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -84,11 +85,10 @@ LLM_TOOL_SCHEMA = {
             "reaction": {
                 "type": "string",
                 "description": (
-                    "一句不超过 25 字的吐槽或自言自语，要像真人玩家在聊天，不是战术报告。"
-                    "可以嚣张、抱怨、吐槽、开玩笑、阴阳怪气——有情绪才有灵魂。"
-                    "别写「推进战线」「调整阵型」「准备迎战」这种战斗日志式的句子。"
+                    "你这一刻想说什么就说什么——吐槽、咆哮、自嘲、中二台词、冷笑话、"
+                    "自言自语、阴阳怪气、突然唱歌、喊口号——任何你想说的，不要克制。"
+                    "不要写战斗报告，不要分析战术，你就是个有情绪的真人玩家。"
                 ),
-                "maxLength": 60,
             },
         },
         "required": ["action_id", "reason"],
@@ -115,6 +115,7 @@ class LLMClient:
         *,
         timeout: float = 30.0,
         max_retries: int = 2,
+        use_tool_api: Optional[bool] = None,
     ):
         self.api_key = api_key or os.environ["ANTHROPIC_API_KEY"]
         self.base_url = base_url or os.environ.get(
@@ -123,6 +124,12 @@ class LLMClient:
         self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         self.timeout = timeout
         self.max_retries = max_retries
+        # tool_use is reliable on Anthropic but broken on some proxies (MiniMax).
+        # Set ANTHROPIC_USE_TOOL_API=0 to fall back to plain JSON mode.
+        self.use_tool_api = (
+            use_tool_api if use_tool_api is not None
+            else os.environ.get("ANTHROPIC_USE_TOOL_API", "1") != "0"
+        )
 
         import httpx
 
@@ -153,7 +160,7 @@ class LLMClient:
         user: str,
         *,
         tool: Optional[dict] = None,
-        max_tokens: int = 1024,
+        max_tokens: int = 512,
         temperature: float = 0.7,
     ) -> LLMResponse:
         """Send one round-trip to the LLM.
@@ -172,27 +179,78 @@ class LLMClient:
             temperature=temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
+            # M3 supports Anthropic-native thinking param (M2.x ignores it)
+            thinking={"type": "disabled"},
         )
 
         if use_tools:
-            kwargs["tools"] = [LLM_TOOL_SCHEMA]
-            kwargs["tool_choice"] = {"type": "any"}
+            if self.use_tool_api:
+                kwargs["tools"] = [LLM_TOOL_SCHEMA]
+                kwargs["tool_choice"] = {"type": "any"}
+                kwargs["max_tokens"] = 300
+                kwargs["stop_sequences"] = ["\n\n\n"]
+            else:
+                # JSON mode: no tool_use — ask model to output raw JSON.
+                # Works with proxies that don't implement tool_use correctly.
+                json_fmt = '{"action_id": "move_6_5_1 || attack_7_9", "reason": "≤40字", "reaction": "≤25字"}'
+                kwargs["messages"][0]["content"] = (
+                    user
+                    + f'\n\n【关键】只输出一行 JSON，不要输出任何其他内容！格式：{json_fmt}'
+                )
+                kwargs["max_tokens"] = 300  # thinking disabled, 300 tokens is plenty for JSON
+                kwargs["stop_sequences"] = ["\n\n"]
 
+        t0 = time.perf_counter()
         msg = await self._client.messages.create(**kwargs)
 
-        # Find the first tool_use block
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+        # Build usage early — needed by debug logging below
+        usage = TokenUsage(
+            input_tokens=getattr(msg.usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(msg.usage, "output_tokens", 0) or 0,
+        )
+
+        # Find the first tool_use block (skip thinking blocks — MiniMax ignores
+        # thinking=disabled and always sends thinking blocks first).
         tool_block = None
         text_parts: list[str] = []
+        thinking_tokens = 0
         for block in msg.content:
+            if block.type == "thinking":
+                # MiniMax extended thinking — skip, but count tokens for logging
+                thinking_tokens += len(getattr(block, "thinking", "") or "")
+                continue
             if block.type == "tool_use":
                 tool_block = block
                 break
             if block.type == "text":
                 text_parts.append(block.text)
+            elif hasattr(block, "text") and block.type not in ("thinking",):
+                text_parts.append(block.text)
 
-        usage = TokenUsage(
-            input_tokens=getattr(msg.usage, "input_tokens", 0) or 0,
-            output_tokens=getattr(msg.usage, "output_tokens", 0) or 0,
+        if thinking_tokens:
+            logger.debug("Skipped %d chars of thinking blocks", thinking_tokens)
+
+        # Debug: dump raw content when response looks broken (text + tool both missing)
+        if not text_parts and not tool_block and thinking_tokens == 0:
+            import json as _json
+            try:
+                raw_dump = _json.dumps(
+                    [{"type": getattr(b, "type", "?"), "repr": str(b)[:200]} for b in (msg.content or [])],
+                    ensure_ascii=False,
+                )
+            except Exception:
+                raw_dump = repr(msg.content)
+            logger.warning(
+                "LLM response empty! stop=%s out_tokens=%d content=%s",
+                msg.stop_reason, usage.output_tokens, raw_dump,
+            )
+
+        logger.info(
+            "LLM API call: %dms, in=%d out=%d tokens, model=%s, stop=%s",
+            elapsed_ms, usage.input_tokens, usage.output_tokens,
+            self.model, msg.stop_reason or "?",
         )
 
         if tool_block is not None:
@@ -205,8 +263,36 @@ class LLMClient:
                 raw=msg,
             )
 
-        # No tool_use — free-text response (reactions, commentary, etc.)
+        # ── JSON mode fallback: parse raw JSON from text ──
         text = "".join(text_parts)
+        if use_tools and not self.use_tool_api and text:
+            import json as _json
+            import re as _re
+            # Try to extract JSON object even if surrounded by other text
+            m = _re.search(r'\{[^{}]*"action_id"\s*:\s*"[^"]+"[^{}]*\}', text)
+            tidied = (m.group(0) if m else text).strip()
+            tidied = tidied.lstrip("```json").lstrip("```").rstrip("```").strip()
+            try:
+                parsed = _json.loads(tidied)
+                logger.info(
+                    "LLM JSON mode: parsed ok, action_id=%s",
+                    parsed.get("action_id", "?")[:60],
+                )
+                return LLMResponse(
+                    text="",
+                    tool_name="choose_action",
+                    tool_input=parsed,
+                    stop_reason=msg.stop_reason or "",
+                    usage=usage,
+                    raw=msg,
+                )
+            except (_json.JSONDecodeError, TypeError) as exc:
+                logger.debug(
+                    "JSON mode parse failed (stop=%s): %.150s — %s",
+                    msg.stop_reason, text, exc,
+                )
+
+        # No tool_use — free-text response (reactions, commentary, etc.)
         logger.debug(
             "LLM free-text response (stop_reason=%s): %.100s",
             msg.stop_reason, text,

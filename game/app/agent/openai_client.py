@@ -105,12 +105,26 @@ LLM_TOOL_SCHEMA = {
         "properties": {
             "action_id": {
                 "type": "string",
-                "description": "The id of the legal action to execute, copied verbatim.",
+                "description": (
+                    "ALL your action_ids for this turn, copied verbatim from "
+                    "the legal_actions list, separated by ' || '. "
+                ),
             },
             "reason": {
                 "type": "string",
                 "description": "≤40 Chinese characters explaining the strategic intent.",
                 "maxLength": 120,
+            },
+            "reaction": {
+                "type": "string",
+                "description": (
+                    "你这一刻想说什么就说什么——吐槽、感叹、咆哮、自嘲、"
+                    "中二台词、自言自语、阴阳怪气、突然唱歌、"
+                    "讲冷笑话、喊口号、骂自己、夸对手、"
+                    "任何你想说的，不要克制，越放飞越好。"
+                    "不要写战斗报告，不要分析战术，不要汇报战况。"
+                    "你就是个有情绪的真人玩家，不是军师。"
+                ),
             },
         },
         "required": ["action_id", "reason"],

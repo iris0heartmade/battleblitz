@@ -13,7 +13,8 @@ this module instead of the original.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import time
+from typing import Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,18 +42,26 @@ else:
 # Shared LLM client (one per process is enough)
 # ----------------------------------------------------------------
 
-_default_client: Optional[LLMClient] = None
+LLMClientLike = Union[LLMClient, "OpenAIClient"]
+_default_client: Optional[LLMClientLike] = None
 
 
-def get_default_llm_client() -> LLMClient:
-    """Lazy singleton. Tests can monkey-patch `agent.llm_client._default_client`."""
+def get_default_llm_client() -> LLMClientLike:
+    """Lazy singleton. Auto-detects Anthropic vs OpenAI from LLM_PROTOCOL env."""
     global _default_client
     if _default_client is None:
-        _default_client = LLMClient()
+        protocol = _os.environ.get("LLM_PROTOCOL", "anthropic")
+        if protocol == "openai":
+            from app.agent.openai_client import OpenAIClient
+            _default_client = OpenAIClient()
+            logger.info("LLM client: OpenAI protocol → %s", _default_client.base_url)
+        else:
+            _default_client = LLMClient()
+            logger.info("LLM client: Anthropic protocol → %s", _default_client.base_url)
     return _default_client
 
 
-def set_default_llm_client(client: LLMClient) -> None:
+def set_default_llm_client(client: LLMClientLike) -> None:
     """Test hook: replace the global LLM client with a fake."""
     global _default_client
     _default_client = client
@@ -86,17 +95,26 @@ async def dispatch_ai_turn(
 
     # LLM agent
     try:
+        t_start = time.perf_counter()
         client = get_default_llm_client()
-        personality = getattr(player, "agent_personality", "balanced") or "balanced"
+        # Random personality each turn for maximum variety
+        import random as _random
+        personality = _random.choice(["aggressive", "defensive", "balanced", "trickster"])
         agent = LLMAgent(
             llm_client=client,
             personality=personality,
+            max_retries=1,  # each retry costs ~20s, keep it tight
             max_decisions_per_turn=AI_MAX_ACTIONS_PER_TURN,
         )
 
         # Determine budget: 2 actions per turn (first player 1 on turn 1)
         from app.routes.actions import _actions_per_turn
         budget = _actions_per_turn(player, game)
+
+        logger.info(
+            "LLM agent turn start: player=%s, turn=%d, budget=%d, personality=%s",
+            player.user_name, game.turn_number, budget, personality,
+        )
 
         metrics: TurnMetrics = await agent.take_turn(
             session, game, player, budget_left=budget,
@@ -112,10 +130,13 @@ async def dispatch_ai_turn(
                 description=f"[{reaction.event}/{reaction.mood}] {reaction.text}",
             ))
 
+        total_ms = int((time.perf_counter() - t_start) * 1000)
         logger.info(
-            "LLM agent %s turn %d: %d actions, %d LLM calls, %d retries, "
-            "%d fallback, %d/%d tokens, %d reactions",
+            "LLM agent %s turn %d DONE: %dms total, %d actions, "
+            "%d LLM calls, %d retries, %d fallback, "
+            "%d/%d tokens, %d reactions",
             player.user_name, game.turn_number,
+            total_ms,
             metrics.actions_taken, metrics.llm_calls, metrics.llm_retries,
             metrics.fallback_used,
             metrics.input_tokens, metrics.output_tokens,

@@ -111,8 +111,8 @@ def _actions_per_turn(player: Player, game: Game) -> int:
     else (and first player on later turns) gets 2 actions per turn.
     """
     if player.seat == 0 and not game.first_player_done_first_turn:
-        return 1
-    return 2
+        return 5
+    return 5
 
 
 async def _check_action_budget(session: AsyncSession, player: Player, unit: Unit) -> None:

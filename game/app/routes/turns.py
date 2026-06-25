@@ -91,9 +91,9 @@ async def end_turn(
 
     # Fairness rule: first player (seat 0) gets 1 action on first turn only;
     # everyone else (and first player on later turns) needs 2 actions per turn.
-    required_actions = 2
+    required_actions = 5
     if player.seat == 0 and not game.first_player_done_first_turn:
-        required_actions = 1
+        required_actions = 5
 
     # Count units that have already acted this turn
     player_units = (
