@@ -2,8 +2,8 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 
-# Data validation
-pydantic>=2.6.0
+# Data validation - pin to 2.10.x for aarch64 (Raspberry Pi) wheels
+pydantic==2.10.3
 
 # Async ORM + SQLite driver
 sqlalchemy>=2.0.25
