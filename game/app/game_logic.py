@@ -14,7 +14,12 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.classes.units import get as _get_unit, type_advantage as _type_adv
+from app.classes.units import (
+    default_roster,
+    get as _get_unit,
+    get_or_none as _get_unit_or_none,
+    type_advantage as _type_adv,
+)
 from app.config import (
     AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN, AI_SKILL_HEAL_THRESHOLD_HP,
     BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS,
@@ -22,14 +27,10 @@ from app.config import (
     EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
     LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAX_LEVEL, MAP_SIZE,
     MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
-    SKILL_DOUBLE_STRIKE, SKILL_HEAL, SKILL_RALLY, SKILL_SNIPE,
+    SKILL_DOUBLE_STRIKE,
     TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
     TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER, TERRAIN_SPAWN_WEIGHTS,
 )
-# Aliases for backward compat (backed by app.classes.units)
-from app.config import (STARTING_ROSTER, UNIT_BASE_STATS,
-    UNIT_CAN_MOVE_AFTER_ACTION, UNIT_DEFAULT_SKILLS, UNIT_DISPLAY_NAMES,
-    UNIT_MP_POOL, TYPE_ADVANTAGE)
 
 UNIT_HEALER = "healer"
 UNIT_KNIGHT = "knight"
@@ -108,9 +109,9 @@ _UNIT_NAME_SUFFIX = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"]
 
 
 def _unit_name(unit_type: str, index: int) -> str:
-    base = UNIT_DISPLAY_NAMES.get(unit_type, unit_type.title())
+    base = _get_unit(unit_type)
     suffix = _UNIT_NAME_SUFFIX[index] if index < len(_UNIT_NAME_SUFFIX) else f"#{index + 1}"
-    return f"{base}-{suffix}"
+    return f"{base.display_en}-{suffix}"
 
 
 def _spawn_xy_for_castle(castle_xy: Tuple[int, int], unit_index: int) -> Tuple[int, int]:
@@ -129,20 +130,16 @@ def create_initial_units(
 ) -> List[Unit]:
     """Create the starting 5 units for each player (placed near their castle).
 
-    The `mov` field on each Unit stores its movement pool (used as MP each
-    turn). Per-unit-type overrides in UNIT_MP_POOL take precedence over the
-    default in UNIT_BASE_STATS so we can tune MP without changing ATK/DEF.
+    Unit stats/skills come from the unit class registry.
     """
     units: List[Unit] = []
     for player in players:
         castle_xy = castle_positions_map[player.seat]
         unit_index = 0
-        for unit_type, count in STARTING_ROSTER.items():
+        for unit_type, count in default_roster().items():
+            uc = _get_unit(unit_type)
             for _ in range(count):
-                base = UNIT_BASE_STATS[unit_type]
-                skills = list(UNIT_DEFAULT_SKILLS.get(unit_type, []))
                 x, y = _spawn_xy_for_castle(castle_xy, unit_index)
-                mp_pool = UNIT_MP_POOL.get(unit_type, base["mov"])
                 units.append(
                     Unit(
                         player_id=player.id,
@@ -150,18 +147,18 @@ def create_initial_units(
                         name=_unit_name(unit_type, unit_index),
                         level=1,
                         exp=0,
-                        hp=base["hp"],
-                        max_hp=base["hp"],
-                        atk=base["atk"],
-                        def_=base["def"],
-                        mov=mp_pool,                # pool value (also shown as MOV)
-                        mp=mp_pool,                  # current MP, refilled each turn
+                        hp=uc.base_hp,
+                        max_hp=uc.base_hp,
+                        atk=uc.base_atk,
+                        def_=uc.base_def,
+                        mov=uc.mp_pool,
+                        mp=uc.mp_pool,
                         morale=0,
                         x=x,
                         y=y,
                         has_acted=False,
                         has_moved=False,
-                        skills=skills,
+                        skills=list(uc.default_skills),
                     )
                 )
                 unit_index += 1
@@ -484,36 +481,10 @@ async def check_victory_by_castles(
     return None
 
 
-# ============================================================
-# Healer skill helper
-# ============================================================
-
-HEAL_AMOUNT: int = 20
-
-
-def heal_adjacent_ally(healer: Unit, ally: Unit) -> int:
-    """Restore `HEAL_AMOUNT` HP to an adjacent ally. Returns HP actually restored."""
-    if SKILL_HEAL not in (healer.skills or []):
-        return 0
-    if healer is ally:
-        return 0
-    if (healer.id is not None and ally.id is not None) and healer.id == ally.id:
-        return 0
-    if healer.player_id != ally.player_id:
-        return 0
-    if max(abs(healer.x - ally.x), abs(healer.y - ally.y)) != 1:
-        return 0
-    deficit = ally.max_hp - ally.hp
-    restored = min(HEAL_AMOUNT, deficit)
-    ally.hp += restored
-    return restored
-
-
 __all__ = [
     "DamageResult",
     "EndTurnResult",
     "LevelUpResult",
-    "HEAL_AMOUNT",
     "MAP_PRESETS",
     "UNIT_COMPOSITIONS",
     "apply_damage",
@@ -530,7 +501,6 @@ __all__ = [
     "create_initial_units",
     "generate_map",
     "generate_map_preset",
-    "heal_adjacent_ally",
     "level_up_if_ready",
     "unit_attack_range",
 ]
@@ -718,13 +688,11 @@ def create_initial_units_with_roster(
         castle_xy = castle_positions_map[player.seat]
         unit_index = 0
         for unit_type, count in roster.items():
+            uc = _get_unit_or_none(unit_type)
+            if uc is None:
+                continue
             for _ in range(count):
-                if unit_type not in UNIT_BASE_STATS:
-                    continue
-                base = UNIT_BASE_STATS[unit_type]
-                skills = list(UNIT_DEFAULT_SKILLS.get(unit_type, []))
                 x, y = _spawn_xy_for_castle(castle_xy, unit_index)
-                mp_pool = UNIT_MP_POOL.get(unit_type, base["mov"])
                 units.append(
                     Unit(
                         player_id=player.id,
@@ -732,18 +700,18 @@ def create_initial_units_with_roster(
                         name=_unit_name(unit_type, unit_index),
                         level=1,
                         exp=0,
-                        hp=base["hp"],
-                        max_hp=base["hp"],
-                        atk=base["atk"],
-                        def_=base["def"],
-                        mov=mp_pool,
-                        mp=mp_pool,
+                        hp=uc.base_hp,
+                        max_hp=uc.base_hp,
+                        atk=uc.base_atk,
+                        def_=uc.base_def,
+                        mov=uc.mp_pool,
+                        mp=uc.mp_pool,
                         morale=0,
                         x=x,
                         y=y,
                         has_acted=False,
                         has_moved=False,
-                        skills=skills,
+                        skills=list(uc.default_skills),
                     )
                 )
                 unit_index += 1
@@ -854,7 +822,7 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
         score = _unit_value(e) * 1.0
         score -= e.hp * 0.5   # lower HP = higher score
         score += 100 if e.hp <= unit.atk else 0  # can kill this turn
-        type_mult = TYPE_ADVANTAGE.get((unit.unit_type, e.unit_type), 1.0)
+        type_mult = _type_adv(unit.unit_type, e.unit_type)
         score *= type_mult
         # Prefer targets within aggro range (closer = more relevant)
         score += max(0, AI_AGGRO_RANGE - d) * 5
@@ -980,36 +948,38 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
 
 
 async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AISnapshot) -> bool:
-    """If healer/rally, try to use. Returns True if skill was used."""
-    if not unit.skills:
+    """Use the unit's best active skill (delegated to the skill registry).
+
+    Returns True if any skill was used.
+    """
+    from app.classes.units.skills import get_active_for
+    from app.classes.units.skills.base import SkillContext
+
+    active_skills = get_active_for(unit)
+    if not active_skills:
         return False
-    if SKILL_HEAL in (unit.skills or []) and unit.unit_type == UNIT_HEALER:
-        # Find adjacent wounded ally
-        candidates = []
-        for a in snap.ally_units:
-            if a.id == unit.id or a.hp <= 0:
+
+    for sk in active_skills:
+        # For heal: pick the ally with the biggest HP deficit
+        if sk.skill_id == "heal":
+            candidates = [
+                a for a in snap.ally_units
+                if a.id != unit.id
+                and 0 < a.hp < a.max_hp
+                and chebyshev((unit.x, unit.y), (a.x, a.y)) == 1
+            ]
+            if not candidates:
                 continue
-            if a.hp >= a.max_hp:
-                continue
-            if chebyshev((unit.x, unit.y), (a.x, a.y)) != 1:
-                continue
-            deficit_pct = (a.max_hp - a.hp) / max(1, a.max_hp) * 100
-            candidates.append((deficit_pct, a))
-        if candidates:
-            candidates.sort(key=lambda t: -t[0])
-            ally = candidates[0][1]
-            heal_adjacent_ally(unit, ally)
-            unit.has_acted = True
+            target = max(candidates, key=lambda a: (a.max_hp - a.hp))
+            ctx = SkillContext(user=unit, target=target, ally_units=list(snap.ally_units))
+        else:
+            ctx = SkillContext(user=unit, ally_units=list(snap.ally_units))
+
+        if not sk.can_use(ctx):
+            continue
+        result = await sk.execute(session, ctx)
+        if result.ok:
             return True
-    if SKILL_RALLY in (unit.skills or []) and unit.unit_type == UNIT_HEALER:
-        # Apply +10% ATK to adjacent allies (including self)
-        for a in snap.ally_units:
-            if a.hp <= 0:
-                continue
-            if chebyshev((unit.x, unit.y), (a.x, a.y)) == 1:
-                a.atk = int(round(a.atk * 1.10))
-        unit.has_acted = True
-        return True
     return False
 
 
