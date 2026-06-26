@@ -1714,6 +1714,376 @@ function skillName(s) {
 }
 
 // ============================================================
+// Dialog box (S0.1) — 剧情/对话系统
+// ============================================================
+//
+// API:
+//   dialog.show(scene) -> Promise       // 单个场景
+//   dialog.play(scenes) -> Promise      // 顺序播放多个场景
+//   dialog.say(speaker, text, opts?)    // 单行对话
+//   dialog.close()                      // 强制关闭
+//
+// Scene 类型:
+//   { type: 'dialogue', speaker, speaker_color?, text }
+//   { type: 'narration', text }
+//   { type: 'choice', question, choices: [{text, value?}] }
+//         -> resolves to choices[i].value ?? choices[i].text
+//   { type: 'wait', ms }                // 等待 N 毫秒后继续
+//
+// 全局交互：
+//   - 点击对话框 / 叙述区 / 按 Space / Enter → 推进（typewriter 中则立即完成）
+//   - 按 Esc → 强制关闭（resolve 当前 promise）
+//   - 选项按钮点击 → 选中并 resolve
+// ============================================================
+
+const Dialog = {
+  // 运行状态
+  active: false,         // 是否正在播放
+  _resolve: null,        // 当前场景的 resolver
+  _currentScene: null,   // 当前场景对象
+  _typewriterTimer: null,// 打字机 interval
+  _typewriterDone: false,// 当前文本是否打完
+  _typedText: "",        // 当前已打字的文本（用于取消）
+
+  // ---- 可调参数 ----
+  CHARS_PER_SEC: 40,          // 打字速度（默认 40 字/秒，~25ms/字）
+  MAX_OPTIONS: 4,             // 最多 4 个选项
+  NARRATION_CHARS_PER_SEC: 25,// 叙述模式稍慢（22ms/字），便于阅读
+
+  // ====================== 公共 API ======================
+
+  /**
+   * 显示并播放一个场景。返回 Promise，在场景"完成"时 resolve。
+   *   dialogue/narration  → resolve undefined
+   *   choice             → resolve 选中项的 value（或 text）
+   *   wait               → resolve undefined（等待后）
+   */
+  show(scene) {
+    if (!scene || typeof scene !== "object") {
+      return Promise.reject(new Error("Dialog.show: scene is required"));
+    }
+    if (this.active) {
+      // 防止递归：若已有 dialog 在播，把当前 promise 链挂到它的下一个位置
+      return this._queue(scene);
+    }
+    return this._run(scene);
+  },
+
+  /** 顺序播放多个场景。任一 reject 会立即终止链。 */
+  async play(scenes) {
+    if (!Array.isArray(scenes)) throw new Error("Dialog.play: scenes must be array");
+    for (const sc of scenes) {
+      await this.show(sc);
+    }
+  },
+
+  /** 快速显示一行对话（等价于一个 dialogue 场景）。 */
+  say(speaker, text, opts = {}) {
+    return this.show({
+      type: "dialogue",
+      speaker,
+      speaker_color: opts.color,
+      text,
+    });
+  },
+
+  /** 强制关闭（resolve 当前 pending 场景，丢弃后续队列）。 */
+  close() {
+    if (!this.active) return;
+    const r = this._resolve;
+    this._cleanup();
+    if (r) r(undefined);
+  },
+
+  /**
+   * 内置演示脚本：完整跑一遍 dialogue / narration / choice / wait 四种场景。
+   * 用于在没有 S0.2 剧情系统时手动验证对话框功能。
+   */
+  async demo() {
+    await this.play([
+      { type: "narration", text: "很久以前，这片大陆被黑暗笼罩……" },
+      { type: "dialogue", speaker: "云", speaker_color: "#ffb84d",
+        text: "你好，旅者。我是云，这片大陆的守护者。" },
+      { type: "dialogue", speaker: "红", speaker_color: "#e85a6a",
+        text: "今天，我们将吹响反击的号角。" },
+      { type: "choice",
+        question: "你选择相信谁？",
+        choices: [
+          { text: "相信云的判断", value: "yun" },
+          { text: "跟随红的勇气", value: "hong" },
+        ],
+      },
+      { type: "narration", text: "（你做出了选择）" },
+      { type: "dialogue", speaker: "系统",
+        text: "🎉 对话框演示完成！" },
+    ]);
+    toast("对话框演示结束");
+  },
+
+  // ====================== 内部 ======================
+
+  _queue(scene) {
+    // 已激活时，新场景排队等当前场景结束后播放
+    return new Promise((resolve) => {
+      this._pendingQueue = this._pendingQueue || [];
+      this._pendingQueue.push({ scene, resolve });
+    });
+  },
+
+  _drainQueue() {
+    const next = (this._pendingQueue || []).shift();
+    if (!next) return;
+    // 在 microtask 中启动下一个，避免 resolve 后同步递归
+    Promise.resolve().then(() => {
+      this._run(next.scene).then(next.resolve);
+    });
+  },
+
+  _run(scene) {
+    return new Promise((resolve) => {
+      this.active = true;
+      this._currentScene = scene;
+      this._resolve = resolve;
+      this._typewriterDone = false;
+
+      const t = scene.type;
+      if (t === "dialogue") this._renderDialogue(scene);
+      else if (t === "narration") this._renderNarration(scene);
+      else if (t === "choice") this._renderChoice(scene);
+      else if (t === "wait") this._renderWait(scene);
+      else {
+        // 未知类型：直接通过
+        this._cleanup();
+        resolve(undefined);
+      }
+    });
+  },
+
+  // ---------- DOM 渲染 ----------
+
+  _el() {
+    return {
+      box: document.getElementById("dialog-box"),
+      narration: document.getElementById("dialog-narration"),
+    };
+  },
+
+  _renderDialogue(scene) {
+    const { box, narration } = this._el();
+    narration.hidden = true;
+
+    const speakerEl = box.querySelector(".dialog-speaker");
+    const textEl = box.querySelector(".dialog-text");
+    const choicesEl = box.querySelector(".dialog-choices");
+
+    speakerEl.textContent = scene.speaker || "";
+    speakerEl.classList.toggle("is-narration", !scene.speaker);
+    if (scene.speaker_color) {
+      speakerEl.style.color = scene.speaker_color;
+    } else {
+      speakerEl.style.color = "";
+    }
+
+    choicesEl.innerHTML = "";
+    box.classList.remove("is-text-done");
+    box.classList.add("is-typing");
+    box.hidden = false;
+    this._startTypewriter(textEl, scene.text || "", false);
+  },
+
+  _renderNarration(scene) {
+    const { box, narration } = this._el();
+    box.hidden = true;
+
+    const textEl = narration.querySelector(".dialog-narration-text");
+    narration.classList.remove("is-text-done");
+    narration.hidden = false;
+    this._startTypewriter(textEl, scene.text || "", true);
+  },
+
+  _renderChoice(scene) {
+    const { box, narration } = this._el();
+    narration.hidden = true;
+
+    const speakerEl = box.querySelector(".dialog-speaker");
+    const textEl = box.querySelector(".dialog-text");
+    const choicesEl = box.querySelector(".dialog-choices");
+
+    speakerEl.textContent = "";
+    speakerEl.classList.add("is-narration");
+    speakerEl.style.color = "";
+    textEl.textContent = scene.question || "请选择：";
+    choicesEl.innerHTML = "";
+
+    const choices = (scene.choices || []).slice(0, this.MAX_OPTIONS);
+    choices.forEach((c, i) => {
+      const btn = document.createElement("button");
+      btn.className = "dialog-choice";
+      btn.type = "button";
+      btn.textContent = `${i + 1}. ${c.text}`;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._finishChoice(c);
+      });
+      choicesEl.appendChild(btn);
+    });
+
+    // 选项模式：关闭打字机，立刻显示题目
+    this._stopTypewriter();
+    box.classList.add("is-text-done");
+    box.classList.remove("is-typing");
+    box.hidden = false;
+  },
+
+  _renderWait(scene) {
+    // 等待场景不显示任何 UI，仅延时后 resolve
+    const ms = Math.max(0, Number(scene.ms) || 0);
+    setTimeout(() => {
+      if (this._resolve && this._currentScene === scene) {
+        const r = this._resolve;
+        this._cleanup();
+        r(undefined);
+      }
+    }, ms);
+  },
+
+  _finishChoice(c) {
+    const value = (c && c.value !== undefined) ? c.value : (c ? c.text : undefined);
+    const r = this._resolve;
+    this._cleanup();
+    if (r) r(value);
+  },
+
+  // ---------- 打字机 ----------
+
+  _startTypewriter(targetEl, text, isNarration) {
+    this._stopTypewriter();
+    this._typedText = text;
+
+    const cps = isNarration ? this.NARRATION_CHARS_PER_SEC : this.CHARS_PER_SEC;
+    const intervalMs = Math.max(8, Math.round(1000 / cps));
+
+    targetEl.innerHTML = "";
+    const caret = document.createElement("span");
+    caret.className = "dialog-caret";
+    targetEl.appendChild(caret);
+
+    let i = 0;
+    const tick = () => {
+      if (!this.active) return;
+      if (i >= text.length) {
+        this._finishTypewriter();
+        return;
+      }
+      const ch = text[i++];
+      caret.insertAdjacentText("beforebegin", ch);
+    };
+    this._typewriterTimer = setInterval(tick, intervalMs);
+  },
+
+  _stopTypewriter() {
+    if (this._typewriterTimer) {
+      clearInterval(this._typewriterTimer);
+      this._typewriterTimer = null;
+    }
+  },
+
+  /** 立即完成当前打字机（点击/Enter 触发）。 */
+  _finishTypewriter() {
+    this._stopTypewriter();
+    const { box, narration } = this._el();
+    // 把当前场景的整段文本写回去（覆盖未打完的部分）
+    const textEl = box.querySelector(".dialog-text");
+    const narEl = narration.querySelector(".dialog-narration-text");
+    const target = narration.hidden === false ? narEl : textEl;
+    if (target && this._currentScene) {
+      target.textContent = this._currentScene.text || "";
+    }
+    box.classList.add("is-text-done");
+    box.classList.remove("is-typing");
+    narration.classList.add("is-text-done");
+    this._typewriterDone = true;
+  },
+
+  /** 推进到下一个状态（点击/Enter 在打字完成时触发）。 */
+  _advance() {
+    if (!this.active) return;
+    const scene = this._currentScene;
+    if (!scene) return;
+    if (scene.type === "dialogue" || scene.type === "narration") {
+      const r = this._resolve;
+      this._cleanup();
+      if (r) r(undefined);
+    }
+    // choice/wait 不响应点击推进
+  },
+
+  // ---------- 清理 ----------
+
+  _cleanup() {
+    this._stopTypewriter();
+    const { box, narration } = this._el();
+    box.hidden = true;
+    narration.hidden = true;
+    box.classList.remove("is-text-done", "is-typing");
+    narration.classList.remove("is-text-done");
+    box.querySelector(".dialog-choices").innerHTML = "";
+    box.querySelector(".dialog-text").innerHTML = "";
+    narration.querySelector(".dialog-narration-text").innerHTML = "";
+    box.querySelector(".dialog-speaker").textContent = "";
+    this.active = false;
+    this._currentScene = null;
+    this._resolve = null;
+    this._typewriterDone = false;
+    this._drainQueue();
+  },
+
+  // ---------- 全局事件绑定 ----------
+
+  _bindGlobalEvents() {
+    if (this._bound) return;
+    this._bound = true;
+
+    // 点击对话框或叙述区
+    const { box, narration } = this._el();
+    box.addEventListener("click", (e) => {
+      // 选项点击已在 _renderChoice 中 stopPropagation
+      if (!this.active) return;
+      if (e.target.closest(".dialog-choice")) return;
+      if (this._typewriterDone) this._advance();
+      else this._finishTypewriter();
+    });
+    narration.addEventListener("click", () => {
+      if (!this.active) return;
+      if (this._typewriterDone) this._advance();
+      else this._finishTypewriter();
+    });
+
+    // 全局键盘：Space / Enter 推进；Esc 关闭
+    document.addEventListener("keydown", (e) => {
+      if (!this.active) return;
+      // 如果焦点在 input/textarea/select，按键交给它们
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.close();
+      } else if (e.key === " " || e.key === "Enter") {
+        // choice 模式允许 Enter 选中第 1 个选项（但本期暂不实现数字键）
+        if (this._currentScene && this._currentScene.type === "choice") return;
+        e.preventDefault();
+        if (this._typewriterDone) this._advance();
+        else this._finishTypewriter();
+      }
+    });
+  },
+};
+
+// 暴露给浏览器控制台与游戏内调用
+window.dialog = Dialog;
+Dialog._bindGlobalEvents();
+
+// ============================================================
 // Wiring
 // ============================================================
 
@@ -1821,6 +2191,10 @@ document.addEventListener("DOMContentLoaded", () => {
       case "create-game":
         await createGame();
         break;
+      case "dialog-demo":
+        // S0.1 对话框演示：play 一段内嵌剧情样例
+        await Dialog.demo();
+        break;
     }
   });
 
@@ -1839,10 +2213,13 @@ document.addEventListener("DOMContentLoaded", () => {
     aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
   }
 
-  // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu
+  // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu.
+  // NOTE: do NOT call showView('menu') on the `!resumed` branch — by the time this promise
+  // resolves, the user may have already clicked into another view (e.g. 新建游戏).
+  // Overriding their navigation back to menu is a UX bug. The initial showView('menu') above
+  // is sufficient for the default case.
   tryResumeSession().then((resumed) => {
     if (!resumed) {
-      showView("menu");
       updateResumeButton(loadSession());
     }
   });
