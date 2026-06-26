@@ -16,6 +16,7 @@
         <button id="resume-btn" class="btn btn-accent btn-lg" data-action="resume-game" hidden>▶ 继续上次的游戏</button>
         <button class="btn btn-primary btn-lg" data-action="goto-new-game">新建游戏</button>
         <button class="btn btn-primary btn-lg" data-action="goto-join-game">加入游戏</button>
+        <button class="btn btn-secondary btn-lg" data-action="goto-mainline-list">📖 主线模式</button>
         <button class="btn btn-secondary btn-lg" data-action="goto-settings">游戏设置</button>
         <button class="btn btn-ghost btn-lg" data-action="goto-help">玩法说明</button>
       </div>
@@ -156,6 +157,35 @@
           <li>克制：剑士→骑士(+20%)，骑士→弓箭手(+20%)</li>
           <li>暴击：基础 5% + 每级 1%，伤害 1.5 倍</li>
         </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 主线：章节列表 ====================== -->
+  <section id="view-mainline-list" class="view" hidden>
+    <div class="panel mainline-list-panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>📖 主线模式</h2>
+      <p class="muted">选择一条主线开始你的战役。每条主线包含若干战斗，战斗之间穿插剧情对话。</p>
+      <div id="mainline-list" class="mainline-list">
+        <p class="muted">加载中…</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 主线：游玩（剧情 + 战斗） ====================== -->
+  <section id="view-mainline-play" class="view" hidden>
+    <div class="panel mainline-play-panel">
+      <div class="mainline-header">
+        <button class="btn btn-back" data-action="goto-mainline-list">← 返回章节列表</button>
+        <h2 id="mainline-title">主线</h2>
+        <span id="mainline-progress" class="muted small"></span>
+      </div>
+      <div id="mainline-content" class="mainline-content">
+        <p class="muted">剧情/战斗由 MainlineView 动态填充…</p>
+      </div>
+      <div class="mainline-actions">
+        <button class="btn btn-ghost btn-sm" data-action="mainline-abandon">🚪 放弃主线</button>
       </div>
     </div>
   </section>

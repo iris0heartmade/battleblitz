@@ -1,6 +1,7 @@
 # BattleBlitz LLM Agent — 接口规范
 
 > 版本：v0.1.0 · 适用代码：`game/app/agent/` · `game/app/classes/units/`
+> **架构概览 / 子系统列表**：见 [`README.md`](README.md)
 >
 > 本文档定义 LLM 对手层的全部公共接口：Python API、HTTP 端点变更、数据契约、配置项。
 > 目标读者：希望集成、扩展或测试该模块的开发者。
@@ -316,7 +317,6 @@ class Reaction:
 #### `generate_reaction(personality, event, *, rng=None) -> Reaction`
 
 从模板库随机选一句。**三级 fallback**：
-
 1. `(personality, event)` 特定模板（如 `("aggressive", "kill")`）
 2. `("balanced", event)` 通用模板
 3. `_NEUTRAL_FALLBACK[event]` 中性默认
@@ -453,51 +453,12 @@ actions = await dispatch_ai_turn(session, game, current)  # 替换原 ai_take_tu
 |--------|----------------------|--------------------|
 | Anthropic 官方 | `https://api.anthropic.com` | `claude-sonnet-4-6` |
 | Minimax coding plan | `https://api.minimaxi.com/anthropic` | `MiniMax-M3` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-6` |
+| OpenRouter | `https://openrouter.app/api/v1` | `anthropic/claude-sonnet-4-6` |
 | 本地 llama.cpp server | `http://127.0.0.1:8080` | 任意（需兼容 Anthropic schema）|
 
 ---
 
-## 5. 数据流
-
-```
-[路由]  routes/turns.py
-   │  end_turn 后 → 下一个玩家是 AI？
-   │  是 → asyncio.create_task(_run_ai_turn_chain)
-   ▼
-[分发]  dispatch_ai_turn(session, game, player)
-   │  按 player.agent_kind 分发
-   │
-   ├─ "rules"  →  rules_ai_take_turn       (原有逻辑)
-   │
-   └─ "llm"    →  LLMAgent.take_turn
-                     │
-                     │  0. _detect_passive_reactions()   # 上回合被打/被击杀
-                     │
-                     │  while budget_left > 0:
-                     │     1. snapshot = build_snapshot(...)
-                     │     2. legal    = enumerate_legal_actions(...)
-                     │     3. prompt   = build_*_prompt(snapshot, legal, personality)
-                     │     4. response = await LLMClient.chat(...)
-                     │     5. action   = AgentAction(...)
-                     │     6. validate action_id ∈ legal
-                     │     7. execute via _ai_move / _ai_attack / _ai_use_skill
-                     │     8. _detect_action_outcomes()   # 击杀/占城堡反应
-                     │     9. 失败 → 重试 (max 3 次) → 兜底规则 AI
-                     │
-                     ▼
-                  metrics (含 reactions)
-                     │
-                     ▼
-              ActionLog entries with action_type="ai_commentary"
-                     │
-                     ▼
-              前端通过 GET /games/{id} 读到
-```
-
----
-
-## 6. 错误处理策略
+## 5. 错误处理策略
 
 | 失败点 | 行为 |
 |--------|------|
@@ -511,9 +472,9 @@ actions = await dispatch_ai_turn(session, game, current)  # 替换原 ai_take_tu
 
 ---
 
-## 7. 完整示例
+## 6. 完整示例
 
-### 7.0 前端读取 AI 反应
+### 6.0 前端读取 AI 反应
 
 `ActionLog.action_type = "ai_commentary"` 的记录就是 AI 发言。Description 格式：`[event/mood] text`。
 
@@ -531,7 +492,7 @@ actions = await dispatch_ai_turn(session, game, current)  # 替换原 ai_take_tu
 
 前端推荐按 `player_id` 过滤 + 解析 `[event/mood]` 前缀做表情图标（joy→😄, anger→😠, frustrated→😤, smug→😏, disappointed→😞, relieved→😅, neutral→💬）。
 
-### 7.1 启动 + 加 LLM AI
+### 6.1 启动 + 加 LLM AI
 
 ```bash
 # 配置
@@ -559,7 +520,7 @@ curl -X POST http://localhost:8000/games/1/add-ai \
   -d '{"difficulty":"normal","agent_kind":"llm","personality":"aggressive"}'
 ```
 
-### 7.2 Python 直接调用
+### 6.2 Python 直接调用
 
 ```python
 import asyncio
@@ -584,7 +545,7 @@ async def run_one_turn(session: AsyncSession, game: Game, player: Player):
         print(f"  - {d.legal_action.description}  ({d.reason})")
 ```
 
-### 7.3 测试用 mock client
+### 6.3 测试用 mock client
 
 ```python
 from unittest.mock import AsyncMock
@@ -612,9 +573,9 @@ set_default_llm_client(FakeLLM(action_id="end_turn"))
 
 ---
 
-## 8. 扩展指南
+## 7. 扩展指南
 
-### 8.1 加新性格
+### 7.1 加新性格
 
 ```python
 # game/app/agent/prompt.py
@@ -628,7 +589,7 @@ class AddAIRequest(BaseModel):
     )
 ```
 
-### 8.2 切换后端到 OpenAI 兼容 API
+### 7.2 切换后端到 OpenAI 兼容 API
 
 **已实现**（`app/agent/openai_client.py`）。无需自己写——`.env` 设 `LLM_PROTOCOL=openai` 即可：
 
@@ -642,16 +603,16 @@ OPENAI_MODEL=local-model
 
 实现细节见 `app/agent/openai_client.py`（Anthropic → OpenAI 工具 schema 转换、function calling 解析）。
 
-### 8.3 加 ReAct 工具（沙盘推演）
+### 7.3 加 ReAct 工具（沙盘推演）
 
-参考 `~/battleblitz-llm-agent.md` §7。最小改动：
+参考 `README.md` §7。最小改动：
 1. `LLM_TOOL_SCHEMA` 加第二个工具 `simulate_move`
 2. `llm_client.chat` 改循环，每轮检查 `tool_use` 是否为 `simulate`，是则本地计算后 `messages.append({"role":"user","content": result})` 再发
 3. `LLMAgent.decide_one` 终止条件改为收到 `choose_action` 而非首次响应
 
 ---
 
-## 9. 版本与兼容
+## 8. 版本与兼容
 
 | 版本 | 兼容范围 |
 |------|----------|

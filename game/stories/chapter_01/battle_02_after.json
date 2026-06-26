@@ -1,0 +1,20 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "城堡的吊桥在夕阳中缓缓落下。守军在城墙上挂起了白旗。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "红……你伤得不轻。先别动，让我看看你的护腕。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "（笑）这算什么，比起山口的箭雨，攻城塔投下来的火油还更烫手。"
+    }
+  ]
+}
