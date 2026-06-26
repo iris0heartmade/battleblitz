@@ -17,6 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import (
+    COUNTER_DAMAGE_MULT,
+    COUNTER_IMMUNE_SKILLS,
     MAP_SIZE,
     SKILL_DOUBLE_STRIKE,
     SKILL_HEAL,
@@ -32,9 +34,11 @@ from app.game_logic import (
     attack_with_double_strike,
     award_exp,
     calculate_damage,
+    can_attack_from_position,
     claim_castle_if_present,
     heal_adjacent_ally,
     unit_attack_range,
+    unit_min_attack_range,
 )
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
@@ -70,18 +74,18 @@ router = APIRouter(prefix="/games", tags=["actions"])
 async def _load_active_game(session: AsyncSession, game_id: int) -> Game:
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "playing":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"game is {game.status}")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"游戏状态不是进行中（当前：{game.status}）")
     return game
 
 
 async def _load_unit(session: AsyncSession, unit_id: int) -> Unit:
     unit = await session.get(Unit, unit_id)
     if unit is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "unit not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "单位不存在")
     if unit.hp <= 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit is dead")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "单位已阵亡")
     return unit
 
 
@@ -91,16 +95,16 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     ).scalars().all()
     alive_seats = sorted(p.seat for p in players if p.is_alive)
     if not alive_seats:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no players alive")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
     expected_seat = next(
         (s for s in alive_seats if s >= game.current_player_index),
         alive_seats[0],
     )
     player = next((p for p in players if p.id == player_id), None)
     if player is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "player not found in game")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
     if player.id != next(p.id for p in players if p.seat == expected_seat):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not your turn")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "现在不是你的回合")
     return player
 
 
@@ -171,24 +175,24 @@ async def move_unit(
     player = await _ensure_current_player(session, game, body.player_id)
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_moved:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already moved this turn")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已移动过")
     await _check_action_budget(session, player, unit)
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target out of bounds")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
 
     terrain, owners, occ = await _load_tile_grid(session, game_id)
     target = (body.to_x, body.to_y)
 
     # Target must be empty (no unit on it)
     if occ.get(target) is not None and occ.get(target) != unit.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target tile is occupied")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标格已被占据")
 
     # Cannot enter an enemy castle
     tile_terrain = terrain.get(target)
     if tile_terrain == TERRAIN_CASTLE and owners.get(target) not in (None, player.id):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot enter enemy castle")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法进入敌方城堡")
 
     # Pathfind with movement budget
     blocked = {(x, y) for (x, y), u in occ.items() if u is not None and u != unit.id}
@@ -202,7 +206,7 @@ async def move_unit(
         blocked_units=blocked,
     )
     if path is None or path[-1] != target:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "destination unreachable")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "目的地不可达")
 
     # Compute actual cost along the chosen path
     from app.config import TERRAIN_MOVE_COST
@@ -286,19 +290,23 @@ async def attack(
     player = await _ensure_current_player(session, game, body.player_id)
     attacker = await _load_unit(session, body.attacker_id)
     if attacker.player_id != player.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "attacker does not belong to you")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "攻击者不属于你")
     if attacker.has_acted:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "attacker has already acted")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "攻击者本回合已行动过")
     await _check_action_budget(session, player, attacker)
 
     target = await _load_unit(session, body.target_id)
     if target.player_id == player.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot attack your own unit")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
 
     distance = chebyshev((attacker.x, attacker.y), (target.x, target.y))
+    atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
-    if distance == 0 or distance > atk_range:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"target out of range (need {distance} <= {atk_range})")
+    if distance == 0 or distance <= atk_min or distance > atk_range:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"target out of range (need {atk_min} < d={distance} <= {atk_range})",
+        )
 
     # Ranged attacks need LOS
     if atk_range > 1:
@@ -307,7 +315,7 @@ async def attack(
         # The target's own tile should not block LOS to itself
         blockers.discard((target.x, target.y))
         if not has_line_of_sight((attacker.x, attacker.y), (target.x, target.y), blockers):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "line of sight blocked")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "视线被阻挡")
 
     # Determine defender's terrain bonus
     def_tile = (
@@ -331,6 +339,46 @@ async def attack(
         from app.game_logic import award_morale
         award_morale(attacker)
 
+    # ── Counter attack ────────────────────────────────────────
+    # Counter fires if:
+    #   1. defender survived the initial attack (HP > 0)
+    #   2. defender's current attack range can reach the attacker
+    #   3. defender doesn't have an immunity skill (e.g. "kiting")
+    # Damage multiplier is COUNTER_DAMAGE_MULT (default 0.5).
+    counter_dmg = 0
+    defender_skills = set(target.skills or [])
+    has_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    if (
+        not is_kill
+        and not has_immunity
+        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    ):
+        # Defender's terrain bonus is the tile the defender is on
+        counter_tile = (
+            await session.execute(
+                select(Tile).where(
+                    Tile.game_id == game_id,
+                    Tile.x == target.x,
+                    Tile.y == target.y,
+                )
+            )
+        ).scalars().first()
+        counter_bonus = TERRAIN_DEF_BONUS.get(
+            counter_tile.terrain if counter_tile else "plain", 0
+        )
+        counter_rng = random.Random()
+        counter_hits = attack_with_double_strike(
+            target, attacker, counter_bonus, rng=counter_rng
+        )
+        for ch in counter_hits:
+            counter_dmg += max(1, int(ch.damage * COUNTER_DAMAGE_MULT))
+        apply_damage(attacker, counter_dmg)
+        _log(
+            session, game, player, "counter",
+            f"{target.name} counter → {attacker.name}: {counter_dmg} dmg "
+            f"(x{COUNTER_DAMAGE_MULT})",
+        )
+
     # Mark attacker as having acted.
     # If the attacker's class allows move-after-action AND it still has MP,
     # keep mp as is; otherwise zero it out (unit is rooted for the turn).
@@ -350,7 +398,7 @@ async def attack(
 
     _log(session, game, player, "attack",
          f"{attacker.name} -> {target.name}: {total_dmg} dmg"
-         + (" [KILL]" if is_kill else "")
+         + (" [击杀]" if is_kill else "")
          + (f" crit={hits[0].is_crit}" if hits and hits[0].is_crit else ""))
 
     if is_kill:
@@ -386,9 +434,12 @@ async def attack(
         target_def_bonus=tile_bonus,
         attacker_exp_gained=exp_gained,
         assist_unit_ids=assist_ids,
+        counter_damage=counter_dmg,
+        attacker_hp_after=attacker.hp,
         description=(
             f"{attacker.name} hit {target.name} for {total_dmg} damage"
-            + (" [KILL]" if is_kill else f" (HP left {target.hp})")
+            + (" [击杀]" if is_kill else f" (HP left {target.hp})")
+            + (f" → counter {counter_dmg}" if counter_dmg > 0 else "")
         ),
     )
 
@@ -410,18 +461,18 @@ async def use_skill(
     player = await _ensure_current_player(session, game, body.player_id)
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_acted:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
     await _check_action_budget(session, player, unit)
 
     skill_id = body.skill
     try:
         sk = _get_skill(skill_id)
     except KeyError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown skill '{skill_id}'")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f'未知技能：{skill_id}')
     if skill_id not in (unit.skills or []):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unit does not have skill '{skill_id}'")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"该单位没有这个技能 '{skill_id}'")
     if sk.is_passive:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{skill_id}' is passive; use attack endpoint")
 
@@ -447,7 +498,7 @@ async def use_skill(
 
     result = await sk.execute(session, ctx)
     if not result.ok:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, result.description or "skill failed")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, result.description or "技能释放失败")
 
     _log(session, game, player, "skill", result.description)
     audit.info(
@@ -476,9 +527,9 @@ async def wait_action(
     player = await _ensure_current_player(session, game, body.player_id)
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_acted:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
     await _check_action_budget(session, player, unit)
 
     unit.has_acted = True

@@ -156,6 +156,19 @@ ABANDONED_LOBBY_MINUTES: Final[int] = 30  # waiting game with 0 players older th
 ABANDONED_FINISHED_HOURS: Final[int] = 24  # finished games older than this get deleted
 LOBBY_CLEANUP_INTERVAL_SECONDS: Final[int] = 60  # how often to scan for abandoned lobbies
 
+
+# ============================================================
+# Counter-attack tuning
+# ============================================================
+# When a defender survives an attack and can hit the attacker, it deals
+# `COUNTER_DAMAGE_MULT * normal_damage` (rounded down, min 1).
+# Fire-Emblem uses 0.5 (50%); raise it to make counter more punishing,
+# lower it to make counter mostly cosmetic.
+COUNTER_DAMAGE_MULT: Final[float] = 0.5
+# Some units may bypass counter entirely (e.g. ranged kiting units).
+# Leave empty for now; populated by per-unit skills later.
+COUNTER_IMMUNE_SKILLS: Final[tuple[str, ...]] = ()
+
 # AI player
 AI_THINK_DELAY_SECONDS: Final[float] = 1.2  # delay between AI actions so humans can watch
 AI_MAX_ACTIONS_PER_TURN: Final[int] = 5      # safety cap so a buggy AI can't loop forever

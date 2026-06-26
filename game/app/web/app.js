@@ -46,8 +46,9 @@ const state = {
   me: { player_id: null, user_name: null, color: null, game_id: null, seat: null },
   game: null,            // GameStateOut
   selectedUnit: null,    // UnitOut (the unit whose bubble is currently open)
-  actionMode: null,      // "move" | "attack" | null (driven by bubble)
+  actionMode: null,      // "move" | "attack" | "range" | null (driven by bubble)
   pendingMove: null,     // { toX, toY } - awaiting move confirmation
+  path: null,            // [{x, y}, ...] - computed path for mouse hover
   refreshTimer: null,
   presets: null,         // { maps: [], unit_compositions: [] }
   refPanelOpen: false,
@@ -566,18 +567,34 @@ function renderBoard(st) {
       if (state.selectedUnit && state.selectedUnit.x === x && state.selectedUnit.y === y) {
         cell.classList.add("selected");
       }
-      // Show reachable tiles (green) whenever a unit bubble is open and
-      // that unit still has movement. This makes the "射程" button work
-      // even before the user clicks "移动".
-      if (state.reachableTiles?.has(`${x},${y}`) && !state.pendingMove) {
-        cell.classList.add("move-hint");
+      if (state.actionMode === "range") {
+        // Range-view mode: red translucent overlay on attackable tiles
+        if (state.attackTargets?.has(`${x},${y}`)) {
+          cell.classList.add("range-hint");
+        }
+      } else {
+        // Normal mode: show movement range (green) and attack targets (red)
+        if (state.reachableTiles?.has(`${x},${y}`) && !state.pendingMove) {
+          cell.classList.add("move-hint");
+        }
+        if (state.attackTargets?.has(`${x},${y}`)) {
+          cell.classList.add("target");
+        }
       }
-      // Show attackable targets (red) under the same condition.
-      if (state.attackTargets?.has(`${x},${y}`)) {
-        cell.classList.add("target");
+
+      // Mouse-hover movement path dots
+      if (state.path && state.path.length > 2) {
+        const pi = state.path.findIndex(p => p.x === x && p.y === y);
+        if (pi > 0 && pi < state.path.length - 1) {
+          cell.classList.add("path-dot");
+        }
+        if (pi === state.path.length - 1) {
+          cell.classList.add("path-dot", "path-end");
+        }
       }
 
       cell.addEventListener("click", () => onCellClick(x, y, st));
+      cell.addEventListener("mouseenter", () => onCellHover(x, y));
       frag.appendChild(cell);
     }
   }
@@ -682,21 +699,185 @@ function computeReachable(unit) {
   return reachable;
 }
 
+function getUnitAttackProfile(unit) {
+  // Returns {minRange, maxRange} where attacks hit enemies at distance d
+  // (chebyshev) when minRange < d <= maxRange.
+  // - Melee (剑士, 骑士, etc.): d in (0, 1]    → adjacent only
+  // - Ranged (弓手):  d in (1, 3]              → fire 1..2 tiles away, no melee
+  // - +snipe skill on ranged extends maxRange by 1
+  if (unit.unit_type === "archer") {
+    const max = (unit.skills || []).includes("snipe") ? 4 : 3;
+    return { minRange: 1, maxRange: max };
+  }
+  return { minRange: 0, maxRange: 1 };
+}
+
+function canUnitAttack(unit, fromX, fromY, toX, toY) {
+  const d = Math.max(Math.abs(toX - fromX), Math.abs(toY - fromY));
+  if (d === 0) return false;
+  const prof = getUnitAttackProfile(unit);
+  return d > prof.minRange && d <= prof.maxRange;
+}
+
+// ============================================================
+// Combat forecast — client-side damage prediction
+// ============================================================
+// Replicates the server's calculate_damage() formula so the player sees
+// the predicted outcome before committing to an attack.
+
+// Counter damage multiplier (mirrors app.config.COUNTER_DAMAGE_MULT).
+const COUNTER_DAMAGE_MULT = 0.5;
+
+const TERRAIN_DEF_BONUS = {
+  plain: 0, forest: 2, mountain: 3, river: 0, castle: 5,
+};
+
+const TYPE_ADVANTAGE_FRONT = {
+  swordsman: { knight: 1.20 },
+  knight:    { archer: 1.20 },
+};
+
+function getTypeMultiplier(attackerType, defenderType) {
+  return TYPE_ADVANTAGE_FRONT[attackerType]?.[defenderType] ?? 1.0;
+}
+
+function forecastSingleHit(attacker, defender, tileDefBonus, crit) {
+  // Mirrors app.game_logic.calculate_damage
+  const MORALE_ATK_PER_STAR = 0.10;
+  const MORALE_DEF_PER_STAR = 0.05;
+  const CRIT_MULTIPLIER = 1.5;
+  const BASE_CRIT_RATE = 0.05;
+  const CRIT_PER_LEVEL = 0.01;
+
+  const atkM = attacker.morale || 0;
+  const defM = defender.morale || 0;
+  const effAtk = Math.max(1, attacker.atk * (1 + atkM * MORALE_ATK_PER_STAR));
+  const effDef = Math.max(1, (defender.def_ + tileDefBonus) * (1 + defM * MORALE_DEF_PER_STAR));
+
+  const base = effAtk * (effAtk / (effAtk + effDef));
+  const typeMult = getTypeMultiplier(attacker.unit_type, defender.unit_type);
+  const mult = crit ? typeMult * CRIT_MULTIPLIER : typeMult;
+  const dmg = Math.max(1, Math.round(base * mult));
+
+  const critRate = Math.min(1.0, BASE_CRIT_RATE + CRIT_PER_LEVEL * ((attacker.level || 1) - 1));
+  const normalDmg = Math.max(1, Math.round(base * typeMult));
+  const critDmg = Math.max(1, Math.round(base * typeMult * CRIT_MULTIPLIER));
+
+  return {
+    damage: dmg,
+    isCrit: !!crit,
+    isKill: dmg >= (defender.hp || 0),
+    normalDamage: normalDmg,
+    critDamage: critDmg,
+    critChance: critRate,
+    typeMultiplier: typeMult,
+  };
+}
+
+function getDefenderTerrainBonus(targetUnit) {
+  const t = state.game.tiles.find(t => t.x === targetUnit.x && t.y === targetUnit.y);
+  return t ? (TERRAIN_DEF_BONUS[t.terrain] || 0) : 0;
+}
+
+function forecastAttack(attacker, defender) {
+  // Main forecast: returns the predicted outcome of a normal attack + counter.
+  // Counter rules: only if defender survives AND defender is currently in
+  // attack range of the original attacker (i.e. can hit back).
+  const tileDefBonus = getDefenderTerrainBonus(defender);
+  const mainHit = forecastSingleHit(attacker, defender, tileDefBonus, /*crit=*/false);
+  const mainCrit = forecastSingleHit(attacker, defender, tileDefBonus, /*crit=*/true);
+  const critRate = mainHit.critChance;
+  // Use the most-likely outcome (non-crit) for the headline damage.
+  const mainDmg = mainHit.damage;
+  const attackerHpAfter = (attacker.hp || 0) - mainDmg;
+  const defenderHpAfter = (defender.hp || 0) - mainDmg;
+  const mainKills = mainDmg >= (defender.hp || 0);
+
+  // Counter attack prediction (if defender survives)
+  let counter = null;
+  if (!mainKills) {
+    const counterRange = getUnitAttackProfile(defender).maxRange;
+    const counterMin = getUnitAttackProfile(defender).minRange;
+    const distToAttacker = Math.max(
+      Math.abs(attacker.x - defender.x),
+      Math.abs(attacker.y - defender.y)
+    );
+    if (distToAttacker > counterMin && distToAttacker <= counterRange) {
+      const counterTileBonus = getDefenderTerrainBonus(attacker);
+      const counterHit = forecastSingleHit(defender, attacker, counterTileBonus, false);
+      const counterDmg = Math.max(1, Math.floor(counterHit.damage * COUNTER_DAMAGE_MULT));
+      counter = {
+        damage: counterDmg,
+        attackerHpAfter: (attacker.hp || 0) - mainDmg - counterDmg,
+        willKill: counterDmg >= (attacker.hp || 0) - mainDmg,
+      };
+    }
+  }
+
+  return {
+    main: {
+      damage: mainDmg,
+      normalDamage: mainHit.normalDamage,
+      critDamage: mainHit.critDamage,
+      critRate: critRate,
+      typeMultiplier: mainHit.typeMultiplier,
+      defenderHpAfter: Math.max(0, defenderHpAfter),
+      willKill: mainKills,
+    },
+    counter,
+  };
+}
+
 function computeAttackTargets(unit) {
   const st = state.game;
   const targets = new Set();
-  let atkRange = 1;
-  if (unit.unit_type === "archer") atkRange = 2;
-  if ((unit.skills || []).includes("snipe")) atkRange += 1;
   for (const p of st.players) {
     if (p.id === state.me.player_id) continue;
     for (const u of p.units) {
       if (u.hp <= 0) continue;
-      const d = Math.max(Math.abs(u.x - unit.x), Math.abs(u.y - unit.y));
-      if (d > 0 && d <= atkRange) targets.add(`${u.x},${u.y}`);
+      if (canUnitAttack(unit, unit.x, unit.y, u.x, u.y)) {
+        targets.add(`${u.x},${u.y}`);
+      }
     }
   }
   return targets;
+}
+
+function computeThreatArea(unit, reachableTiles) {
+  // Compute the full "threat zone" — every tile that this unit COULD attack
+  // this turn by moving to any reachable position first.
+  // reachableTiles: Set of "x,y" strings that the unit can move to.
+  // Returns a Set of "x,y" strings representing all attackable tiles.
+  const prof = getUnitAttackProfile(unit);
+
+  const threat = new Set();
+
+  function addFromPosition(px, py) {
+    for (let dx = -prof.maxRange; dx <= prof.maxRange; dx++) {
+      for (let dy = -prof.maxRange; dy <= prof.maxRange; dy++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        if (d <= prof.minRange) continue;
+        if (d > prof.maxRange) continue;
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 0 || nx >= 15 || ny < 0 || ny >= 15) continue;
+        threat.add(`${nx},${ny}`);
+      }
+    }
+  }
+
+  // Threat from current position
+  addFromPosition(unit.x, unit.y);
+
+  // Threat from each reachable tile
+  if (reachableTiles) {
+    for (const key of reachableTiles) {
+      const [rx, ry] = key.split(",").map(Number);
+      addFromPosition(rx, ry);
+    }
+  }
+
+  return threat;
 }
 
 // ----- Bubble rendering -----
@@ -786,8 +967,20 @@ function showUnitActionBubble(unit) {
 function showMoveConfirmBubble(unit, toX, toY) {
   state.pendingMove = { toX, toY };
   state.actionMode = "move-confirm";
+  const steps = state.path ? state.path.length - 1 : "?";
+  const cost = state.path ? (() => {
+    const tileMap = new Map();
+    for (const t of state.game.tiles) tileMap.set(`${t.x},${t.y}`, t);
+    const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
+    let total = 0;
+    for (let i = 1; i < state.path.length; i++) {
+      const t = tileMap.get(`${state.path[i].x},${state.path[i].y}`);
+      total += costs[t?.terrain] ?? 1;
+    }
+    return total;
+  })() : "?";
   const html = `
-    <div class="ab-title">移动到 (${toX}, ${toY})</div>
+    <div class="ab-title">移动到 (${toX}, ${toY}) · ${steps} 步 ⚡${cost}</div>
     <div class="ab-row">
       <button class="ab-btn primary" data-ab="confirm-move">✅ 确认移动</button>
       <button class="ab-btn cancel" data-ab="cancel-move">❌ 取消</button>
@@ -802,14 +995,48 @@ function showMoveConfirmBubble(unit, toX, toY) {
 function showAttackConfirmBubble(attacker, target) {
   state.pendingAttack = { targetId: target.id };
   state.actionMode = "attack-confirm";
+  // Compute forecast
+  const fc = forecastAttack(attacker, target);
+  const stars = (n) => "★".repeat(n) + "☆".repeat(Math.max(0, 3 - n));
+  const m = fc.main;
+  const counterLine = fc.counter
+    ? `🔁 反击：${fc.counter.damage}  → 攻击者后：${fc.counter.attackerHpAfter}/${attacker.hp || "?"}HP${fc.counter.willKill ? " ☠️" : ""}`
+    : (m.willKill ? "" : "（目标太远无法反击）");
+  const killLine = m.willKill ? " ☠️ 击杀" : "";
+  const critLine = m.critRate > 0.05 ? `暴击率 ${Math.round(m.critRate * 100)}% → ${m.critDamage} 伤害` : "";
+  const typeLine = m.typeMultiplier > 1 ? `兵种克制 ×${m.typeMultiplier}` : (m.typeMultiplier < 1 ? `被克制 ×${m.typeMultiplier}` : "无克制");
+
   const html = `
-    <div class="ab-title">攻击 ${escapeHtml(target.name)}</div>
+    <div class="forecast-card">
+      <div class="forecast-title">⚔️ 战斗预测</div>
+      <div class="forecast-row">
+        <div class="forecast-side">
+          <div class="forecast-name">${escapeHtml(attacker.name)}</div>
+          <div class="forecast-meta">${stars(attacker.morale || 0)} · Lv.${attacker.level || 1}</div>
+          <div class="forecast-stat">ATK ${attacker.atk}</div>
+          <div class="forecast-hp">HP ${attacker.hp || "?"}/${attacker.max_hp || "?"}</div>
+        </div>
+        <div class="forecast-vs">VS</div>
+        <div class="forecast-side">
+          <div class="forecast-name">${escapeHtml(target.name)}</div>
+          <div class="forecast-meta">${stars(target.morale || 0)} · Lv.${target.level || 1}</div>
+          <div class="forecast-stat">DEF ${target.def_}</div>
+          <div class="forecast-hp">HP ${target.hp || "?"}/${target.max_hp || "?"}</div>
+        </div>
+      </div>
+      <div class="forecast-line forecast-dmg">💥 预计伤害：${m.damage}${killLine}</div>
+      <div class="forecast-line forecast-after">→ 目标后：${m.defenderHpAfter}/${target.max_hp || "?"}HP</div>
+      ${critLine ? `<div class="forecast-line">${critLine}</div>` : ""}
+      <div class="forecast-line forecast-aux">🎖️ ${typeLine}</div>
+      ${counterLine ? `<div class="forecast-line forecast-counter">${counterLine}</div>` : ""}
+    </div>
     <div class="ab-row">
       <button class="ab-btn danger" data-ab="confirm-attack">⚔️ 确认攻击</button>
       <button class="ab-btn cancel" data-ab="cancel-attack">❌ 取消</button>
     </div>
   `;
-  showBubbleAt(target.x, target.y, html, { compact: true });
+  // Use a wider bubble for the forecast
+  showBubbleAt(target.x, target.y, html);
   document.getElementById("action-bubble").querySelectorAll("[data-ab]").forEach(btn => {
     btn.addEventListener("click", () => onBubbleClick(btn.dataset.ab, attacker));
   });
@@ -891,6 +1118,7 @@ function showInspectBubble(unit, player) {
   const html = `
     ${renderUnitHtml(unit, player)}
     <div class="ab-row">
+      <button class="ab-btn" data-ab="range">🎯 射程</button>
       <button class="ab-btn cancel" data-ab="close">✕ 关闭</button>
     </div>
   `;
@@ -907,6 +1135,7 @@ function showActedBubble(unit, player) {
     <div class="ab-title" style="color:var(--text-dim);">⏸ 已行动</div>
     ${renderUnitHtml(unit, player)}
     <div class="ab-row">
+      <button class="ab-btn" data-ab="range">🎯 射程</button>
       <button class="ab-btn cancel" data-ab="close">✕ 关闭</button>
     </div>
   `;
@@ -927,13 +1156,14 @@ async function onBubbleClick(action, unit, targetId) {
       enterAttackMode(unit);
       break;
     case "range":
-      // Re-render the board so reachable tiles (green) and attackable
-      // enemies (red) get highlighted. computeReachable/computeAttackTargets
-      // were already populated when the bubble opened.
+      // Compute the full threat area: all tiles this unit can attack from
+      // ANY reachable position (current position + tiles within MP movement).
+      state.actionMode = "range";
+      state.reachableTiles = computeReachable(unit);
+      state.attackTargets = computeThreatArea(unit, state.reachableTiles);
+      const threatCount = state.attackTargets?.size || 0;
       renderBoard(state.game);
-      const mCount = state.reachableTiles?.size || 0;
-      const aCount = state.attackTargets?.size || 0;
-      toast(`移动范围 ${mCount} 格 · 攻击目标 ${aCount} 个`);
+      toast(`威胁范围 ${threatCount} 格 · 点击任意处取消查看`);
       break;
     case "info":
       // Show full info inline (re-render bubble as info card)
@@ -957,6 +1187,7 @@ async function onBubbleClick(action, unit, targetId) {
     case "cancel-move":
       state.actionMode = null;
       state.pendingMove = null;
+      state.path = null;
       showUnitActionBubble(unit);
       renderBoard(state.game);
       return;
@@ -1006,9 +1237,10 @@ async function onBubbleClick(action, unit, targetId) {
 
 function enterMoveMode(unit) {
   state.actionMode = "move";
+  state.path = null;
   // Small hint bubble
   const html = `
-    <div class="ab-title">选择目的地</div>
+    <div class="ab-title">选择目的地 — 鼠标悬浮预览路径</div>
     <div class="ab-row">
       <button class="ab-btn cancel" data-ab="cancel-move">❌ 取消</button>
     </div>
@@ -1050,6 +1282,81 @@ function enterHealMode(unit) {
   renderBoard(state.game);
 }
 
+// ----- Cell hover (for path preview) -----
+
+function computeClientPath(unit, toX, toY, reachable) {
+  // BFS-based path from unit position to (toX, toY) using terrain costs.
+  // Returns array of {x, y} steps (unit position first, destination last).
+  if (!reachable?.has(`${toX},${toY}`)) return null;
+  const st = state.game;
+  const tileMap = new Map();
+  for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
+  const occupied = new Set();
+  for (const p of st.players) for (const u of p.units) {
+    if (u.id !== unit.id && u.hp > 0) occupied.add(`${u.x},${u.y}`);
+  }
+  const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
+
+  // Dijkstra / A* with cost
+  const start = { x: unit.x, y: unit.y };
+  const goal = { x: toX, y: toY };
+  const open = [{ ...start, cost: 0, dist: Math.abs(toX - unit.x) + Math.abs(toY - unit.y) }];
+  const cameFrom = new Map();
+  const bestCost = new Map([[`${unit.x},${unit.y}`, 0]]);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+
+  while (open.length) {
+    open.sort((a, b) => (a.cost + a.dist) - (b.cost + b.dist));
+    const cur = open.shift();
+    const ck = `${cur.x},${cur.y}`;
+    if (cur.x === goal.x && cur.y === goal.y) {
+      // Reconstruct
+      const path = [{ x: cur.x, y: cur.y }];
+      while (cameFrom.has(`${path[0].x},${path[0].y}`)) {
+        const prev = cameFrom.get(`${path[0].x},${path[0].y}`);
+        path.unshift({ x: prev.x, y: prev.y });
+      }
+      return path;
+    }
+    if (cur.cost > bestCost.get(ck)) continue;
+    for (const [dx, dy] of dirs) {
+      const nx = cur.x + dx, ny = cur.y + dy;
+      if (nx < 0 || nx >= 15 || ny < 0 || ny >= 15) continue;
+      const k = `${nx},${ny}`;
+      const t = tileMap.get(k);
+      if (!t) continue;
+      if (t.terrain === "castle" && t.owner_id !== null && t.owner_id !== state.me.player_id) continue;
+      if (occupied.has(k)) continue;
+      const step = costs[t.terrain] ?? 1;
+      const newCost = cur.cost + step;
+      if (newCost > unit.mp) continue;
+      if ((bestCost.get(k) ?? Infinity) <= newCost) continue;
+      bestCost.set(k, newCost);
+      cameFrom.set(k, { x: cur.x, y: cur.y });
+      open.push({ x: nx, y: ny, cost: newCost, dist: Math.abs(nx - toX) + Math.abs(ny - toY) });
+    }
+  }
+  return null;
+}
+
+function onCellHover(x, y) {
+  if (state.actionMode !== "move" || !state.selectedUnit) return;
+  const key = `${x},${y}`;
+  if (!state.reachableTiles?.has(key)) {
+    if (state.path) { state.path = null; renderBoard(state.game); }
+    return;
+  }
+  const newPath = computeClientPath(state.selectedUnit, x, y, state.reachableTiles);
+  if (newPath) {
+    // Reconstruct full coordinate path from the path array
+    state.path = newPath;
+    renderBoard(state.game);
+  } else if (state.path) {
+    state.path = null;
+    renderBoard(state.game);
+  }
+}
+
 // ----- Cell click handler -----
 
 function onCellClick(x, y, st) {
@@ -1061,7 +1368,15 @@ function onCellClick(x, y, st) {
     if (state.reachableTiles?.has(`${x},${y}`) && (!occupant || occupant.unit.id === state.selectedUnit.id)) {
       showMoveConfirmBubble(state.selectedUnit, x, y);
     } else {
-      toast("该格不可达或被占用");
+      // Click on non-reachable tile → exit move mode, go back to idle
+      state.actionMode = null;
+      state.path = null;
+      state.reachableTiles = null;
+      state.attackTargets = null;
+      state.selectedUnit = null;
+      hideBubble();
+      renderBoard(state.game);
+      renderUnitInfo(state.game);
     }
     return;
   }
@@ -1179,7 +1494,10 @@ async function doAttack(attacker, targetId) {
     const crit = r.hits.some(h => h.is_crit);
     const kill = r.hits.some(h => h.is_kill);
     const moraleGain = kill ? " ⭐士气+1" : "";
-    toast(`造成 ${totalDmg} 伤害${crit ? "（暴击！）" : ""}${moraleGain}`);
+    const counterMsg = r.counter_damage > 0
+      ? ` · 反击 ${r.counter_damage}（你剩 ${r.attacker_hp_after}HP）`
+      : "";
+    toast(`造成 ${totalDmg} 伤害${crit ? "（暴击！）" : ""}${moraleGain}${counterMsg}`);
     await refreshGame();
     // After attack: unit has acted. If class can move after AND MP > 0,
     // offer to keep moving; otherwise close.
