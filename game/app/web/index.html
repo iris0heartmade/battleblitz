@@ -122,6 +122,7 @@
       <button class="btn btn-back" data-action="goto-menu">← 返回</button>
       <h2>玩法说明</h2>
       <div class="help-content">
+        <button class="btn btn-secondary" data-action="dialog-demo">🎭 试玩对话框</button>
         <h3>🎯 目标</h3>
         <ul>
           <li>消灭敌方所有单位</li>
@@ -279,6 +280,32 @@
       </div>
     </div>
   </section>
+
+  <!-- ====================== 对话框系统 (S0.1) ======================
+       通用剧情/对话底部弹窗 + 全屏叙述
+       API: dialog.play(scenes) / dialog.say(speaker, text) / dialog.close()
+       ============================================================== -->
+  <div id="dialog-box" class="dialog-box" hidden>
+    <div class="dialog-inner">
+      <div class="dialog-avatar">
+        <div class="dialog-avatar-placeholder">🎭</div>
+      </div>
+      <div class="dialog-body">
+        <div class="dialog-header">
+          <span class="dialog-speaker"></span>
+          <span class="dialog-hint">▼ 点击继续</span>
+        </div>
+        <div class="dialog-text"></div>
+        <div class="dialog-choices"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全屏叙述（narration 场景：无边框，居中大字） -->
+  <div id="dialog-narration" class="dialog-narration" hidden>
+    <div class="dialog-narration-text"></div>
+    <div class="dialog-narration-hint">▼ 点击继续</div>
+  </div>
 
   <script src="/ui/app.js"></script>
 </body>
