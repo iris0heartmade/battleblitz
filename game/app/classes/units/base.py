@@ -37,9 +37,10 @@ class UnitClassProfile:
     base_mov: int
     mp_pool: int
     default_skills: Tuple[str, ...]
-    attack_range: int          # 1 = melee, 2+ = ranged
+    attack_range: int          # 1 = melee, 2+ = ranged (max chebyshev distance)
     can_move_after_action: bool
-    strong_against: FrozenSet[str]   # e.g. {"knight"}
+    min_attack_range: int = 0 # 0 = can melee at d=1; 1 = must keep distance (ranged-only)
+    strong_against: FrozenSet[str] = frozenset()  # e.g. {"knight"}
 
 
 # ----------------------------------------------------------------
@@ -68,13 +69,14 @@ class BaseUnitClass(ABC):
 
     # ── Skills ─────────────────────────────────────────────────
     default_skills: ClassVar[List[str]]  # [] / ["snipe"] / ["heal", "rally"]
-    attack_range: ClassVar[int] = 1      # 1 = melee, 2+ = ranged
+    attack_range: ClassVar[int] = 1      # 1 = melee, 2+ = ranged (max chebyshev)
+    min_attack_range: ClassVar[int] = 0 # 0 = can attack d=1; 1 = ranged-only (no melee)
 
     # ── Mobility ───────────────────────────────────────────────
     can_move_after_action: ClassVar[bool] = False
 
     # ── Type advantage ─────────────────────────────────────────
-    strong_against: ClassVar[List[str]] = []  # e.g. ["knight"]
+    strong_against: ClassVar[List[str]] = []  # e.g. ["knight"]  (used by compile() default)
 
     @classmethod
     def compile(cls) -> UnitClassProfile:
@@ -91,6 +93,7 @@ class BaseUnitClass(ABC):
             mp_pool=cls.mp_pool,
             default_skills=tuple(cls.default_skills),
             attack_range=cls.attack_range,
+            min_attack_range=cls.min_attack_range,
             can_move_after_action=cls.can_move_after_action,
             strong_against=frozenset(cls.strong_against),
         )

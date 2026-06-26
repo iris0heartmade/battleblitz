@@ -53,12 +53,12 @@ def _next_color(used_colors: List[str]) -> str:
     for c in DEFAULT_PLAYER_COLORS:
         if c not in used_colors:
             return c
-    raise HTTPException(status.HTTP_409_CONFLICT, "no colors available")
+    raise HTTPException(status.HTTP_409_CONFLICT, "没有可用的颜色")
 
 
 async def _ensure_started_or_400(game: Game) -> None:
     if game.status not in ("waiting", "playing"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "game is finished")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已结束")
 
 
 @router.post("", response_model=GameSummaryOut, status_code=status.HTTP_201_CREATED)
@@ -93,18 +93,18 @@ async def join_game(
 ) -> PlayerOut:
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "waiting":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "game already started")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始")
 
     existing = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
     if len(existing) >= MAX_PLAYERS:
-        raise HTTPException(status.HTTP_409_CONFLICT, "game is full")
+        raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
 
     if any(p.user_name == body.user_name for p in existing):
-        raise HTTPException(status.HTTP_409_CONFLICT, "user_name already taken in this game")
+        raise HTTPException(status.HTTP_409_CONFLICT, "此游戏中用户名已被占用")
 
     used_colors = [p.color for p in existing]
     color = body.color if body.color and body.color not in used_colors else _next_color(used_colors)
@@ -125,7 +125,7 @@ async def join_game(
             "USER_ACTION | user=%s | game=%d | action=JOIN | result=FAIL | reason=constraint_violation",
             body.user_name, game_id,
         )
-        raise HTTPException(status.HTTP_409_CONFLICT, "could not join (constraint violation)")
+        raise HTTPException(status.HTTP_409_CONFLICT, "加入失败（约束冲突）")
 
     audit.info(
         "USER_ACTION | user=player_%d | game=%d | action=JOIN | result=SUCCESS | "
@@ -162,10 +162,10 @@ async def rejoin_game(
     """
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     player = await session.get(Player, body.player_id)
     if player is None or player.game_id != game_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "player not in this game")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
     return RejoinGameResponse(
         game_id=game.id,
         game_status=game.status,
@@ -189,12 +189,12 @@ async def start_game(
 ) -> GameStateOut:
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status == "playing":
         # Idempotent: return current state
         return await _build_state(session, game)
     if game.status == "finished":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "game already finished")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已经结束")
 
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
@@ -252,7 +252,7 @@ async def start_game(
             turn_number=game.turn_number,
             player_id=None,
             action_type="system",
-            description=f"Game started with {len(players)} players",
+            description=f"游戏开始，玩家： {len(players)} players",
         )
     )
 
@@ -277,7 +277,7 @@ async def get_game_state(
 ) -> GameStateOut:
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     return await _build_state(session, game)
 
 
@@ -356,14 +356,14 @@ async def add_ai_player(
     """Add an AI-controlled player to a waiting game."""
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "waiting":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "game already started")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始")
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
     if len(players) >= MAX_PLAYERS:
-        raise HTTPException(status.HTTP_409_CONFLICT, "game is full")
+        raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
     used_colors = [p.color for p in players]
     color = _next_color(used_colors)
     seat = max((p.seat for p in players), default=-1) + 1
@@ -396,12 +396,12 @@ async def remove_player(
     """Remove an AI (or any pre-start) player from a waiting game."""
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "waiting":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "game already started")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始")
     player = await session.get(Player, player_id)
     if player is None or player.game_id != game_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "player not in this game")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
     # Free the player's seat (cascade will remove their units)
     await session.delete(player)
     await session.flush()
