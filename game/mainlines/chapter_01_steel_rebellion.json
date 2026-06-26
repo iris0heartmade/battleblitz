@@ -1,0 +1,47 @@
+{
+  "id": "chapter_01_steel_rebellion",
+  "title": "钢铁起义",
+  "synopsis": "边境领主暴动，玩家扮演的剑士踏上收复失地之路。第一章：山口伏击 → 围城战。",
+  "cover_art": null,
+  "required_classes": ["swordsman", "archer"],
+  "starting_units": [
+    {"class_id": "swordsman", "level": 1, "name": "云"},
+    {"class_id": "archer",    "level": 1, "name": "红"}
+  ],
+  "dialogues": {
+    "intro":           "stories/chapter_01/intro.json",
+    "battle_01_after": "stories/chapter_01/battle_01_after.json",
+    "battle_02_after": "stories/chapter_01/battle_02_after.json",
+    "victory":         "stories/chapter_01/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "山口伏击",
+      "map_preset": "mountain_pass",
+      "map_seed": 42,
+      "win_condition": "rout",
+      "ally_composition":    {"swordsman": 3, "archer": 1},
+      "enemy_composition":   {"knight": 4},
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "围城战",
+      "map_preset": "four_lakes",
+      "map_seed": 7,
+      "win_condition": "seize",
+      "ally_composition":    {"swordsman": 3, "archer": 2},
+      "enemy_composition":   {"knight": 5, "archer": 3},
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 500,
+    "unlock_class": "knight",
+    "exp_per_unit": 120
+  },
+  "art_assets": {}
+}
