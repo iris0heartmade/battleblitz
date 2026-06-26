@@ -60,25 +60,25 @@ async def end_turn(
 ) -> EndTurnResult:
     game = await session.get(Game, game_id)
     if game is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "game not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "playing":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"game is {game.status}")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"游戏状态不是进行中（当前：{game.status}）")
 
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
     if not players:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no players in game")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "此游戏没有玩家")
 
     player = next((p for p in players if p.id == body.player_id), None)
     if player is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "player not in game")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
     if not player.is_alive:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "you are eliminated")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "你已被淘汰")
 
     alive_seats = sorted(p.seat for p in players if p.is_alive)
     if not alive_seats:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no players alive")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
 
     # Locate the expected current player
     expected_seat = next(
@@ -87,7 +87,7 @@ async def end_turn(
     )
     expected_player = next(p for p in players if p.seat == expected_seat)
     if player.id != expected_player.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not your turn")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "现在不是你的回合")
 
     # Fairness rule: first player (seat 0) gets 1 action on first turn only;
     # everyone else (and first player on later turns) needs 2 actions per turn.

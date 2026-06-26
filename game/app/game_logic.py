@@ -182,12 +182,29 @@ class DamageResult:
 
 
 def unit_attack_range(unit: Unit) -> int:
-    """Effective attack range (class profile + passive skill modifiers)."""
+    """Maximum attack range (chebyshev distance)."""
     from app.classes.units.skills import get_passive_for
     base = _get_unit(unit.unit_type).attack_range
     for sk in get_passive_for(unit):
         base = sk.modify_attack_range(base, unit)
     return base
+
+
+def unit_min_attack_range(unit: Unit) -> int:
+    """Minimum attack range (chebyshev distance).
+
+    0 = can attack adjacent (d=1) → melee
+    1 = must keep distance (no melee, like Fire-Emblem archers)
+    """
+    return _get_unit(unit.unit_type).min_attack_range
+
+
+def can_attack_from_position(unit: Unit, fromX: int, fromY: int, toX: int, toY: int) -> bool:
+    """True if `unit` could attack (toX, toY) when standing on (fromX, fromY)."""
+    d = max(abs(toX - fromX), abs(toY - fromY))
+    if d == 0:
+        return False
+    return unit_min_attack_range(unit) < d <= unit_attack_range(unit)
 
 
 def _type_multiplier(attacker: Unit, defender: Unit) -> float:

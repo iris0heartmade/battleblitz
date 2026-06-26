@@ -219,6 +219,8 @@ class AttackResult(BaseModel):
     target_def_bonus: int
     attacker_exp_gained: int
     assist_unit_ids: List[int] = []
+    counter_damage: int = 0
+    attacker_hp_after: int
     description: str
 
 
