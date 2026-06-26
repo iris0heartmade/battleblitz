@@ -1330,3 +1330,109 @@ html, body {
   .game-menu { width: 85vw; }
   #chat-float { max-width: 200px; max-height: 80px; }
 }
+
+/* ============================================================
+   Mainline (主线模式) — 章节列表 + 游玩面板
+   ============================================================ */
+
+.mainline-list-panel {
+  max-width: 880px;
+  width: 100%;
+}
+
+.mainline-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.mainline-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.mainline-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.mainline-card h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.mainline-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.mainline-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.mainline-card .btn {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.mainline-play-panel {
+  max-width: 760px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mainline-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mainline-header h2 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.mainline-header #mainline-progress {
+  flex: 0 0 auto;
+}
+
+.mainline-content {
+  min-height: 220px;
+  padding: 24px 20px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.mainline-content .muted {
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.mainline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

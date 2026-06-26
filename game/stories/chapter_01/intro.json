@@ -1,0 +1,42 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "黎明。边境的炊烟尚未升起，雾气贴在山口像一层铅灰色的纱。"
+    },
+    {
+      "type": "narration",
+      "text": "暴动的消息已经从北境传回王城。领主卡尔德的铁骑正沿着山口南下，意图切断王都的粮道。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "红，你的弓手埋伏在左翼那片松林。我带剑士正面顶住山口第一波冲击，听我号令再射。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "明白。等他们踏入伏击圈中央，我再放第一箭。云，小心——他们的骑士铠甲很厚。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "王城的命令是\"必须在援军到达前夺回山口\"。失败就意味着冬季断粮。"
+    },
+    {
+      "type": "choice",
+      "question": "你准备先做什么？",
+      "choices": [
+        { "text": "整队出发，速战速决", "value": "rush" },
+        { "text": "先侦察山口，再做部署", "value": "scout" }
+      ]
+    },
+    {
+      "type": "battle_ref",
+      "battle_id": "battle_01"
+    }
+  ]
+}

@@ -8,8 +8,12 @@ Top-level imports:
     )
 """
 from app.progression.exceptions import (
+    InvalidMainlineProgress,
     InvalidNickname,
     LevelCapReached,
+    MainlineAlreadyActive,
+    MainlineIdNotFound,
+    NoActiveMainline,
     ProgressionError,
     PromoteRequirementNotMet,
     ProfileAlreadyExists,
@@ -43,6 +47,7 @@ from app.progression.models import (
 )
 from app.progression.service import (
     AwardXpSummary,
+    MainlineProgressSummary,
     ProgressionService,
     PromoteSummary,
 )
@@ -72,6 +77,7 @@ __all__ = [
     "LevelUpResult",
     "AwardXpSummary",
     "PromoteSummary",
+    "MainlineProgressSummary",
     # Errors
     "ProgressionError",
     "ProfileNotFound",
@@ -82,4 +88,8 @@ __all__ = [
     "LevelCapReached",
     "TierCapReached",
     "PromoteRequirementNotMet",
+    "MainlineIdNotFound",
+    "MainlineAlreadyActive",
+    "NoActiveMainline",
+    "InvalidMainlineProgress",
 ]

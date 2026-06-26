@@ -57,6 +57,27 @@ class PlayerProfile(Base):
     )
     current_season: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     rating: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
+    # ── Mainline (campaign) progress — Step 2 ─────────────────
+    # `active_mainline` is the id of the campaign the player is currently
+    # playing (matches `Mainline.id` in `game/mainlines/*.json`). NULL
+    # means no campaign is active.
+    # `mainline_progress` is the in-campaign cursor. Shape:
+    #   {"battle_index": int, "scene_id": str, "started_at": str|None}
+    # - `battle_index`  : 0-based index into Mainline.battles (next battle
+    #                     to play). When == len(battles) the mainline is
+    #                     cleared.
+    # - `scene_id`      : current dialogue key in Mainline.dialogues
+    #                     (e.g. "intro", "battle_01_after", "victory").
+    #                     The frontend looks this up to render the next
+    #                     script.
+    # - `started_at`    : ISO-8601 UTC timestamp of the campaign start
+    #                     (or NULL if no campaign is active).
+    active_mainline: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default=None
+    )
+    mainline_progress: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )
@@ -72,7 +93,10 @@ class PlayerProfile(Base):
     )
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"<PlayerProfile id={self.id} user={self.user_name!r} rating={self.rating}>"
+        return (
+            f"<PlayerProfile id={self.id} user={self.user_name!r} "
+            f"rating={self.rating} active_mainline={self.active_mainline!r}>"
+        )
 
 
 # ============================================================

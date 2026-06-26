@@ -77,8 +77,10 @@ BattleBlitz/
 │   ├── architecture.md         # 本文档（架构总览）
 │   ├── dead-code.md            # 死代码清单（待清理）
 │   ├── ARCHITECTURE_PLAN.md    # 长期架构规划
-│   ├── battleblitz-llm-agent.md # LLM agent 设计文档
-│   └── llm-agent-api.md        # LLM agent 接口规范
+│   ├── battleblitz-llm-agent.md # LLM agent 设计文档（已并入 llm-agent/README.md）
+│   └── llm-agent/
+│       ├── README.md            # LLM agent 架构
+│       └── api.md               # LLM agent 接口规范
 ├── game/
 │   ├── app/
 │   │   ├── __init__.py

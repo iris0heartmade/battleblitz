@@ -5,7 +5,7 @@ Public API:
     from app.llm import safe_complete, set_llm_client, LLMClient
 
     # At app startup, register an implementation (owned by the project
-    # owner per doc/battleblitz-llm-agent.md):
+    # owner per docs/llm-agent.md):
     #     set_llm_client(MyClaudeClient())
 
     # At call sites:

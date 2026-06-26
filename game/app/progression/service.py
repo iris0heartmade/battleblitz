@@ -13,11 +13,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.progression.exceptions import (
+    InvalidMainlineProgress,
     LevelCapReached,
+    MainlineAlreadyActive,
+    MainlineIdNotFound,
+    NoActiveMainline,
     PromoteRequirementNotMet,
     TierCapReached,
 )
@@ -31,6 +37,30 @@ from app.progression.models import PlayerProfile, UnitInstance
 from app.progression.repository import ProfileRepository, UnitRepository
 
 logger = logging.getLogger(__name__)
+
+
+# A validator raises MainlineIdNotFound if `mainline_id` is unknown.
+# Default implementation lazily imports `app.mainline.loader` (avoiding
+# the circular dependency that a top-level import would create). Tests
+# can inject a mock via the ProgressionService constructor.
+MainlineValidator = Callable[[str], None]
+
+
+def _default_mainline_validator(mainline_id: str) -> None:
+    """Default mainline id validator — delegates to app.mainline.loader.
+
+    Imported lazily so `app.progression` does not hard-depend on
+    `app.mainline` at import time. The loader's `load_mainline` raises
+    `MainlineNotFound` (subclass of `MainlineError`); we translate it
+    to `MainlineIdNotFound` so the progression namespace is self-contained.
+    """
+    from app.mainline.loader import MainlineNotFound, load_mainline
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise MainlineIdNotFound(
+            f"mainline {mainline_id!r} not found in mainlines/"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -51,13 +81,38 @@ class PromoteSummary:
     new_level_cap: int
 
 
+@dataclass(frozen=True)
+class MainlineProgressSummary:
+    """Returned by every mainline-progress service method.
+
+    The HTTP layer renders this back to the client so it can show the
+    new state (active id, current cursor, remaining battle count).
+    """
+    user_name: str
+    active_mainline: Optional[str]
+    mainline_progress: dict
+    # True iff the operation finished the last battle and auto-cleared
+    # the active mainline. Useful for the client to show a "VICTORY"
+    # screen.
+    cleared: bool = False
+
+
 class ProgressionService:
     """Orchestrates profile + unit + leveling operations."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        mainline_validator: Optional[MainlineValidator] = None,
+    ) -> None:
         self.session = session
         self.profiles = ProfileRepository(session)
         self.units = UnitRepository(session)
+        # Resolve lazily so importing this module never touches mainline.
+        self._mainline_validator: MainlineValidator = (
+            mainline_validator or _default_mainline_validator
+        )
 
     # ── Profiles ────────────────────────────────────────────
 
@@ -173,9 +228,238 @@ class ProgressionService:
             new_level_cap=new_cap,
         )
 
+    # ── Mainline (campaign) progress — Step 2 ────────────────
+    #
+    # JSON contract for `PlayerProfile.mainline_progress`:
+    #   {
+    #     "battle_index": int,    # 0-based; == len(battles) => cleared
+    #     "scene_id": str,        # key into Mainline.dialogues
+    #     "started_at": str|None  # ISO-8601 UTC; None iff no active mainline
+    #   }
+    #
+    # The service never imports `app.mainline` directly — instead it
+    # delegates id existence checks to `self._mainline_validator`,
+    # which is injected by the API layer (or defaults to a lazy loader
+    # call for production use). This keeps the dependency direction
+    # `progression -> mainline` (one-way) and lets tests mock the
+    # validator without monkey-patching modules.
+
+    def _build_mainline_progress(
+        self,
+        battle_index: int,
+        scene_id: str,
+        started_at: Optional[str],
+    ) -> dict:
+        """Validate + serialise a progress row to its JSON shape."""
+        if battle_index < 0:
+            raise InvalidMainlineProgress(
+                f"battle_index must be >= 0, got {battle_index}"
+            )
+        if not isinstance(scene_id, str) or not scene_id:
+            raise InvalidMainlineProgress("scene_id must be a non-empty string")
+        return {
+            "battle_index": int(battle_index),
+            "scene_id": scene_id,
+            "started_at": started_at,
+        }
+
+    async def set_active_mainline(
+        self,
+        user_name: str,
+        mainline_id: str,
+        *,
+        force: bool = False,
+    ) -> MainlineProgressSummary:
+        """Begin (or reset) a campaign for the given player.
+
+        - Validates the mainline id exists (delegated to
+          `self._mainline_validator`).
+        - If the profile already has an active mainline and `force` is
+          False, raises `MainlineAlreadyActive`.
+        - Otherwise writes the initial progress row
+          (battle_index=0, scene_id="intro", started_at=now).
+
+        The engine (Step 3) will later use the loaded mainline's
+        `dialogues["intro"]` path to fetch the first script.
+        """
+        # Verify the mainline id exists. Raises MainlineIdNotFound.
+        self._mainline_validator(mainline_id)
+
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            # Re-use the existing 404 path so route handlers stay uniform.
+            from app.progression.exceptions import ProfileNotFound
+            raise ProfileNotFound(f"profile {user_name!r} not found")
+
+        if profile.active_mainline is not None and not force:
+            raise MainlineAlreadyActive(
+                f"profile {user_name!r} already has an active mainline "
+                f"({profile.active_mainline!r}); abandon it first or pass force=True"
+            )
+
+        started_at = datetime.now(timezone.utc).isoformat()
+        # Default opening: first battle, "intro" dialogue (or first key
+        # in `Mainline.dialogues` if "intro" is absent — the engine can
+        # override later).
+        try:
+            from app.mainline.loader import load_mainline
+            ml = load_mainline(mainline_id)
+            scene_id = "intro" if "intro" in ml.dialogues else (
+                next(iter(ml.dialogues)) if ml.dialogues else "intro"
+            )
+        except Exception:  # pragma: no cover — defensive
+            scene_id = "intro"
+
+        profile.active_mainline = mainline_id
+        profile.mainline_progress = self._build_mainline_progress(
+            battle_index=0,
+            scene_id=scene_id,
+            started_at=started_at,
+        )
+        await self.session.flush()
+        logger.info(
+            "Mainline started: user=%r mainline=%r force=%s",
+            user_name, mainline_id, force,
+        )
+        return MainlineProgressSummary(
+            user_name=user_name,
+            active_mainline=profile.active_mainline,
+            mainline_progress=dict(profile.mainline_progress),
+            cleared=False,
+        )
+
+    async def advance_mainline_progress(
+        self,
+        user_name: str,
+        *,
+        scene_id: Optional[str] = None,
+        next_battle: bool = False,
+    ) -> MainlineProgressSummary:
+        """Move the campaign cursor forward.
+
+        Behaviour:
+          * If neither `scene_id` nor `next_battle` is set this is a
+            no-op (returns the current state).
+          * If the profile has no active mainline, raises
+            `NoActiveMainline`.
+          * If `next_battle` is True, increments `battle_index` by 1.
+          * If `scene_id` is given, sets the dialogue cursor. The id
+            is validated against the active mainline's `dialogues` map.
+          * If the new `battle_index` equals `len(battles)`, the
+            mainline is auto-cleared (`active_mainline` set to None,
+            `mainline_progress` reset to an empty dict) and `cleared`
+            is True on the response.
+        """
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            from app.progression.exceptions import ProfileNotFound
+            raise ProfileNotFound(f"profile {user_name!r} not found")
+        if profile.active_mainline is None:
+            raise NoActiveMainline(
+                f"profile {user_name!r} has no active mainline to advance"
+            )
+
+        # Load the mainline to know battle count + dialogue keys.
+        from app.mainline.loader import MainlineNotFound, load_mainline
+        try:
+            ml = load_mainline(profile.active_mainline)
+        except MainlineNotFound as exc:
+            # Active mainline vanished from disk — treat as no-active
+            # and surface to caller via the same exception type so the
+            # route can return 409.
+            raise NoActiveMainline(
+                f"active mainline {profile.active_mainline!r} is no longer "
+                f"available on disk"
+            ) from exc
+
+        current = dict(profile.mainline_progress or {})
+        cur_index = int(current.get("battle_index", 0))
+        cur_scene = current.get("scene_id", "intro")
+        cur_started = current.get("started_at")
+
+        # Apply updates.
+        new_index = cur_index
+        new_scene = cur_scene
+        if next_battle:
+            new_index = cur_index + 1
+        if scene_id is not None:
+            if scene_id not in ml.dialogues:
+                raise InvalidMainlineProgress(
+                    f"scene_id {scene_id!r} not in mainline "
+                    f"{profile.active_mainline!r}.dialogues "
+                    f"(have {sorted(ml.dialogues)})"
+                )
+            new_scene = scene_id
+
+        # Auto-clear when the cursor walks off the end of the battle list.
+        cleared = new_index >= len(ml.battles)
+        if cleared:
+            profile.active_mainline = None
+            profile.mainline_progress = self._build_mainline_progress(
+                battle_index=new_index,
+                scene_id=new_scene,
+                started_at=None,  # no campaign active
+            )
+            await self.session.flush()
+            logger.info(
+                "Mainline cleared: user=%r finished %d battles",
+                user_name, len(ml.battles),
+            )
+        else:
+            profile.active_mainline = profile.active_mainline
+            profile.mainline_progress = self._build_mainline_progress(
+                battle_index=new_index,
+                scene_id=new_scene,
+                started_at=cur_started,
+            )
+            await self.session.flush()
+            logger.info(
+                "Mainline advanced: user=%r mainline=%r index=%d scene=%r",
+                user_name, profile.active_mainline, new_index, new_scene,
+            )
+
+        return MainlineProgressSummary(
+            user_name=user_name,
+            active_mainline=profile.active_mainline,
+            mainline_progress=dict(profile.mainline_progress),
+            cleared=cleared,
+        )
+
+    async def abandon_mainline(
+        self, user_name: str
+    ) -> MainlineProgressSummary:
+        """Drop the active mainline (if any) without finishing it.
+
+        Idempotent: returns the current state even when there is no
+        active mainline. The route layer surfaces a 200 with the
+        cleared payload in that case.
+        """
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            from app.progression.exceptions import ProfileNotFound
+            raise ProfileNotFound(f"profile {user_name!r} not found")
+        if profile.active_mainline is not None:
+            old = profile.active_mainline
+            profile.active_mainline = None
+            profile.mainline_progress = self._build_mainline_progress(
+                battle_index=0,
+                scene_id="intro",
+                started_at=None,
+            )
+            await self.session.flush()
+            logger.info("Mainline abandoned: user=%r mainline=%r", user_name, old)
+        return MainlineProgressSummary(
+            user_name=user_name,
+            active_mainline=profile.active_mainline,
+            mainline_progress=dict(profile.mainline_progress or {}),
+            cleared=profile.active_mainline is None,
+        )
+
 
 __all__ = [
     "ProgressionService",
     "AwardXpSummary",
     "PromoteSummary",
+    "MainlineProgressSummary",
+    "MainlineValidator",
 ]
