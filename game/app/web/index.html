@@ -167,7 +167,19 @@
       <p class="muted" id="lobby-status">等待玩家加入…</p>
       <div id="lobby-players" class="lobby-players"></div>
       <div class="lobby-actions">
-        <button class="btn btn-secondary" id="lobby-add-ai-btn" data-action="add-ai">🤖 加入 AI</button>
+        <div class="lobby-ai-row">
+          <button class="btn btn-secondary" id="lobby-add-ai-btn" data-action="add-ai">🤖 加入 AI</button>
+          <select id="lobby-ai-kind" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-lobby);color:var(--text);border:1px solid var(--border-bg);cursor:pointer;">
+            <option value="rules">规则 AI</option>
+            <option value="llm">LLM Agent</option>
+          </select>
+          <select id="lobby-ai-personality" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-lobby);color:var(--text);border:1px solid var(--border-bg);cursor:pointer;">
+            <option value="balanced">均衡</option>
+            <option value="aggressive">激进</option>
+            <option value="defensive">谨慎</option>
+            <option value="trickster">狡猾</option>
+          </select>
+        </div>
         <button class="btn btn-primary btn-lg" id="lobby-start-btn" disabled data-action="start-game">▶ 开始游戏</button>
       </div>
       <p class="muted small">提示：作为房主（座位 0），可以加入 AI 电脑填补空位，AI 会自动行动。</p>
@@ -178,35 +190,55 @@
   <section id="view-game" class="view view-game" hidden>
     <div class="game-layout">
       <header class="game-header">
-        <div class="game-info">
-          <span class="badge">回合 <b id="game-turn">1</b></span>
-          <span class="badge" id="game-current-player">轮到：…</span>
-          <span class="badge" id="game-map-seed">种子：…</span>
+        <div class="game-header-left">
+          <button class="btn btn-secondary btn-sm" data-action="toggle-ref-panel">📖 参考</button>
+          <button class="btn btn-secondary btn-sm" data-action="refresh-state">🔄</button>
+        </div>
+        <div class="game-header-center">
           <span class="badge" id="game-thinking" hidden>🤖 电脑思考中…</span>
         </div>
-        <div class="game-actions">
-          <button class="btn btn-secondary" data-action="toggle-ref-panel">📖 参考</button>
-          <button class="btn btn-secondary" data-action="refresh-state">🔄 刷新</button>
+        <div class="game-header-right">
           <button class="btn btn-danger" data-action="end-turn">结束回合 →</button>
+          <button class="btn btn-secondary btn-sm" data-action="toggle-game-menu" id="game-menu-btn">☰</button>
         </div>
       </header>
 
+      <!-- Overlay -->
+      <div id="menu-overlay" class="menu-overlay" hidden data-action="toggle-game-menu"></div>
+
+      <!-- Slide-out left panel -->
+      <aside id="game-menu" class="game-menu" hidden>
+        <div class="menu-header">
+          <span class="menu-turn">回合 <b id="game-turn">1</b></span>
+          <span id="game-current-player">…</span>
+          <span class="menu-seed">种子 <span id="game-map-seed">…</span></span>
+        </div>
+
+        <div class="panel-card menu-card">
+          <h3>选中单位 <span id="action-counter" class="action-counter"></span></h3>
+          <div id="unit-info"><p class="muted">点击单位查看详情</p></div>
+        </div>
+
+        <div class="panel-card menu-card">
+          <h3>参战玩家</h3>
+          <div id="players-list"></div>
+        </div>
+
+        <div class="panel-card menu-card">
+          <h3>战报</h3>
+          <div id="action-log" class="action-log"></div>
+        </div>
+
+        <div class="menu-footer">
+          <button class="btn btn-ghost btn-sm" data-action="goto-menu">🏠 返回主菜单</button>
+        </div>
+      </aside>
+
+      <!-- Floating AI chat -->
+      <div id="chat-float" class="chat-box"></div>
+
       <main class="game-main">
         <div id="board" class="board"></div>
-        <aside class="side-panel">
-          <div class="panel-card">
-            <h3>本回合操作 <span id="action-counter" class="action-counter">0/2</span></h3>
-            <div id="unit-info"><p class="muted">点击单位查看详情</p></div>
-          </div>
-          <div class="panel-card">
-            <h3>参战玩家</h3>
-            <div id="players-list"></div>
-          </div>
-          <div class="panel-card">
-            <h3>战报</h3>
-            <div id="action-log" class="action-log"></div>
-          </div>
-        </aside>
       </main>
 
       <!-- 气泡式操作菜单（在棋盘上方浮层） -->

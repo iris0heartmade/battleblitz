@@ -8,6 +8,7 @@ All routes enforce:
 """
 from __future__ import annotations
 
+import logging
 import random
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -47,6 +48,7 @@ from app.schemas import (
     WaitRequest,
     WaitResult,
 )
+from app.events import GameEvent, bus
 from app.utils import (
     Coord,
     bfs_reachable,
@@ -54,6 +56,9 @@ from app.utils import (
     has_line_of_sight,
     pathfind,
 )
+
+logger = logging.getLogger(__name__)
+audit = logging.getLogger("audit.user")
 
 router = APIRouter(prefix="/games", tags=["actions"])
 
@@ -106,30 +111,18 @@ def _actions_per_turn(player: Player, game: Game) -> int:
     else (and first player on later turns) gets 2 actions per turn.
     """
     if player.seat == 0 and not game.first_player_done_first_turn:
-        return 1
-    return 2
+        return 5
+    return 5
 
 
 async def _check_action_budget(session: AsyncSession, player: Player, unit: Unit) -> None:
-    """Raise 400 if player has already reached the max units-acted cap this turn
-    AND the unit being acted with hasn't acted yet (i.e. this would be a NEW unit).
+    """No-op stub: each unit acts independently, no per-player cap.
+
+    The per-unit `has_acted` flag (checked in each action handler) is the
+    only constraint. Players may end their turn at any time via
+    /games/{id}/end-turn — no "must do N actions first" rule.
     """
-    game = await session.get(Game, player.game_id)
-    if game is None:
-        return
-    max_actions = _actions_per_turn(player, game)
-    if unit.has_acted:
-        # Already caught by caller; nothing to do here.
-        return
-    units = (
-        await session.execute(select(Unit).where(Unit.player_id == player.id))
-    ).scalars().all()
-    acted = sum(1 for u in units if u.has_acted)
-    if acted >= max_actions:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"本回合最多操作 {max_actions} 个单位（已操作 {acted}）",
-        )
+    return
 
 
 async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coord, str], Dict[Coord, Optional[int]], Dict[Coord, Optional[int]]]:
@@ -179,8 +172,8 @@ async def move_unit(
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "unit does not belong to you")
-    if unit.has_acted:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted this turn")
+    if unit.has_moved:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already moved this turn")
     await _check_action_budget(session, player, unit)
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "target out of bounds")
@@ -232,6 +225,10 @@ async def move_unit(
     # Spend movement points; unit can still attack (or continue moving for
     # classes with can_move_after_action).
     unit.mp = max(0, unit.mp - cost)
+    # Track move separately from has_acted so the unit can still attack/heal
+    # this turn after moving. has_moved blocks further moves; has_acted blocks
+    # further non-move actions.
+    unit.has_moved = True
 
     # Castle capture
     castle_captured = False
@@ -245,6 +242,25 @@ async def move_unit(
     _log(session, game, player, "move",
          f"{unit.name} moved to ({target[0]}, {target[1]}) cost={cost}"
          + (" [captured castle]" if castle_captured else ""))
+
+    # Publish to in-process event bus (consumed by AI replay / commentary / WS gateway)
+    await bus.publish(GameEvent(
+        type="move", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+        context={
+            "from_x": path[0][0], "from_y": path[0][1],
+            "to_x": target[0], "to_y": target[1],
+            "mp_cost": cost, "mp_remaining": unit.mp,
+            "castle_captured": castle_captured,
+        },
+    ))
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=MOVE | result=SUCCESS | "
+        "unit=%d | from=(%d,%d) | to=(%d,%d) | cost=%d | castle_captured=%s",
+        player.id, game_id, unit.id, path[0][0], path[0][1],
+        target[0], target[1], cost, castle_captured,
+    )
 
     return MoveResult(
         unit_id=unit.id,
@@ -340,6 +356,28 @@ async def attack(
     if is_kill:
         _log(session, game, player, "death", f"{target.name} was slain")
 
+    # Publish to in-process event bus
+    await bus.publish(GameEvent(
+        type="kill" if is_kill else "attack",
+        game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=attacker.id, actor_name=attacker.name,
+        target_player_id=target.player_id, target_unit_id=target.id, target_name=target.name,
+        context={
+            "damage": total_dmg,
+            "is_crit": hits[0].is_crit if hits else False,
+            "is_kill": is_kill,
+            "attacker_hp": attacker.hp,
+            "target_hp": target.hp,
+        },
+    ))
+
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=ATTACK | result=SUCCESS | "
+        "attacker=%d | target=%d | total_dmg=%d | is_kill=%s | crit=%s",
+        player.id, game_id, attacker.id, target.id, total_dmg,
+        is_kill, hits[0].is_crit if hits else False,
+    )
+
     return AttackResult(
         hits=[DamageInfo(damage=h.damage, is_crit=h.is_crit, is_kill=is_kill,
                          attacker_unit_id=attacker.id, target_unit_id=target.id) for h in hits],
@@ -365,6 +403,9 @@ async def use_skill(
     body: SkillRequest,
     session: AsyncSession = Depends(get_session),
 ) -> SkillResult:
+    from app.classes.units.skills import get as _get_skill
+    from app.classes.units.skills.base import SkillContext as _SkillCtx
+
     game = await _load_active_game(session, game_id)
     player = await _ensure_current_player(session, game, body.player_id)
     unit = await _load_unit(session, body.unit_id)
@@ -374,67 +415,51 @@ async def use_skill(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unit has already acted")
     await _check_action_budget(session, player, unit)
 
-    skill = body.skill
-    if skill not in (unit.skills or []):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unit does not have skill '{skill}'")
+    skill_id = body.skill
+    try:
+        sk = _get_skill(skill_id)
+    except KeyError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown skill '{skill_id}'")
+    if skill_id not in (unit.skills or []):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unit does not have skill '{skill_id}'")
+    if sk.is_passive:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{skill_id}' is passive; use attack endpoint")
 
-    # Skills that cost action: heal, rally. snipe/double_strike are passive.
-    if skill == SKILL_HEAL:
-        if body.target_id is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "heal requires target_id")
-        ally = await _load_unit(session, body.target_id)
-        if ally.player_id != player.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "can only heal your own units")
-        restored = heal_adjacent_ally(unit, ally)
-        if restored == 0:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "target not adjacent / already full HP")
-        unit.has_acted = True
-        unit.mp = 0  # skills consume remaining MP
-        _log(session, game, player, "skill",
-             f"{unit.name} healed {ally.name} for {restored} HP")
-        return SkillResult(
-            unit_id=unit.id, skill=skill, target_unit_id=ally.id,
-            restored_hp=restored,
-            description=f"{unit.name} healed {ally.name} for {restored} HP",
-        )
+    # Resolve target
+    target = await _load_unit(session, body.target_id) if body.target_id is not None else None
 
-    if skill == SKILL_RALLY:
-        # +10% ATK to adjacent allies for this turn (apply buff to unit + adjacent allies)
-        affected: List[int] = []
-        adjacent_tiles = [
-            (unit.x + dx, unit.y + dy)
-            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
-            if (dx, dy) != (0, 0)
-        ]
-        tiles = (
-            await session.execute(
-                select(Tile).where(
-                    Tile.game_id == game_id,
-                    Tile.x.in_([c[0] for c in adjacent_tiles]),
-                    Tile.y.in_([c[1] for c in adjacent_tiles]),
-                )
-            )
-        ).scalars().all()
-        affected_ids = [t.occupied_unit_id for t in tiles if t.occupied_unit_id is not None]
-        for uid in affected_ids:
-            u = await session.get(Unit, uid)
-            if u and u.player_id == player.id and u.hp > 0:
-                u.atk = int(round(u.atk * 1.10))
-                affected.append(u.id)
-        unit.has_acted = True
-        unit.mp = 0
-        _log(session, game, player, "skill",
-             f"{unit.name} rallied: buffed {len(affected)} adjacent allies (+10% ATK)")
-        return SkillResult(
-            unit_id=unit.id, skill=skill, target_unit_id=None,
-            restored_hp=0,
-            description=f"{unit.name} rallied {len(affected)} allies",
-        )
+    # Build context
+    all_players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    all_units = (await session.execute(
+        select(Unit).where(Unit.player_id.in_([p.id for p in all_players]))
+    )).scalars().all()
+    ctx = _SkillCtx(
+        user=unit, target=target,
+        ally_units=[u for u in all_units if u.player_id == player.id and u.hp > 0],
+        enemy_units=[u for u in all_units if u.player_id != player.id and u.hp > 0],
+    )
 
-    if skill in (SKILL_DOUBLE_STRIKE, "snipe"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{skill}' is passive; use attack endpoint")
+    if not sk.can_use(ctx):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"skill '{skill_id}' cannot be used right now")
 
-    raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown skill '{skill}'")
+    result = await sk.execute(session, ctx)
+    if not result.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, result.description or "skill failed")
+
+    _log(session, game, player, "skill", result.description)
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=SKILL | result=SUCCESS | "
+        "skill=%s | unit=%d",
+        player.id, game_id, skill_id, unit.id,
+    )
+    return SkillResult(
+        unit_id=unit.id, skill=skill_id, target_unit_id=body.target_id,
+        restored_hp=result.restored_hp,
+        description=result.description,
+    )
 
 
 # ============================================================
@@ -459,4 +484,13 @@ async def wait_action(
     unit.has_acted = True
     unit.mp = 0  # wait consumes remaining MP
     _log(session, game, player, "wait", f"{unit.name} waited")
+    # Publish to event bus
+    await bus.publish(GameEvent(
+        type="wait", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+    ))
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=WAIT | result=SUCCESS | unit=%d",
+        player.id, game_id, unit.id,
+    )
     return WaitResult(unit_id=unit.id, description=f"{unit.name} ends turn")

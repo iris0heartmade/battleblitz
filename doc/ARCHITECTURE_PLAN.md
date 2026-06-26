@@ -1,0 +1,1258 @@
+# BattleBlitz 架构规划 v1.0
+
+> **作者角色**：软件架构师
+> **负责范围**：角色培养系统 / Agent 对手系统 / Agent 观战评论系统
+> **当前状态**：v0.1.0（基础回合制战棋已实现）
+> **目标版本**：v1.0（可演示内测版）→ v2.0（可上线版本）
+> **规划时间**：2026-06-25
+> **预计周期**：v1.0 约 10 周，v2.0 约 6 个月
+
+---
+
+## 0. 文档说明
+
+### 0.1 核心约束
+
+| 约束 | 内容 | 含义 |
+|---|---|---|
+| **零美术资产** | 当前没有 Live2D / Spine / 序列帧 | 引擎相关工作延后 |
+| **零授权预算** | 拒绝付费引擎 | 候选限于 Godot / Unity Free / Web |
+| **无浏览器客户端** | 未来必须是原生客户端 | Godot 是默认选择 |
+| **Python 后端为主** | FastAPI + SQLAlchemy + 异步 | 后端逻辑 100% 在 Python |
+| **测试覆盖 ≥ 80%** | 已建立 pytest 体系 | 每个新模块必须有测试 |
+
+### 0.2 三个核心系统
+
+| 系统 | 是什么 | 价值 |
+|---|---|---|
+| **角色培养系统** | 跨局英雄养成：等级、天赋、装备、个性 | 长期留存 |
+| **Agent 对手系统** | 多档位、多人格的 AI 对手，可选 LLM 战略家 | 核心可玩性 |
+| **Agent 观战评论系统** | 事件驱动的实时解说，含 LLM 润色 + TTS | 差异化体验 |
+
+### 0.3 文档读者
+
+- 主要读者：本文档作者（你）
+- 次要读者：未来参与后端开发的同事、AI 编程助手
+- 不必阅读：客户端开发者（他们只看 `app/protocol/` 即可）
+
+---
+
+## 1. 顶层架构
+
+### 1.1 五层分层
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  第五层  客户端（暂未启动）                                      │
+│  Godot 4 + 官方 Live2D Cubism 插件 + 官方 WebSocketPeer         │
+│  ── 待美术资产到位后启动 ──                                      │
+├─────────────────────────────────────────────────────────────────┤
+│  第四层  表现层 API（与客户端对话的语言）                        │
+│  REST + WebSocket，按 protocol/v1 规范输出                      │
+│  ── 现在就要稳定下来 ──                                         │
+├─────────────────────────────────────────────────────────────────┤
+│  第三层  应用服务（业务编排）                                    │
+│  app/progression/  app/ai/  app/commentary/                    │
+│  ── 未来 8 周的主要战场 ──                                      │
+├─────────────────────────────────────────────────────────────────┤
+│  第二层  领域核心（引擎无关的游戏规则）                         │
+│  app/game_logic/  app/events/  app/protocol/                   │
+│  ── 已经基本就位 ──                                             │
+├─────────────────────────────────────────────────────────────────┤
+│  第一层  基础设施                                               │
+│  app/database/  app/logging_config/  app/llm/  app/observability│
+│  ── 已就位 + 补 LLM 客户端 ──                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 关键约定
+
+1. **业务代码严禁跨层调用**：应用服务不能直接 `from app.game_logic import ...` 改 SQL；改 SQL 走 repository 层
+2. **协议层只翻译不计算**：HTTP/WebSocket handler 只做"数据 → 协议对象"的转换，不做业务判断
+3. **领域核心不感知协议**：它只知道游戏规则，不知道外面是 HTTP 还是 WebSocket
+4. **跨层共享用 Protocol 接口**：通过 `typing.Protocol` 定义接口，避免循环依赖
+5. **配置数据用 YAML，业务代码用 Python**：运营调参不改代码
+
+### 1.3 数据流（观战场景示例）
+
+```
+游戏事件（攻击/击杀/移动）
+    ↓
+app/game_logic/         业务规则层：判定事件、计算伤害
+    ↓ publish(GameEvent)
+app/events/             事件总线：进程内 pub/sub
+    ↓ subscribe
+    ├── app/ai/         AI 自己订阅，复盘上回合
+    ├── app/commentary/ 评论订阅，生成文案
+    └── app/protocol/   协议层，序列化到 WebSocket
+            ↓
+        观众客户端
+```
+
+---
+
+## 2. 角色培养系统
+
+### 2.1 系统目标
+
+| 维度 | 目标 |
+|---|---|
+| 持久化 | 跨局保存，单个 UnitInstance 跟随玩家终身 |
+| 成长曲线 | 可配置，运营后期调参不改代码 |
+| 天赋系统 | 数据驱动（YAML 定义），美术改数据不改代码 |
+| 装备系统 | 三槽位（武器/防具/饰品），稀有度分级 |
+| 升级判定 | 服务端权威，前端只发起请求 |
+| 段位/阶级 | 1→2→3 阶，等级上限、解锁技能池随阶级提升 |
+| 个性特征 | brave/coward/tactical/loyal，影响 AI 决策权重 |
+
+### 2.2 数据模型
+
+#### 2.2.1 SQL DDL
+
+```sql
+-- 玩家账号层
+CREATE TABLE player_profiles (
+    id                  BIGSERIAL PRIMARY KEY,
+    user_name           VARCHAR(64) UNIQUE NOT NULL,
+    gold                INT NOT NULL DEFAULT 0,
+    unlock_points       INT NOT NULL DEFAULT 0,    -- 永久解锁点数
+    unlocked_classes    JSONB NOT NULL DEFAULT '["swordsman","archer","knight","healer"]',
+    unlocked_cosmetics  JSONB NOT NULL DEFAULT '{}',
+    current_season      INT NOT NULL DEFAULT 1,
+    rating              INT NOT NULL DEFAULT 1000, -- 段位分
+    created_at          TIMESTAMPTZ NOT NULL,
+    updated_at          TIMESTAMPTZ NOT NULL
+);
+
+-- 英雄层（一名玩家可以拥有多只同名/不同名单位）
+CREATE TABLE unit_instances (
+    id              BIGSERIAL PRIMARY KEY,
+    profile_id      BIGINT NOT NULL REFERENCES player_profiles(id) ON DELETE CASCADE,
+    base_type       VARCHAR(16) NOT NULL,      -- swordsman/archer/...
+    nickname        VARCHAR(32) NOT NULL,
+    tier            INT NOT NULL DEFAULT 1 CHECK (tier BETWEEN 1 AND 3),
+    level           INT NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 50),
+    exp             INT NOT NULL DEFAULT 0,
+    personality     VARCHAR(16) NOT NULL DEFAULT 'tactical',
+    talent_points   INT NOT NULL DEFAULT 0,    -- 待分配
+    talents         JSONB NOT NULL DEFAULT '{}', -- {node_id: rank}
+    equipment       JSONB NOT NULL DEFAULT '{"weapon":null,"armor":null,"accessory":null}',
+    career_stats    JSONB NOT NULL DEFAULT '{"matches":0,"kills":0,"deaths":0,"mvps":0,"wins":0}',
+    created_at      TIMESTAMPTZ NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL,
+    INDEX idx_unit_profile (profile_id)
+);
+
+-- 装备定义（静态配置表）
+CREATE TABLE equipment_templates (
+    id              INT PRIMARY KEY,
+    slot            VARCHAR(16) NOT NULL,      -- weapon/armor/accessory
+    name            VARCHAR(64) NOT NULL,
+    rarity          INT NOT NULL,             -- 1-5 星
+    stat_bonuses    JSONB NOT NULL,
+    set_id          VARCHAR(32) NULL,         -- 套装 ID
+    drop_source     VARCHAR(32) NOT NULL      -- shop/gacha/match_reward
+);
+
+-- 天赋树定义（静态配置）
+CREATE TABLE talent_definitions (
+    class_id        VARCHAR(16) NOT NULL,
+    node_id         VARCHAR(32) NOT NULL,
+    tier_required   INT NOT NULL,
+    level_required  INT NOT NULL,
+    position        JSONB NOT NULL,
+    max_rank        INT NOT NULL DEFAULT 1,
+    effect          JSONB NOT NULL,
+    prereq_nodes    JSONB NOT NULL DEFAULT '[]',
+    PRIMARY KEY (class_id, node_id)
+);
+
+-- 比赛快照
+CREATE TABLE match_records (
+    id                  BIGSERIAL PRIMARY KEY,
+    game_id             INT NOT NULL,
+    season              INT NOT NULL,
+    started_at          TIMESTAMPTZ NOT NULL,
+    ended_at            TIMESTAMPTZ,
+    winner_profile_id   BIGINT REFERENCES player_profiles(id),
+    unit_snapshots      JSONB NOT NULL,
+    events_url          TEXT
+);
+```
+
+### 2.3 文件结构
+
+```
+app/progression/
+├── __init__.py
+├── models.py              # SQLAlchemy ORM 映射
+├── schemas.py             # Pydantic 模型
+├── leveling.py            # 升级曲线公式
+├── talent_tree.py         # 天赋定义加载 + 解锁校验
+├── equipment.py           # 装备槽管理 + 套装效果
+├── personality.py         # 个性特征对 AI 的影响权重
+├── api.py                 # FastAPI 路由
+├── service.py             # 业务编排
+└── repository.py          # 数据访问层
+```
+
+### 2.4 关键算法
+
+#### 2.4.1 升级曲线
+
+```python
+# app/progression/leveling.py
+from typing import Final
+
+# 数据驱动，方便运营调参
+XP_CURVE: Final[dict[int, int]] = {
+    1: 100, 2: 200, 3: 350, 4: 550, 5: 800,
+    6: 1100, 7: 1450, 8: 1850, 9: 2300, 10: 2800,
+    11: 3350, 12: 3950, 13: 4600, 14: 5300, 15: 6050,
+    16: 6850, 17: 7700, 18: 8600, 19: 9550, 20: 10550,
+    # ... 50 级
+}
+
+TIER_LEVEL_CAP: Final[dict[int, int]] = {1: 20, 2: 35, 3: 50}
+
+# 属性成长曲线
+GROWTH_CURVES: Final[dict[str, callable]] = {
+    "linear":      lambda base, lv: int(base * (1 + 0.05 * (lv - 1))),
+    "exponential": lambda base, lv: int(base * (1.1 ** (lv - 1))),
+    "logarithmic": lambda base, lv: int(base * (1 + 0.1 * math.log2(max(lv, 1)))),
+}
+
+
+def xp_to_next(level: int) -> int:
+    return XP_CURVE.get(level, XP_CURVE[max(XP_CURVE.keys())])
+
+
+def stat_at_level(base: int, level: int, curve: str = "linear") -> int:
+    return GROWTH_CURVES[curve](base, level)
+```
+
+#### 2.4.2 天赋解锁
+
+```python
+# app/progression/talent_tree.py
+import yaml
+from pathlib import Path
+
+class TalentError(Exception): pass
+class PrereqNotMet(TalentError): pass
+class TierRequired(TalentError): pass
+class LevelRequired(TalentError): pass
+
+# 从 YAML 加载
+TALENT_DEFS: dict[tuple[str, str], dict] = {}
+_talent_yaml = Path(__file__).parent / "data" / "talents.yaml"
+if _talent_yaml.exists():
+    raw = yaml.safe_load(_talent_yaml.read_text(encoding="utf-8"))
+    for class_id, tree in raw.items():
+        for node in tree.get("nodes", []):
+            TALENT_DEFS[(class_id, node["id"])] = node
+
+
+def unlock_node(unit: "UnitInstance", node_id: str) -> None:
+    spec = TALENT_DEFS.get((unit.base_type, node_id))
+    if not spec:
+        raise TalentError(f"unknown talent: {node_id}")
+    if unit.tier < spec["tier_required"]:
+        raise TierRequired(f"need tier {spec['tier_required']}, have {unit.tier}")
+    if unit.level < spec["level_required"]:
+        raise LevelRequired(f"need level {spec['level_required']}, have {unit.level}")
+    if unit.talent_points < spec.get("cost", 1):
+        raise PrereqNotMet("no talent points")
+    for prereq in spec.get("prereq_nodes", []):
+        if not unit.talents.get(prereq):
+            raise PrereqNotMet(f"need prereq {prereq}")
+    unit.talents[node_id] = unit.talents.get(node_id, 0) + 1
+    unit.talent_points -= spec.get("cost", 1)
+
+
+def apply_talents_to_stats(base_stats: dict, talents: dict, class_id: str) -> dict:
+    """根据已解锁天赋计算最终属性。"""
+    result = dict(base_stats)
+    for node_id, rank in talents.items():
+        spec = TALENT_DEFS.get((class_id, node_id))
+        if not spec:
+            continue
+        effect = spec.get("effect", {})
+        stat = effect.get("stat")
+        value = effect.get("value", 0) * rank
+        if stat.endswith("_pct"):
+            base_stat = stat[:-4]
+            if base_stat in result:
+                result[base_stat] = int(result[base_stat] * (1 + value / 100))
+        elif stat in result:
+            result[stat] += value
+    return result
+```
+
+#### 2.4.3 个性 → AI 权重
+
+```python
+# app/progression/personality.py
+PERSONALITY_MODIFIERS: Final[dict[str, dict]] = {
+    "brave": {
+        "attack_weight": 1.3, "defense_weight": 0.7,
+        "retreat_hp_pct": 0.10,  # 10% HP 以下才撤
+        "preferred_targets": ["healer", "knight"],
+    },
+    "coward": {
+        "attack_weight": 0.6, "defense_weight": 1.4,
+        "retreat_hp_pct": 0.50,
+        "preferred_targets": ["wounded"],
+    },
+    "tactical": {
+        "attack_weight": 1.0, "defense_weight": 1.0,
+        "retreat_hp_pct": 0.25,
+        "preferred_targets": ["value_target"],
+    },
+    "loyal": {
+        "attack_weight": 1.0, "defense_weight": 1.2,
+        "retreat_hp_pct": 0.30,
+        "preferred_targets": ["nearest_threat_to_ally"],
+    },
+}
+```
+
+### 2.5 阶段拆分
+
+| 周 | 任务 | 交付物 | 测试要求 |
+|---|---|---|---|
+| W1 | DB schema + ORM + 迁移 | 能创建 PlayerProfile + UnitInstance | repository 单测 |
+| W2 | 升级曲线 + XP 流程 | `level_up()` + `xp_to_next()` | 曲线测试 + 边界 |
+| W3 | 天赋树 YAML + 解锁逻辑 | `TalentService` | 5+ 个解锁场景 |
+| W4 | 装备系统（三槽 + 套装）| `EquipmentService` | 套装叠加测试 |
+| W5 | 个性系统 + AI 集成接口 | `PersonalityModifier` | 权重转换测试 |
+| W6 | REST API + OpenAPI 文档 | `/profiles/*` `/units/*` 端点 | 集成测试 |
+
+---
+
+## 3. Agent 对手系统
+
+### 3.1 系统目标
+
+| 维度 | 目标 |
+|---|---|
+| 多档位 | easy / normal / hard / insane 四档 |
+| 多人格 | aggressive / defensive / rusher / economist / balanced |
+| 可观测 | 每步决策记日志，方便后期调参 |
+| 可扩展 | 战略层（LLM）和战术层（规则）解耦，可分别升级 |
+| 性能 | 整回合 < 1s 计算（hard 档允许到 3s） |
+| 学习 | 收集对局数据，为未来 ML 模型准备 |
+
+### 3.2 分层架构
+
+```
+┌──────────────────────────────────────────────────┐
+│  L4  LLM 战略家（可选，hard+ 档启用）             │
+│      每回合调一次 LLM，拿"战略意图"               │
+│      输入：游戏快照                               │
+│      输出：JSON {focus, play_style, priorities}  │
+├──────────────────────────────────────────────────┤
+│  L3  个性 / 难度调参层                           │
+│      接收战略意图，转成"权重表"                   │
+├──────────────────────────────────────────────────┤
+│  L2  战术层                                       │
+│      拿权重表做具体决策                           │
+│      选目标 / 选移动点 / 放技能                   │
+├──────────────────────────────────────────────────┤
+│  L1  动作执行层                                  │
+│      apply_damage / move_unit / heal             │
+└──────────────────────────────────────────────────┘
+```
+
+### 3.3 文件结构
+
+```
+app/ai/
+├── __init__.py
+├── personalities.py       # 5 种人格配置
+├── difficulty.py          # 4 档难度
+├── weights.py             # 权重计算
+├── target_selector.py     # 选攻击目标
+├── movement_planner.py    # 选移动目的地
+├── skill_planner.py       # 技能决策
+├── llm_strategist.py      # LLM 战略家
+├── telemetry.py           # 决策日志
+├── api.py                 # 配置 AI 的接口
+└── run.py                 # 主入口（替换现有 ai_take_turn）
+```
+
+### 3.4 关键算法
+
+#### 3.4.1 人格配置
+
+```python
+# app/ai/personalities.py
+from typing import Final
+
+PERSONALITIES: Final[dict[str, dict]] = {
+    "aggressive": {
+        "display_name": "激进",
+        "attack_weight": 2.0,
+        "defense_weight": 0.5,
+        "capture_weight": 1.0,
+        "heal_threshold": 0.6,
+        "retreat_hp_pct": 0.15,
+        "preferred_targets": ["healer", "knight", "archer"],
+    },
+    "defensive": {
+        "display_name": "防守",
+        "attack_weight": 0.5,
+        "defense_weight": 2.0,
+        "capture_weight": 1.5,
+        "heal_threshold": 0.3,
+        "retreat_hp_pct": 0.40,
+        "preferred_targets": ["nearest_threat"],
+    },
+    "rusher": {
+        "display_name": "速攻",
+        "attack_weight": 1.5,
+        "defense_weight": 0.3,
+        "capture_weight": 3.0,
+        "heal_threshold": 0.8,
+        "retreat_hp_pct": 0.05,
+        "preferred_targets": ["castle", "castle", "weakest"],
+    },
+    "economist": {
+        "display_name": "稳健",
+        "attack_weight": 0.8,
+        "defense_weight": 1.0,
+        "capture_weight": 2.5,
+        "heal_threshold": 0.5,
+        "retreat_hp_pct": 0.30,
+        "preferred_targets": ["value_target"],
+    },
+    "balanced": {
+        "display_name": "均衡",
+        "attack_weight": 1.0,
+        "defense_weight": 1.0,
+        "capture_weight": 1.0,
+        "heal_threshold": 0.5,
+        "retreat_hp_pct": 0.25,
+        "preferred_targets": ["value_target"],
+    },
+}
+```
+
+#### 3.4.2 难度配置
+
+```python
+# app/ai/difficulty.py
+DIFFICULTY: Final[dict[str, dict]] = {
+    "easy":   {"lookahead": 0, "noise": 0.3, "use_llm": False, "decision_ms": 800},
+    "normal": {"lookahead": 1, "noise": 0.10, "use_llm": False, "decision_ms": 1200},
+    "hard":   {"lookahead": 2, "noise": 0.0, "use_llm": True, "decision_ms": 600},
+    "insane": {"lookahead": 3, "noise": 0.0, "use_llm": True, "decision_ms": 400},
+}
+```
+
+#### 3.4.3 权重计算
+
+```python
+# app/ai/weights.py
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Weights:
+    attack: float
+    defense: float
+    capture: float
+    heal_priority: float
+    retreat_below: float
+    noise: float
+    lookahead: int
+    use_llm: bool
+
+
+def compute_weights(personality: str, difficulty: str) -> Weights:
+    p = PERSONALITIES[personality]
+    d = DIFFICULTY[difficulty]
+    return Weights(
+        attack=p["attack_weight"],
+        defense=p["defense_weight"],
+        capture=p["capture_weight"],
+        heal_priority=p["heal_threshold"],
+        retreat_below=p["retreat_hp_pct"],
+        noise=d["noise"],
+        lookahead=d["lookahead"],
+        use_llm=d["use_llm"],
+    )
+```
+
+#### 3.4.4 目标选择（升级版）
+
+```python
+# app/ai/target_selector.py
+def select(attacker: Unit, enemies: list[Unit], weights: Weights) -> Unit | None:
+    candidates = []
+    for e in enemies:
+        d = chebyshev((attacker.x, attacker.y), (e.x, e.y))
+        if not _in_range(attacker, e, d):
+            continue
+        score = _unit_value(e)
+        # 残血补刀加权
+        if e.hp <= attacker.atk:
+            score += 100
+        # 距离惩罚
+        score -= d * 5
+        # 难度噪声
+        if weights.noise > 0:
+            score += random.uniform(-weights.noise, weights.noise) * score
+        candidates.append((score, e))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda c: c[0])[1]
+```
+
+#### 3.4.5 LLM 战略家
+
+```python
+# app/ai/llm_strategist.py
+STRATEGIST_PROMPT = """你是 BattleBlitz 的高级 AI 战略家。
+当前局面（己方 = 蓝）：
+- 我方单位：{my_units_summary}
+- 敌方单位：{enemy_units_summary}
+- 中立城堡：{neutral_castles}
+- 关键位置：{key_positions}
+
+本回合（turn {turn}）的战略意图（JSON 格式）：
+{{
+  "focus": "healer"|"knight"|"weakest"|"strongest"|"castle",
+  "play_style": "aggressive"|"defensive"|"economic"|"feint",
+  "priorities": ["list", "of", "2-3", "priorities"],
+  "warnings": ["if any units in danger"]
+}}"""
+
+
+class LLMStrategist:
+    def __init__(self, model: str = "claude-haiku-4-5"):
+        self.client = anthropic.AsyncAnthropic()
+        self.model = model
+
+    async def get_intent(self, snap: GameSnapshot) -> StrategicIntent:
+        prompt = STRATEGIST_PROMPT.format(...)
+        try:
+            resp = await asyncio.wait_for(
+                self.client.messages.create(
+                    model=self.model,
+                    max_tokens=200,
+                    messages=[{"role": "user", "content": prompt}],
+                ),
+                timeout=1.5,
+            )
+            return StrategicIntent.parse_raw(resp.content[0].text)
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning("LLM strategist failed: %s, falling back to rules", e)
+            return self._default_intent(snap)
+```
+
+### 3.5 阶段拆分
+
+| 周 | 任务 | 交付物 | 测试要求 |
+|---|---|---|---|
+| W1 | personalities + difficulty + 权重计算 | `Weights` 体系 | 单元测试 |
+| W2 | target_selector 升级 | 替换现有 _ai_pick_attack_target | 对照旧版 |
+| W3 | movement_planner 升级 | 替换现有 _ai_pick_move_target | 移动评分测试 |
+| W4 | LLMStrategist（仅 hard 档）| 战略家 + 单测 + 集成测试 | 降级路径 |
+| W5 | telemetry + 决策回放 | AI 决策日志 API | 数据落库 |
+| W6 | 难度自适应（基于玩家胜率）| 反馈调参机制 | 模拟验证 |
+
+---
+
+## 4. Agent 观战评论系统
+
+### 4.1 系统目标
+
+| 维度 | 目标 |
+|---|---|
+| 实时性 | 关键事件 < 2s 端到端（事件发生 → 用户听到） |
+| 风格化 | 多种解说人格（激情、毒舌、学术、温馨） |
+| 容错 | LLM 调用失败自动降级到模板 |
+| 文本 + 语音 | 同步输出字幕和 TTS 音频 |
+| 可开关 | 用户可静音/切换解说/调语速 |
+| 收藏 | 精彩解说可标记"精彩瞬间" |
+
+### 4.2 流水线
+
+```
+游戏事件流 ──→ 事件分类器 ──→ 重要性评分
+                              ↓
+                       关键事件 ──→ LLM 润色（500-2000ms）
+                       普通事件 ──→ 模板匹配（<50ms）
+                              ↓
+                          文本 + 元数据
+                              ↓
+                          TTS（edge-tts）
+                              ↓
+                       WebSocket 推送
+                              ↓
+                       观众客户端播放
+```
+
+### 4.3 文件结构
+
+```
+app/commentary/
+├── __init__.py
+├── personas.py            # 解说人格
+├── classifier.py          # 事件分类
+├── templates.py           # 模板库
+├── llm_commentator.py     # LLM 润色
+├── generator.py           # 总入口
+├── tts.py                 # 文字转语音
+├── history.py             # 事件历史
+├── api.py                 # 观众接口
+└── bus_subscriber.py      # 订阅事件总线
+```
+
+### 4.4 关键算法
+
+#### 4.4.1 事件分类
+
+```python
+# app/commentary/classifier.py
+from enum import IntEnum
+
+class Importance(IntEnum):
+    NORMAL = 1       # 仅模板
+    IMPORTANT = 2    # 模板优先
+    CRITICAL = 3     # 必走 LLM
+
+CRITICAL_EVENTS = {"kill", "castle_captured", "comeback", "victory_imminent"}
+IMPORTANT_EVENTS = {"level_up", "double_kill", "low_hp_save", "first_blood"}
+# 其他都是 NORMAL
+
+
+def classify(event: GameEvent, history: list[GameEvent]) -> Importance:
+    if event.type in CRITICAL_EVENTS:
+        return Importance.CRITICAL
+    if event.type in IMPORTANT_EVENTS:
+        return Importance.IMPORTANT
+    return Importance.NORMAL
+```
+
+#### 4.4.2 Persona
+
+```python
+# app/commentary/personas.py
+PERSONAS: Final[dict[str, dict]] = {
+    "hype": {
+        "display_name": "激情解说",
+        "style_guide": "激情澎湃、语速快、善用感叹号和夸张比喻",
+        "catchphrases": ["漂亮！", "不可思议！", "难以置信！", "就是现在！"],
+        "tts_voice": "zh-CN-YunjianNeural",
+        "speech_rate": 1.1,
+    },
+    "sarcastic": {
+        "display_name": "毒舌解说",
+        "style_guide": "反讽、调侃、一本正经地说荒唐话",
+        "catchphrases": ["这就是传说中的...", "哇哦。", "我真的没想到..."],
+        "tts_voice": "zh-CN-YunxiNeural",
+        "speech_rate": 0.95,
+    },
+    "academic": {
+        "display_name": "学术解说",
+        "style_guide": "客观分析、引用数据、冷静评价",
+        "catchphrases": ["从战术角度看...", "数据显示...", "这是一个有趣的选择"],
+        "tts_voice": "zh-CN-YunyangNeural",
+        "speech_rate": 0.9,
+    },
+    "warm": {
+        "display_name": "温馨解说",
+        "style_guide": "温和、关怀、关注每个英雄的成长",
+        "catchphrases": ["这个小家伙...", "加油啊...", "真是不容易"],
+        "tts_voice": "zh-CN-XiaoxiaoNeural",
+        "speech_rate": 0.85,
+    },
+}
+```
+
+#### 4.4.3 模板渲染
+
+```python
+# app/commentary/templates.py
+import random
+
+KILL_TEMPLATES = [
+    "{attacker} 一刀砍翻 {target}！",
+    "{attacker} 的 {weapon} 直取 {target} 的要害！",
+    "{target} 倒下了，{attacker} 立下大功！",
+    "{attacker} 收下 {target} 的人头！",
+    "漂亮！{attacker} 终结了 {target}！",
+]
+
+CASTLE_TEMPLATES = [
+    "{attacker} 踏上了 {castle} 的废墟！城堡易主！",
+    "城堡被攻陷！{attacker_color} 拿下 {castle}！",
+]
+
+
+def render_kill(event: GameEvent, persona: dict) -> str | None:
+    weapon = {"swordsman": "剑", "archer": "箭", "knight": "长枪", "healer": "法杖"}.get(
+        event.context.get("attacker_type"), "一击"
+    )
+    tpl = random.choice(KILL_TEMPLATES)
+    text = tpl.format(
+        attacker=event.actor_name,
+        target=event.target_name,
+        weapon=weapon,
+    )
+    # 用 persona 的 catchphrase 装饰
+    if random.random() < 0.3 and persona.get("catchphrases"):
+        text = random.choice(persona["catchphrases"]) + text
+    return text
+```
+
+#### 4.4.4 LLM 润色
+
+```python
+# app/commentary/llm_commentator.py
+COMMENTATOR_PROMPT = """你是{style}的电竞解说"{name}"。
+惯用词：{catchphrases}
+长度限制：10-30 个汉字
+禁止：脏话、真实人名
+
+近期事件（按时间顺序）：
+{recent_events}
+
+当前事件：
+{current_event}
+
+输出一句解说文案："""
+
+
+async def polish(template: str, event: GameEvent, history: list, persona: dict) -> str:
+    resp = await client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=80,
+        messages=[{"role": "user", "content": COMMENTATOR_PROMPT.format(
+            style=persona["style_guide"],
+            name=persona["display_name"],
+            catchphrases=", ".join(persona["catchphrases"][:5]),
+            recent_events=_format_recent(history[-5:]),
+            current_event=event.json(),
+        )}],
+    )
+    return _sanitize(resp.content[0].text, max_len=30)
+```
+
+#### 4.4.5 TTS 流水线
+
+```python
+# app/commentary/tts.py
+import edge_tts
+
+class TTSCache:
+    def __init__(self, max_size: int = 1000):
+        self.cache: dict[str, bytes] = {}
+        self.max_size = max_size
+
+    async def speak(self, text: str, voice: str) -> bytes:
+        key = f"{voice}:{text}"
+        if key in self.cache:
+            return self.cache[key]
+        if len(self.cache) >= self.max_size:
+            self.cache.pop(next(iter(self.cache)))
+        communicate = edge_tts.Communicate(text, voice)
+        audio = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio += chunk["data"]
+        self.cache[key] = audio
+        return audio
+```
+
+### 4.5 阶段拆分
+
+| 周 | 任务 | 交付物 | 测试要求 |
+|---|---|---|---|
+| W1 | 事件分类器 + 模板库（20+ 句）| 不带 LLM 的"假解说" | 模板渲染测试 |
+| W2 | LLM 润色器（含超时降级）| 关键事件能出有风格文案 | 降级路径测试 |
+| W3 | TTS 集成（edge-tts + 缓存）| 文字+音频同步输出 | TTS 缓存命中 |
+| W4 | 4 种 persona 完整实现 | 用户可切换解说风格 | persona 一致性 |
+| W5 | WebSocket 推流 + 历史回放 | 观众端能看到/听到 | 端到端测试 |
+| W6 | "精彩瞬间"自动检测 + 用户标记 | 留存钩子 | 检测准确率 |
+
+---
+
+## 5. 跨系统基础设施
+
+### 5.1 事件总线（`app/events/`）— 三大系统的脊柱
+
+#### 5.1.1 事件类型
+
+```python
+# app/events/types.py
+from typing import Literal
+from pydantic import BaseModel
+
+class GameEvent(BaseModel):
+    type: Literal[
+        "move", "attack", "kill", "skill", "wait",
+        "turn_end", "round_end", "castle_captured",
+        "level_up", "low_hp_warning", "comeback",
+        "victory_imminent", "match_start", "match_end",
+    ]
+    v: int = 1
+    game_id: int
+    turn: int
+    timestamp_ms: int
+    actor_player_id: int | None
+    actor_unit_id: int | None
+    target_player_id: int | None
+    target_unit_id: int | None
+    context: dict = {}
+```
+
+#### 5.1.2 进程内总线
+
+```python
+# app/events/bus.py
+import asyncio
+from collections import defaultdict
+
+
+class GameEventBus:
+    """进程内 pub/sub。Redis 化在 Phase 4 之后。"""
+
+    def __init__(self):
+        self._subscribers: dict[int, list[asyncio.Queue]] = defaultdict(list)
+
+    async def publish(self, event: GameEvent) -> None:
+        for queue in self._subscribers[event.game_id]:
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                logger.warning("event queue full, dropping: %s", event.type)
+
+    def subscribe(self, game_id: int) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        self._subscribers[game_id].append(queue)
+        return queue
+
+    def unsubscribe(self, game_id: int, queue: asyncio.Queue) -> None:
+        if queue in self._subscribers.get(game_id, []):
+            self._subscribers[game_id].remove(queue)
+
+
+# 全局单例
+bus = GameEventBus()
+```
+
+#### 5.1.3 埋点位置
+
+| 位置 | 事件类型 |
+|---|---|
+| `actions.py::move_unit` 成功时 | `move` |
+| `actions.py::attack` 成功时 | `attack`, `kill` (若击杀) |
+| `actions.py::use_skill` 成功时 | `skill` |
+| `actions.py::wait_action` 成功时 | `wait` |
+| `game_logic.py::ai_take_turn` 每步 | `ai_step` (可选) |
+| `game_logic.py::claim_castle_if_present` 返回 True | `castle_captured` |
+| `game_logic.py::apply_end_of_turn` 完成时 | `round_end` |
+
+### 5.2 协议层（`app/protocol/`）— 跨端语言
+
+```python
+# app/protocol/v1.py
+class ProtocolV1:
+    VERSION = 1
+
+    # 服务端 → 客户端
+    STATE_SNAPSHOT = "state_snapshot"
+    EVENT_DELTA = "event_delta"
+    COMMENTARY = "commentary"
+    ERROR = "error"
+
+    # 客户端 → 服务端
+    CLIENT_JOIN = "client_join"
+    CLIENT_LEAVE = "client_leave"
+    CLIENT_CHAT = "client_chat"
+
+
+class WSMessage(BaseModel):
+    v: int = 1
+    type: str
+    seq: int | None = None
+    payload: dict
+    sent_at_ms: int
+```
+
+**配套文档**：`docs/protocol-v1.md`（用 JSON Schema 描述每个 type，附 sample）
+
+### 5.3 LLM 客户端抽象（`app/llm/`）
+
+```python
+# app/llm/client.py
+from typing import Protocol
+
+class LLMClient(Protocol):
+    async def complete(self, prompt: str, *, max_tokens: int, model: str | None = None) -> str: ...
+
+
+class ClaudeClient:
+    def __init__(self, model_default: str = "claude-haiku-4-5"):
+        import anthropic
+        self.client = anthropic.AsyncAnthropic()
+        self.model_default = model_default
+
+    async def complete(self, prompt: str, *, max_tokens: int, model: str | None = None) -> str:
+        resp = await self.client.messages.create(
+            model=model or self.model_default,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.content[0].text
+
+
+def get_llm_client() -> LLMClient:
+    return ClaudeClient()
+
+
+async def safe_complete(prompt: str, *, max_tokens: int, timeout: float = 1.5) -> str | None:
+    """带超时 + 降级的 LLM 调用。"""
+    client = get_llm_client()
+    try:
+        return await asyncio.wait_for(
+            client.complete(prompt, max_tokens=max_tokens),
+            timeout=timeout,
+        )
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning("LLM call failed: %s", e)
+        return None
+```
+
+### 5.4 持久化升级
+
+| 阶段 | DB | 原因 |
+|---|---|---|
+| 现在到 Phase 3 | SQLite | 单机开发快，pytest 友好 |
+| Phase 4+ | PostgreSQL | 多实例 + Redis pubsub 需要 |
+
+**迁移工具**：Alembic
+
+```bash
+alembic init app/database/migrations
+alembic revision --autogenerate -m "add unit_instances"
+alembic upgrade head
+```
+
+### 5.5 观测性（`app/observability/`）
+
+- ✅ **已就位**：`app/logging_config.py`（logging + audit + HEALTH）
+- 🔜 **待加**：metrics（AI 调用次数/延迟、LLM 调用次数/失败率、WS 连接数）
+- **工具**：`prometheus_client`（指标端点 `/metrics`）
+
+```python
+# app/observability/metrics.py
+from prometheus_client import Counter, Histogram, Gauge
+
+ai_decisions = Counter("ai_decisions_total", "AI decisions made", ["personality", "difficulty"])
+ai_decision_latency = Histogram("ai_decision_latency_ms", "AI decision latency", ["difficulty"])
+llm_calls = Counter("llm_calls_total", "LLM calls", ["model", "purpose"])
+llm_failures = Counter("llm_failures_total", "LLM failures", ["model", "purpose"])
+ws_connections = Gauge("ws_connections", "Active WebSocket connections", ["endpoint"])
+commentary_latency = Histogram("commentary_latency_ms", "Event → commentary latency")
+```
+
+---
+
+## 6. 工具链
+
+### 6.1 已就位（✅）
+
+| 工具 | 版本 | 用途 |
+|---|---|---|
+| Python | 3.13 | 主语言 |
+| FastAPI | 0.138 | Web 框架 |
+| SQLAlchemy | 2.0.51 | ORM |
+| pydantic | 2.10.3 | 数据验证（aarch64 锁定）|
+| aiosqlite | 0.22 | 异步 SQLite |
+| pytest | 9.1 | 测试框架 |
+| pytest-asyncio | 1.4 | 异步测试 |
+| pytest-cov | 7.1 | 覆盖率 |
+| psutil | 7.2 | HEALTH 监控 |
+| httpx | 0.28 | ASGI 测试客户端 |
+| ruff | - | Lint + format（待用） |
+
+### 6.2 待安装（🔜）
+
+| 工具 | 用途 | 安装 |
+|---|---|---|
+| **anthropic** | Claude API SDK | `pip install anthropic` |
+| **edge-tts** | TTS（免费） | `pip install edge-tts` |
+| **alembic** | DB 迁移 | `pip install alembic` |
+| **redis** | 后期多实例（Phase 4）| `pip install redis` |
+| **prometheus-client** | 指标 | `pip install prometheus-client` |
+| **PyYAML** | 天赋树配置 | `pip install pyyaml` |
+| **mypy** | 类型检查 | `pip install mypy` |
+| **tenacity** | 重试装饰器 | `pip install tenacity` |
+
+### 6.3 明确不要的（❌）
+
+- ❌ Cocos/Unity/Godot（引擎相关延后）
+- ❌ Celery（进程内队列够用）
+- ❌ Kubernetes（一容器搞定）
+- ❌ OAuth（单 token 够用）
+- ❌ Redis Cluster（单机 Redis 撑 10K 并发）
+- ❌ 任何 BI 工具
+
+### 6.4 推荐 IDE / 编辑器
+
+- **VSCode + Pylance**：mypy 集成最好
+- PyCharm 也行（SQLAlchemy async 类型配置稍麻烦）
+
+### 6.5 CI/CD
+
+**GitHub Actions**（简化版，单机开发也行）：
+
+```yaml
+# .github/workflows/test.yml
+name: tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -r game/requirements.txt -r game/requirements-dev.txt
+      - run: cd game && PYTHONPATH=. pytest --cov=app
+      - run: cd game && ruff check .
+```
+
+---
+
+## 7. 完整路线图
+
+### 7.1 10 周计划（v1.0 内测版）
+
+| 周 | 基础设施 | 培养系统 | AI 对手 | AI 观战 |
+|---|---|---|---|---|
+| W1 | 事件总线 + LLM 客户端 + 协议层 | DB schema + ORM | - | - |
+| W2 | Alembic + PostgreSQL（可选）| 升级曲线 + level_up | 权重体系 | 事件分类器 + 模板 |
+| W3 | - | 天赋树 YAML + 解锁 | target_selector | LLM 润色器 |
+| W4 | - | 装备系统 + 三槽 | movement_planner | TTS 集成 + 缓存 |
+| W5 | WebSocket 网关替换 HTTP 轮询 | 个性系统 + AI 集成 | skill_planner | 4 种 persona |
+| W6 | 协议 v1 文档 + 客户端 SDK | REST API + OpenAPI | LLMStrategist | WS 推流 + 回放 |
+| W7 | - | 端到端测试 | telemetry | 精彩瞬间 |
+| W8 | - | 性能优化 | 难度自适应 | 多 persona UI |
+| W9 | 三大系统联动 | | | |
+| W10 | **可演示内测版** | | | |
+
+### 7.2 v1.0 演示脚本
+
+1. 创建玩家 → 选 5 个英雄 → 培养到 Lv10 满天赋
+2. 创建房间 → 人类 vs 3 个 AI（不同 personality）
+3. 开打 → 观战模式 → 听到激情解说
+4. 中途切换 AI 难度到 hard，AI 表现变强
+5. 比赛结束 → 战绩记录 + 精彩回放
+
+### 7.3 v2.0 路线（再 4-6 个月）
+
+| 阶段 | 内容 |
+|---|---|
+| M4-M5 | 客户端启动：Godot 4 + 协议 v1 SDK |
+| M5-M6 | Live2D 集成（等美术出 .moc3）|
+| M6-M7 | 多语言（中/英）|
+| M7-M8 | 排行榜、赛季、匹配系统 |
+| M8 | 公测版 |
+
+---
+
+## 8. 接口契约
+
+### 8.1 WebSocket 协议 v1
+
+**连接**：`ws://server/games/{game_id}/ws?token=xxx`
+
+**客户端 → 服务端**
+
+```json
+{"v": 1, "type": "ping"}
+{"v": 1, "type": "action.move", "payload": {"unit_id": 42, "to_x": 5, "to_y": 6}}
+{"v": 1, "type": "action.attack", "payload": {"attacker_id": 42, "target_id": 56}}
+{"v": 1, "type": "action.end_turn"}
+```
+
+**服务端 → 客户端**
+
+```json
+{"v": 1, "type": "state_snapshot", "seq": 100, "payload": {}}
+{"v": 1, "type": "event_delta", "seq": 101, "payload": {"type": "kill", ...}}
+{"v": 1, "type": "commentary", "seq": 102, "payload": {"text": "...", "audio_url": "..."}}
+{"v": 1, "type": "error", "seq": 103, "payload": {"code": "OUT_OF_MP", "message": "..."}}
+```
+
+### 8.2 REST API（增量）
+
+| 方法 | 路径 | 用途 | 系统 |
+|---|---|---|---|
+| POST | /profiles | 创建玩家档案 | 培养 |
+| GET | /profiles/{id} | 玩家详情 | 培养 |
+| POST | /profiles/{id}/units | 创建英雄 | 培养 |
+| GET | /units/{id} | 英雄详情 | 培养 |
+| POST | /units/{id}/level-up | 升级 | 培养 |
+| POST | /units/{id}/talents/{node} | 分配天赋 | 培养 |
+| POST | /units/{id}/equipment | 装备 | 培养 |
+| POST | /units/{id}/promote | 阶级提升 | 培养 |
+| GET | /ai/personalities | 列人格 | AI |
+| POST | /games/{id}/ai/config | 改 AI 配置 | AI |
+| GET | /games/{id}/ai/telemetry | 决策日志 | AI |
+| GET | /commentary/personas | 列解说 | 观战 |
+| GET | /games/{id}/commentary/replay | 回放 | 观战 |
+| WS | /games/{id}/ws | 主游戏同步 | 通用 |
+| WS | /games/{id}/commentary | 观战流 | 观战 |
+
+### 8.3 事件类型清单
+
+| type | 来源 | 重要性 | 触发条件 |
+|---|---|---|---|
+| `move` | actions.move | NORMAL | 单位成功移动 |
+| `attack` | actions.attack | NORMAL | 单位成功攻击（未击杀）|
+| `kill` | actions.attack | CRITICAL | 单位击杀 |
+| `skill` | actions.skill | NORMAL | 单位释放技能 |
+| `wait` | actions.wait | NORMAL | 单位主动待命 |
+| `turn_end` | turns.end_turn | NORMAL | 玩家结束回合 |
+| `round_end` | turns.apply_end_of_turn | IMPORTANT | 一整圈结束 |
+| `castle_captured` | game_logic.claim_castle | CRITICAL | 占领敌方城堡 |
+| `level_up` | game_logic.level_up | IMPORTANT | 单位升级 |
+| `low_hp_warning` | 业务编排 | IMPORTANT | 单位 HP < 25% |
+| `comeback` | 业务编排 | CRITICAL | 落后方开始反击 |
+| `victory_imminent` | 业务编排 | CRITICAL | 一方接近胜利 |
+| `match_start` | game.start | IMPORTANT | 比赛开始 |
+| `match_end` | game.end | CRITICAL | 比赛结束 |
+
+---
+
+## 9. 风险与缓解
+
+| 风险 | 概率 | 影响 | 缓解 |
+|---|---|---|---|
+| LLM 调用超时不稳 | 高 | 关键事件延迟 | `safe_complete` 1.5s 超时 + 模板降级 |
+| 天赋树设计后期大改 | 中 | 重做表结构 | 用 JSONB 存天赋数据，表 schema 不动 |
+| 角色平衡难调 | 高 | 游戏体验差 | 数据驱动曲线 + telemetry + A/B 框架 |
+| 现有 SQLite 在 W3+ 不够用 | 中 | 数据丢失 | 提前迁 PostgreSQL，但留 SQLite 兼容 |
+| 客户端选择后悔 | 低 | 浪费 2-3 周 | 现在不选；选了 Godot 也是小风险 |
+| WebSocket 替代 HTTP 后老客户端挂 | 中 | 旧版 app.js 失效 | 灰度：旧路由保留 + 文档化迁移 |
+| AI 难度不可控 | 中 | 新手劝退 / 高手无感 | telemetry 看胜率，自适应 |
+| TTS 服务挂 | 低 | 观战没声音 | 文本输出仍可用，音频失败 log warning |
+| Live2D 模型版权问题 | 中 | 法律风险 | 使用 CC0 / 自研 / 商用授权的模型 |
+| LLM 成本失控 | 中 | 账单爆 | 限流 + Haiku 优先 + 缓存 + 监控 |
+
+---
+
+## 10. 第一周任务清单
+
+按价值/成本排序，今天就能开始：
+
+### Day 1（2 小时）
+
+```bash
+# 安装新依赖
+pip install anthropic edge-tts pyyaml alembic ruff mypy tenacity
+```
+
+```bash
+# 创建目录骨架
+mkdir -p app/events app/llm app/protocol app/observability
+mkdir -p app/progression app/ai app/commentary
+```
+
+### Day 2（3 小时）
+
+- 写 `app/events/types.py`（GameEvent 定义）
+- 写 `app/events/bus.py`（GameEventBus 100 行）
+- 写 `app/events/__init__.py` 暴露 `bus` 单例
+- 在 `actions.py` 的 move/attack 末尾加 `await bus.publish(event)`
+- 写 `tests/test_events.py` 验证
+
+### Day 3-5
+
+- 写 `app/llm/client.py`（Claude 客户端 + safe_complete）
+- 写 `app/ai/llm_strategist.py` 雏形
+- 写 `app/commentary/classifier.py` + 20 个模板
+- 写 `app/commentary/generator.py`（最简版）
+
+### Day 6-7
+
+- 三大系统各写 1 个最核心函数的单测
+- 跑通：事件发布 → 模板匹配 → TTS 播放的端到端 demo
+- 写 `docs/protocol-v1.md` 草稿
+
+### 周末交付
+
+1. ✅ `app/events/bus.py`（100 行）
+2. ✅ `app/llm/client.py`（50 行）
+3. ✅ `app/commentary/classifier.py` + 模板（200 行）
+4. ✅ 三个系统各 1 个 hello world 单测
+5. ✅ 协议 v1 草稿
+
+---
+
+## 11. 一句话总结
+
+> **三大系统建在同一根脊柱上：事件总线。事件流出来后，三件事可以并行做。**
+
+| 系统 | 输入 | 输出 | 实时性 |
+|---|---|---|---|
+| 角色培养 | 比赛结果（kills/wins/MVPs）| 经验/金币/解锁 | 异步 |
+| AI 对手 | 游戏快照 | 单位动作 | < 1s |
+| AI 观战 | 游戏事件 | 文本+音频 | < 2s |
+
+它们从同一个事件流出来，但消费方式完全不同。事件总线是地基，地基先打，三大系统并行盖。
+
+---
+
+## 附录 A：术语表
+
+| 术语 | 含义 |
+|---|---|
+| **Tier** | 英雄阶级，1/2/3 阶，影响等级上限和技能池 |
+| **Personality** | 英雄个性（brave/coward/tactical/loyal），影响 AI 决策权重 |
+| **Talent Node** | 天赋树的一个节点，消耗天赋点解锁，提供属性加成 |
+| **Strategic Intent** | LLM 战略家输出的战略意图（focus + play_style + priorities）|
+| **Commentary Persona** | 解说人格（hype/sarcastic/academic/warm）|
+| **Importance** | 事件重要性（NORMAL/IMPORTANT/CRITICAL）|
+| **WSMessage** | WebSocket 消息统一外壳，versioned |
+| **HEALTH** | 周期性系统健康日志（per Agent Logging Standard §4.2）|
+| **USER_ACTION** | 审计日志（per Agent Logging Standard §15）|
+
+## 附录 B：参考文档
+
+- [Agent Logging Standard](https://github.com/YoukoSaint/Logging_Standard_for_Agent) — 已实施
+- [FastAPI 文档](https://fastapi.tiangolo.com/) — 主框架
+- [SQLAlchemy 2.x 异步](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) — ORM
+- [Anthropic Claude API](https://docs.anthropic.com/) — LLM
+- [edge-tts](https://github.com/rany2/edge-tts) — TTS
+- [pytest-asyncio](https://pytest-asyncio.readthedocs.io/) — 异步测试
+- [Alembic](https://alembic.sqlalchemy.org/) — DB 迁移
+
+## 附录 C：相关代码现状
+
+| 模块 | 状态 | 覆盖 |
+|---|---|---|
+| `app/utils.py` | ✅ 就位 | 89% |
+| `app/game_logic.py` | ✅ 基础就位 | 48% |
+| `app/logging_config.py` | ✅ 就位 | 96% |
+| `app/database.py` | ✅ 就位 | 75% |
+| `app/main.py` | ✅ 就位 | 62% |
+| `app/routes/*` | ✅ 基础就位 | 12-34% |
+| `app/progression/` | 🔜 W1 开始 | - |
+| `app/ai/` | 🔜 W1 开始（升级现有）| - |
+| `app/commentary/` | 🔜 W1 开始 | - |
+| `app/events/` | 🔜 今天 | - |
+| `app/llm/` | 🔜 今天 | - |
+| `app/protocol/` | 🔜 W2 | - |
+| `app/observability/` | 🔜 W4 | - |
+
+---
+
+**文档版本**：v1.0
+**最后更新**：2026-06-25
+**下次评审**：W2 结束时（2026-07-09）
