@@ -307,8 +307,15 @@ html, body {
 
 .lobby-actions {
   display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-top: 12px;
+}
+.lobby-ai-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 /* ============================================================
@@ -331,16 +338,14 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 8px 16px;
   background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
+  position: relative;  /* anchor for .game-menu absolute */
 }
-
-.game-info {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
+.game-header-left,
+.game-header-right { display: flex; gap: 6px; align-items: center; }
+.game-header-center { flex: 1; text-align: center; }
 
 .badge {
   background: var(--bg-card);
@@ -348,20 +353,60 @@ html, body {
   padding: 4px 12px;
   border-radius: 6px;
   font-size: 13px;
+  white-space: nowrap;
 }
-
 .badge b { color: var(--accent); }
 
-.game-actions {
-  display: flex;
-  gap: 8px;
+/* ── Overlay + slide-out menu ── */
+.menu-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.2);
+  z-index: 100;
+  cursor: pointer;
 }
+.game-menu {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: 320px; max-width: 85vw;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  z-index: 200; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  font-size: 13px; padding: 16px;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+}
+.game-menu[hidden] { display: flex !important; transform: translateX(-100%); pointer-events: none; }
+.game-menu:not([hidden]) { transform: translateX(0); }
+.menu-header {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.menu-turn { font-size: 16px; }
+.menu-turn b { color: var(--accent); }
+.menu-seed { color: var(--text-dim); font-size: 11px; }
+.menu-card { background: var(--bg-soft); padding: 10px; border-radius: 8px; }
+.menu-card h3 { font-size: 13px; margin: 0 0 6px; }
+.menu-footer { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+
+/* ── AI chat floats on main screen ── */
+#chat-float {
+  position: fixed; bottom: 12px; left: 12px;
+  max-width: 320px; max-height: 140px;
+  background: rgba(25,25,32,0.85); backdrop-filter: blur(4px);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; z-index: 50;
+  overflow-y: auto; pointer-events: auto;
+}
+#chat-float .chat-msg:last-child { border-bottom: none; }
 
 .game-main {
-  display: grid;
-  grid-template-columns: auto 320px;
-  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
   height: 100%;
+  padding-top: 8px;
+}
 }
 
 /* ============================================================
@@ -369,20 +414,19 @@ html, body {
    ============================================================ */
 
 .board {
-  --cell: 44px;
-  display: grid;
-  grid-template-columns: repeat(15, var(--cell));
-  grid-template-rows: repeat(15, var(--cell));
+  display: grid !important;
+  grid-template-columns: repeat(15, 44px) !important;
+  grid-template-rows: repeat(15, 44px) !important;
   gap: 0;
   padding: 16px;
   background: var(--bg);
-  overflow: auto;
   user-select: none;
+  width: max-content;
 }
 
 .cell {
-  width: var(--cell);
-  height: var(--cell);
+  width: 44px;
+  height: 44px;
   background: var(--t-plain);
   border: 1px solid var(--t-grid);
   position: relative;
@@ -556,9 +600,32 @@ html, body {
   border-bottom: 1px dotted var(--border);
   color: var(--text-dim);
 }
-.action-log .entry.system { color: var(--accent); }
-.action-log .entry.attack { color: var(--danger); }
-.action-log .entry.move   { color: var(--good); }
+.action-log .entry.system        { color: var(--accent); }
+.action-log .entry.attack        { color: var(--danger); }
+.action-log .entry.move          { color: var(--good); }
+.action-log .entry.ai_commentary {
+  border-bottom: none;
+  padding: 4px 6px;
+  margin: 2px 0;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  font-family: inherit;
+}
+/* ── AI Chat panel ── */
+#chat-panel { max-height: 200px; overflow-y: auto; }
+.chat-box { font-size: 13px; }
+.chat-msg {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 0; border-bottom: 1px dotted rgba(255,255,255,0.05);
+}
+.chat-avatar {
+  width: 20px; height: 20px; min-width: 20px;
+  border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1;
+}
+.chat-name { font-weight: 600; color: var(--accent); min-width: fit-content; }
+.chat-text { color: var(--text-dim); }
 
 /* ============================================================
    Toast & modal
@@ -944,4 +1011,39 @@ html, body {
   border-radius: 8px;
   margin-left: 4px;
   font-weight: 700;
+}
+/* ============================================================
+   Mobile portrait
+   ============================================================ */
+@media (max-width: 768px) {
+  .game-header { padding: 6px 10px; }
+  .game-header-left,
+  .game-header-right { gap: 4px; }
+  .game-header .btn-sm { padding: 4px 8px; font-size: 14px; }
+  .btn-danger { padding: 6px 14px; font-size: 13px; }
+
+  .board {
+    grid-template-columns: repeat(15, 28px);
+    grid-template-rows: repeat(15, 28px);
+    padding: 8px;
+    max-height: 60vh;
+  }
+  .cell { width: 28px; height: 28px; font-size: 10px; }
+
+  .action-bubble { max-width: 90vw; }
+  .ref-panel { max-width: 100vw; }
+
+  .game-menu { width: 280px; }
+  #chat-float { max-width: 260px; max-height: 100px; font-size: 12px; }
+}
+@media (max-width: 480px) {
+  .board {
+    grid-template-columns: repeat(15, 22px);
+    grid-template-rows: repeat(15, 22px);
+    padding: 4px;
+    max-height: 55vh;
+  }
+  .cell { width: 22px; height: 22px; }
+  .game-menu { width: 85vw; }
+  #chat-float { max-width: 200px; max-height: 80px; }
 }

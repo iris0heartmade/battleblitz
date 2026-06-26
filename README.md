@@ -15,7 +15,7 @@ python -m venv venv
 # Activate venv:
 # Windows Git Bash:   source venv/Scripts/activate
 # Windows PowerShell: venv\Scripts\Activate.ps1
-# macOS/Linux:        source venv/bin/activate
+ macOS/Linux:        source venv/bin/activate
 
 pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
