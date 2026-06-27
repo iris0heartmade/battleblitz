@@ -37,7 +37,7 @@ class UnitClassProfile:
     base_mov: int
     mp_pool: int
     default_skills: Tuple[str, ...]
-    attack_range: int          # 1 = melee, 2+ = ranged (max chebyshev distance)
+    attack_range: int          # 1 = melee, 2+ = ranged (max Manhattan distance)
     can_move_after_action: bool
     min_attack_range: int = 0 # 0 = can melee at d=1; 1 = must keep distance (ranged-only)
     strong_against: FrozenSet[str] = frozenset()  # e.g. {"knight"}
@@ -69,7 +69,7 @@ class BaseUnitClass(ABC):
 
     # ── Skills ─────────────────────────────────────────────────
     default_skills: ClassVar[List[str]]  # [] / ["snipe"] / ["heal", "rally"]
-    attack_range: ClassVar[int] = 1      # 1 = melee, 2+ = ranged (max chebyshev)
+    attack_range: ClassVar[int] = 1      # 1 = melee, 2+ = ranged (max Manhattan)
     min_attack_range: ClassVar[int] = 0 # 0 = can attack d=1; 1 = ranged-only (no melee)
 
     # ── Mobility ───────────────────────────────────────────────

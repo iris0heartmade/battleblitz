@@ -36,7 +36,7 @@ UNIT_HEALER = "healer"
 UNIT_KNIGHT = "knight"
 
 from app.models import ActionLog, Game, Player, Tile, Unit
-from app.utils import bfs_reachable, chebyshev, has_line_of_sight, pathfind
+from app.utils import bfs_reachable, has_line_of_sight, manhattan, pathfind
 
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class DamageResult:
 
 
 def unit_attack_range(unit: Unit) -> int:
-    """Maximum attack range (chebyshev distance)."""
+    """Maximum attack range (Manhattan distance)."""
     from app.classes.units.skills import get_passive_for
     base = _get_unit(unit.unit_type).attack_range
     for sk in get_passive_for(unit):
@@ -188,7 +188,7 @@ def unit_attack_range(unit: Unit) -> int:
 
 
 def unit_min_attack_range(unit: Unit) -> int:
-    """Minimum attack range (chebyshev distance).
+    """Minimum attack range (Manhattan distance).
 
     0 = can attack adjacent (d=1) → melee
     1 = must keep distance (no melee, like Fire-Emblem archers)
@@ -197,8 +197,11 @@ def unit_min_attack_range(unit: Unit) -> int:
 
 
 def can_attack_from_position(unit: Unit, fromX: int, fromY: int, toX: int, toY: int) -> bool:
-    """True if `unit` could attack (toX, toY) when standing on (fromX, fromY)."""
-    d = max(abs(toX - fromX), abs(toY - fromY))
+    """True if `unit` could attack (toX, toY) when standing on (fromX, fromY).
+
+    Distance is measured in Manhattan metric (|dx|+|dy|).
+    """
+    d = manhattan((fromX, fromY), (toX, toY))
     if d == 0:
         return False
     return unit_min_attack_range(unit) < d <= unit_attack_range(unit)
@@ -827,7 +830,7 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
     }
     candidates = []
     for e in snap.enemy_units:
-        d = chebyshev((unit.x, unit.y), (e.x, e.y))
+        d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
         if d > 1:
@@ -876,12 +879,12 @@ def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, i
             s += 200
         # Reward getting close to the nearest enemy (but not on top)
         if snap.enemy_units:
-            nearest = min(chebyshev(tile, (e.x, e.y)) for e in snap.enemy_units)
+            nearest = min(manhattan(tile, (e.x, e.y)) for e in snap.enemy_units)
             s += max(0, AI_AGGRO_RANGE - nearest) * 6
             # Slight penalty if surrounded by many enemies at this tile
             in_range = sum(
                 1 for e in snap.enemy_units
-                if chebyshev(tile, (e.x, e.y)) <= unit_attack_range(e)
+                if manhattan(tile, (e.x, e.y)) <= unit_attack_range(e)
             )
             s -= in_range * 8
         # Reward defensive terrain
@@ -894,7 +897,7 @@ def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, i
             s += 30
         # Small bonus for keeping close to allies (concentration)
         if snap.ally_units:
-            min_ally = min(chebyshev(tile, (a.x, a.y)) for a in snap.ally_units if a.id != unit.id) \
+            min_ally = min(manhattan(tile, (a.x, a.y)) for a in snap.ally_units if a.id != unit.id) \
                 if any(a.id != unit.id for a in snap.ally_units) else 5
             s += max(0, 3 - min_ally) * 1
         return s
@@ -983,7 +986,7 @@ async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AI
                 a for a in snap.ally_units
                 if a.id != unit.id
                 and 0 < a.hp < a.max_hp
-                and chebyshev((unit.x, unit.y), (a.x, a.y)) == 1
+                and manhattan((unit.x, unit.y), (a.x, a.y)) == 1
             ]
             if not candidates:
                 continue

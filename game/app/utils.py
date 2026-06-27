@@ -37,8 +37,14 @@ def manhattan(a: Coord, b: Coord) -> int:
 
 
 def neighbors(x: int, y: int) -> List[Coord]:
-    """8-neighbour king moves (allows diagonals)."""
-    return [(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)]
+    """4-neighbour orthogonal moves (Manhattan adjacency — no diagonals).
+
+    Units move one tile at a time using only the four cardinal directions
+    (up / down / left / right). Diagonals are intentionally disallowed so
+    that movement and attack ranges are measured in Manhattan distance
+    (Fire-Emblem / Advance-Wars style).
+    """
+    return [(x + dx, y + dy) for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))]
 
 
 def has_line_of_sight(
