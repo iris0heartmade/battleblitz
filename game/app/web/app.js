@@ -539,12 +539,64 @@ function updateActionCounter() {
   }
 }
 
+// Auto-fit board to viewport so a 15x15 grid never overflows on small
+// screens. Sets the --cell-size CSS var on #board; both .board's grid
+// template and .cell width/height read from the same var. Bound to
+// resize / orientationchange, plus called once at startup and at the
+// start of every renderBoard (cheap: ~5 arithmetic ops + 1 setProperty).
+const BOARD_SIZE = 15;            // MAP_SIZE — keep in sync with backend
+const CELL_MIN = 14;              // hard floor so tiles stay readable
+const CELL_MAX = 48;              // hard ceiling (desktop default 44)
+
+function fitBoard() {
+  const board = document.getElementById("board");
+  if (!board) return;
+  // Avoid running before layout exists
+  const viewportW = window.innerWidth  || document.documentElement.clientWidth;
+  const viewportH = window.innerHeight || document.documentElement.clientHeight;
+  if (!viewportW || !viewportH) return;
+
+  // Reserve room for top toolbar + bottom browser chrome + breathing room.
+  // Measured from style.css: .game-header ≈ 56px, chat-float/banner etc.
+  // add up to ~80px on mobile; use 160px safety budget.
+  const RESERVED_H = 160;
+  // .board's own padding (16px) + 1px borders (left+top) add 34px to width.
+  // Without this, 15*cellSize exactly fits but the board still overflows by 34px.
+  const BOARD_BOX_W = 34;
+  const BOARD_BOX_H = 34;
+
+  const maxByW = (viewportW - BOARD_BOX_W) / BOARD_SIZE;
+  const maxByH = (viewportH - RESERVED_H - BOARD_BOX_H) / BOARD_SIZE;
+  const cellSize = Math.max(
+    CELL_MIN,
+    Math.min(CELL_MAX, Math.floor(Math.min(maxByW, maxByH)))
+  );
+
+  // DEBUG: helps the user verify the calc from DevTools. Remove once confirmed.
+  console.log("[fitBoard]", { viewportW, viewportH, maxByW, maxByH, cellSize });
+
+  board.style.setProperty("--cell-size", cellSize + "px");
+}
+
+window.addEventListener("resize",            fitBoard);
+window.addEventListener("orientationchange", fitBoard);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", fitBoard);
+} else {
+  fitBoard();
+}
+
 function renderBoard(st) {
   const board = document.getElementById("board");
-  // Force grid layout via inline style (overrides any CSS issues)
+  // Force grid layout via inline style (overrides any CSS issues).
+  // Cell size comes from --cell-size CSS var so the board can auto-fit
+  // small viewports (mobile portrait). fitBoard() recomputes the var.
   board.style.display = "grid";
-  board.style.gridTemplateColumns = "repeat(15, 44px)";
-  board.style.gridTemplateRows = "repeat(15, 44px)";
+  board.style.gridTemplateColumns = "repeat(15, var(--cell-size))";
+  board.style.gridTemplateRows = "repeat(15, var(--cell-size))";
+  // Make sure CSS var is set on this specific instance (some browsers
+  // can be finicky with var() inside inline grid-template strings).
+  fitBoard();
   // Build cells map for quick lookup
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
