@@ -17,6 +17,7 @@
         <button class="btn btn-primary btn-lg" data-action="goto-new-game">新建游戏</button>
         <button class="btn btn-primary btn-lg" data-action="goto-join-game">加入游戏</button>
         <button class="btn btn-secondary btn-lg" data-action="goto-mainline-list">📖 主线模式</button>
+        <button class="btn btn-secondary btn-lg" data-action="goto-saves">📁 存档管理</button>
         <button class="btn btn-secondary btn-lg" data-action="goto-settings">游戏设置</button>
         <button class="btn btn-ghost btn-lg" data-action="goto-help">玩法说明</button>
       </div>
@@ -166,8 +167,36 @@
     <div class="panel mainline-list-panel">
       <button class="btn btn-back" data-action="goto-menu">← 返回</button>
       <h2>📖 主线模式</h2>
-      <p class="muted">选择一条主线开始你的战役。每条主线包含若干战斗，战斗之间穿插剧情对话。</p>
+      <p class="muted">每个用户拥有 3 个独立的主线存档格（开房模式的进度互不影响）。</p>
+      <div class="save-slots-header">
+        <h3>我的存档格</h3>
+      </div>
+      <div id="mainline-slots" class="save-slots">
+        <p class="muted">加载中…</p>
+      </div>
+      <div class="save-slots-header">
+        <h3>主线章节</h3>
+      </div>
       <div id="mainline-list" class="mainline-list">
+        <p class="muted">加载中…</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== 存档管理 ====================== -->
+  <section id="view-saves" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>📁 存档管理</h2>
+      <p class="muted">数据库结构更新可能导致旧存档报错（数据库迁移会清空一切）。在这里可以删除有问题的存档。</p>
+
+      <h3>🏠 开房模式存档</h3>
+      <div id="saves-open" class="saves-list">
+        <p class="muted">加载中…</p>
+      </div>
+
+      <h3>📖 主线模式存档</h3>
+      <div id="saves-mainline" class="saves-list">
         <p class="muted">加载中…</p>
       </div>
     </div>

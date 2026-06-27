@@ -134,6 +134,67 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme === "dark" ? "dark" : "");
 }
 
+// ----- 存档管理视图 -----
+
+const SAVE_STATUS_LABEL = {
+  waiting: "等待中",
+  playing: "进行中",
+  finished: "已结束",
+};
+
+function formatGameName(g) {
+  // 主线模式的存档名形如 "mainline:chapter_01_steel_rebellion:battle_01"
+  // 开房模式是用户输入的任意名字
+  if (g.name && g.name.startsWith("mainline:")) {
+    const parts = g.name.split(":");
+    return `主线 · ${parts[1] || g.name}`;
+  }
+  return g.name || `#${g.id}`;
+}
+
+async function renderSavesView() {
+  const openEl = document.getElementById("saves-open");
+  const mlEl = document.getElementById("saves-mainline");
+  openEl.innerHTML = `<p class="muted">加载中…</p>`;
+  mlEl.innerHTML = `<p class="muted">加载中…</p>`;
+  let games = [];
+  try {
+    games = await api("GET", "/games");
+  } catch (e) {
+    openEl.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+    mlEl.innerHTML = "";
+    return;
+  }
+  const open = games.filter(g => !(g.name || "").startsWith("mainline:"));
+  const ml = games.filter(g => (g.name || "").startsWith("mainline:"));
+  renderSavesList(openEl, open, "暂无开房模式存档。");
+  renderSavesList(mlEl, ml, "暂无主线模式存档。");
+}
+
+function renderSavesList(container, games, emptyMsg) {
+  if (!games.length) {
+    container.innerHTML = `<p class="muted">${escapeHtml(emptyMsg)}</p>`;
+    return;
+  }
+  container.innerHTML = "";
+  for (const g of games) {
+    const card = document.createElement("div");
+    card.className = "save-card";
+    const statusLabel = SAVE_STATUS_LABEL[g.status] || g.status;
+    card.innerHTML = `
+      <div class="save-info">
+        <div class="save-name">${escapeHtml(formatGameName(g))} <span class="muted">#${g.id}</span></div>
+        <div class="muted small">
+          状态: ${escapeHtml(statusLabel)} · 回合 ${g.turn_number ?? "?"} · 种子 ${g.map_seed ?? "?"}
+        </div>
+        <div class="muted small">${escapeHtml(g.created_at || "")}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" data-action="save-delete" data-game-id="${g.id}" data-game-name="${escapeHtml(formatGameName(g))}">🗑️ 删除</button>
+    `;
+    container.appendChild(card);
+  }
+}
+
 async function renderJoinList() {
   const list = document.getElementById("join-list");
   list.innerHTML = `<p class="muted">加载中…</p>`;
@@ -1439,21 +1500,46 @@ function computeClientPath(unit, toX, toY, reachable) {
   return null;
 }
 
+function updatePathPreview() {
+  // Lightweight update: only mutate path-dot / path-end classes in place.
+  // Do NOT call renderBoard here — that rebuilds all cells, which destroys
+  // the DOM nodes that the browser is currently hovering, fires a fresh
+  // mouseenter, and creates an infinite render-loop.
+  const board = document.getElementById("board");
+  if (!board) return;
+  // Clear any prior path dots
+  for (const el of board.querySelectorAll(".path-dot, .path-end")) {
+    el.classList.remove("path-dot", "path-end");
+  }
+  if (!state.path || state.path.length < 3) return;
+  // path[0] is start, path[last] is end; middle tiles get path-dot, end gets path-end
+  for (let i = 1; i < state.path.length - 1; i++) {
+    const p = state.path[i];
+    const cell = board.querySelector(`.cell[data-x="${p.x}"][data-y="${p.y}"]`);
+    if (cell) cell.classList.add("path-dot");
+  }
+  const end = state.path[state.path.length - 1];
+  const endCell = board.querySelector(`.cell[data-x="${end.x}"][data-y="${end.y}"]`);
+  if (endCell) endCell.classList.add("path-dot", "path-end");
+}
+
 function onCellHover(x, y) {
   if (state.actionMode !== "move" || !state.selectedUnit) return;
   const key = `${x},${y}`;
   if (!state.reachableTiles?.has(key)) {
-    if (state.path) { state.path = null; renderBoard(state.game); }
+    if (state.path) {
+      state.path = null;
+      updatePathPreview();
+    }
     return;
   }
   const newPath = computeClientPath(state.selectedUnit, x, y, state.reachableTiles);
   if (newPath) {
-    // Reconstruct full coordinate path from the path array
     state.path = newPath;
-    renderBoard(state.game);
+    updatePathPreview();
   } else if (state.path) {
     state.path = null;
-    renderBoard(state.game);
+    updatePathPreview();
   }
 }
 
@@ -2475,6 +2561,68 @@ const MainlineView = {
     }
   },
 
+  // ---------- 主线 3 个存档格 ----------
+  // 每个用户拥有 3 个独立的主线进度槽位（slot 1/2/3）。
+  // 槽位和具体章节解绑 — 同一槽位可以反复开始不同的章节；
+  // 槽位被新存档占用时，旧存档会被覆盖（防止同一槽位累积多个 active 存档）。
+
+  MAINLINE_SLOT_COUNT: 3,
+
+  async renderSlots() {
+    const container = document.getElementById("mainline-slots");
+    if (!container) return;
+    container.innerHTML = `<p class="muted">加载中…</p>`;
+    let userName = (state.settings && state.settings.playerName) || "";
+    // 没设昵称时给个临时占位（不写入 settings）
+    const probeName = userName || "__mainline_slot_probe__";
+    let profile = null;
+    try {
+      profile = await api("GET", `/profile/${encodeURIComponent(probeName)}`);
+    } catch (_) {
+      // 没创建过 profile — 3 个槽位全空
+      profile = null;
+    }
+    // 列出所有 mainline 存档并按 chapter+battle 归到槽位
+    let saves = [];
+    try {
+      const allGames = await api("GET", "/games");
+      saves = (allGames || []).filter(g => (g.name || "").startsWith("mainline:"));
+    } catch (_) {}
+    // 当前用户的 active 主线存档
+    const myActiveSaves = profile ? saves.filter(g => g.status === "playing") : [];
+    // 简单分配策略：每个 active 存档占一个槽位（按 id 升序），其余为空。
+    // 复杂度：3 个存档格 = 最多 3 个 active 存档。
+    const sortedActives = myActiveSaves.slice(0, this.MAINLINE_SLOT_COUNT).sort((a, b) => a.id - b.id);
+    container.innerHTML = "";
+    for (let i = 0; i < this.MAINLINE_SLOT_COUNT; i++) {
+      const slot = document.createElement("div");
+      const g = sortedActives[i];
+      if (g) {
+        const slotLabel = `存档 ${i + 1}`;
+        const chapterName = (g.name || "").split(":")[1] || g.name;
+        slot.className = "save-slot occupied";
+        slot.innerHTML = `
+          <div class="slot-title">${slotLabel} · 进行中</div>
+          <div class="slot-content">
+            <div><strong>${escapeHtml(chapterName)}</strong></div>
+            <div class="muted small">回合 ${g.turn_number ?? "?"} · #${g.id}</div>
+          </div>
+          <div class="slot-actions">
+            <button class="btn btn-primary btn-sm" data-action="mainline-slot-resume" data-game-id="${g.id}" data-slot-idx="${i}">▶ 从记录开始</button>
+            <button class="btn btn-danger btn-sm" data-action="mainline-slot-delete" data-game-id="${g.id}">🗑️</button>
+          </div>
+        `;
+      } else {
+        slot.className = "save-slot empty";
+        slot.innerHTML = `
+          <div class="slot-title">存档 ${i + 1} · 空</div>
+          <div class="slot-content">空存档 — 在下方选章节开始</div>
+        `;
+      }
+      container.appendChild(slot);
+    }
+  },
+
   // ---------- 入口：点击"开始"后走这个流程 ----------
 
   async startAndEnter(id, triggerBtn) {
@@ -2820,6 +2968,24 @@ document.addEventListener("DOMContentLoaded", () => {
         renderSettings();
         showView("settings");
         break;
+      case "goto-saves":
+        showView("saves");
+        await renderSavesView();
+        break;
+      case "save-delete": {
+        const gid = parseInt(target.dataset.gameId);
+        const gname = target.dataset.gameName || `#${gid}`;
+        if (!gid) { toast("无效存档 id"); break; }
+        if (!confirm(`确定要删除存档「${gname}」吗？此操作不可恢复。`)) break;
+        try {
+          await api("DELETE", `/games/${gid}`);
+          toast(`已删除存档 ${gname}`);
+          await renderSavesView();
+        } catch (e) {
+          toast(`删除失败：${e.message}`, 3000);
+        }
+        break;
+      }
       case "goto-new-game":
         document.getElementById("new-name").value = state.settings.playerName ? `${state.settings.playerName}的房间` : "";
         document.getElementById("new-error").hidden = true;
@@ -2885,8 +3051,52 @@ document.addEventListener("DOMContentLoaded", () => {
       // ---------- 主线模式 ----------
       case "goto-mainline-list":
         showView("mainline-list");
-        await MainlineView.renderList();
+        await Promise.all([
+          MainlineView.renderList(),
+          MainlineView.renderSlots(),
+        ]);
         break;
+      case "mainline-slot-resume": {
+        const gid = parseInt(target.dataset.gameId);
+        if (!gid) break;
+        const userName = (state.settings && state.settings.playerName) || "";
+        if (!userName) {
+          toast("请先在【游戏设置】里设置你的玩家昵称", 3000);
+          break;
+        }
+        try {
+          const r = await api("POST", `/games/${gid}/rejoin_by_name`, { user_name: userName });
+          state.me = {
+            player_id: r.player.id,
+            user_name: r.player.user_name,
+            color: r.player.color,
+            game_id: r.game_id,
+            seat: r.player.seat,
+          };
+          saveSession(state.me);
+          // 标记为当前主线模式
+          state.mainline = state.mainline || {};
+          showView("game");
+          await refreshGame();
+          toast("已从存档继续");
+        } catch (e) {
+          toast(`继续存档失败：${e.message}`, 3000);
+        }
+        break;
+      }
+      case "mainline-slot-delete": {
+        const gid = parseInt(target.dataset.gameId);
+        if (!gid) break;
+        if (!confirm(`确定要删除主线存档 #${gid} 吗？此操作不可恢复。`)) break;
+        try {
+          await api("DELETE", `/games/${gid}`);
+          toast(`已删除存档 #${gid}`);
+          await MainlineView.renderSlots();
+        } catch (e) {
+          toast(`删除失败：${e.message}`, 3000);
+        }
+        break;
+      }
       case "mainline-card-click": {
         const mid = target.dataset.mainlineId;
         if (!mid) {

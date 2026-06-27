@@ -13,6 +13,7 @@ import random
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -303,6 +304,50 @@ async def rejoin_game(
     )
 
 
+class RejoinByNameRequest(BaseModel):
+    user_name: str
+
+
+@router.post("/{game_id}/rejoin_by_name", response_model=RejoinGameResponse)
+async def rejoin_by_name(
+    game_id: int,
+    body: RejoinByNameRequest,
+    session: AsyncSession = Depends(get_session),
+) -> RejoinGameResponse:
+    """Resume a game by user_name (used by the "从记录开始" save-slot button).
+
+    The client knows the game's id (from the save slot) and the player's
+    user_name (from settings) but not the player_id. This endpoint looks up
+    the matching Player row by (game_id, user_name).
+    """
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+    player = (
+        await session.execute(
+            select(Player).where(
+                Player.game_id == game_id, Player.user_name == body.user_name
+            )
+        )
+    ).scalars().first()
+    if player is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "该存档中没有此用户名的玩家")
+    return RejoinGameResponse(
+        game_id=game.id,
+        game_status=game.status,
+        player=PlayerOut(
+            id=player.id,
+            user_name=player.user_name,
+            color=player.color,
+            is_alive=player.is_alive,
+            has_ended_turn=player.has_ended_turn,
+            seat=player.seat,
+            is_ai=player.is_ai,
+            units=[],
+        ),
+    )
+
+
 @router.post("/{game_id}/start", response_model=GameStateOut)
 async def start_game(
     game_id: int,
@@ -505,6 +550,23 @@ async def remove_player(
         if p.seat != new_seat:
             p.seat = new_seat
     return await _build_state(session, game)
+
+
+@router.delete("/{game_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_game(
+    game_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a saved game (and all related rows via cascade).
+
+    Used by the in-game "存档管理" screen so users can wipe a stale slot
+    when a schema change breaks an old save.
+    """
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+    await session.delete(game)
+    await session.flush()
 
 
 # ============================================================
