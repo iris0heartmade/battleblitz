@@ -573,6 +573,25 @@ async def delete_game(
 # Helpers
 # ============================================================
 
+def _with_combat_stats(unit: Unit) -> dict:
+    """Augment a Unit row with the class-level attack-range stats the
+    client needs to render range overlays (otherwise the UI has to
+    hard-code the values per unit type and they drift out of sync).
+
+    Skills (e.g. archer's `snipe`) may further modify these values on
+    the server; here we just expose the class defaults. The frontend
+    should also treat `attack_range` as the *base* and apply its own
+    knowledge of skills when relevant.
+    """
+    from app.classes.units import get as _get_unit
+    profile = _get_unit(unit.unit_type)
+    return {
+        **unit.__dict__,
+        "attack_range": profile.attack_range,
+        "min_attack_range": profile.min_attack_range,
+    }
+
+
 async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
     """Assemble full game state in one query batch."""
     players = (
@@ -628,7 +647,9 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 agent_kind=p.agent_kind,
                 agent_personality=p.agent_personality,
                 units=[
-                    UnitOut.model_validate(u)
+                    UnitOut.model_validate(
+                        _with_combat_stats(u)
+                    )
                     for u in sorted(units_by_player.get(p.id, []), key=lambda x: (x.unit_type, x.id))
                 ],
             )
