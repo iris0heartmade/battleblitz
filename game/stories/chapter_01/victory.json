@@ -1,0 +1,28 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "夜。王都的信使骑马穿过新占领的山口，带来了嘉奖令与新的封号。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "红。山口夺回来了，我们的名字也会被写进王城史册——但这只是开始。卡尔德的残部还在北境。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "那就休整一晚，明天再开拔。这一章的故事……就留给王都的酒馆里去讲吧。"
+    },
+    {
+      "type": "choice",
+      "question": "通关之后你想做什么？",
+      "choices": [
+        { "text": "回大厅领奖", "value": "lobby" },
+        { "text": "观看本场战斗回放", "value": "replay" }
+      ]
+    }
+  ]
+}

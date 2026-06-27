@@ -1,11 +1,16 @@
 """
 Game-lifecycle routes: create, join, fetch state, start.
+
+`start_game` is a thin wrapper around the module-level
+`_start_battle_internal()` helper so that other modules (notably the
+mainline routes) can spawn battles without going through the public
+`POST /games/{id}/start` endpoint and its player-count guard.
 """
 from __future__ import annotations
 
 import logging
 import random
-from typing import List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -59,6 +64,122 @@ def _next_color(used_colors: List[str]) -> str:
 async def _ensure_started_or_400(game: Game) -> None:
     if game.status not in ("waiting", "playing"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已结束")
+
+
+# ============================================================
+# Module-level helper used by /games/{id}/start AND by mainline routes
+# ============================================================
+
+async def _start_battle_internal(
+    session: AsyncSession,
+    game: Game,
+    players: List[Player],
+    *,
+    map_preset: Optional[str] = None,
+    map_seed: Optional[int] = None,
+    roster: Optional[Dict[str, int]] = None,
+    rosters_by_seat: Optional[Dict[int, Dict[str, int]]] = None,
+) -> None:
+    """Generate tiles, spawn units, mark castles + tile occupancy.
+
+    Used by both ``start_game`` (the HTTP endpoint) and the mainline
+    routes (``routes/mainline.py``). The caller is responsible for
+    committing/rolling back the session.
+
+    Args:
+        session: Active async DB session.
+        game: A persisted ``Game`` row (with ``id``).
+        players: Already-persisted ``Player`` rows belonging to ``game``.
+        map_preset: Override the game's preset (otherwise game.map_preset).
+        map_seed: Override the game's seed (otherwise game.map_seed).
+        roster: Caller-supplied unit roster; if ``None``, derives from
+            ``game.unit_composition`` via ``get_roster_for_composition``.
+            Applied to EVERY player when ``rosters_by_seat`` is None.
+        rosters_by_seat: Optional per-seat roster override map, e.g.
+            ``{0: {"swordsman": 3, "archer": 1}, 1: {"knight": 4}}``.
+            When provided, takes precedence over ``roster``.
+    """
+    game_id = game.id
+
+    preset_id = map_preset or getattr(game, "map_preset", None) or "classic"
+    seed = map_seed if map_seed is not None else game.map_seed
+
+    grid = generate_map_preset(
+        preset_id=preset_id,
+        seed=seed,
+        num_castles=max(2, min(CASTLES_PER_GAME, len(players))),
+    )
+    tiles: List[Tile] = [t for row in grid for t in row]
+    for t in tiles:
+        t.game_id = game_id
+    session.add_all(tiles)
+
+    castle_xy = castle_positions(len(players))
+    default_roster = get_roster_for_composition(
+        getattr(game, "unit_composition", None)
+    )
+    units: List[Unit] = []
+    for player in players:
+        per_player_roster: Dict[str, int]
+        if rosters_by_seat is not None and player.seat in rosters_by_seat:
+            per_player_roster = rosters_by_seat[player.seat]
+        elif roster is not None:
+            per_player_roster = roster
+        else:
+            per_player_roster = default_roster
+        # Compute castle position for this seat
+        seat_xy = castle_xy.get(player.seat)
+        if seat_xy is None:
+            continue
+        # Reuse the original helper but per-player; create_initial_units_with_roster
+        # applies the SAME roster to every player, so we call it once per
+        # player with the right roster by fabricating a tiny single-player
+        # pseudo-game (cheaper than duplicating the helper).
+        for unit_type, count in per_player_roster.items():
+            from app.game_logic import _spawn_xy_for_castle, _unit_name
+            from app.classes.units import get_or_none as _get_unit_or_none
+
+            uc = _get_unit_or_none(unit_type)
+            if uc is None:
+                continue
+            for idx in range(int(count)):
+                x, y = _spawn_xy_for_castle(seat_xy, idx)
+                units.append(Unit(
+                    player_id=player.id,
+                    unit_type=unit_type,
+                    name=_unit_name(unit_type, idx),
+                    level=1, exp=0,
+                    hp=uc.base_hp, max_hp=uc.base_hp,
+                    atk=uc.base_atk, def_=uc.base_def,
+                    mov=uc.mp_pool, mp=uc.mp_pool,
+                    morale=0, x=x, y=y,
+                    has_acted=False, has_moved=False,
+                    skills=list(uc.default_skills),
+                ))
+    if units:
+        session.add_all(units)
+    await session.flush()
+
+    seat_to_player = {p.seat: p for p in players}
+    for seat, (cx, cy) in castle_xy.items():
+        for t in tiles:
+            if t.x == cx and t.y == cy:
+                t.owner_id = seat_to_player[seat].id
+                break
+
+    for u in units:
+        for t in tiles:
+            if t.x == u.x and t.y == u.y:
+                t.occupied_unit_id = u.id
+                break
+
+    game.status = "playing"
+    game.current_player_index = 0
+    for p in players:
+        p.has_ended_turn = False
+
+
+
 
 
 @router.post("", response_model=GameSummaryOut, status_code=status.HTTP_201_CREATED)
@@ -205,46 +326,14 @@ async def start_game(
             f"need at least {MIN_PLAYERS} players (currently {len(players)})",
         )
 
-    # Generate map and persist tiles
-    grid = generate_map_preset(
-        preset_id=getattr(game, "map_preset", None) or "classic",
-        seed=game.map_seed,
-        num_castles=max(2, min(CASTLES_PER_GAME, len(players))),
-    )
-    tiles: List[Tile] = [t for row in grid for t in row]
-    for t in tiles:
-        t.game_id = game_id
-    session.add_all(tiles)
+    await _start_battle_internal(session, game, players)
 
-    # Create units
-    castle_xy = castle_positions(len(players))
-    roster = get_roster_for_composition(getattr(game, "unit_composition", None))
-    units = create_initial_units_with_roster(game, players, castle_xy, roster)
-    for u in units:
-        u.player_id = u.player_id  # already set
-    session.add_all(units)
-    await session.flush()
-
-    # Mark the castle tiles with their owner (seat index -> player id)
-    seat_to_player = {p.seat: p for p in players}
-    for seat, (cx, cy) in castle_xy.items():
-        for t in tiles:
-            if t.x == cx and t.y == cy:
-                t.owner_id = seat_to_player[seat].id
-                break
-
-    # Mark tiles occupied by units
-    for u in units:
-        for t in tiles:
-            if t.x == u.x and t.y == u.y:
-                t.occupied_unit_id = u.id
-                break
-
-    game.status = "playing"
-    game.current_player_index = 0
-    # Reset end-turn flags
-    for p in players:
-        p.has_ended_turn = False
+    # Re-query tiles/units via _build_state (avoids lazy loads on
+    # detached players after the session commits). Capture the unit
+    # count here for the log line.
+    roster_total = sum(get_roster_for_composition(
+        getattr(game, "unit_composition", None)
+    ).values())
 
     session.add(
         ActionLog(
@@ -258,13 +347,14 @@ async def start_game(
 
     logger.info(
         "Game started: id=%d players=%d units=%d map_preset=%s seed=%d",
-        game_id, len(players), len(units),
+        game_id, len(players),
+        roster_total * len(players),
         getattr(game, "map_preset", None) or "classic", game.map_seed,
     )
     audit.info(
         "USER_ACTION | user=system | game=%d | action=GAME_START | result=SUCCESS | "
-        "players=%d units=%d",
-        game_id, len(players), len(units),
+        "players=%d",
+        game_id, len(players),
     )
 
     return await _build_state(session, game)

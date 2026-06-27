@@ -57,6 +57,11 @@ const state = {
   actionsTaken: 0,
   actionsRequired: 2,
   bannerTimeout: null,
+  // ----- 主线模式状态 -----
+  mainline: null,             // { id, title, total_battles, battle_index, state }  活跃主线
+  mainlineGameId: null,       // 主线中正在进行的 game.id
+  mainlinePlayerId: null,     // 该 game 中的人类玩家 id
+  mainlineAdvancePending: false, // 防止 advance 重复触发
 };
 
 // ----- API helpers -----
@@ -66,13 +71,36 @@ async function api(method, path, body) {
     headers: { "Content-Type": "application/json" },
   };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(API + path, opts);
+  let r;
+  try {
+    r = await fetch(API + path, opts);
+  } catch (netErr) {
+    // 网络层失败（如 fetch 本身抛 TypeError）
+    const err = new Error(`network error: ${netErr.message || netErr}`);
+    err.status = 0;
+    err.body = null;
+    throw err;
+  }
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!r.ok) {
-    const msg = (data && data.detail) || r.statusText || `HTTP ${r.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    // 关键：保留 status / body / detail 让 catch 能精准判断
+    const detail = (data && typeof data === "object") ? data.detail : null;
+    const msgText = (() => {
+      if (typeof detail === "string") return detail;
+      if (detail && typeof detail === "object") {
+        // 结构化 detail：取 hint / message / error 任意一项作 message
+        return detail.hint || detail.message || detail.error || JSON.stringify(detail);
+      }
+      return r.statusText || `HTTP ${r.status}`;
+    })();
+    const err = new Error(msgText);
+    err.status = r.status;          // 关键：让 catch 能判 409
+    err.body = data;                // 关键：完整 body
+    err.detail = detail;            // 关键：直接拿 FastAPI detail
+    err.url = `${method} ${path}`;
+    throw err;
   }
   return data;
 }
@@ -446,21 +474,35 @@ function renderGame(st) {
 
   // Game over modal
   if (st.game.status === "finished") {
-    document.getElementById("game-over-modal").hidden = false;
-    const alive = st.players.filter(p => p.is_alive);
-    if (alive.length === 1) {
-      document.getElementById("game-over-title").textContent = `🏆 ${alive[0].user_name} 获胜！`;
-      document.getElementById("game-over-body").textContent = `对手全灭。`;
-    } else if (alive.length === 0) {
-      document.getElementById("game-over-title").textContent = `⚖️ 平局`;
-      document.getElementById("game-over-body").textContent = `所有玩家都被淘汰。`;
-    } else {
-      document.getElementById("game-over-title").textContent = `🏆 游戏结束`;
-      document.getElementById("game-over-body").textContent = `有玩家获胜了。`;
-    }
     clearInterval(state.refreshTimer);
+
+    // 主线模式中：把胜负判定交给 MainlineView 处理；不显示原生 modal
+    if (state.mainline && state.mainlineGameId === st.game.id && !state.mainlineAdvancePending) {
+      state.mainlineAdvancePending = true;
+      // 异步触发 advance，不阻塞 render 后续
+      MainlineView.onBattleFinished(st).catch((e) => {
+        toast("主线推进失败：" + e.message, 3000);
+        state.mainlineAdvancePending = false;
+        // 退化：还是显示原生 modal，让用户能返回大厅
+        document.getElementById("game-over-modal").hidden = false;
+      });
+    } else {
+      document.getElementById("game-over-modal").hidden = false;
+      const alive = st.players.filter(p => p.is_alive);
+      if (alive.length === 1) {
+        document.getElementById("game-over-title").textContent = `🏆 ${alive[0].user_name} 获胜！`;
+        document.getElementById("game-over-body").textContent = `对手全灭。`;
+      } else if (alive.length === 0) {
+        document.getElementById("game-over-title").textContent = `⚖️ 平局`;
+        document.getElementById("game-over-body").textContent = `所有玩家都被淘汰。`;
+      } else {
+        document.getElementById("game-over-title").textContent = `🏆 游戏结束`;
+        document.getElementById("game-over-body").textContent = `有玩家获胜了。`;
+      }
+    }
   } else {
     document.getElementById("game-over-modal").hidden = true;
+    state.mainlineAdvancePending = false;
   }
 
   renderBoard(st);
@@ -1714,6 +1756,963 @@ function skillName(s) {
 }
 
 // ============================================================
+// Dialog box (S0.1) — 剧情/对话系统
+// ============================================================
+//
+// API:
+//   dialog.show(scene) -> Promise       // 单个场景
+//   dialog.play(scenes) -> Promise      // 顺序播放多个场景
+//   dialog.say(speaker, text, opts?)    // 单行对话
+//   dialog.close()                      // 强制关闭
+//
+// Scene 类型:
+//   { type: 'dialogue', speaker, speaker_color?, text }
+//   { type: 'narration', text }
+//   { type: 'choice', question, choices: [{text, value?}] }
+//         -> resolves to choices[i].value ?? choices[i].text
+//   { type: 'wait', ms }                // 等待 N 毫秒后继续
+//
+// 全局交互：
+//   - 点击对话框 / 叙述区 / 按 Space / Enter → 推进（typewriter 中则立即完成）
+//   - 按 Esc → 强制关闭（resolve 当前 promise）
+//   - 选项按钮点击 → 选中并 resolve
+// ============================================================
+
+const Dialog = {
+  // 运行状态
+  active: false,         // 是否正在播放
+  _resolve: null,        // 当前场景的 resolver
+  _currentScene: null,   // 当前场景对象
+  _typewriterTimer: null,// 打字机 interval
+  _typewriterDone: false,// 当前文本是否打完
+  _typedText: "",        // 当前已打字的文本（用于取消）
+
+  // ---- 可调参数 ----
+  CHARS_PER_SEC: 40,          // 打字速度（默认 40 字/秒，~25ms/字）
+  MAX_OPTIONS: 4,             // 最多 4 个选项
+  NARRATION_CHARS_PER_SEC: 25,// 叙述模式稍慢（22ms/字），便于阅读
+
+  // ====================== 公共 API ======================
+
+  /**
+   * 显示并播放一个场景。返回 Promise，在场景"完成"时 resolve。
+   *   dialogue/narration  → resolve undefined
+   *   choice             → resolve 选中项的 value（或 text）
+   *   wait               → resolve undefined（等待后）
+   *   battle_ref         → resolve scene 本身（含 battle_id 字段；主线引擎拿到后启动战斗）
+   */
+  show(scene) {
+    if (!scene || typeof scene !== "object") {
+      return Promise.reject(new Error("Dialog.show: scene is required"));
+    }
+    if (this.active) {
+      // 防止递归：若已有 dialog 在播，把当前 promise 链挂到它的下一个位置
+      return this._queue(scene);
+    }
+    return this._run(scene);
+  },
+
+  /** 顺序播放多个场景。任一 reject 会立即终止链。 */
+  async play(scenes) {
+    if (!Array.isArray(scenes)) throw new Error("Dialog.play: scenes must be array");
+    for (const sc of scenes) {
+      await this.show(sc);
+    }
+  },
+
+  /** 快速显示一行对话（等价于一个 dialogue 场景）。 */
+  say(speaker, text, opts = {}) {
+    return this.show({
+      type: "dialogue",
+      speaker,
+      speaker_color: opts.color,
+      text,
+    });
+  },
+
+  /** 强制关闭（resolve 当前 pending 场景，丢弃后续队列）。 */
+  close() {
+    if (!this.active) return;
+    const r = this._resolve;
+    this._cleanup();
+    if (r) r(undefined);
+  },
+
+  /**
+   * 内置演示脚本：完整跑一遍 dialogue / narration / choice / wait 四种场景。
+   * 用于在没有 S0.2 剧情系统时手动验证对话框功能。
+   */
+  async demo() {
+    await this.play([
+      { type: "narration", text: "很久以前，这片大陆被黑暗笼罩……" },
+      { type: "dialogue", speaker: "云", speaker_color: "#ffb84d",
+        text: "你好，旅者。我是云，这片大陆的守护者。" },
+      { type: "dialogue", speaker: "红", speaker_color: "#e85a6a",
+        text: "今天，我们将吹响反击的号角。" },
+      { type: "choice",
+        question: "你选择相信谁？",
+        choices: [
+          { text: "相信云的判断", value: "yun" },
+          { text: "跟随红的勇气", value: "hong" },
+        ],
+      },
+      { type: "narration", text: "（你做出了选择）" },
+      { type: "dialogue", speaker: "系统",
+        text: "🎉 对话框演示完成！" },
+    ]);
+    toast("对话框演示结束");
+  },
+
+  // ====================== 内部 ======================
+
+  _queue(scene) {
+    // 已激活时，新场景排队等当前场景结束后播放
+    return new Promise((resolve) => {
+      this._pendingQueue = this._pendingQueue || [];
+      this._pendingQueue.push({ scene, resolve });
+    });
+  },
+
+  _drainQueue() {
+    const next = (this._pendingQueue || []).shift();
+    if (!next) return;
+    // 在 microtask 中启动下一个，避免 resolve 后同步递归
+    Promise.resolve().then(() => {
+      this._run(next.scene).then(next.resolve);
+    });
+  },
+
+  _run(scene) {
+    return new Promise((resolve) => {
+      this.active = true;
+      this._currentScene = scene;
+      this._resolve = resolve;
+      this._typewriterDone = false;
+
+      const t = scene.type;
+      if (t === "dialogue") this._renderDialogue(scene);
+      else if (t === "narration") this._renderNarration(scene);
+      else if (t === "choice") this._renderChoice(scene);
+      else if (t === "wait") this._renderWait(scene);
+      else if (t === "battle_ref") {
+        // 主线剧情里的"进入战斗"标记：不渲染 UI，立即 resolve 场景本身，
+        // 让调用方 (MainlineView) 通过 await Dialog.show(scene) 拿到 battle_id。
+        // 等后端真实接入后，这里可以替换成调用 window.mainlineEngine.startBattle(scene.battle_id)。
+        this._cleanup();
+        resolve(scene);
+      }
+      else {
+        // 未知类型：直接通过
+        this._cleanup();
+        resolve(undefined);
+      }
+    });
+  },
+
+  // ---------- DOM 渲染 ----------
+
+  _el() {
+    return {
+      box: document.getElementById("dialog-box"),
+      narration: document.getElementById("dialog-narration"),
+    };
+  },
+
+  _renderDialogue(scene) {
+    const { box, narration } = this._el();
+    narration.hidden = true;
+
+    const speakerEl = box.querySelector(".dialog-speaker");
+    const textEl = box.querySelector(".dialog-text");
+    const choicesEl = box.querySelector(".dialog-choices");
+
+    speakerEl.textContent = scene.speaker || "";
+    speakerEl.classList.toggle("is-narration", !scene.speaker);
+    if (scene.speaker_color) {
+      speakerEl.style.color = scene.speaker_color;
+    } else {
+      speakerEl.style.color = "";
+    }
+
+    choicesEl.innerHTML = "";
+    box.classList.remove("is-text-done");
+    box.classList.add("is-typing");
+    box.hidden = false;
+    this._startTypewriter(textEl, scene.text || "", false);
+  },
+
+  _renderNarration(scene) {
+    const { box, narration } = this._el();
+    box.hidden = true;
+
+    const textEl = narration.querySelector(".dialog-narration-text");
+    narration.classList.remove("is-text-done");
+    narration.hidden = false;
+    this._startTypewriter(textEl, scene.text || "", true);
+  },
+
+  _renderChoice(scene) {
+    const { box, narration } = this._el();
+    narration.hidden = true;
+
+    const speakerEl = box.querySelector(".dialog-speaker");
+    const textEl = box.querySelector(".dialog-text");
+    const choicesEl = box.querySelector(".dialog-choices");
+
+    speakerEl.textContent = "";
+    speakerEl.classList.add("is-narration");
+    speakerEl.style.color = "";
+    textEl.textContent = scene.question || "请选择：";
+    choicesEl.innerHTML = "";
+
+    const choices = (scene.choices || []).slice(0, this.MAX_OPTIONS);
+    choices.forEach((c, i) => {
+      const btn = document.createElement("button");
+      btn.className = "dialog-choice";
+      btn.type = "button";
+      btn.textContent = `${i + 1}. ${c.text}`;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._finishChoice(c);
+      });
+      choicesEl.appendChild(btn);
+    });
+
+    // 选项模式：关闭打字机，立刻显示题目
+    this._stopTypewriter();
+    box.classList.add("is-text-done");
+    box.classList.remove("is-typing");
+    box.hidden = false;
+  },
+
+  _renderWait(scene) {
+    // 等待场景不显示任何 UI，仅延时后 resolve
+    const ms = Math.max(0, Number(scene.ms) || 0);
+    setTimeout(() => {
+      if (this._resolve && this._currentScene === scene) {
+        const r = this._resolve;
+        this._cleanup();
+        r(undefined);
+      }
+    }, ms);
+  },
+
+  _finishChoice(c) {
+    const value = (c && c.value !== undefined) ? c.value : (c ? c.text : undefined);
+    const r = this._resolve;
+    this._cleanup();
+    if (r) r(value);
+  },
+
+  // ---------- 打字机 ----------
+
+  _startTypewriter(targetEl, text, isNarration) {
+    this._stopTypewriter();
+    this._typedText = text;
+
+    const cps = isNarration ? this.NARRATION_CHARS_PER_SEC : this.CHARS_PER_SEC;
+    const intervalMs = Math.max(8, Math.round(1000 / cps));
+
+    targetEl.innerHTML = "";
+    const caret = document.createElement("span");
+    caret.className = "dialog-caret";
+    targetEl.appendChild(caret);
+
+    let i = 0;
+    const tick = () => {
+      if (!this.active) return;
+      if (i >= text.length) {
+        this._finishTypewriter();
+        return;
+      }
+      const ch = text[i++];
+      caret.insertAdjacentText("beforebegin", ch);
+    };
+    this._typewriterTimer = setInterval(tick, intervalMs);
+  },
+
+  _stopTypewriter() {
+    if (this._typewriterTimer) {
+      clearInterval(this._typewriterTimer);
+      this._typewriterTimer = null;
+    }
+  },
+
+  /** 立即完成当前打字机（点击/Enter 触发）。 */
+  _finishTypewriter() {
+    this._stopTypewriter();
+    const { box, narration } = this._el();
+    // 把当前场景的整段文本写回去（覆盖未打完的部分）
+    const textEl = box.querySelector(".dialog-text");
+    const narEl = narration.querySelector(".dialog-narration-text");
+    const target = narration.hidden === false ? narEl : textEl;
+    if (target && this._currentScene) {
+      target.textContent = this._currentScene.text || "";
+    }
+    box.classList.add("is-text-done");
+    box.classList.remove("is-typing");
+    narration.classList.add("is-text-done");
+    this._typewriterDone = true;
+  },
+
+  /** 推进到下一个状态（点击/Enter 在打字完成时触发）。 */
+  _advance() {
+    if (!this.active) return;
+    const scene = this._currentScene;
+    if (!scene) return;
+    if (scene.type === "dialogue" || scene.type === "narration") {
+      const r = this._resolve;
+      this._cleanup();
+      if (r) r(undefined);
+    }
+    // choice/wait 不响应点击推进
+  },
+
+  // ---------- 清理 ----------
+
+  _cleanup() {
+    this._stopTypewriter();
+    const { box, narration } = this._el();
+    box.hidden = true;
+    narration.hidden = true;
+    box.classList.remove("is-text-done", "is-typing");
+    narration.classList.remove("is-text-done");
+    box.querySelector(".dialog-choices").innerHTML = "";
+    box.querySelector(".dialog-text").innerHTML = "";
+    narration.querySelector(".dialog-narration-text").innerHTML = "";
+    box.querySelector(".dialog-speaker").textContent = "";
+    this.active = false;
+    this._currentScene = null;
+    this._resolve = null;
+    this._typewriterDone = false;
+    this._drainQueue();
+  },
+
+  // ---------- 全局事件绑定 ----------
+
+  _bindGlobalEvents() {
+    if (this._bound) return;
+    this._bound = true;
+
+    // 点击对话框或叙述区
+    const { box, narration } = this._el();
+    box.addEventListener("click", (e) => {
+      // 选项点击已在 _renderChoice 中 stopPropagation
+      if (!this.active) return;
+      if (e.target.closest(".dialog-choice")) return;
+      if (this._typewriterDone) this._advance();
+      else this._finishTypewriter();
+    });
+    narration.addEventListener("click", () => {
+      if (!this.active) return;
+      if (this._typewriterDone) this._advance();
+      else this._finishTypewriter();
+    });
+
+    // 全局键盘：Space / Enter 推进；Esc 关闭
+    document.addEventListener("keydown", (e) => {
+      if (!this.active) return;
+      // 如果焦点在 input/textarea/select，按键交给它们
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.close();
+      } else if (e.key === " " || e.key === "Enter") {
+        // choice 模式允许 Enter 选中第 1 个选项（但本期暂不实现数字键）
+        if (this._currentScene && this._currentScene.type === "choice") return;
+        e.preventDefault();
+        if (this._typewriterDone) this._advance();
+        else this._finishTypewriter();
+      }
+    });
+  },
+};
+
+// 暴露给浏览器控制台与游戏内调用
+window.dialog = Dialog;
+Dialog._bindGlobalEvents();
+
+// ============================================================
+// MainlineView — 主线模式前端模块
+//
+// 职责：仅做"展示 + 编排"：
+//   - 列章节卡片（GET /mainlines）
+//   - 看详情（GET /mainlines/{id}）
+//   - 开始主线（POST /mainlines/{id}/start）
+//   - 拉对话剧本 JSON（GET /mainlines/dialogue?path=...）
+//   - 战斗胜利后推进（POST /mainlines/{id}/advance）
+//   - 放弃主线（POST /mainlines/{id}/abandon）
+//
+// 设计原则：所有战斗/AI/回合逻辑一律不重写，
+// 直接把 state.me/game_id 喂给现有 enterGame() / refreshGame()。
+// ============================================================
+
+const MainlineView = {
+  // 当前在 mainline-play 视图里显示的元数据
+  _current: null,        // { id, title, total_battles, battle_index }
+
+  // session 级缓存：已确认存在的 user_name。
+  // 避免每次点"开始"都 POST /progression/profiles（已被忽略但 server log 噪音）。
+  _profileEnsuredFor: null,
+
+  // 并发锁：当前正在跑的 ensureProfile promise。
+  // 防止用户在 quick-clicking / 轮询触发时并发跑出多份 GET/POST。
+  _profileEnsuringPromise: null,
+
+  // ---------- 网络封装（薄壳，所有端点都在 docs/step3_plan.md） ----------
+
+  async fetchList() {
+    console.debug("[mainline] fetchList");
+    const r = await api("GET", "/mainlines");
+    console.info(`[mainline] fetchList OK: count=${(r || []).length}`);
+    return r;
+  },
+
+  async fetchDetail(id) {
+    console.debug(`[mainline] fetchDetail: id=${id}`);
+    const r = await api("GET", `/mainlines/${encodeURIComponent(id)}`);
+    console.info(`[mainline] fetchDetail OK: id=${id} battles=${r && r.battle_count}`);
+    return r;
+  },
+
+  async fetchDialogue(path) {
+    // 服务端 GET /mainlines/dialogue?path=<相对路径>
+    // 安全：服务端会校验 path 不能逃出 game/ 根
+    console.debug(`[mainline] fetchDialogue: path=${path}`);
+    const r = await api("GET", `/mainlines/dialogue?path=${encodeURIComponent(path)}`);
+    // r 可能是 {"scenes": [...]} 或直接的 scenes 数组
+    let scenes = [];
+    if (Array.isArray(r)) scenes = r;
+    else if (r && Array.isArray(r.scenes)) scenes = r.scenes;
+    console.info(`[mainline] fetchDialogue OK: path=${path} scenes=${scenes.length}`);
+    return scenes;
+  },
+
+  // ---------- profile 防御 ----------
+
+  /**
+   * 确保后端存在一个名为当前 user 的 PlayerProfile。
+   * 任何 /mainlines/* 端点都依赖该 row；缺失时后端会 404。
+   * 失败原因（昵称为空、POST 报错非 409）会通过 toast 告知用户，
+   * 调用方应直接 return，不继续走业务。
+   *
+   * 并发：已有 ensureProfile 在跑就直接 await 之，避免 N 个 click 触发
+   * N 个并行 GET/POST 风暴（这是玩家-828 死循环日志的根因之一）。
+   *
+   * 返回：trim 后的 userName（保证非空）；或 null（已 toast）。
+   */
+  async ensureProfile() {
+    // 0. 并发锁：已有 ensureProfile 在跑 → 直接等它，不再开新的。
+    //    finally 块会在结束后把 _profileEnsuringPromise 置 null。
+    if (this._profileEnsuringPromise) {
+      console.debug("[mainline] ensureProfile: awaiting in-flight call");
+      return this._profileEnsuringPromise;
+    }
+
+    this._profileEnsuringPromise = (async () => {
+      try {
+        // 1. 从 settings 拿 user_name（trim 后）
+        let userName = (state.settings.playerName || "").trim();
+
+        // 2. 空名 → 弹 prompt 让用户输入（不可空）
+        if (!userName) {
+          userName = (prompt("请输入你的玩家昵称（1-32 字符）：", "玩家") || "").trim();
+          if (!userName) {
+            toast("昵称不能为空", 2000);
+            return null;
+          }
+          // 写回 settings 并持久化
+          state.settings.playerName = userName;
+          try { saveSettings(state.settings); } catch (e) {
+            console.warn("[mainline] saveSettings failed:", e);
+          }
+        }
+
+        // 3. Session 缓存命中：直接返回，不再发任何请求（避免 server log 噪音）
+        if (this._profileEnsuredFor === userName) {
+          console.debug(`[mainline] profile ensured (cached): user=${userName}`);
+          if (state.me) state.me.user_name = userName;
+          return userName;
+        }
+
+        // 4. GET 探活：profile 已存在就直接走业务，不发 POST
+        try {
+          await api("GET", `/profile/${encodeURIComponent(userName)}`);
+          console.debug(`[mainline] profile exists (GET ok): user=${userName}`);
+        } catch (getErr) {
+          // 404 = 不存在 → POST 创建
+          if (getErr.status === 404) {
+            // 用户可见反馈：让用户知道正在做什么（避免狂点）
+            toast(`正在创建玩家档案「${userName}」…`, 1500);
+            try {
+              await api("POST", "/progression/profiles", { user_name: userName });
+              console.info(`[mainline] profile created: user=${userName}`);
+            } catch (postErr) {
+              // POST 也 409 说明别的 session 刚创建好 → 当作已存在处理
+              if (postErr.status === 409) {
+                console.debug(`[mainline] profile created concurrently: user=${userName}`);
+              } else {
+                console.error(`[mainline] profile create failed: user=${userName}`, postErr);
+                toast(`创建玩家档案失败：${postErr.message}`, 3000);
+                return null;
+              }
+            }
+          } else {
+            // 其他 GET 错误（500、网络断）→ 失败
+            console.error(`[mainline] profile lookup failed: user=${userName}`, getErr);
+            toast(`查询玩家档案失败：${getErr.message}`, 3000);
+            return null;
+          }
+        }
+
+        // 5. 标记 session 缓存 + 同步 state.me.user_name
+        this._profileEnsuredFor = userName;
+        if (state.me) state.me.user_name = userName;
+        return userName;
+      } finally {
+        // 释放锁：无论成功 / 失败 / throw，都让下一次 ensureProfile
+        // 能正常重试（避免锁死）。对调用方语义不变：await 返回值。
+        this._profileEnsuringPromise = null;
+      }
+    })();
+
+    return this._profileEnsuringPromise;
+  },
+
+  /**
+   * 清掉 session 缓存。给"切换昵称"场景用：下次 ensureProfile 会重新 GET 探活。
+   * abandon 不需要调这个 —— profile 还在，缓存有效。
+   */
+  resetProfileCache() {
+    this._profileEnsuredFor = null;
+    console.debug("[mainline] profile cache reset");
+  },
+
+  async start(id, userName, opts = {}) {
+    console.debug(`[mainline] start entry: id=${id} user_name=${userName} opts=${JSON.stringify(opts)}`);
+    // 后端契约：POST /mainlines/{id}/start body = {user_name, skip_intro?}
+    const callStart = () => api("POST", `/mainlines/${encodeURIComponent(id)}/start`, {
+      user_name: userName,
+      skip_intro: !!opts.skipIntro,
+    });
+    try {
+      const r = await callStart();
+      console.info(
+        `[mainline] start OK: id=${id} game_id=${r && r.game_id} ` +
+        `player_id=${r && r.player_id} state=${r && r.state}`
+      );
+      return r;
+    } catch (e) {
+      // 409 "already active" → 自动重置并重试一次（带 _retried 防无限递归）。
+      // 用户点"开始"就是想玩，撞上旧的 active mainline 时最直觉的体验就是
+      // 自动 abandon 旧进度并立刻重开 — 而不是让用户再点一次 abandon 再点 start。
+      if (e.status === 409 && !opts._retried) {
+        const detail = e && e.body && e.body.detail;
+        const isActiveMainline = detail && detail.error === "mainline_already_active";
+        if (isActiveMainline) {
+          console.warn(
+            `[mainline] start 409 active, auto-reset: id=${id} user=${userName} ` +
+            `active_mainline=${detail.active_mainline}`
+          );
+          toast("检测到进行中的主线，正在重置并重新开始…", 1500);
+          try {
+            await api("POST", `/mainlines/${encodeURIComponent(id)}/abandon`, {
+              user_name: userName,
+            });
+            console.info(`[mainline] auto-abandon OK, retrying start: id=${id} user=${userName}`);
+          } catch (abandonErr) {
+            console.error(
+              `[mainline] auto-abandon failed: id=${id} user=${userName}`,
+              abandonErr
+            );
+            toast("放弃旧进度失败：" + (abandonErr.message || ""), 3000);
+            throw abandonErr;
+          }
+          // 重试一次（_retried=true 防止再 409 时再次进入 auto-retry 流程）
+          const r2 = await this.start(id, userName, { ...opts, _retried: true });
+          return r2;
+        }
+      }
+      console.error(
+        `[mainline] start failed: id=${id} err=${e && e.message} status=${e && e.status}`,
+        e && e.body
+      );
+      throw e;
+    }
+  },
+
+  async advance(id, userName, gameId) {
+    console.debug(`[mainline] advance entry: id=${id} user_name=${userName} game_id=${gameId}`);
+    try {
+      const r = await api("POST", `/mainlines/${encodeURIComponent(id)}/advance`, {
+        user_name: userName,
+        game_id: gameId,
+      });
+      console.info(`[mainline] advance OK: id=${id} state=${r && r.state} battle_index=${r && r.battle_index}`);
+      return r;
+    } catch (e) {
+      console.error(`[mainline] advance failed: id=${id} err=${e && e.message} status=${e && e.status}`);
+      throw e;
+    }
+  },
+
+  async startNextBattle(id, userName) {
+    console.debug(`[mainline] startNextBattle entry: id=${id} user_name=${userName}`);
+    try {
+      const r = await api("POST", `/mainlines/${encodeURIComponent(id)}/next-battle`, {
+        user_name: userName,
+      });
+      console.info(`[mainline] startNextBattle OK: id=${id} game_id=${r && r.game_id} battle_index=${r && r.battle_index}`);
+      return r;
+    } catch (e) {
+      console.error(`[mainline] startNextBattle failed: id=${id} err=${e && e.message} status=${e && e.status}`);
+      throw e;
+    }
+  },
+
+  async abandon(id, userName) {
+    console.debug(`[mainline] abandon entry: id=${id} user_name=${userName}`);
+    try {
+      const r = await api("POST", `/mainlines/${encodeURIComponent(id)}/abandon`, {
+        user_name: userName,
+      });
+      console.info(`[mainline] abandon OK: id=${id}`);
+      return r;
+    } catch (e) {
+      console.error(`[mainline] abandon failed: id=${id} err=${e && e.message}`);
+      throw e;
+    }
+  },
+
+  // ---------- 章节列表视图 ----------
+
+  async renderList() {
+    const container = document.getElementById("mainline-list");
+    container.innerHTML = `<p class="muted">加载中…</p>`;
+    try {
+      const items = await this.fetchList();
+      if (!items || !items.length) {
+        container.innerHTML = `<p class="muted">暂无主线章节。</p>`;
+        return;
+      }
+      container.innerHTML = "";
+      for (const m of items) {
+        const card = document.createElement("div");
+        card.className = "mainline-card";
+        card.dataset.mainlineId = m.id;
+        card.innerHTML = `
+          <h3>${escapeHtml(m.title)}</h3>
+          <p class="muted">${escapeHtml(m.synopsis || "")}</p>
+          <div class="meta">
+            <span>战斗数: ${m.battle_count}</span>
+            <span>所需职业: ${(m.required_classes || []).join(", ") || "无"}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" data-action="mainline-card-click" data-mainline-id="${escapeHtml(m.id)}">开始 →</button>
+        `;
+        container.appendChild(card);
+      }
+    } catch (e) {
+      container.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+    }
+  },
+
+  // ---------- 入口：点击"开始"后走这个流程 ----------
+
+  async startAndEnter(id, triggerBtn) {
+    // 防线 1：先确保后端有 profile，再走 /start。
+    // 这样能避免"前端用临时 user_name → 后端 404 → 用户狂点"的死循环。
+    //
+    // 按钮 loading 状态：用户狂点是死循环的另一根稻草。
+    // 拿到按钮引用后立刻 disable + 改文字，避免重复点击。
+    // 成功：进入 play 视图，列表 DOM 销毁，按钮自然消失。
+    // 失败：try/finally 恢复按钮。
+    let restored = false;
+    const restoreBtn = () => {
+      if (restored) return;
+      restored = true;
+      if (triggerBtn && triggerBtn.isConnected) {
+        triggerBtn.disabled = false;
+        triggerBtn.textContent = "开始 →";
+      }
+    };
+    if (triggerBtn && triggerBtn.isConnected) {
+      triggerBtn.disabled = true;
+      triggerBtn.textContent = "准备中…";
+    }
+
+    const userName = await this.ensureProfile();
+    if (!userName) {
+      console.info(`[mainline] startAndEnter aborted: ensureProfile failed (mainline=${id})`);
+      restoreBtn();
+      return;
+    }
+    console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_START | mainline=${id}`);
+    try {
+      const r = await this.start(id, userName);
+      // 记录到 state（其他模块/refreshGame 据此判断主线模式）
+      state.mainline = {
+        id,
+        title: r.title || id,
+        total_battles: r.total_battles,
+        battle_index: r.battle_index,
+        state: r.state,
+      };
+      state.mainlineGameId = r.game_id;
+      state.mainlinePlayerId = r.player_id;
+      state.me.game_id = r.game_id;
+      state.me.player_id = r.player_id;
+      // userName 在 ensureProfile + _resolveUserName 已保证非空；
+      // 不要用 `玩家-${id}` 这种 fallback 把脏数据写进 state.me，
+      // 否则后续 advance / next-battle 会带着脏 user_name 反复 404。
+      state.me.user_name = userName;
+      // 持久化以便刷新恢复
+      const sess = loadSession() || {};
+      saveSession({
+        ...sess,
+        mainline_id: id,
+        mainline_game_id: r.game_id,
+        mainline_player_id: r.player_id,
+        game_id: r.game_id,
+        player_id: r.player_id,
+        user_name: state.me.user_name,
+      });
+      await this._enterPlayView(r);
+      // 成功路径不恢复按钮：list 视图已销毁，按钮 isConnected=false。
+      // 但 restoreBtn 内的 isConnected 守卫会跳过，逻辑正确。
+    } catch (e) {
+      toast("开始主线失败：" + e.message, 3000);
+      restoreBtn();
+    }
+  },
+
+  // ---------- 主线游玩视图：先放 pre 对话，再切战斗 ----------
+
+  async _enterPlayView(startResp) {
+    showView("mainline-play");
+    this._updateHeader(startResp);
+
+    // 1. 播放 pre_battle 对话（如果有 url）
+    if (startResp.pre_battle_dialogue_url) {
+      const scenes = await this._playDialogueSafely(
+        startResp.pre_battle_dialogue_url,
+        startResp.pre_battle_dialogue_key || "intro"
+      );
+      if (scenes === null) return;  // 用户中途关闭，暂停在 play 视图
+    }
+
+    // 2. 进入战斗视图（复用 view-game 全部代码）
+    await this._enterBattlePhase(startResp);
+  },
+
+  _updateHeader(r) {
+    document.getElementById("mainline-title").textContent =
+      state.mainline?.title || r.mainline_id || "主线";
+    const idx = (r.battle_index ?? 0) + 1;
+    const total = r.total_battles ?? "?";
+    document.getElementById("mainline-progress").textContent =
+      `第 ${idx} / ${total} 场 · 状态: ${r.state}`;
+  },
+
+  async _enterBattlePhase(r) {
+    // 把 game id 写进 state.me，让 enterGame() 能跑现有 refreshGame 逻辑
+    state.me.game_id = r.game_id;
+    // 进入棋盘视图（不要清 mainline 标志位，renderGame 据此跳过原生 modal）
+    await enterGame();
+  },
+
+  // 拉对话并播放。任何一步失败都会 toast 但不阻塞战斗（fallback 到战斗）。
+  async _playDialogueSafely(path, key) {
+    console.info(`[mainline] playing dialogue: path=${path} key=${key}`);
+    try {
+      const scenes = await this.fetchDialogue(path);
+      if (!scenes.length) {
+        console.info(`[mainline] dialogue empty: path=${path}`);
+        return [];
+      }
+      console.info(`[mainline] dialogue loaded: path=${path} scenes=${scenes.length}`);
+      await Dialog.play(scenes);
+      console.info(`[mainline] dialogue done: path=${path}`);
+      return scenes;
+    } catch (e) {
+      console.warn(`[mainline] dialogue play failed: path=${path}`, e);
+      toast(`剧情加载失败（${key}）：${e.message}`, 3000);
+      return null;
+    }
+  },
+
+  // ---------- 战斗胜利后的推进回调（由 renderGame finished 分支触发） ----------
+
+  async onBattleFinished(st) {
+    if (!state.mainline) return;
+    // 防御：advance / next-battle 也依赖 profile；万一 state 因刷新丢
+    // 了，重建一次。失败就让原生 modal 提示用户重试。
+    const userName = await this.ensureProfile();
+    if (!userName) {
+      toast("玩家档案丢失，无法推进主线。请返回大厅重试。", 4000);
+      return;
+    }
+
+    const isWin = this._didHumanWin(st);
+    if (!isWin) {
+      console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_BATTLE_LOST | mainline=${state.mainline.id}`);
+      // 人类玩家没赢：暂停在 mainline-play，让原生 modal 提示用户
+      toast("战斗失败。返回章节列表或放弃当前主线。", 4000);
+      document.getElementById("game-over-modal").hidden = false;
+      document.getElementById("game-over-title").textContent = "⚔️ 主线战败";
+      document.getElementById("game-over-body").textContent =
+        "回到章节列表可重试，或点放弃主线。";
+      // 改 modal 的返回按钮为"返回章节列表"
+      const backBtn = document.querySelector("#game-over-modal [data-action='goto-menu']");
+      if (backBtn) backBtn.dataset.action = "goto-mainline-list";
+      state.mainlineAdvancePending = false;
+      return;
+    }
+
+    // 推进
+    const r = await this.advance(state.mainline.id, userName, state.mainlineGameId);
+    if (r.state === "victory") {
+      console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_CLEAR | mainline=${state.mainline.id}`);
+      // 通关：播 victory 对话 + choice
+      await this._handleVictory(r);
+    } else if (r.state === "dialogue") {
+      // 战后对话 → 然后请求下一场 battle
+      this._updateHeader({ ...r, battle_index: r.battle_index });
+      if (r.post_battle_dialogue_url) {
+        await this._playDialogueSafely(
+          r.post_battle_dialogue_url,
+          r.post_battle_dialogue_key || "post"
+        );
+      }
+      // 自动请求下一场 battle
+      await this._requestNextBattle();
+    } else {
+      toast(`主线推进返回未知状态: ${r.state}`, 3000);
+      showView("mainline-list");
+    }
+    state.mainlineAdvancePending = false;
+  },
+
+  _didHumanWin(st) {
+    const me = st.players.find(p => p.id === state.mainlinePlayerId);
+    return !!(me && me.is_alive);
+  },
+
+  async _handleVictory(r) {
+    showView("mainline-play");
+    this._updateHeader({ ...r, battle_index: (r.battle_index ?? 0) });
+
+    // 播放 victory 对话
+    try {
+      const scenes = await this.fetchDialogue("stories/chapter_01/victory.json");
+      // 让用户点 choice：把每个 option.value 作为推进动作
+      await Dialog.play(scenes);
+    } catch (e) {
+      console.warn("victory 对话播放失败", e);
+    }
+
+    // 弹奖励提示
+    if (r.rewards) {
+      const rew = r.rewards;
+      const parts = [];
+      if (rew.gold) parts.push(`+${rew.gold} 金币`);
+      if (rew.unlock_class) parts.push(`解锁 ${rew.unlock_class}`);
+      if (rew.exp_per_unit) parts.push(`+${rew.exp_per_unit} 经验/单位`);
+      toast("🎉 通关！" + (parts.length ? " " + parts.join("，") : ""), 5000);
+    } else {
+      toast("🎉 通关！", 4000);
+    }
+
+    // 清空主线状态
+    this._clearMainlineState();
+    showView("mainline-list");
+  },
+
+  async _requestNextBattle() {
+    const userName = await this.ensureProfile();
+    if (!userName) return;  // ensureProfile 已 toast
+    try {
+      const r = await this.startNextBattle(state.mainline.id, userName);
+      state.mainlineGameId = r.game_id;
+      state.mainlinePlayerId = r.player_id;
+      state.mainline.battle_index = r.battle_index;
+      const sess = loadSession() || {};
+      saveSession({
+        ...sess,
+        mainline_game_id: r.game_id,
+        mainline_player_id: r.player_id,
+        game_id: r.game_id,
+        player_id: r.player_id,
+      });
+      // 没有 pre 对话就直接进战斗
+      if (r.pre_battle_dialogue_url) {
+        await this._playDialogueSafely(
+          r.pre_battle_dialogue_url,
+          r.pre_battle_dialogue_key || "intro"
+        );
+      }
+      await this._enterBattlePhase(r);
+    } catch (e) {
+      toast("加载下一场战斗失败：" + e.message, 3000);
+    }
+  },
+
+  async abandon() {
+    if (!state.mainline) return;
+    if (!confirm("确定放弃当前主线？")) return;
+    const userName = await this.ensureProfile();
+    if (!userName) return;  // ensureProfile 已 toast
+    console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_ABANDON | mainline=${state.mainline.id}`);
+    try {
+      await this.abandon(state.mainline.id, userName);
+    } catch (e) {
+      toast("放弃失败：" + e.message, 3000);
+      return;
+    }
+    this._clearMainlineState();
+    Dialog.close();
+    showView("menu");
+    toast("已放弃当前主线");
+  },
+
+  _clearMainlineState() {
+    state.mainline = null;
+    state.mainlineGameId = null;
+    state.mainlinePlayerId = null;
+    state.mainlineAdvancePending = false;
+    // 同步清掉 session 里 mainline 字段
+    const sess = loadSession();
+    if (sess && sess.mainline_id) {
+      delete sess.mainline_id;
+      delete sess.mainline_game_id;
+      delete sess.mainline_player_id;
+      saveSession(sess);
+    }
+  },
+
+  // ---------- 工具 ----------
+
+  /** 把当前 settings 解析成 user_name。
+   *  后端 mainline 端点需要 user_name（不是数字 profile_id）。
+   *  优先级：state.me.user_name > state.settings.playerName。
+   *  由于服务端没有 /profiles/me 端点，本期先尝试 settings，
+   *  后续 step 5 实装登录后再改为正式登录态。
+   */
+  async _resolveUserName() {
+    if (state.me && state.me.user_name) return state.me.user_name;
+    if (state.settings && state.settings.playerName) {
+      const n = (state.settings.playerName || "").trim();
+      if (n) return n;
+    }
+    // 退化：返回 null，调用方据此 toast 提示
+    return null;
+  },
+};
+
+// 暴露给浏览器控制台
+window.mainlineView = MainlineView;
+
+// ============================================================
 // Wiring
 // ============================================================
 
@@ -1821,6 +2820,28 @@ document.addEventListener("DOMContentLoaded", () => {
       case "create-game":
         await createGame();
         break;
+      case "dialog-demo":
+        // S0.1 对话框演示：play 一段内嵌剧情样例
+        await Dialog.demo();
+        break;
+      // ---------- 主线模式 ----------
+      case "goto-mainline-list":
+        showView("mainline-list");
+        await MainlineView.renderList();
+        break;
+      case "mainline-card-click": {
+        const mid = target.dataset.mainlineId;
+        if (!mid) {
+          toast("无效的章节 id", 2000);
+          break;
+        }
+        // 把按钮引用传过去，让 startAndEnter 加 loading 状态防狂点
+        await MainlineView.startAndEnter(mid, target);
+        break;
+      }
+      case "mainline-abandon":
+        await MainlineView.abandon();
+        break;
     }
   });
 
@@ -1839,10 +2860,13 @@ document.addEventListener("DOMContentLoaded", () => {
     aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
   }
 
-  // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu
+  // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu.
+  // NOTE: do NOT call showView('menu') on the `!resumed` branch — by the time this promise
+  // resolves, the user may have already clicked into another view (e.g. 新建游戏).
+  // Overriding their navigation back to menu is a UX bug. The initial showView('menu') above
+  // is sufficient for the default case.
   tryResumeSession().then((resumed) => {
     if (!resumed) {
-      showView("menu");
       updateResumeButton(loadSession());
     }
   });

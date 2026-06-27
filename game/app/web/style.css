@@ -1123,6 +1123,179 @@ html, body {
   font-weight: 700;
 }
 /* ============================================================
+   Dialog box (S0.1) — 剧情/对话底部弹窗
+   ============================================================ */
+
+.dialog-box {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 150;
+  background: linear-gradient(180deg, rgba(29, 38, 56, 0.96) 0%, rgba(14, 19, 32, 0.98) 100%);
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  padding: 14px 20px 18px;
+  animation: dialogSlideIn 0.32s ease-out;
+}
+.dialog-box[hidden] { display: none !important; }
+
+.dialog-box .dialog-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dialog-box .dialog-avatar {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.dialog-box .dialog-avatar-placeholder {
+  font-size: 36px;
+  opacity: 0.55;
+}
+
+.dialog-box .dialog-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialog-box .dialog-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.dialog-box .dialog-speaker {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+.dialog-box .dialog-speaker.is-narration {
+  color: var(--text-dim);
+  font-style: italic;
+  font-weight: 400;
+}
+.dialog-box .dialog-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+}
+.dialog-box.is-text-done .dialog-hint { opacity: 0.7; }
+.dialog-box.is-typing .dialog-hint { opacity: 0; }
+
+.dialog-box .dialog-text {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--text);
+  min-height: 1.6em;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.dialog-box .dialog-text .dialog-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: caretBlink 1s steps(2) infinite;
+}
+
+.dialog-box .dialog-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dialog-box .dialog-choice {
+  text-align: left;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.08s ease-out;
+}
+.dialog-box .dialog-choice:hover {
+  background: var(--bg-card);
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+.dialog-box .dialog-choice:active { transform: translateX(4px) scale(0.99); }
+
+/* 全屏叙述（narration：无边框，居中大字） */
+.dialog-narration {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  animation: dialogFadeIn 0.4s ease-out;
+}
+.dialog-narration[hidden] { display: none !important; }
+
+.dialog-narration .dialog-narration-text {
+  max-width: 720px;
+  font-size: 22px;
+  line-height: 1.8;
+  color: var(--text);
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dialog-narration .dialog-narration-text .dialog-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: caretBlink 1s steps(2) infinite;
+}
+.dialog-narration .dialog-narration-hint {
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+}
+.dialog-narration.is-text-done .dialog-narration-hint { opacity: 0.7; }
+
+/* 进出动画 */
+@keyframes dialogSlideIn {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes dialogFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes caretBlink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* ============================================================
    Mobile portrait
    ============================================================ */
 @media (max-width: 768px) {
@@ -1156,4 +1329,110 @@ html, body {
   .cell { width: 22px; height: 22px; }
   .game-menu { width: 85vw; }
   #chat-float { max-width: 200px; max-height: 80px; }
+}
+
+/* ============================================================
+   Mainline (主线模式) — 章节列表 + 游玩面板
+   ============================================================ */
+
+.mainline-list-panel {
+  max-width: 880px;
+  width: 100%;
+}
+
+.mainline-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.mainline-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.mainline-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.mainline-card h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.mainline-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.mainline-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.mainline-card .btn {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.mainline-play-panel {
+  max-width: 760px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mainline-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mainline-header h2 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.mainline-header #mainline-progress {
+  flex: 0 0 auto;
+}
+
+.mainline-content {
+  min-height: 220px;
+  padding: 24px 20px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.mainline-content .muted {
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.mainline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

@@ -54,3 +54,8 @@ dist/
 # ===== user doc =========
 /game/agent/.env
 /agent/README.md
+doc
+
+# ===== Todolist ==========
+*todo*.md
+todolist

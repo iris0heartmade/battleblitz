@@ -25,18 +25,15 @@ from app.config import (
     SKILL_RALLY,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
-    UNIT_CAN_MOVE_AFTER_ACTION,
 )
 from app.database import get_session
 from app.game_logic import (
-    HEAL_AMOUNT,
     apply_damage,
     attack_with_double_strike,
     award_exp,
     calculate_damage,
     can_attack_from_position,
     claim_castle_if_present,
-    heal_adjacent_ally,
     unit_attack_range,
     unit_min_attack_range,
 )
@@ -383,7 +380,7 @@ async def attack(
     # If the attacker's class allows move-after-action AND it still has MP,
     # keep mp as is; otherwise zero it out (unit is rooted for the turn).
     attacker.has_acted = True
-    if not UNIT_CAN_MOVE_AFTER_ACTION.get(attacker.unit_type, False):
+    if not _get_unit_class(attacker.unit_type).can_move_after_action:
         attacker.mp = 0
 
     # XP
