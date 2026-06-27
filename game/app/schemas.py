@@ -107,6 +107,10 @@ class UnitOut(APIModel):
     has_acted: bool
     has_moved: bool = False
     skills: List[str]
+    # Class-level combat stats the client needs to render attack range /
+    # threat-area overlays without hard-coding values per unit type.
+    attack_range: int = 1
+    min_attack_range: int = 0
 
 
 class PlayerOut(APIModel):

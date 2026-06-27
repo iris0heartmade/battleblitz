@@ -858,14 +858,20 @@ function computeReachable(unit) {
 function getUnitAttackProfile(unit) {
   // Returns {minRange, maxRange} where attacks hit enemies at distance d
   // (Manhattan distance: |dx| + |dy|) when minRange < d <= maxRange.
-  // - Melee (剑士, 骑士, etc.): d in (0, 1]    → adjacent only
-  // - Ranged (弓手):  d in (1, 3]              → fire 1..2 tiles away, no melee
-  // - +snipe skill on ranged extends maxRange by 1
-  if (unit.unit_type === "archer") {
-    const max = (unit.skills || []).includes("snipe") ? 4 : 3;
-    return { minRange: 1, maxRange: max };
-  }
-  return { minRange: 0, maxRange: 1 };
+  //
+  // IMPORTANT: do NOT hard-code per-unit ranges here. The server pushes the
+  // class-level `attack_range` / `min_attack_range` on every unit in the
+  // game-state payload, and skills like archer's `snipe` are applied on
+  // top of that. Hard-coded values drift out of sync and the user ends up
+  // seeing attackable tiles they can't actually hit.
+  const baseMax = (typeof unit.attack_range === "number") ? unit.attack_range : 1;
+  const baseMin = (typeof unit.min_attack_range === "number") ? unit.min_attack_range : 0;
+  // +snipe skill on ranged extends maxRange by 1 (mirrors the server's
+  // skill.modify_attack_range). If we ever add more range-modifying skills,
+  // switch to a server endpoint that returns the *effective* range.
+  let maxRange = baseMax;
+  if ((unit.skills || []).includes("snipe")) maxRange += 1;
+  return { minRange: baseMin, maxRange };
 }
 
 function manhattan(ax, ay, bx, by) {

@@ -37,6 +37,7 @@ from app.game_logic import (
     unit_attack_range,
     unit_min_attack_range,
 )
+from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AttackRequest,
@@ -380,7 +381,7 @@ async def attack(
     # If the attacker's class allows move-after-action AND it still has MP,
     # keep mp as is; otherwise zero it out (unit is rooted for the turn).
     attacker.has_acted = True
-    if not _get_unit_class(attacker.unit_type).can_move_after_action:
+    if not _get_unit(attacker.unit_type).can_move_after_action:
         attacker.mp = 0
 
     # XP
