@@ -74,24 +74,33 @@ class TestDistances:
 
 @pytest.mark.unit
 class TestNeighbors:
-    def test_center_has_8_neighbors(self):
+    def test_center_has_4_neighbors(self):
         n = neighbors(5, 5)
-        assert len(n) == 8
+        assert len(n) == 4
+        # Cardinal directions only (Manhattan adjacency)
+        assert (4, 5) in n
+        assert (6, 5) in n
+        assert (5, 4) in n
+        assert (5, 6) in n
+        # No diagonal neighbours
+        assert (4, 4) not in n
+        assert (6, 6) not in n
         # No self-loop
         assert (5, 5) not in n
 
-    def test_corner_has_3_neighbors(self):
-        # `neighbors` is unbounded; corners still get 8 candidate coords,
+    def test_corner_has_2_neighbors(self):
+        # `neighbors` is unbounded; corners get 4 candidate coords,
         # some of which fall outside the grid. Callers must bounds-check.
         n = neighbors(0, 0)
-        assert len(n) == 8
-        # The 3 in-bounds neighbours are present
+        assert len(n) == 4
+        # The 2 in-bounds neighbours are present
         assert (1, 0) in n
         assert (0, 1) in n
-        assert (1, 1) in n
-        # The 5 out-of-bounds are present too (caller's job to filter)
-        assert (-1, -1) in n
+        # The 2 out-of-bounds are present too (caller's job to filter)
         assert (-1, 0) in n
+        assert (0, -1) in n
+        # No diagonal neighbour at (1, 1) — diagonals disallowed
+        assert (1, 1) not in n
         # No self-loop regardless
         assert (0, 0) not in n
 

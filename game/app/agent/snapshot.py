@@ -5,7 +5,7 @@ Fog of war: an AI only sees enemy units that are:
   - within sight range of one of its own units, OR
   - standing on a visible (line-of-sight-able) tile
 
-For MVP we use a simple rule: any enemy within `chebyshev` distance 4 of any
+For MVP we use a simple rule: any enemy within `manhattan` distance 4 of any
 of my units is visible. Anything farther away we report as fog (position only
 if we've ever seen it, otherwise nothing). Units we've never seen are omitted.
 
@@ -33,7 +33,7 @@ from app.config import (
     TERRAIN_TYPES,
 )
 from app.models import Game, Player, Tile, Unit
-from app.utils import chebyshev
+from app.utils import manhattan
 
 
 # Map internal terrain names to the schema's TerrainZh literal.
@@ -55,7 +55,7 @@ def _compute_visible_enemy_coords(
     visible: set[Coord] = set()
     for e in enemy_units:
         for m in my_units:
-            if chebyshev((m.x, m.y), (e.x, e.y)) <= sight_range:
+            if manhattan((m.x, m.y), (e.x, e.y)) <= sight_range:
                 visible.add((e.x, e.y))
                 break
     return visible

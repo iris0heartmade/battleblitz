@@ -53,8 +53,8 @@ from app.events import GameEvent, bus
 from app.utils import (
     Coord,
     bfs_reachable,
-    chebyshev,
     has_line_of_sight,
+    manhattan,
     pathfind,
 )
 
@@ -296,7 +296,7 @@ async def attack(
     if target.player_id == player.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
 
-    distance = chebyshev((attacker.x, attacker.y), (target.x, target.y))
+    distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
     if distance == 0 or distance <= atk_min or distance > atk_range:

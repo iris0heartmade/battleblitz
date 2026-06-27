@@ -769,7 +769,8 @@ function computeReachable(unit) {
   const reachable = new Set();
   const queue = [{ x: unit.x, y: unit.y, cost: 0 }];
   const visited = new Map([[`${unit.x},${unit.y}`, 0]]);
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  // Manhattan-adjacency only (no diagonals): movement is 4-directional.
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
   const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
   while (queue.length) {
     const cur = queue.shift();
@@ -795,7 +796,7 @@ function computeReachable(unit) {
 
 function getUnitAttackProfile(unit) {
   // Returns {minRange, maxRange} where attacks hit enemies at distance d
-  // (chebyshev) when minRange < d <= maxRange.
+  // (Manhattan distance: |dx| + |dy|) when minRange < d <= maxRange.
   // - Melee (剑士, 骑士, etc.): d in (0, 1]    → adjacent only
   // - Ranged (弓手):  d in (1, 3]              → fire 1..2 tiles away, no melee
   // - +snipe skill on ranged extends maxRange by 1
@@ -806,8 +807,12 @@ function getUnitAttackProfile(unit) {
   return { minRange: 0, maxRange: 1 };
 }
 
+function manhattan(ax, ay, bx, by) {
+  return Math.abs(ax - bx) + Math.abs(ay - by);
+}
+
 function canUnitAttack(unit, fromX, fromY, toX, toY) {
-  const d = Math.max(Math.abs(toX - fromX), Math.abs(toY - fromY));
+  const d = manhattan(fromX, fromY, toX, toY);
   if (d === 0) return false;
   const prof = getUnitAttackProfile(unit);
   return d > prof.minRange && d <= prof.maxRange;
@@ -892,9 +897,9 @@ function forecastAttack(attacker, defender) {
   if (!mainKills) {
     const counterRange = getUnitAttackProfile(defender).maxRange;
     const counterMin = getUnitAttackProfile(defender).minRange;
-    const distToAttacker = Math.max(
-      Math.abs(attacker.x - defender.x),
-      Math.abs(attacker.y - defender.y)
+    const distToAttacker = manhattan(
+      attacker.x, attacker.y,
+      defender.x, defender.y
     );
     if (distToAttacker > counterMin && distToAttacker <= counterRange) {
       const counterTileBonus = getDefenderTerrainBonus(attacker);
@@ -949,7 +954,7 @@ function computeThreatArea(unit, reachableTiles) {
   function addFromPosition(px, py) {
     for (let dx = -prof.maxRange; dx <= prof.maxRange; dx++) {
       for (let dy = -prof.maxRange; dy <= prof.maxRange; dy++) {
-        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        const d = Math.abs(dx) + Math.abs(dy);  // Manhattan distance
         if (d <= prof.minRange) continue;
         if (d > prof.maxRange) continue;
         const nx = px + dx;
@@ -1397,7 +1402,8 @@ function computeClientPath(unit, toX, toY, reachable) {
   const open = [{ ...start, cost: 0, dist: Math.abs(toX - unit.x) + Math.abs(toY - unit.y) }];
   const cameFrom = new Map();
   const bestCost = new Map([[`${unit.x},${unit.y}`, 0]]);
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  // Manhattan-adjacency only (no diagonals): movement is 4-directional.
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
 
   while (open.length) {
     open.sort((a, b) => (a.cost + a.dist) - (b.cost + b.dist));

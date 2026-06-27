@@ -37,7 +37,7 @@ from app.game_logic import (
     unit_attack_range,
 )
 from app.models import Game, Player, Tile, Unit
-from app.utils import bfs_reachable, chebyshev, has_line_of_sight
+from app.utils import bfs_reachable, has_line_of_sight, manhattan
 
 
 # Cap the number of move targets we list. AI doesn't need to know about every
@@ -138,7 +138,7 @@ def _legal_actions_for_unit(
                     score = 0
                 else:
                     nearest = min(
-                        chebyshev(coord, (e.x, e.y)) for e in enemy_units
+                        manhattan(coord, (e.x, e.y)) for e in enemy_units
                     )
                     score = -nearest  # closer is better
                 scored.append((score, coord))
@@ -159,7 +159,7 @@ def _legal_actions_for_unit(
         if t in (TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER)
     }
     for e in enemy_units:
-        d = chebyshev((unit.x, unit.y), (e.x, e.y))
+        d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
         if d > 1:
@@ -213,7 +213,7 @@ def _legal_actions_for_unit(
             for a in ally_units:
                 if a.id == unit.id or a.hp <= 0 or a.hp >= a.max_hp:
                     continue
-                if chebyshev((unit.x, unit.y), (a.x, a.y)) != 1:
+                if manhattan((unit.x, unit.y), (a.x, a.y)) != 1:
                     continue
                 ctx = _SkillCtx(user=unit, target=a, ally_units=ally_units)
                 if sk.can_use(ctx):
