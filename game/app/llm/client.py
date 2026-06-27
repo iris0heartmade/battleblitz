@@ -3,7 +3,7 @@ LLM client abstraction.
 
 Defines the *interface* (LLMClient Protocol) and the *safety wrapper*
 (safe_complete). The actual Claude / OpenAI / local-Llama implementations
-are intentionally NOT included here — see doc/battleblitz-llm-agent.md
+are intentionally NOT included here — see docs/llm-agent.md
 for the spec; the implementation is owned by the project owner.
 
 Why a Protocol? Two reasons:

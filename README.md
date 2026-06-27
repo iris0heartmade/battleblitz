@@ -36,6 +36,14 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### 开启本地大模型服务（如果有）
+```bash
+/home/youko/llama.cpp/build/bin/llama-server \
+    -m /home/youko/llama.cpp/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
+    --port 8080
+```
+
+
 打开 <http://localhost:8000/> 即可进入游戏。
 
 ### 树莓派 / Linux 部署

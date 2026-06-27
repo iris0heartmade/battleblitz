@@ -5,7 +5,7 @@ This module defines the data shapes; it does **not** do any I/O. The actual
 WebSocket/REST serialization is done by routes/protocol_ws.py (future) and
 the existing REST routes.
 
-Design rules (see doc/ARCHITECTURE_PLAN.md §8.1 for full spec):
+Design rules (see docs/archive/2026-06-26-v1-plan.md §8.1 for full spec):
   - Flat JSON; no nested ORM objects
   - Every message has a `v: 1` version field
   - Type strings (not numeric enums)

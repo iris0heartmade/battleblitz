@@ -1,0 +1,20 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "山口安静下来了。卡尔德的先锋骑士倒在松林边缘，晨雾被染成铁锈色。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "干得漂亮，红。你那一箭正中领头骑士的面甲，他们阵脚一下就乱了。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "别高兴太早。这只是他们的先遣队，主力还在后头。我们得趁士气高涨，立刻南下追到他们堡寨。"
+    }
+  ]
+}
