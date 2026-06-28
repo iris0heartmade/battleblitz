@@ -3347,6 +3347,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (r) r.disabled = editorState.redoStack.length === 0;
   }
 
+  // Remember the last terrain brush the user used, so fill / line tools
+  // know which terrain to paint. Defaults to plain.
+  let lastTerrainBrush = "P";
+  function lastTerrainTool() { return lastTerrainBrush; }
+
   function makeEmptyLayout(w, h, fill = "P") {
     return Array.from({ length: h }, () => fill.repeat(w));
   }
@@ -3391,6 +3396,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ev.preventDefault();
           eraseEditorCell(x, y);
         });
+        // Line tool: drag to draw a line from start to end
+        cell.addEventListener("mousedown", () => onEditorCellMouseDown(x, y));
+        cell.addEventListener("mouseup", () => onEditorCellMouseUp(x, y));
         board.appendChild(cell);
       }
     }
@@ -3485,13 +3493,72 @@ document.addEventListener("DOMContentLoaded", () => {
       renderEditorBoard();
       return;
     }
+    // Fill tool: BFS flood fill of connected same-terrain region
+    if (tool === "fill") {
+      const targetTerrain = editorState.layout[y][x];
+      const replacement = lastTerrainTool();  // use most recent terrain brush
+      if (!replacement || targetTerrain === replacement) return;
+      pushUndo();
+      const stack = [[x, y]];
+      const visited = new Set([`${x},${y}`]);
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        editorState.layout[cy][cx] = replacement;
+        const neighbors = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
+        for (const [nx, ny] of neighbors) {
+          const key = `${nx},${ny}`;
+          if (visited.has(key)) continue;
+          if (nx < 0 || nx >= editorState.width) continue;
+          if (ny < 0 || ny >= editorState.height) continue;
+          if (editorState.layout[ny][nx] !== targetTerrain) continue;
+          visited.add(key);
+          stack.push([nx, ny]);
+        }
+      }
+      renderEditorBoard();
+      return;
+    }
+    // Line tool: handled via mousedown/mouseup (lineStart state), not click
+    if (tool === "line") return;
     // Terrain tool: P / F / M / R / C
     const row = editorState.layout[y];
     if (row[x] !== tool) {
       pushUndo();
       row[x] = tool;
+      lastTerrainBrush = tool;
       renderEditorBoard();
     }
+  }
+
+  // Line tool: mousedown records start, mouseup draws line from start to end.
+  let lineStart = null;  // [x, y] | null
+  function onEditorCellMouseDown(x, y) {
+    if (editorState.tool !== "line") return;
+    lineStart = [x, y];
+  }
+  function onEditorCellMouseUp(x, y) {
+    if (editorState.tool !== "line" || !lineStart) return;
+    const [x0, y0] = lineStart;
+    lineStart = null;
+    const brush = lastTerrainBrush;
+    if (!brush) return;
+    pushUndo();
+    // Bresenham's line
+    let cx = x0, cy = y0;
+    const dx = Math.abs(x - x0), dy = Math.abs(y - y0);
+    const sx = x0 < x ? 1 : -1;
+    const sy = y0 < y ? 1 : -1;
+    let err = dx - dy;
+    while (true) {
+      if (cx >= 0 && cx < editorState.width && cy >= 0 && cy < editorState.height) {
+        editorState.layout[cy][cx] = brush;
+      }
+      if (cx === x && cy === y) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; cx += sx; }
+      if (e2 <  dx) { err += dx; cy += sy; }
+    }
+    renderEditorBoard();
   }
 
   function eraseEditorCell(x, y) {
