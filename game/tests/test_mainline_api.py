@@ -5,7 +5,7 @@ Uses the same ``prog_client`` fixture style as
 ``tests/test_progression_api.py``: per-test DB reset so tests are
 hermetic.
 
-Coverage map (matches ``doc/step3_plan.md`` §6):
+Coverage map:
   1.  GET /mainlines returns chapter_01
   2.  GET /mainlines/{id} returns detail with 2 battles + 4 dialogue keys
   3.  POST /mainlines/{id}/start creates Game + AI enemy

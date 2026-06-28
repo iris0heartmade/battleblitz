@@ -2410,7 +2410,7 @@ const MainlineView = {
   // 防止用户在 quick-clicking / 轮询触发时并发跑出多份 GET/POST。
   _profileEnsuringPromise: null,
 
-  // ---------- 网络封装（薄壳，所有端点都在 docs/step3_plan.md） ----------
+  // ---------- 网络封装（薄壳，所有端点见 docs/架构.md §八） ----------
 
   async fetchList() {
     console.debug("[mainline] fetchList");

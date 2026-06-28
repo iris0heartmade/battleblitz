@@ -111,8 +111,12 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 BattleBlitz/
 ├── README.md
-├── ARCHITECTURE_PLAN.md    # 详细路线图（P0-P3）
-├── doc/                     # 设计文档
+├── docs/                   # 项目文档（详见 docs/README.md）
+│   ├── 架构.md              # 整体架构 + API 列表
+│   ├── 路线.md              # S0/P0-P3 路线图 + 进度
+│   ├── 阶段.md              # 分阶段开发方案
+│   ├── 死代码.md            # 死代码扫描结果
+│   └── llm-agent/           # LLM Agent 子系统文档
 ├── game/
 │   ├── app/
 │   │   ├── main.py          # FastAPI 入口
