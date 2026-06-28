@@ -964,6 +964,9 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
     else:
         award_exp(attacker, "hit")
     attacker.has_acted = True
+    # Immediately remove dead unit from the board/DB
+    if target.hp <= 0:
+        await cleanup_dead_units(session, [target])
     return True
 
 
