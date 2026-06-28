@@ -199,13 +199,14 @@ async def create_game(
         current_player_index=0,
         map_seed=seed,
         map_preset=body.map_preset,
+        map_biome=body.map_biome,
         unit_composition=body.unit_composition,
     )
     session.add(game)
     await session.flush()
     logger.info(
-        "Game created: id=%d name=%r seed=%d max_players=%d map_preset=%s",
-        game.id, game.name, seed, body.max_players, body.map_preset,
+        "Game created: id=%d name=%r seed=%d max_players=%d map_preset=%s biome=%s",
+        game.id, game.name, seed, body.max_players, body.map_preset, body.map_biome,
     )
     return GameSummaryOut.model_validate(game)
 
@@ -444,7 +445,10 @@ async def list_presets() -> PresetsResponse:
     from app.game_logic import MAP_PRESETS
     return PresetsResponse(
         maps=[
-            PresetInfo(id=p["id"], name=p["name"], description=p["description"])
+            PresetInfo(
+                id=p["id"], name=p["name"], description=p["description"],
+                biome=p.get("biome", "grass"),
+            )
             for p in MAP_PRESETS.values()
         ],
         unit_compositions=[

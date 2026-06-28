@@ -56,6 +56,16 @@ dist/
 /agent/README.md
 doc
 
+# ===== Brainstorming / scratch =====
+.superpowers/
+
+# ===== user uploads =====
+*.jpg
+*.jpeg
+*.png
+!game/app/web/assets/tiles/**/*.png
+!game/app/web/assets/**/*.png
+
 # ===== Todolist ==========
 *todo*.md
 todolist

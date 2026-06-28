@@ -556,6 +556,7 @@ def _load_map_presets() -> Dict[str, Dict]:
             "id": "classic",
             "name": "经典随机",
             "description": "按种子随机生成的标准地图",
+            "biome": "grass",
             "layout": [],
         },
     }
@@ -566,6 +567,8 @@ def _load_map_presets() -> Dict[str, Dict]:
             if layout:
                 assert len(layout) == MAP_SIZE and all(len(r) == MAP_SIZE for r in layout), \
                     f"Preset {data.get('id', path.stem)} must be {MAP_SIZE}x{MAP_SIZE}"
+            # Default biome to "grass" if not specified in JSON
+            data.setdefault("biome", "grass")
             presets[data["id"]] = data
     return presets
 

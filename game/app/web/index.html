@@ -19,6 +19,7 @@
         <button class="btn btn-secondary btn-lg" data-action="goto-saves">📁 存档管理</button>
         <button class="btn btn-secondary btn-lg" data-action="goto-settings">⚙️ 设置</button>
         <button class="btn btn-ghost btn-lg" data-action="goto-help">❓ 帮助</button>
+        <button class="btn btn-ghost btn-lg" data-action="goto-editor">🛠️ 地图编辑器</button>
       </div>
       <p class="menu-footer">© 2026 · powered by FastAPI + SQLAlchemy</p>
     </div>
@@ -219,6 +220,77 @@
       <div id="saves-mainline" class="saves-list">
         <p class="muted">加载中…</p>
       </div>
+    </div>
+  </section>
+
+  <!-- ====================== 地图编辑器 ====================== -->
+  <section id="view-editor" class="view" hidden>
+    <div class="panel">
+      <div class="editor-header">
+        <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+        <h2>🛠️ 地图编辑器</h2>
+        <div class="editor-actions">
+          <button id="editor-new-btn" class="btn btn-primary">＋ 新建</button>
+          <button id="editor-load-btn" class="btn btn-secondary">📂 读取</button>
+          <button id="editor-save-btn" class="btn btn-accent">💾 保存</button>
+        </div>
+      </div>
+
+      <div class="editor-toolbar">
+        <div class="form-row">
+          <label>地图名</label>
+          <input id="editor-name" type="text" maxlength="40" placeholder="我的地图" />
+        </div>
+        <div class="form-row-inline">
+          <div class="form-row">
+            <label>宽 (15-35)</label>
+            <input id="editor-width" type="number" min="15" max="35" value="15" />
+          </div>
+          <div class="form-row">
+            <label>高 (15-40)</label>
+            <input id="editor-height" type="number" min="15" max="40" value="15" />
+          </div>
+          <div class="form-row">
+            <label>生物群系</label>
+            <select id="editor-biome">
+              <option value="grass">草原</option>
+              <option value="snow">雪地</option>
+              <option value="desert">沙漠</option>
+            </select>
+          </div>
+          <button id="editor-resize-btn" class="btn btn-secondary">应用尺寸</button>
+        </div>
+        <div class="form-row">
+          <label>工具（点格子应用）</label>
+          <div class="editor-tools">
+            <button class="tool-btn active" data-tool="P" title="平地">🌱</button>
+            <button class="tool-btn" data-tool="F" title="森林">🌲</button>
+            <button class="tool-btn" data-tool="M" title="山地">⛰</button>
+            <button class="tool-btn" data-tool="R" title="河流">🌊</button>
+            <button class="tool-btn" data-tool="C" title="城堡">🏰</button>
+            <button class="tool-btn" data-tool="unit-swordsman" title="剑士">⚔️</button>
+            <button class="tool-btn" data-tool="unit-archer" title="弓手">🏹</button>
+            <button class="tool-btn" data-tool="unit-knight" title="骑士">🐎</button>
+            <button class="tool-btn" data-tool="unit-healer" title="治疗师">💚</button>
+            <button class="tool-btn" data-tool="erase" title="擦除">🧹</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>玩家颜色（放置单位时用）</label>
+          <div class="editor-color-picker">
+            <button class="color-btn active" data-color="red" style="background:#e85a6a">红</button>
+            <button class="color-btn" data-color="blue" style="background:#5a8ae8">蓝</button>
+            <button class="color-btn" data-color="green" style="background:#5ae87a">绿</button>
+            <button class="color-btn" data-color="yellow" style="background:#e8d65a">黄</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-canvas-wrap">
+        <div id="editor-board" class="editor-board"></div>
+      </div>
+
+      <p class="hint">提示：先选工具 → 调整尺寸 → 点格子绘制。单位必须放在非城堡格。</p>
     </div>
   </section>
 

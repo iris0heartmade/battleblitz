@@ -479,6 +479,11 @@ html, body {
   width: var(--cell-size);
   height: var(--cell-size);
   background: var(--t-plain);
+  /* Tile pixel-art rendering: stay sharp at any zoom level (see app.js tileImageUrl) */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-size: var(--cell-size) var(--cell-size);
+  background-repeat: no-repeat;
   /* Only right + bottom border -> exactly 1px between cells (no doubled seam) */
   border-right: 1px solid var(--t-grid);
   border-bottom: 1px solid var(--t-grid);
@@ -1662,4 +1667,157 @@ html, body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ============================================================
+   Map editor
+   ============================================================ */
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.editor-header h2 { flex: 1; margin: 0; }
+.editor-actions { display: flex; gap: 8px; }
+
+.editor-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.editor-toolbar .form-row { margin: 0; }
+.editor-toolbar label { min-width: 110px; }
+
+.form-row-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+.form-row-inline .form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.form-row-inline input[type="number"] {
+  width: 70px;
+}
+
+.editor-tools {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tool-btn {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--grid);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.tool-btn:hover { transform: scale(1.08); }
+.tool-btn.active {
+  border-color: var(--accent);
+  background: var(--bg);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.editor-color-picker {
+  display: flex;
+  gap: 6px;
+}
+.color-btn {
+  width: 40px;
+  height: 32px;
+  border: 2px solid var(--grid);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+}
+.color-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.editor-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.editor-board {
+  display: grid;
+  gap: 0;
+  /* gap is 0 so tile borders align */
+  background: var(--t-grid);
+  padding: 1px;
+  border-radius: 4px;
+  /* Cell size set dynamically by JS based on board size + viewport */
+  --cell-size: 24px;
+  grid-template-columns: repeat(var(--w, 15), var(--cell-size));
+  grid-template-rows: repeat(var(--h, 15), var(--cell-size));
+}
+
+.editor-cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  background: var(--t-plain);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-size: var(--cell-size) var(--cell-size);
+  background-repeat: no-repeat;
+  position: relative;
+  cursor: crosshair;
+  box-sizing: border-box;
+  /* 1px between cells */
+  border-right: 1px solid var(--t-grid);
+  border-bottom: 1px solid var(--t-grid);
+}
+
+.editor-cell:hover {
+  filter: brightness(1.2);
+  z-index: 2;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.editor-cell .unit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.hint {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .editor-board { --cell-size: 18px; }
+  .tool-btn { width: 36px; height: 36px; font-size: 18px; }
 }

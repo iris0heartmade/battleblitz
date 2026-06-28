@@ -29,6 +29,7 @@ class CreateGameRequest(BaseModel):
     map_seed: Optional[int] = None  # None = random
     max_players: int = Field(default=2, ge=2, le=4)
     map_preset: Optional[str] = None  # e.g. "classic" / "open_plains" / "mountain_pass"
+    map_biome: str = Field(default="grass")  # "grass" | "snow" | "desert"
     unit_composition: Optional[str] = None  # e.g. "classic" / "aggressive" / "defensive"
 
 
@@ -65,6 +66,7 @@ class PresetInfo(BaseModel):
     id: str
     name: str
     description: str
+    biome: Optional[str] = None  # "grass" | "snow" | "desert" (preset's visual theme)
 
 
 class PresetsResponse(BaseModel):
@@ -142,6 +144,8 @@ class GameSummaryOut(APIModel):
     turn_number: int
     current_player_index: int
     map_seed: int
+    map_preset: Optional[str]
+    map_biome: str
     created_at: datetime
 
 

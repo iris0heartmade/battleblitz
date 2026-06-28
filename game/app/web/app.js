@@ -650,16 +650,42 @@ if (document.readyState === "loading") {
   fitBoard();
 }
 
+// Tile image lookup: terrain + biome → asset URL (with deterministic variant)
+// variant count per terrain:
+const TILE_VARIANTS = {
+  plain: 2, forest: 2, mountain: 2, river: 4, castle: 2, desert: 2, snow: 2,
+};
+// Terrains whose palette depends on game biome
+const BIOME_AWARE_TERRAINS = new Set(["forest", "castle"]);
+
+function pickTileVariant(terrain, x, y) {
+  const n = TILE_VARIANTS[terrain] || 2;
+  // Deterministic pseudo-random based on (x, y, terrain)
+  let h = 0;
+  for (const c of terrain) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  h = (h ^ (x * 73856093) ^ (y * 19349663)) >>> 0;
+  return h % n;
+}
+
+function tileImageUrl(terrain, biome, x, y) {
+  const variant = pickTileVariant(terrain, x, y);
+  const base = BIOME_AWARE_TERRAINS.has(terrain) ? `${terrain}_${biome}` : terrain;
+  return `/assets/tiles/${base}_v${variant}.png`;
+}
+
 function renderBoard(st) {
   const board = document.getElementById("board");
+  // Determine board dimensions from tiles (supports custom-sized maps)
+  let boardW = BOARD_SIZE, boardH = BOARD_SIZE;
+  for (const t of st.tiles) {
+    if (t.x + 1 > boardW) boardW = t.x + 1;
+    if (t.y + 1 > boardH) boardH = t.y + 1;
+  }
+  const biome = st.game?.map_biome || "grass";
   // Force grid layout via inline style (overrides any CSS issues).
-  // Cell size comes from --cell-size CSS var so the board can auto-fit
-  // small viewports (mobile portrait). fitBoard() recomputes the var.
   board.style.display = "grid";
-  board.style.gridTemplateColumns = "repeat(15, var(--cell-size))";
-  board.style.gridTemplateRows = "repeat(15, var(--cell-size))";
-  // Make sure CSS var is set on this specific instance (some browsers
-  // can be finicky with var() inside inline grid-template strings).
+  board.style.gridTemplateColumns = `repeat(${boardW}, var(--cell-size))`;
+  board.style.gridTemplateRows = `repeat(${boardH}, var(--cell-size))`;
   fitBoard();
   // Build cells map for quick lookup
   const tileMap = new Map();
@@ -680,15 +706,18 @@ function renderBoard(st) {
   }
 
   const frag = document.createDocumentFragment();
-  for (let y = 0; y < 15; y++) {
-    for (let x = 0; x < 15; x++) {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
       const tile = tileMap.get(`${x},${y}`);
       const cell = document.createElement("div");
-      cell.className = "cell t-" + (tile?.terrain || "plain");
+      const terrain = tile?.terrain || "plain";
+      cell.className = "cell t-" + terrain;
       cell.dataset.x = x;
       cell.dataset.y = y;
       cell.style.gridColumn = String(x + 1);
       cell.style.gridRow = String(y + 1);
+      // Background tile image (pixel art)
+      cell.style.backgroundImage = `url(${tileImageUrl(terrain, biome, x, y)})`;
 
       const occupant = unitMap.get(`${x},${y}`);
       if (occupant) {
@@ -3108,6 +3137,10 @@ document.addEventListener("DOMContentLoaded", () => {
       case "goto-help":
         showView("help");
         break;
+      case "goto-editor":
+        showView("editor");
+        initEditor();
+        break;
       case "toggle-ref-panel":
         toggleRefPanel();
         break;
@@ -3235,6 +3268,250 @@ document.addEventListener("DOMContentLoaded", () => {
       aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
     });
     aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+  }
+
+  // ============================================================
+  // Map editor (custom map designer)
+  // ============================================================
+  const editorState = {
+    width: 15,
+    height: 15,
+    layout: null,         // 2D array of terrain chars
+    initialUnits: [],     // [{x, y, type, color, level}]
+    biome: "grass",
+    tool: "P",            // current tool
+    color: "red",         // current unit color
+    mapId: null,          // set when editing/saving existing
+    mapName: "",
+  };
+
+  function makeEmptyLayout(w, h, fill = "P") {
+    return Array.from({ length: h }, () => fill.repeat(w));
+  }
+
+  function renderEditorBoard() {
+    const board = document.getElementById("editor-board");
+    if (!board) return;
+    board.innerHTML = "";
+    const W = editorState.width, H = editorState.height;
+    // Build unit index for quick lookup
+    const unitMap = new Map();
+    for (const u of editorState.initialUnits) {
+      unitMap.set(`${u.x},${u.y}`, u);
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const terrain = editorState.layout[y][x] || "P";
+        const cell = document.createElement("div");
+        cell.className = "editor-cell t-" + terrain;
+        cell.dataset.x = x;
+        cell.dataset.y = y;
+        // background tile image
+        cell.style.backgroundImage = `url(${tileImageUrl(terrain, editorState.biome, x, y)})`;
+        // unit overlay
+        const u = unitMap.get(`${x},${y}`);
+        if (u) {
+          const uEl = document.createElement("div");
+          uEl.className = `unit u-${u.color}`;
+          uEl.textContent = unitGlyph(u.type);
+          uEl.title = `${u.type} (Lv.${u.level})`;
+          cell.appendChild(uEl);
+        }
+        cell.addEventListener("click", () => onEditorCellClick(x, y));
+        cell.addEventListener("contextmenu", (ev) => {
+          ev.preventDefault();
+          eraseEditorCell(x, y);
+        });
+        board.appendChild(cell);
+      }
+    }
+  }
+
+  function onEditorCellClick(x, y) {
+    const tool = editorState.tool;
+    if (tool === "erase") {
+      eraseEditorCell(x, y);
+      return;
+    }
+    if (tool.startsWith("unit-")) {
+      const unitType = tool.slice(5);
+      // Remove any existing unit at this cell
+      editorState.initialUnits = editorState.initialUnits.filter(
+        u => !(u.x === x && u.y === y)
+      );
+      // Castle cells can't hold units (server validates)
+      if (editorState.layout[y][x] === "C") {
+        toast("城堡格不能放单位");
+        return;
+      }
+      editorState.initialUnits.push({
+        x, y, type: unitType, color: editorState.color, level: 1,
+      });
+      renderEditorBoard();
+      return;
+    }
+    // Terrain tool: P / F / M / R / C
+    const row = editorState.layout[y];
+    row[x] = tool;
+    renderEditorBoard();
+  }
+
+  function eraseEditorCell(x, y) {
+    // Remove any unit at this cell
+    editorState.initialUnits = editorState.initialUnits.filter(
+      u => !(u.x === x && u.y === y)
+    );
+    // Reset terrain to plain
+    editorState.layout[y][x] = "P";
+    renderEditorBoard();
+  }
+
+  function initEditor() {
+    if (editorState.layout === null) {
+      editorState.width = 15;
+      editorState.height = 15;
+      editorState.layout = makeEmptyLayout(15, 15);
+      editorState.initialUnits = [];
+      editorState.biome = "grass";
+      editorState.mapId = null;
+      editorState.mapName = "";
+    }
+    // Wire up toolbar controls (idempotent: only once)
+    if (!window.__editorWired) {
+      window.__editorWired = true;
+      document.getElementById("editor-resize-btn").addEventListener("click", onEditorResize);
+      document.getElementById("editor-new-btn").addEventListener("click", onEditorNew);
+      document.getElementById("editor-load-btn").addEventListener("click", onEditorLoadClick);
+      document.getElementById("editor-save-btn").addEventListener("click", onEditorSave);
+      // Tool buttons
+      document.querySelectorAll(".tool-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tool-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          editorState.tool = btn.dataset.tool;
+        });
+      });
+      // Color buttons
+      document.querySelectorAll(".color-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".color-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          editorState.color = btn.dataset.color;
+        });
+      });
+    }
+    // Reflect current state into form inputs
+    document.getElementById("editor-name").value = editorState.mapName;
+    document.getElementById("editor-width").value = editorState.width;
+    document.getElementById("editor-height").value = editorState.height;
+    document.getElementById("editor-biome").value = editorState.biome;
+    renderEditorBoard();
+  }
+
+  function onEditorResize() {
+    const newW = parseInt(document.getElementById("editor-width").value, 10);
+    const newH = parseInt(document.getElementById("editor-height").value, 10);
+    if (!Number.isFinite(newW) || !Number.isFinite(newH) ||
+        newW < 15 || newW > 35 || newH < 15 || newH > 40) {
+      toast("尺寸超出范围（宽 15-35, 高 15-40）");
+      return;
+    }
+    // Grow / shrink layout preserving existing cells
+    const newLayout = makeEmptyLayout(newW, newH);
+    for (let y = 0; y < Math.min(editorState.height, newH); y++) {
+      for (let x = 0; x < Math.min(editorState.width, newW); x++) {
+        newLayout[y][x] = editorState.layout[y][x] || "P";
+      }
+    }
+    editorState.width = newW;
+    editorState.height = newH;
+    editorState.layout = newLayout;
+    // Drop out-of-bounds units
+    editorState.initialUnits = editorState.initialUnits.filter(
+      u => u.x < newW && u.y < newH
+    );
+    renderEditorBoard();
+  }
+
+  function onEditorNew() {
+    if (!confirm("新建空白地图？当前未保存的改动会丢失。")) return;
+    editorState.layout = makeEmptyLayout(15, 15);
+    editorState.initialUnits = [];
+    editorState.width = 15;
+    editorState.height = 15;
+    editorState.biome = "grass";
+    editorState.mapId = null;
+    editorState.mapName = "";
+    initEditor();
+  }
+
+  async function onEditorLoadClick() {
+    let maps;
+    try {
+      maps = await api("GET", "/editor/maps");
+    } catch (e) {
+      toast("读取列表失败：" + e.message);
+      return;
+    }
+    if (!maps || maps.length === 0) {
+      toast("暂无已保存的地图");
+      return;
+    }
+    const lines = ["📂 已保存的地图："];
+    maps.forEach((m, i) => {
+      lines.push(`${i + 1}. ${m.name}  [${m.width}x${m.height} ${m.biome}]  (id=${m.id})`);
+    });
+    const choice = prompt(lines.join("\n\n") + "\n\n输入编号读取（或取消）：");
+    if (!choice) return;
+    const idx = parseInt(choice, 10) - 1;
+    if (idx < 0 || idx >= maps.length) {
+      toast("无效编号");
+      return;
+    }
+    await loadEditorMap(maps[idx].id);
+  }
+
+  async function loadEditorMap(mapId) {
+    try {
+      const m = await api("GET", `/editor/maps/${mapId}`);
+      editorState.mapId = m.id;
+      editorState.mapName = m.name;
+      editorState.width = m.size.width;
+      editorState.height = m.size.height;
+      editorState.biome = m.biome;
+      editorState.layout = m.layout.map(row => row);  // shallow copy
+      editorState.initialUnits = m.initial_units.map(u => ({ ...u }));
+      initEditor();
+      toast(`已读取：${m.name}`);
+    } catch (e) {
+      toast("读取失败：" + e.message);
+    }
+  }
+
+  async function onEditorSave() {
+    const name = document.getElementById("editor-name").value.trim();
+    if (!name) {
+      toast("请填写地图名");
+      return;
+    }
+    const biome = document.getElementById("editor-biome").value;
+    editorState.biome = biome;
+    const body = {
+      id: editorState.mapId || undefined,
+      name,
+      size: { width: editorState.width, height: editorState.height },
+      biome,
+      layout: editorState.layout,
+      initial_units: editorState.initialUnits,
+    };
+    try {
+      const m = await api("POST", "/editor/maps", body);
+      editorState.mapId = m.id;
+      editorState.mapName = m.name;
+      toast(`保存成功！id=${m.id}（${m.size.width}x${m.size.height}）`);
+    } catch (e) {
+      toast("保存失败：" + e.message);
+    }
   }
 
 });

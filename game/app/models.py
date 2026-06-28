@@ -51,6 +51,9 @@ class Game(Base):
     current_player_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     map_seed: Mapped[int] = mapped_column(Integer, nullable=False)
     map_preset: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Map biome for tile palette selection: "grass" | "snow" | "desert"
+    # Affects forest_*/castle_* tile variants rendered by the frontend.
+    map_biome: Mapped[str] = mapped_column(String(16), nullable=False, default="grass")
     unit_composition: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Fairness: the first player (seat 0) is limited to 1 action on their first
     # turn; once they've ended it, everyone gets 2 actions per turn going forward.

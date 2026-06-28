@@ -23,6 +23,7 @@ from app.database import dispose_db, init_db
 from app.logging_config import log_server_lifecycle, setup_logging
 from app.routes import actions as actions_routes
 from app.routes import debug_ws as debug_ws_routes
+from app.routes import editor as editor_routes
 from app.routes import game as game_routes
 from app.routes import mainline as mainline_routes
 from app.routes import profile as profile_routes
@@ -110,6 +111,7 @@ app.include_router(game_routes.router)
 app.include_router(actions_routes.router)
 app.include_router(turns_routes.router)
 app.include_router(debug_ws_routes.router)
+app.include_router(editor_routes.router)
 app.include_router(progression_api.router, prefix="/progression")
 # Profile-keyed (user_name) routes — mainline progress endpoints
 # (Step 2). Mounted at the root so the client hits /profile/... .

@@ -12,7 +12,6 @@ import random
 import pytest
 
 from app.config import (
-    DEFAULT_MELEE_RANGE,
     MAP_SIZE,
     MORALE_MAX,
     SKILL_DOUBLE_STRIKE,
@@ -222,7 +221,8 @@ class TestTypeAdvantage:
 @pytest.mark.unit
 class TestAttackRange:
     def test_swordsman_is_melee(self):
-        assert unit_attack_range(_stub_unit("swordsman")) == DEFAULT_MELEE_RANGE
+        # Swordsman base attack_range = 1 (melee)
+        assert unit_attack_range(_stub_unit("swordsman")) == 1
 
     def test_archer_default(self):
         assert unit_attack_range(_stub_unit("archer")) == 2
