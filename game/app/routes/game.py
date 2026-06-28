@@ -23,6 +23,11 @@ from app.config import (
     DEFAULT_PLAYER_COLORS,
     MAX_PLAYERS,
     MIN_PLAYERS,
+    TERRAIN_CASTLE,
+    TERRAIN_FOREST,
+    TERRAIN_MOUNTAIN,
+    TERRAIN_PLAIN,
+    TERRAIN_RIVER,
 )
 from app.database import get_session
 from app.game_logic import (
@@ -70,6 +75,19 @@ async def _ensure_started_or_400(game: Game) -> None:
 # Module-level helper used by /games/{id}/start AND by mainline routes
 # ============================================================
 
+_CHAR_TO_TERRAIN = {
+    "P": TERRAIN_PLAIN,
+    "F": TERRAIN_FOREST,
+    "M": TERRAIN_MOUNTAIN,
+    "R": TERRAIN_RIVER,
+    "C": TERRAIN_CASTLE,
+}
+
+
+def _char_to_terrain(ch: str) -> str:
+    """Map a single ASCII char (P/F/M/R/C) to its terrain string id."""
+    return _CHAR_TO_TERRAIN.get(ch, TERRAIN_PLAIN)
+
 async def _start_battle_internal(
     session: AsyncSession,
     game: Game,
@@ -104,11 +122,43 @@ async def _start_battle_internal(
     preset_id = map_preset or getattr(game, "map_preset", None) or "classic"
     seed = map_seed if map_seed is not None else game.map_seed
 
-    grid = generate_map_preset(
-        preset_id=preset_id,
-        seed=seed,
-        num_castles=max(2, min(CASTLES_PER_GAME, len(players))),
-    )
+    # Custom maps (from /editor/maps) are referenced as "custom:<id>" in the
+    # preset field. Load their layout + initial_units directly instead of
+    # running the procedural generator.
+    custom_layout: Optional[List[str]] = None
+    custom_units: Optional[List[Dict[str, Any]]] = None
+    custom_map_biome: Optional[str] = None
+    if preset_id.startswith("custom:"):
+        from app.routes.editor import _read_map
+        custom_id = preset_id[len("custom:"):]
+        data = _read_map(custom_id)
+        custom_layout = data["layout"]
+        custom_units = data.get("initial_units", [])
+        # Use custom map's biome if game doesn't have one explicitly set
+        custom_map_biome = data.get("biome", "grass")
+        # Tile grid is sized by the custom map; bypass procedural generator
+        from app.config import TERRAIN_PLAIN as _T_PLAIN
+        grid: List[List[Tile]] = []
+        for y, row in enumerate(custom_layout):
+            grid_row: List[Tile] = []
+            for x, ch in enumerate(row):
+                grid_row.append(Tile(
+                    game_id=game_id,
+                    x=x, y=y,
+                    terrain=_char_to_terrain(ch),
+                ))
+            grid.append(grid_row)
+    else:
+        grid = generate_map_preset(
+            preset_id=preset_id,
+            seed=seed,
+            num_castles=max(2, min(CASTLES_PER_GAME, len(players))),
+        )
+
+    # If game.map_biome wasn't set but custom map has one, sync it
+    if custom_map_biome and not getattr(game, "map_biome", None):
+        game.map_biome = custom_map_biome
+
     tiles: List[Tile] = [t for row in grid for t in row]
     for t in tiles:
         t.game_id = game_id
@@ -163,6 +213,37 @@ async def _start_battle_internal(
     if units:
         session.add_all(units)
     await session.flush()
+
+    # Spawn units from custom map's initial_units (editor's design-time placement).
+    # Each unit is matched to a player by its `color` field.
+    if custom_units:
+        from app.classes.units import get_or_none as _get_unit_or_none
+        color_to_player = {p.color: p for p in players if p.color}
+        for cu in custom_units:
+            uc = _get_unit_or_none(cu["type"])
+            if uc is None:
+                continue
+            target_player = color_to_player.get(cu["color"])
+            if target_player is None:
+                continue
+            # Per-player unit index for naming
+            existing_count = sum(1 for u in units if u.player_id == target_player.id)
+            units.append(Unit(
+                player_id=target_player.id,
+                unit_type=cu["type"],
+                name=_unit_name(cu["type"], existing_count),
+                level=int(cu.get("level", 1)),
+                exp=0,
+                hp=uc.base_hp, max_hp=uc.base_hp,
+                atk=uc.base_atk, def_=uc.base_def,
+                mov=uc.mp_pool, mp=uc.mp_pool,
+                morale=0, x=int(cu["x"]), y=int(cu["y"]),
+                has_acted=False, has_moved=False,
+                skills=list(uc.default_skills),
+            ))
+        if units:
+            session.add_all(units)
+        await session.flush()
 
     seat_to_player = {p.seat: p for p in players}
     for seat, (cx, cy) in castle_xy.items():
@@ -440,17 +521,32 @@ async def list_games(
 
 @router.get("/presets", response_model=PresetsResponse)
 async def list_presets() -> PresetsResponse:
-    """Return available map and unit-composition presets for the create-game form."""
+    """Return available map and unit-composition presets for the create-game form.
+
+    Includes both built-in presets (game/maps/*.json) AND user-designed maps
+    saved via the map editor (game/maps/custom/*.json). Custom maps are
+    prefixed with "custom:" so the frontend can distinguish them.
+    """
     from app.classes.units import list_compositions
     from app.game_logic import MAP_PRESETS
+    from app.routes.editor import _CUSTOM_DIR, _list_custom_maps
+    maps: List[PresetInfo] = [
+        PresetInfo(
+            id=p["id"], name=p["name"], description=p["description"],
+            biome=p.get("biome", "grass"),
+        )
+        for p in MAP_PRESETS.values()
+    ]
+    # Append user-designed maps
+    for m in _list_custom_maps(_CUSTOM_DIR):
+        maps.append(PresetInfo(
+            id=f"custom:{m['id']}",
+            name=f"📐 {m['name']}",
+            description=f"自定义地图 · {m['width']}×{m['height']} · {m['biome']}",
+            biome=m["biome"],
+        ))
     return PresetsResponse(
-        maps=[
-            PresetInfo(
-                id=p["id"], name=p["name"], description=p["description"],
-                biome=p.get("biome", "grass"),
-            )
-            for p in MAP_PRESETS.values()
-        ],
+        maps=maps,
         unit_compositions=[
             PresetInfo(id=c["id"], name=c["name"], description=c["description"])
             for c in list_compositions()
