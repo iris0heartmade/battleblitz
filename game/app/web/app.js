@@ -670,7 +670,7 @@ function pickTileVariant(terrain, x, y) {
 function tileImageUrl(terrain, biome, x, y) {
   const variant = pickTileVariant(terrain, x, y);
   const base = BIOME_AWARE_TERRAINS.has(terrain) ? `${terrain}_${biome}` : terrain;
-  return `/assets/tiles/${base}_v${variant}.png`;
+  return `/ui/assets/tiles/${base}_v${variant}.png`;
 }
 
 function renderBoard(st) {
