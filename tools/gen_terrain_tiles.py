@@ -71,6 +71,10 @@ class P:
     snow_shadow = (220, 232, 245)  # light blue shadow
     snow_d = (190, 210, 230)       # deeper blue shade
     snow_drift = (235, 245, 252)   # snow drift highlight
+    # Mountain rocks (灰岩，参考图风格)
+    rock_l = (210, 210, 210)   # light grey (sun-facing)
+    rock_m = (170, 170, 170)   # mid grey (body)
+    rock_d = (110, 110, 110)   # dark grey (shadow)
     # Common
     outline = (26, 26, 26)
 
@@ -200,117 +204,134 @@ def draw_pine(img: Image.Image, cx: int, cy_base: int, total_height: int = 26,
         y_cursor = y_top  # next tier sits on top of this one
 
 
-def make_forest(variant: int) -> Image.Image:
-    img = Image.new("RGB", (SIZE, SIZE), P.grass_l)
+ENV_BG = {
+    # env -> (base_color, tuft_color) for tree/castle tiles
+    "grass":  (P.grass_l, P.grass_d),
+    "snow":   (P.snow_l,  P.snow_shadow),
+    "desert": (P.sand_l,  P.sand_m),
+}
+
+# Tree positions per variant — drawn BACK→MIDDLE→FRONT order
+# (cx, cy_base, total_height, base_width)
+TREE_LAYOUTS = {
+    0: [
+        (15,  17, 22, 8),    # BACK: top-center, mid-tall, narrow (perspective)
+        (25,  26, 12, 6),    # MIDDLE: right-bottom, short
+        (7,   29, 28, 12),   # FRONT: left-bottom, tallest, widest
+    ],
+    1: [
+        (16,  17, 22, 8),    # BACK: top-center, mirror
+        (6,   26, 12, 6),    # MIDDLE: left-bottom
+        (24,  29, 28, 12),   # FRONT: right-bottom, tallest
+    ],
+}
+
+
+def make_forest(env: str, variant: int) -> Image.Image:
+    bg, tuft_color = ENV_BG[env]
+    img = Image.new("RGB", (SIZE, SIZE), bg)
     rng = random.Random(0x200 + variant)
-    if variant == 0:
-        # 2 大松树尽可能高 + 1 小松树（明显矮，在背景中）
-        draw_pine(img, 9,  30, total_height=28, base_width=12)   # 左前大（高 28）
-        draw_pine(img, 22, 31, total_height=30, base_width=12)   # 右前大（最高 30）
-        draw_pine(img, 26, 20, total_height=10, base_width=5)    # 右后小（高 10，明显矮）
-    else:
-        # 镜像布局
-        draw_pine(img, 22, 30, total_height=28, base_width=12)
-        draw_pine(img, 9,  31, total_height=30, base_width=12)
-        draw_pine(img, 5,  20, total_height=10, base_width=5)
-    # Few grass tufts visible between trees
+    # Draw trees back→middle→front (later draws occlude earlier)
+    for cx, cy, h, bw in TREE_LAYOUTS[variant]:
+        draw_pine(img, cx, cy, total_height=h, base_width=bw)
+    # A few ground texture dots
     for _ in range(3):
         x = rng.randint(0, SIZE - 1)
         y = rng.randint(0, SIZE - 1)
-        rect(img, x, y, x + 1, y, P.grass_d)
+        rect(img, x, y, x + 1, y, tuft_color)
     return img
 
 
 # ============================================================
-# Mountain (山地) — 分层山形：3 座层叠山峰 + 两面明暗 + 连接底色
+# Mountain (山地) — 参考图风格：白色雪盖 + 灰岩主体 + 黄沙底
 # ============================================================
-def _draw_two_tone_triangle(img: Image.Image, peak_x: int, peak_y: int,
-                             half_width: int, base_y: int,
-                             light_color: tuple[int, int, int],
-                             dark_color: tuple[int, int, int]) -> None:
-    """Draw a triangle with peak at (peak_x, peak_y), base at y=base_y.
-    Left half = light_color, right half = dark_color, center = dark.
+def _draw_rocky_peak(img: Image.Image, peak_x: int, peak_y: int,
+                     half_width: int, base_y: int,
+                     rock_color: tuple[int, int, int],
+                     snow_color: tuple[int, int, int] = None) -> None:
+    """Draw a rocky peak: triangular body filled with rock_color,
+    optionally capped with snow_color (top ~30%).
+    Adds jagged ridge detail and shadow on right side.
     """
+    peak_h = base_y - peak_y
     for y in range(peak_y, base_y + 1):
         if y < 0 or y >= SIZE:
             continue
-        t = (y - peak_y) / max(1, base_y - peak_y)
+        t = (y - peak_y) / max(1, peak_h)
         w = int(half_width * t)
         if w <= 0:
             continue
+        # Determine if this y is in snow cap region
+        snow_t = max(0, min(1, (peak_h * 0.35 - (y - peak_y)) / (peak_h * 0.35))) if snow_color else 0
         for x in range(peak_x - w, peak_x + w + 1):
             if not (0 <= x < SIZE):
                 continue
-            # Left side lighter, right side darker, center is darker (sun from upper-left)
-            if x <= peak_x - 1:
-                color = light_color
+            # Color: snow cap on top, rock body, with subtle ridge shading
+            if snow_color and snow_t > 0 and (x - peak_x) ** 2 + ((y - peak_y) * 1.5) ** 2 < (half_width * snow_t * 0.7) ** 2:
+                color = snow_color
             else:
-                color = dark_color
+                # Subtle ridge shading: center spine slightly darker, edges lighter
+                if x == peak_x:
+                    color = (rock_color[0] - 20, rock_color[1] - 20, rock_color[2] - 20)
+                elif abs(x - peak_x) <= 1:
+                    color = rock_color
+                else:
+                    color = rock_color
             px(img, x, y, color)
 
 
 def make_mountain(variant: int) -> Image.Image:
-    # Foothill base fills entire tile — connects with adjacent mountain tiles
     if variant == 0:
-        img = Image.new("RGB", (SIZE, SIZE), P.mtn_edge)  # yellow-brown foothill base
+        # 参考图风格：黄沙底 + 多座灰岩峰 + 雪盖
+        img = Image.new("RGB", (SIZE, SIZE), P.sand_l)  # 黄色沙地
 
-        # Layer 1 (back): small peak, far right, lighter color (atmospheric perspective)
-        _draw_two_tone_triangle(img, peak_x=24, peak_y=10, half_width=8,
-                                 base_y=SIZE, light_color=P.mtn_mid, dark_color=P.mtn_edge)
+        # 一些沙地纹理（黄色暗斑）
+        for y in range(0, SIZE, 2):
+            for x in range((y // 2) % 4, SIZE, 6):
+                px(img, x, y, P.sand_m)
 
-        # Layer 2 (middle): medium peak, left, mid color
-        _draw_two_tone_triangle(img, peak_x=9, peak_y=7, half_width=10,
-                                 base_y=SIZE, light_color=P.mtn_high, dark_color=P.mtn_mid)
+        # Back peak (smallest, narrowest, far right) — atmospheric perspective
+        _draw_rocky_peak(img, peak_x=24, peak_y=10, half_width=6,
+                          base_y=SIZE, rock_color=P.rock_m, snow_color=P.snow_cap)
 
-        # Layer 3 (front): tall peak, center-right, darkest/most contrast
-        _draw_two_tone_triangle(img, peak_x=18, peak_y=3, half_width=12,
-                                 base_y=SIZE, light_color=P.mtn_high, dark_color=P.mtn_peak)
+        # Middle peak (medium, far left)
+        _draw_rocky_peak(img, peak_x=8, peak_y=6, half_width=8,
+                          base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
 
-        # Subtle ridge lines on each peak (center)
-        for peak_x, peak_y in [(24, 10), (9, 7), (18, 3)]:
-            for y in range(peak_y + 2, SIZE - 1):
-                if 0 <= peak_x < SIZE:
-                    px(img, peak_x, y, P.outline)
+        # Front peak (tallest, center-right, dominant)
+        _draw_rocky_peak(img, peak_x=17, peak_y=2, half_width=11,
+                          base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
 
-        # Peak tip highlights (snow on tallest peaks)
-        for peak_x, peak_y, use_snow in [(18, 3, True), (9, 7, False), (24, 10, False)]:
-            if use_snow and 0 <= peak_x < SIZE:
-                px(img, peak_x, peak_y, P.snow_cap)
-                px(img, peak_x - 1, peak_y + 1, P.snow_cap)
+        # Subtle dark crevices between rocks (use rock_d color in shadow areas)
+        # Crevice 1: between front and middle peaks
+        for y in range(8, SIZE):
+            px(img, 12, y, P.rock_d)
+            px(img, 13, y, P.rock_d)
+        # Crevice 2: between back and front
+        for y in range(11, SIZE):
+            px(img, 21, y, P.rock_d)
     else:
-        # 雪山版：白底 + 所有山峰带雪顶
-        img = Image.new("RGB", (SIZE, SIZE), P.snow_cap)  # white snow base (铺满)
+        # 雪山版：白底 + 全白雪山峰（白底白峰，主要靠阴影区分）
+        img = Image.new("RGB", (SIZE, SIZE), P.snow_cap)
 
-        # Layer 1 (back, smaller, with snow)
-        _draw_two_tone_triangle(img, peak_x=23, peak_y=10, half_width=7,
-                                 base_y=SIZE, light_color=P.snow_peak, dark_color=P.snow_mid)
-        # Snow cap overlay
-        _draw_two_tone_triangle(img, peak_x=23, peak_y=10, half_width=4,
-                                 base_y=15, light_color=P.snow_cap, dark_color=P.snow_peak)
+        # Back peak (light blue-gray)
+        _draw_rocky_peak(img, peak_x=24, peak_y=10, half_width=6,
+                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
 
-        # Layer 2 (middle)
-        _draw_two_tone_triangle(img, peak_x=8, peak_y=7, half_width=9,
-                                 base_y=SIZE, light_color=P.snow_cap, dark_color=P.snow_mid)
-        _draw_two_tone_triangle(img, peak_x=8, peak_y=7, half_width=5,
-                                 base_y=12, light_color=P.snow_cap, dark_color=P.snow_peak)
+        # Middle peak
+        _draw_rocky_peak(img, peak_x=8, peak_y=6, half_width=8,
+                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
 
-        # Layer 3 (front, tallest)
-        _draw_two_tone_triangle(img, peak_x=18, peak_y=3, half_width=11,
-                                 base_y=SIZE, light_color=P.snow_cap, dark_color=P.snow_mid)
-        _draw_two_tone_triangle(img, peak_x=18, peak_y=3, half_width=6,
-                                 base_y=10, light_color=P.snow_cap, dark_color=P.snow_peak)
+        # Front peak (largest)
+        _draw_rocky_peak(img, peak_x=17, peak_y=2, half_width=11,
+                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
 
-        # Center ridge lines
-        for peak_x, peak_y in [(23, 10), (8, 7), (18, 3)]:
-            for y in range(peak_y + 4, SIZE - 1):
-                if 0 <= peak_x < SIZE:
-                    px(img, peak_x, y, P.outline)
-
-        # Bright snow peak tips
-        for peak_x, peak_y in [(18, 3), (8, 7), (23, 10)]:
-            if 0 <= peak_x < SIZE:
-                px(img, peak_x, peak_y, P.snow_cap)
-                px(img, peak_x - 1, peak_y, P.snow_cap)
+        # Crevices (deeper blue)
+        for y in range(8, SIZE):
+            px(img, 12, y, P.snow_d)
+            px(img, 13, y, P.snow_d)
+        for y in range(11, SIZE):
+            px(img, 21, y, P.snow_d)
     return img
 
 
@@ -444,11 +465,34 @@ def draw_castle(img: Image.Image, style: int) -> None:
     rect(img, 27, 12, 27, 27, P.outline)
 
 
-def make_castle(variant: int) -> Image.Image:
-    img = Image.new("RGB", (SIZE, SIZE), P.grass_l)
-    # Grass base
-    rect(img, 0, 26, SIZE - 1, SIZE - 1, P.grass_m)
+def make_castle(env: str, variant: int) -> Image.Image:
+    bg, _ = ENV_BG[env]
+    img = Image.new("RGB", (SIZE, SIZE), bg)
+    # Ground base strip at bottom
+    if env == "grass":
+        rect(img, 0, 26, SIZE - 1, SIZE - 1, P.grass_m)
+    elif env == "desert":
+        rect(img, 0, 26, SIZE - 1, SIZE - 1, P.sand_m)
+    elif env == "snow":
+        rect(img, 0, 26, SIZE - 1, SIZE - 1, P.snow_shadow)
     draw_castle(img, variant)
+    # Snow on castle tops
+    if env == "snow":
+        # Add snow caps on red crenellation tops and wall edges
+        # Find red crenellation rows (y=8-11 in make_castle) and overlay snow
+        for x in range(5, 28):
+            if 8 <= 11:
+                for y in [8, 11]:
+                    if 0 <= x < SIZE and 0 <= y < SIZE:
+                        r, g, b = img.getpixel((x, y))
+                        if r > 150 and g < 100:  # red crenellation
+                            if y - 1 >= 0:
+                                px(img, x, y - 1, P.snow_cap)
+        # Snow on top edge of walls
+        for x in range(5, 28):
+            r, g, b = img.getpixel((x, 12))
+            if r > 100 and g > 100 and b > 100:  # stone top
+                px(img, x, 11, P.snow_cap)
     return img
 
 
@@ -510,69 +554,66 @@ def make_desert(variant: int) -> Image.Image:
 # Snow plain (雪原)
 # ============================================================
 def make_snow(variant: int) -> Image.Image:
-    img = Image.new("RGB", (SIZE, SIZE), P.snow_l)  # white base
+    """Snow plain — clean white snowfield with subtle drift shading."""
+    img = Image.new("RGB", (SIZE, SIZE), P.snow_l)
     if variant == 0:
-        # 雪面波纹（淡蓝色阴影）
-        for y in [8, 16, 24]:
-            for x in range(0, SIZE):
-                if (x // 3 + y // 4) % 2 == 0:
+        # 稀疏雪面波纹（淡蓝阴影，少而精）
+        for y in range(SIZE):
+            for x in range(SIZE):
+                if (x + y) % 11 == 0 and (x // 3) % 2 == 0:
                     px(img, x, y, P.snow_shadow)
-        # 一串脚印（小深色点，2x2 像素，动物轨迹感）
-        for (fx, fy) in [(6, 12), (11, 14), (16, 12), (21, 14), (26, 12)]:
-            px(img, fx, fy, P.snow_d)
-            px(img, fx, fy + 1, P.snow_d)
     else:
-        # 圆形雪堆 + 冰面反光
-        for cx_d, cy_d, rd in [(8, 12, 8), (24, 20, 10)]:
-            for y in range(cy_d - rd, cy_d + 2):
-                for x in range(cx_d - rd, cx_d + rd + 1):
+        # 雪堆 + 冰面反光
+        for cx_d, cy_d, rd in [(10, 14, 9), (24, 22, 8)]:
+            for y in range(max(0, cy_d - rd), min(SIZE, cy_d + 2)):
+                for x in range(max(0, cx_d - rd), min(SIZE, cx_d + rd + 1)):
                     if (x - cx_d) ** 2 + (y - cy_d) ** 2 <= rd ** 2:
                         if y >= cy_d:
                             px(img, x, y, P.snow_shadow)
-                        elif y == cy_d - 2:
-                            px(img, x, y, P.snow_l)  # 雪堆顶部高光
-        # 冰面反光（小亮点簇）
-        for (sx, sy) in [(3, 3), (10, 7), (15, 18), (28, 8), (20, 28), (5, 26)]:
+        # 冰面反光簇（小白点）
+        for (sx, sy) in [(4, 4), (12, 8), (18, 16), (26, 6), (8, 26), (22, 28)]:
             px(img, sx, sy, P.snow_l)
             if sx + 1 < SIZE:
                 px(img, sx + 1, sy, P.snow_l)
-        # 大雪堆阴影细节
-        for x in range(2, SIZE - 2, 4):
-            px(img, x, SIZE - 2, P.snow_shadow)
     return img
 
 
 # ============================================================
 # Driver
 # ============================================================
-GENERATORS = {
-    "plain":    make_plain,
-    "forest":   make_forest,
-    "mountain": make_mountain,
-    "river":    make_river,
-    "castle":   make_castle,
-    "desert":   make_desert,
-    "snow":     make_snow,
-}
-
-
 def main() -> None:
-    # Per-terrain variant count: river gets 4, others get 2
-    VARIANTS = {
-        "plain": 2,
-        "forest": 2,
-        "mountain": 2,
-        "river": 4,
-        "castle": 2,
-        "desert": 2,
-        "snow": 2,
-    }
-    for name, gen in GENERATORS.items():
-        for v in range(VARIANTS[name]):
-            tile = gen(v)
+    # Tiles that depend on environment (forest, castle get 3 envs each)
+    ENV_AWARE = ("forest", "castle")
+    ENVS = ("grass", "snow", "desert")
+    VARIANTS_2 = ("plain", "mountain", "desert", "snow")
+    VARIANTS_4 = ("river",)
+
+    # Env-aware tiles (forest_grass_v0/v1, forest_snow_v0/v1, etc.)
+    for name in ENV_AWARE:
+        gen_fn = {"forest": make_forest, "castle": make_castle}[name]
+        for env in ENVS:
+            for v in range(2):
+                tile = gen_fn(env, v)
+                path = OUT / f"{name}_{env}_v{v}.png"
+                tile.save(path)
+                print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
+
+    # Plain tiles (2 variants each, no env variation)
+    for name in VARIANTS_2:
+        gen_fn = {"plain": make_plain, "mountain": make_mountain,
+                  "desert": make_desert, "snow": make_snow}[name]
+        for v in range(2):
+            tile = gen_fn(v)
             path = OUT / f"{name}_v{v}.png"
             tile.save(path)
             print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
+
+    # River (4 variants)
+    for v in range(4):
+        tile = make_river(v)
+        path = OUT / f"river_v{v}.png"
+        tile.save(path)
+        print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
 
 
 if __name__ == "__main__":
