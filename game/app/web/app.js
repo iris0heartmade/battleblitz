@@ -3284,7 +3284,68 @@ document.addEventListener("DOMContentLoaded", () => {
     mapId: null,
     mapName: "",
     selectedIdx: -1,      // index into initialUnits for edit ops; -1 = none
+    // Undo/redo: snapshots of the mutable state (deep copies).
+    undoStack: [],
+    redoStack: [],
   };
+
+  // Deep-snapshot the editable part of editorState for undo/redo.
+  function snapshotEditor() {
+    return {
+      width: editorState.width,
+      height: editorState.height,
+      layout: editorState.layout.map(row => row.slice()),
+      initialUnits: editorState.initialUnits.map(u => ({ ...u })),
+      biome: editorState.biome,
+      mapName: editorState.mapName,
+      mapId: editorState.mapId,
+      selectedIdx: editorState.selectedIdx,
+    };
+  }
+
+  function pushUndo() {
+    editorState.undoStack.push(snapshotEditor());
+    if (editorState.undoStack.length > 50) editorState.undoStack.shift();
+    editorState.redoStack = [];   // any new action invalidates redo
+    updateUndoButtons();
+  }
+
+  function applySnapshot(snap) {
+    editorState.width = snap.width;
+    editorState.height = snap.height;
+    editorState.layout = snap.layout.map(row => row.slice());
+    editorState.initialUnits = snap.initialUnits.map(u => ({ ...u }));
+    editorState.biome = snap.biome;
+    editorState.mapName = snap.mapName;
+    editorState.mapId = snap.mapId;
+    editorState.selectedIdx = snap.selectedIdx;
+    // Reflect into form inputs
+    document.getElementById("editor-name").value = editorState.mapName || "";
+    document.getElementById("editor-width").value = editorState.width;
+    document.getElementById("editor-height").value = editorState.height;
+    document.getElementById("editor-biome").value = editorState.biome;
+    renderEditorBoard();
+    updateUndoButtons();
+  }
+
+  function undoEditor() {
+    if (editorState.undoStack.length === 0) return;
+    editorState.redoStack.push(snapshotEditor());
+    applySnapshot(editorState.undoStack.pop());
+  }
+
+  function redoEditor() {
+    if (editorState.redoStack.length === 0) return;
+    editorState.undoStack.push(snapshotEditor());
+    applySnapshot(editorState.redoStack.pop());
+  }
+
+  function updateUndoButtons() {
+    const u = document.getElementById("editor-undo-btn");
+    const r = document.getElementById("editor-redo-btn");
+    if (u) u.disabled = editorState.undoStack.length === 0;
+    if (r) r.disabled = editorState.redoStack.length === 0;
+  }
 
   function makeEmptyLayout(w, h, fill = "P") {
     return Array.from({ length: h }, () => fill.repeat(w));
@@ -3357,12 +3418,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const lvlDn = document.getElementById("editor-unit-lvl-down");
     const delBtn = document.getElementById("editor-unit-delete");
     if (lvlUp) lvlUp.onclick = () => {
-      if (u.level < 10) { u.level++; renderEditorBoard(); }
+      if (u.level < 10) { pushUndo(); u.level++; renderEditorBoard(); }
     };
     if (lvlDn) lvlDn.onclick = () => {
-      if (u.level > 1) { u.level--; renderEditorBoard(); }
+      if (u.level > 1) { pushUndo(); u.level--; renderEditorBoard(); }
     };
     if (delBtn) delBtn.onclick = () => {
+      pushUndo();
       editorState.initialUnits = editorState.initialUnits.filter(x => x !== u);
       editorState.selectedIdx = -1;
       renderEditorBoard();
@@ -3390,6 +3452,8 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
         const u = editorState.initialUnits[editorState.selectedIdx];
+        if (u.x === x && u.y === y) return;  // no-op
+        pushUndo();
         u.x = x; u.y = y;
         editorState.selectedIdx = editorState.initialUnits.indexOf(u);
         renderEditorBoard();
@@ -3404,15 +3468,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (tool.startsWith("unit-")) {
       const unitType = tool.slice(5);
-      // Remove any existing unit at this cell
-      editorState.initialUnits = editorState.initialUnits.filter(
-        u => !(u.x === x && u.y === y)
-      );
       // Castle cells can't hold units (server validates)
       if (editorState.layout[y][x] === "C") {
         toast("城堡格不能放单位");
         return;
       }
+      pushUndo();
+      // Remove any existing unit at this cell
+      editorState.initialUnits = editorState.initialUnits.filter(
+        u => !(u.x === x && u.y === y)
+      );
       editorState.initialUnits.push({
         x, y, type: unitType, color: editorState.color, level: 1,
       });
@@ -3421,18 +3486,23 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     // Terrain tool: P / F / M / R / C
-    const row = editorState.layout[y][x];
-    row[x] = tool;
-    renderEditorBoard();
+    const row = editorState.layout[y];
+    if (row[x] !== tool) {
+      pushUndo();
+      row[x] = tool;
+      renderEditorBoard();
+    }
   }
 
   function eraseEditorCell(x, y) {
+    pushUndo();
     // Remove any unit at this cell
     editorState.initialUnits = editorState.initialUnits.filter(
       u => !(u.x === x && u.y === y)
     );
     // Reset terrain to plain
     editorState.layout[y][x] = "P";
+    editorState.selectedIdx = -1;
     renderEditorBoard();
   }
 
@@ -3453,6 +3523,22 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("editor-new-btn").addEventListener("click", onEditorNew);
       document.getElementById("editor-load-btn").addEventListener("click", onEditorLoadClick);
       document.getElementById("editor-save-btn").addEventListener("click", onEditorSave);
+      document.getElementById("editor-undo-btn").addEventListener("click", undoEditor);
+      document.getElementById("editor-redo-btn").addEventListener("click", redoEditor);
+      // Keyboard shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z) — only when editor view is active
+      document.addEventListener("keydown", (ev) => {
+        const editorView = document.getElementById("view-editor");
+        if (!editorView || editorView.hidden) return;
+        const ctrl = ev.ctrlKey || ev.metaKey;
+        if (!ctrl) return;
+        if (ev.key === "z" && !ev.shiftKey) {
+          ev.preventDefault();
+          undoEditor();
+        } else if ((ev.key === "y") || (ev.key === "z" && ev.shiftKey)) {
+          ev.preventDefault();
+          redoEditor();
+        }
+      });
       // Tool buttons
       document.querySelectorAll(".tool-btn").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -3474,18 +3560,23 @@ document.addEventListener("DOMContentLoaded", () => {
           editorState.color = btn.dataset.color;
           // Apply color to selected unit
           if (editorState.selectedIdx >= 0) {
-            editorState.initialUnits[editorState.selectedIdx].color = btn.dataset.color;
-            renderEditorBoard();
+            const u = editorState.initialUnits[editorState.selectedIdx];
+            if (u.color !== btn.dataset.color) {
+              pushUndo();
+              u.color = btn.dataset.color;
+              renderEditorBoard();
+            }
           }
         });
       });
     }
     // Reflect current state into form inputs
-    document.getElementById("editor-name").value = editorState.mapName;
+    document.getElementById("editor-name").value = editorState.mapName || "";
     document.getElementById("editor-width").value = editorState.width;
     document.getElementById("editor-height").value = editorState.height;
     document.getElementById("editor-biome").value = editorState.biome;
     renderEditorBoard();
+    updateUndoButtons();
   }
 
   function onEditorResize() {
@@ -3496,6 +3587,8 @@ document.addEventListener("DOMContentLoaded", () => {
       toast("尺寸超出范围（宽 15-35, 高 15-40）");
       return;
     }
+    if (newW === editorState.width && newH === editorState.height) return;
+    pushUndo();
     // Grow / shrink layout preserving existing cells
     const newLayout = makeEmptyLayout(newW, newH);
     for (let y = 0; y < Math.min(editorState.height, newH); y++) {
@@ -3522,6 +3615,9 @@ document.addEventListener("DOMContentLoaded", () => {
     editorState.biome = "grass";
     editorState.mapId = null;
     editorState.mapName = "";
+    editorState.selectedIdx = -1;
+    editorState.undoStack = [];
+    editorState.redoStack = [];
     initEditor();
   }
 
@@ -3559,8 +3655,11 @@ document.addEventListener("DOMContentLoaded", () => {
       editorState.width = m.size.width;
       editorState.height = m.size.height;
       editorState.biome = m.biome;
-      editorState.layout = m.layout.map(row => row);  // shallow copy
+      editorState.layout = m.layout.map(row => row.slice());
       editorState.initialUnits = m.initial_units.map(u => ({ ...u }));
+      editorState.selectedIdx = -1;
+      editorState.undoStack = [];
+      editorState.redoStack = [];
       initEditor();
       toast(`已读取：${m.name}`);
     } catch (e) {
