@@ -12,7 +12,7 @@ import logging
 import random
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -136,6 +136,9 @@ async def _start_battle_internal(
         # applies the SAME roster to every player, so we call it once per
         # player with the right roster by fabricating a tiny single-player
         # pseudo-game (cheaper than duplicating the helper).
+        # IMPORTANT: unit_index must be GLOBAL per player, not per-unit-type,
+        # otherwise different unit types get the same spawn offset and overlap.
+        unit_index = 0
         for unit_type, count in per_player_roster.items():
             from app.game_logic import _spawn_xy_for_castle, _unit_name
             from app.classes.units import get_or_none as _get_unit_or_none
@@ -143,12 +146,12 @@ async def _start_battle_internal(
             uc = _get_unit_or_none(unit_type)
             if uc is None:
                 continue
-            for idx in range(int(count)):
-                x, y = _spawn_xy_for_castle(seat_xy, idx)
+            for _ in range(int(count)):
+                x, y = _spawn_xy_for_castle(seat_xy, unit_index)
                 units.append(Unit(
                     player_id=player.id,
                     unit_type=unit_type,
-                    name=_unit_name(unit_type, idx),
+                    name=_unit_name(unit_type, unit_index),
                     level=1, exp=0,
                     hp=uc.base_hp, max_hp=uc.base_hp,
                     atk=uc.base_atk, def_=uc.base_def,
@@ -157,6 +160,7 @@ async def _start_battle_internal(
                     has_acted=False, has_moved=False,
                     skills=list(uc.default_skills),
                 ))
+                unit_index += 1
     if units:
         session.add_all(units)
     await session.flush()
@@ -418,9 +422,19 @@ async def get_game_state(
 
 @router.get("", response_model=List[GameSummaryOut])
 async def list_games(
+    user_name: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> List[GameSummaryOut]:
-    rows = (await session.execute(select(Game).order_by(Game.id.desc()))).scalars().all()
+    """List games. If ``user_name`` is provided, only games where a player
+    with that user_name participated are returned (used by save management
+    so users don't see other players' saves)."""
+    if user_name:
+        # Only games where the named player is a participant
+        sq = select(Player.game_id).where(Player.user_name == user_name).subquery()
+        stmt = select(Game).where(Game.id.in_(sq)).order_by(Game.id.desc())
+    else:
+        stmt = select(Game).order_by(Game.id.desc())
+    rows = (await session.execute(stmt)).scalars().all()
     return [GameSummaryOut.model_validate(g) for g in rows]
 
 
