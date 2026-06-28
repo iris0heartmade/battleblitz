@@ -1424,8 +1424,12 @@ function enterMoveMode(unit) {
 
 function enterAttackMode(unit) {
   state.actionMode = "attack";
+  // Recompute targets from fresh game state (refreshGame may have run)
+  state.attackTargets = computeAttackTargets(unit);
+  const targets = state.attackTargets;
+  const count = targets?.size ?? 0;
   const html = `
-    <div class="ab-title">选择攻击目标</div>
+    <div class="ab-title">选择攻击目标 · 可攻击 ${count} 个敌人</div>
     <div class="ab-row">
       <button class="ab-btn cancel" data-ab="cancel-attack">❌ 取消</button>
     </div>
