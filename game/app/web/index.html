@@ -13,15 +13,35 @@
       <h1 class="title">⚔️ BattleBlitz</h1>
       <p class="subtitle">战棋回合制游戏 · 服务端 v0.1.0</p>
       <div class="menu-buttons">
-        <button id="resume-btn" class="btn btn-accent btn-lg" data-action="resume-game" hidden>▶ 继续上次的游戏</button>
-        <button class="btn btn-primary btn-lg" data-action="goto-new-game">新建游戏</button>
-        <button class="btn btn-primary btn-lg" data-action="goto-join-game">加入游戏</button>
-        <button class="btn btn-secondary btn-lg" data-action="goto-mainline-list">📖 主线模式</button>
+        <button id="resume-btn" class="btn btn-accent btn-lg" data-action="resume-game" hidden>▶ 继续上次</button>
+        <button class="btn btn-primary btn-lg" data-action="goto-mainline-list">📖 主线模式</button>
+        <button class="btn btn-primary btn-lg" data-action="goto-free-mode">🎮 自由模式</button>
         <button class="btn btn-secondary btn-lg" data-action="goto-saves">📁 存档管理</button>
-        <button class="btn btn-secondary btn-lg" data-action="goto-settings">游戏设置</button>
-        <button class="btn btn-ghost btn-lg" data-action="goto-help">玩法说明</button>
+        <button class="btn btn-secondary btn-lg" data-action="goto-settings">⚙️ 设置</button>
+        <button class="btn btn-ghost btn-lg" data-action="goto-help">❓ 帮助</button>
       </div>
       <p class="menu-footer">© 2026 · powered by FastAPI + SQLAlchemy</p>
+    </div>
+  </section>
+
+  <!-- ====================== 自由模式（新建 + 加入房间） ====================== -->
+  <section id="view-free-mode" class="view" hidden>
+    <div class="panel">
+      <button class="btn btn-back" data-action="goto-menu">← 返回</button>
+      <h2>🎮 自由模式</h2>
+      <p class="muted">创建自定义房间或加入其他玩家的对局</p>
+      <div class="free-mode-grid">
+        <div class="free-mode-card" data-action="goto-new-game">
+          <div class="free-mode-icon">🆕</div>
+          <div class="free-mode-label">创建游戏</div>
+          <div class="free-mode-desc">选择地图、兵种配置，邀请或等待其他玩家加入</div>
+        </div>
+        <div class="free-mode-card" data-action="goto-join-game">
+          <div class="free-mode-icon">🚪</div>
+          <div class="free-mode-label">加入房间</div>
+          <div class="free-mode-desc">浏览等待中的游戏房间并加入</div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -29,7 +49,7 @@
   <section id="view-settings" class="view" hidden>
     <div class="panel">
       <button class="btn btn-back" data-action="goto-menu">← 返回</button>
-      <h2>游戏设置</h2>
+      <h2>⚙️ 游戏设置</h2>
       <p class="muted">这些设置会保存在你的浏览器本地（localStorage）。</p>
       <div class="form-row">
         <label>玩家昵称</label>
@@ -344,6 +364,17 @@
        通用剧情/对话底部弹窗 + 全屏叙述
        API: dialog.play(scenes) / dialog.say(speaker, text) / dialog.close()
        ============================================================== -->
+  <!-- ====================== 角色立绘面板 ====================== -->
+  <!-- 位于对话框外部，由 MainlineView 控制显示/隐藏。
+       对话框只显示小型纹章，大型立绘在此面板展示。 -->
+  <div id="portrait-panel" class="portrait-panel" hidden>
+    <div class="portrait-panel-inner">
+      <img id="portrait-image" class="portrait-image" src="" alt="" draggable="false" />
+      <div class="portrait-name-tag" id="portrait-name-tag"></div>
+    </div>
+  </div>
+
+  <!-- ====================== 对话框 ====================== -->
   <div id="dialog-box" class="dialog-box" hidden>
     <div class="dialog-inner">
       <div class="dialog-avatar">

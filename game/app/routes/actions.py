@@ -34,6 +34,7 @@ from app.game_logic import (
     calculate_damage,
     can_attack_from_position,
     claim_castle_if_present,
+    cleanup_dead_units,
     unit_attack_range,
     unit_min_attack_range,
 )
@@ -401,6 +402,13 @@ async def attack(
 
     if is_kill:
         _log(session, game, player, "death", f"{target.name} was slain")
+
+    # ── Immediately remove dead units (don't wait for end-of-turn) ──
+    # Units killed by the attack or killed by the counter-attack
+    # are cleaned up so their tile is freed and they vanish from the board.
+    dead_after_combat = [u for u in (target, attacker) if u.hp <= 0]
+    if dead_after_combat:
+        await cleanup_dead_units(session, dead_after_combat)
 
     # Publish to in-process event bus
     await bus.publish(GameEvent(
