@@ -12,21 +12,16 @@ import random
 import pytest
 
 from app.config import (
-    ARCHER_BASE_RANGE,
-    CRIT_MULTIPLIER,
     DEFAULT_MELEE_RANGE,
     MAP_SIZE,
     MORALE_MAX,
     SKILL_DOUBLE_STRIKE,
     TERRAIN_CASTLE,
     TERRAIN_PLAIN,
-    UNIT_ARCHER,
-    UNIT_HEALER,
-    UNIT_KNIGHT,
-    UNIT_SWORDSMAN,
 )
+from app.classes.units.skills.base import SkillContext
+from app.classes.units.skills.heal import HealSkill
 from app.game_logic import (
-    HEAL_AMOUNT,
     _type_multiplier,
     apply_damage,
     attack_with_double_strike,
@@ -34,7 +29,6 @@ from app.game_logic import (
     calculate_damage,
     castle_positions,
     generate_map,
-    heal_adjacent_ally,
     unit_attack_range,
 )
 from app.models import Unit
@@ -45,7 +39,7 @@ from app.models import Unit
 # ============================================================
 
 def _stub_unit(
-    unit_type: str = UNIT_SWORDSMAN,
+    unit_type: str = "swordsman",
     *,
     atk: int = 20,
     def_: int = 10,
@@ -207,18 +201,18 @@ class TestAwardMorale:
 @pytest.mark.unit
 class TestTypeAdvantage:
     def test_swordsman_beats_knight(self):
-        assert _type_multiplier(_stub_unit(UNIT_SWORDSMAN),
-                                _stub_unit(UNIT_KNIGHT)) == 1.20
+        assert _type_multiplier(_stub_unit("swordsman"),
+                                _stub_unit("knight")) == 1.20
 
     def test_knight_beats_archer(self):
-        assert _type_multiplier(_stub_unit(UNIT_KNIGHT),
-                                _stub_unit(UNIT_ARCHER)) == 1.20
+        assert _type_multiplier(_stub_unit("knight"),
+                                _stub_unit("archer")) == 1.20
 
     def test_no_advantage_between_non_matched(self):
-        assert _type_multiplier(_stub_unit(UNIT_ARCHER),
-                                _stub_unit(UNIT_SWORDSMAN)) == 1.0
-        assert _type_multiplier(_stub_unit(UNIT_HEALER),
-                                _stub_unit(UNIT_HEALER)) == 1.0
+        assert _type_multiplier(_stub_unit("archer"),
+                                _stub_unit("swordsman")) == 1.0
+        assert _type_multiplier(_stub_unit("healer"),
+                                _stub_unit("healer")) == 1.0
 
 
 # ============================================================
@@ -228,65 +222,72 @@ class TestTypeAdvantage:
 @pytest.mark.unit
 class TestAttackRange:
     def test_swordsman_is_melee(self):
-        assert unit_attack_range(_stub_unit(UNIT_SWORDSMAN)) == DEFAULT_MELEE_RANGE
+        assert unit_attack_range(_stub_unit("swordsman")) == DEFAULT_MELEE_RANGE
 
     def test_archer_default(self):
-        assert unit_attack_range(_stub_unit(UNIT_ARCHER)) == ARCHER_BASE_RANGE
+        assert unit_attack_range(_stub_unit("archer")) == 2
 
     def test_archer_with_snipe(self):
-        u = _stub_unit(UNIT_ARCHER, skills=["snipe"])
-        assert unit_attack_range(u) == ARCHER_BASE_RANGE + 1
+        u = _stub_unit("archer", skills=["snipe"])
+        assert unit_attack_range(u) == 3
 
 
 # ============================================================
-# heal_adjacent_ally
+# heal skill (HealSkill)
 # ============================================================
 
 @pytest.mark.unit
 class TestHeal:
+    _skill = HealSkill()
+
     def test_heals_adjacent(self):
-        h = _stub_unit(UNIT_HEALER, skills=["heal"], x=0, y=0)
-        a = _stub_unit(UNIT_SWORDSMAN, hp=20, x=1, y=0)  # adjacent
-        # Same player_id is required by heal_adjacent_ally
-        a.player_id = h.player_id
-        # Make sure there's room to heal (max_hp > hp)
-        a.max_hp = 50
-        restored = heal_adjacent_ally(h, a)
-        assert restored == HEAL_AMOUNT
-        assert a.hp == 20 + HEAL_AMOUNT
+        """HealSkill.execute() restores HP on an adjacent injured ally."""
+        import asyncio
+        from unittest.mock import AsyncMock
 
-    def test_no_heal_when_not_adjacent(self):
-        h = _stub_unit(UNIT_HEALER, skills=["heal"], x=0, y=0)
-        a = _stub_unit(UNIT_SWORDSMAN, hp=20, x=2, y=0)
+        h = _stub_unit("healer", skills=["heal"], x=0, y=0)
+        a = _stub_unit("swordsman", hp=20, x=1, y=0)
         a.player_id = h.player_id
         a.max_hp = 50
-        restored = heal_adjacent_ally(h, a)
-        assert restored == 0
-        assert a.hp == 20
+        ctx = SkillContext(user=h, target=a)
+        session = AsyncMock()
 
-    def test_no_heal_when_full_hp(self):
-        h = _stub_unit(UNIT_HEALER, skills=["heal"], x=0, y=0)
-        a = _stub_unit(UNIT_SWORDSMAN, hp=50, x=1, y=0)
+        result = asyncio.run(self._skill.execute(session, ctx))
+        assert result.restored_hp == 20
+        assert a.hp == 40
+
+    def test_can_use_adjacent_injured_same_player(self):
+        """can_use returns True when all conditions are met."""
+        h = _stub_unit("healer", skills=["heal"], x=0, y=0)
+        a = _stub_unit("swordsman", hp=20, x=1, y=0)
         a.player_id = h.player_id
         a.max_hp = 50
-        restored = heal_adjacent_ally(h, a)
-        assert restored == 0
+        ctx = SkillContext(user=h, target=a)
+        assert self._skill.can_use(ctx) is True
 
-    def test_no_heal_when_other_player(self):
-        h = _stub_unit(UNIT_HEALER, skills=["heal"], x=0, y=0)
-        a = _stub_unit(UNIT_SWORDSMAN, hp=20, x=1, y=0)
+    def test_cannot_use_when_not_adjacent(self):
+        h = _stub_unit("healer", skills=["heal"], x=0, y=0)
+        a = _stub_unit("swordsman", hp=20, x=2, y=0)
+        a.player_id = h.player_id
+        a.max_hp = 50
+        ctx = SkillContext(user=h, target=a)
+        assert self._skill.can_use(ctx) is False
+
+    def test_cannot_use_when_full_hp(self):
+        h = _stub_unit("healer", skills=["heal"], x=0, y=0)
+        a = _stub_unit("swordsman", hp=50, x=1, y=0)
+        a.player_id = h.player_id
+        a.max_hp = 50
+        ctx = SkillContext(user=h, target=a)
+        assert self._skill.can_use(ctx) is False
+
+    def test_cannot_use_when_other_player(self):
+        h = _stub_unit("healer", skills=["heal"], x=0, y=0)
+        a = _stub_unit("swordsman", hp=20, x=1, y=0)
         a.player_id = 99  # different from h.player_id=1
         a.max_hp = 50
-        restored = heal_adjacent_ally(h, a)
-        assert restored == 0
-
-    def test_no_heal_without_skill(self):
-        h = _stub_unit(UNIT_HEALER, skills=[], x=0, y=0)
-        a = _stub_unit(UNIT_SWORDSMAN, hp=20, x=1, y=0)
-        a.player_id = h.player_id
-        a.max_hp = 50
-        restored = heal_adjacent_ally(h, a)
-        assert restored == 0
+        ctx = SkillContext(user=h, target=a)
+        assert self._skill.can_use(ctx) is False
 
 
 # ============================================================
