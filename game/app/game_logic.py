@@ -527,130 +527,55 @@ __all__ = [
 
 
 # ============================================================
-# Map presets (hand-designed 15x15 layouts)
+# Map presets (loaded from game/maps/*.json)
 # ============================================================
-# Each preset is a dict with:
-#   - "id":    string id
-#   - "name":  human-readable name
+# Each preset is a JSON file with:
+#   - "id":          string id
+#   - "name":        human-readable name
 #   - "description": short tag
-#   - "layout": List[List[str]] of length 15 (rows), each row length 15.
-#       Terrain chars: 'P' plain, 'F' forest, 'M' mountain, 'R' river, 'C' castle
-#       Castles are placed at symmetric corner positions for 2-4 players.
+#   - "layout":      List[str], each row a 15-char string. Chars:
+#                    'P' plain, 'F' forest, 'M' mountain, 'R' river, 'C' castle
+#                    Castles are placed at symmetric corner positions for 2-4 players.
+#
+# Empty or missing "layout" → generate_map_preset() falls back to procedural generation.
+#
+# Adding a new preset: drop a JSON file in game/maps/, restart the server.
+# Regenerate JSON from an in-Python layout:  python tools/gen_map_json.py
 
-def _preset(id_: str, name: str, desc: str, layout: List[List[str]]) -> Dict:
-    if layout:
-        assert len(layout) == MAP_SIZE and all(len(r) == MAP_SIZE for r in layout), \
-            f"Preset {id_} must be {MAP_SIZE}x{MAP_SIZE}"
-    return {"id": id_, "name": name, "description": desc, "layout": layout}
+import json as _json
+from pathlib import Path as _Path
 
-
-def _build_open_plains() -> List[List[str]]:
-    """Mostly plain, scattered forests for cover. Easy maneuvering."""
-    row = lambda c: list(c)
-    layout = [row("PPPPPPPPPPPPPPP") for _ in range(MAP_SIZE)]
-    # scatter forests
-    for x, y in [(3, 4), (4, 4), (10, 10), (11, 10), (7, 7), (6, 8), (8, 6)]:
-        layout[y][x] = "F"
-    # corner castles
-    layout[2][2] = "C"; layout[12][12] = "C"
-    layout[2][12] = "C"; layout[12][2] = "C"
-    return layout
+_MAPS_DIR = _Path(__file__).resolve().parent.parent.parent / "maps"
 
 
-def _build_mountain_pass() -> List[List[str]]:
-    """Mountains form corridors, two natural chokepoints."""
-    layout = [["P"] * MAP_SIZE for _ in range(MAP_SIZE)]
-    # Mountain ranges across the middle
-    for y in range(6, 9):
-        for x in range(MAP_SIZE):
-            if x not in (3, 4, 10, 11):  # leave two passes
-                layout[y][x] = "M"
-    # A few forests for cover
-    for x, y in [(2, 3), (12, 3), (2, 11), (12, 11), (7, 1), (7, 13)]:
-        layout[y][x] = "F"
-    layout[2][2] = "C"; layout[12][12] = "C"
-    layout[2][12] = "C"; layout[12][2] = "C"
-    return layout
+def _load_map_presets() -> Dict[str, Dict]:
+    """Load all map preset JSON files from game/maps/ at import time."""
+    presets: Dict[str, Dict] = {
+        # "classic" is special: empty layout → falls back to procedural generation
+        "classic": {
+            "id": "classic",
+            "name": "经典随机",
+            "description": "按种子随机生成的标准地图",
+            "layout": [],
+        },
+    }
+    if _MAPS_DIR.is_dir():
+        for path in sorted(_MAPS_DIR.glob("*.json")):
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            layout = data.get("layout", [])
+            if layout:
+                assert len(layout) == MAP_SIZE and all(len(r) == MAP_SIZE for r in layout), \
+                    f"Preset {data.get('id', path.stem)} must be {MAP_SIZE}x{MAP_SIZE}"
+            presets[data["id"]] = data
+    return presets
 
 
-def _build_river_crossing() -> List[List[str]]:
-    """A river diagonally divides the map; bridges (plain) at corners."""
-    layout = [["P"] * MAP_SIZE for _ in range(MAP_SIZE)]
-    # diagonal river
-    for i in range(MAP_SIZE):
-        layout[i][i] = "R"
-        if i + 1 < MAP_SIZE:
-            layout[i][i + 1] = "R"
-    # plains bridges at corners (cleared at diagonal)
-    for cx, cy in [(0, 0), (MAP_SIZE - 1, 0), (0, MAP_SIZE - 1), (MAP_SIZE - 1, MAP_SIZE - 1)]:
-        for dx in range(-1, 2):
-            for dy in range(-1, 2):
-                x, y = cx + dx, cy + dy
-                if 0 <= x < MAP_SIZE and 0 <= y < MAP_SIZE:
-                    layout[y][x] = "P"
-    # a few forests for cover
-    for x, y in [(4, 5), (10, 5), (5, 9), (9, 9), (7, 7)]:
-        layout[y][x] = "F"
-    layout[1][1] = "C"; layout[13][13] = "C"
-    layout[1][13] = "C"; layout[13][1] = "C"
-    return layout
-
-
-def _build_forest_ambush() -> List[List[str]]:
-    """Dense forest in the middle, plain ring at edges. Defenders win."""
-    layout = [["P"] * MAP_SIZE for _ in range(MAP_SIZE)]
-    # Forest donut
-    for y in range(3, 12):
-        for x in range(3, 12):
-            layout[y][x] = "F"
-    # Scattered mountains for extra cover
-    for x, y in [(5, 7), (9, 7), (7, 5), (7, 9)]:
-        layout[y][x] = "M"
-    layout[1][1] = "C"; layout[13][13] = "C"
-    layout[1][13] = "C"; layout[13][1] = "C"
-    return layout
-
-
-def _build_four_lakes() -> List[List[str]]:
-    """Central mountains, four 'lake' (river) clusters, open plains elsewhere."""
-    layout = [["P"] * MAP_SIZE for _ in range(MAP_SIZE)]
-    # Central mountain fortress
-    for y in range(6, 9):
-        for x in range(6, 9):
-            layout[y][x] = "M"
-    # Lakes in 4 corners (offset)
-    lakes = [(3, 3), (3, 11), (11, 3), (11, 11)]
-    for cx, cy in lakes:
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                x, y = cx + dx, cy + dy
-                if 0 <= x < MAP_SIZE and 0 <= y < MAP_SIZE:
-                    layout[y][x] = "R"
-    # Castles at edges of mountains
-    layout[2][2] = "C"; layout[12][12] = "C"
-    layout[2][12] = "C"; layout[12][2] = "C"
-    return layout
-
-
-MAP_PRESETS: Dict[str, Dict] = {
-    "classic": _preset("classic", "经典随机", "按种子随机生成的标准地图",
-                       []),  # populated on demand via generate_map()
-    "open_plains": _preset("open_plains", "开阔平原", "少障碍、易推进、弓兵强势",
-                           _build_open_plains()),
-    "mountain_pass": _preset("mountain_pass", "山地关口", "山脉横贯，狭窄通道决定胜负",
-                             _build_mountain_pass()),
-    "river_crossing": _preset("river_crossing", "河流分割", "对角线河流分割战场，需绕行或强渡",
-                              _build_river_crossing()),
-    "forest_ambush": _preset("forest_ambush", "森林伏击", "中央密林，防御+2，远程受限",
-                             _build_forest_ambush()),
-    "four_lakes": _preset("four_lakes", "四方水泽", "中央山地堡垒，四角河流阻隔",
-                          _build_four_lakes()),
-}
+MAP_PRESETS: Dict[str, Dict] = _load_map_presets()
 
 
 def generate_map_preset(preset_id: str, seed: int, num_castles: int = CASTLES_PER_GAME) -> List[List[Tile]]:
     """Build a Tile grid from a named preset (or fall back to procedural)."""
-    if preset_id and preset_id in MAP_PRESETS and MAP_PRESETS[preset_id]["layout"]:
+    if preset_id and preset_id in MAP_PRESETS and MAP_PRESETS[preset_id].get("layout"):
         layout = MAP_PRESETS[preset_id]["layout"]
         return _layout_to_tiles(layout)
     # Fall back to the original seeded random generator

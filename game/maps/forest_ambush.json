@@ -1,0 +1,30 @@
+{
+  "id": "forest_ambush",
+  "name": "森林伏击",
+  "description": "中央密林，防御+2，远程受限",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PCPPPPPPPPPPPCP",
+    "PPPPPPPPPPPPPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPFFFFMFFFFPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPFFMFFFMFFPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPFFFFMFFFFPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPFFFFFFFFFPPP",
+    "PPPPPPPPPPPPPPP",
+    "PCPPPPPPPPPPPCP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}

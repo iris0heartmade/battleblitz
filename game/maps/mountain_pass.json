@@ -1,0 +1,30 @@
+{
+  "id": "mountain_pass",
+  "name": "山地关口",
+  "description": "山脉横贯，狭窄通道决定胜负",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPFPPPPPPP",
+    "PPCPPPPPPPPPCPP",
+    "PPFPPPPPPPPPFPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "MMMPPMMMMMPPMMM",
+    "MMMPPMMMMMPPMMM",
+    "MMMPPMMMMMPPMMM",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPFPPPPPPPPPFPP",
+    "PPCPPPPPPPPPCPP",
+    "PPPPPPPFPPPPPPP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}

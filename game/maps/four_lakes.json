@@ -1,0 +1,30 @@
+{
+  "id": "four_lakes",
+  "name": "四方水泽",
+  "description": "中央山地堡垒，四角河流阻隔",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPCRRPPPPPRRCPP",
+    "PPRRRPPPPPRRRPP",
+    "PPRRRPPPPPRRRPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPMMMPPPPPP",
+    "PPPPPPMMMPPPPPP",
+    "PPPPPPMMMPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPRRRPPPPPRRRPP",
+    "PPRRRPPPPPRRRPP",
+    "PPCRRPPPPPRRCPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}

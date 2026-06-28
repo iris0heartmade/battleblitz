@@ -1,0 +1,30 @@
+{
+  "id": "open_plains",
+  "name": "开阔平原",
+  "description": "少障碍、易推进、弓兵强势",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPCPPPPPPPPPCPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPFFPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPFPPPPPP",
+    "PPPPPPPFPPPPPPP",
+    "PPPPPPFPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPFFPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPCPPPPPPPPPCPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}

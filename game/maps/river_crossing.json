@@ -1,0 +1,30 @@
+{
+  "id": "river_crossing",
+  "name": "河流分割",
+  "description": "对角线河流分割战场，需绕行或强渡",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PCRPPPPPPPPPPCP",
+    "PPRRPPPPPPPPPPP",
+    "PPPRRPPPPPPPPPP",
+    "PPPPRRPPPPPPPPP",
+    "PPPPFRRPPPFPPPP",
+    "PPPPPPRRPPPPPPP",
+    "PPPPPPPFRPPPPPP",
+    "PPPPPPPPRRPPPPP",
+    "PPPPPFPPPFRPPPP",
+    "PPPPPPPPPPRRPPP",
+    "PPPPPPPPPPPRRPP",
+    "PPPPPPPPPPPPRRP",
+    "PCPPPPPPPPPPPCP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}
