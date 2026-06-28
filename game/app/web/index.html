@@ -263,6 +263,7 @@
         <div class="form-row">
           <label>工具（点格子应用）</label>
           <div class="editor-tools">
+            <button class="tool-btn" data-tool="select" title="选择/移动单位">🔍</button>
             <button class="tool-btn active" data-tool="P" title="平地">🌱</button>
             <button class="tool-btn" data-tool="F" title="森林">🌲</button>
             <button class="tool-btn" data-tool="M" title="山地">⛰</button>
@@ -274,6 +275,9 @@
             <button class="tool-btn" data-tool="unit-healer" title="治疗师">💚</button>
             <button class="tool-btn" data-tool="erase" title="擦除">🧹</button>
           </div>
+        </div>
+        <div id="editor-selected-info" class="selected-info">
+          未选中单位（用 🔍 工具点击单位即可选中 / 拖到空格移动 / 切颜色改色 / 右键删除）
         </div>
         <div class="form-row">
           <label>玩家颜色（放置单位时用）</label>

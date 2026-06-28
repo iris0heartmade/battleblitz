@@ -1821,3 +1821,34 @@ html, body {
   .editor-board { --cell-size: 18px; }
   .tool-btn { width: 36px; height: 36px; font-size: 18px; }
 }
+
+/* ============================================================
+   Editor: selected unit display
+   ============================================================ */
+.selected-info {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.selected-info b { color: var(--text); }
+
+.editor-cell.unit-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  z-index: 3;
+}
+.editor-cell .unit.selected {
+  filter: brightness(1.3) drop-shadow(0 0 4px var(--accent));
+}
+
+.btn-tiny {
+  padding: 2px 8px !important;
+  font-size: 11px !important;
+  margin-left: 4px;
+  border-radius: 4px;
+}

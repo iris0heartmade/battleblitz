@@ -3279,10 +3279,11 @@ document.addEventListener("DOMContentLoaded", () => {
     layout: null,         // 2D array of terrain chars
     initialUnits: [],     // [{x, y, type, color, level}]
     biome: "grass",
-    tool: "P",            // current tool
-    color: "red",         // current unit color
-    mapId: null,          // set when editing/saving existing
+    tool: "P",            // current tool ("select" / "P" / "F" / "M" / "R" / "C" / "unit-..." / "erase")
+    color: "red",         // current unit color (also used for new units + recolor selected)
+    mapId: null,
     mapName: "",
+    selectedIdx: -1,      // index into initialUnits for edit ops; -1 = none
   };
 
   function makeEmptyLayout(w, h, fill = "P") {
@@ -3294,11 +3295,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!board) return;
     board.innerHTML = "";
     const W = editorState.width, H = editorState.height;
-    // Build unit index for quick lookup
+    // Build unit index + reverse map unitIdx → unit
     const unitMap = new Map();
-    for (const u of editorState.initialUnits) {
+    const idxAt = new Map();
+    editorState.initialUnits.forEach((u, i) => {
       unitMap.set(`${u.x},${u.y}`, u);
-    }
+      idxAt.set(`${u.x},${u.y}`, i);
+    });
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const terrain = editorState.layout[y][x] || "P";
@@ -3316,6 +3319,11 @@ document.addEventListener("DOMContentLoaded", () => {
           uEl.textContent = unitGlyph(u.type);
           uEl.title = `${u.type} (Lv.${u.level})`;
           cell.appendChild(uEl);
+          // Highlight selected unit
+          if (idxAt.get(`${x},${y}`) === editorState.selectedIdx) {
+            cell.classList.add("unit-selected");
+            uEl.classList.add("selected");
+          }
         }
         cell.addEventListener("click", () => onEditorCellClick(x, y));
         cell.addEventListener("contextmenu", (ev) => {
@@ -3325,10 +3333,71 @@ document.addEventListener("DOMContentLoaded", () => {
         board.appendChild(cell);
       }
     }
+    updateSelectedInfo();
+  }
+
+  function updateSelectedInfo() {
+    const info = document.getElementById("editor-selected-info");
+    if (!info) return;
+    const u = editorState.selectedIdx >= 0
+      ? editorState.initialUnits[editorState.selectedIdx]
+      : null;
+    if (!u) {
+      info.textContent = "未选中单位（用 🔍 工具点击单位即可选中）";
+      return;
+    }
+    info.innerHTML = `
+      选中：<b>${u.type}</b> @ (${u.x},${u.y}) · Lv.${u.level} · <span style="color:${playerColorCss(u.color)}">●</span> ${u.color}
+      <button class="btn btn-tiny" id="editor-unit-lvl-up">Lv+</button>
+      <button class="btn btn-tiny" id="editor-unit-lvl-down">Lv-</button>
+      <button class="btn btn-tiny btn-danger" id="editor-unit-delete">删除</button>
+    `;
+    // Wire up the inner buttons (re-query each time)
+    const lvlUp = document.getElementById("editor-unit-lvl-up");
+    const lvlDn = document.getElementById("editor-unit-lvl-down");
+    const delBtn = document.getElementById("editor-unit-delete");
+    if (lvlUp) lvlUp.onclick = () => {
+      if (u.level < 10) { u.level++; renderEditorBoard(); }
+    };
+    if (lvlDn) lvlDn.onclick = () => {
+      if (u.level > 1) { u.level--; renderEditorBoard(); }
+    };
+    if (delBtn) delBtn.onclick = () => {
+      editorState.initialUnits = editorState.initialUnits.filter(x => x !== u);
+      editorState.selectedIdx = -1;
+      renderEditorBoard();
+    };
   }
 
   function onEditorCellClick(x, y) {
     const tool = editorState.tool;
+
+    // SELECT tool: pick up / move existing units
+    if (tool === "select") {
+      const existingIdx = editorState.initialUnits.findIndex(
+        u => u.x === x && u.y === y
+      );
+      if (existingIdx >= 0) {
+        // Click on existing unit → select it
+        editorState.selectedIdx = existingIdx;
+        renderEditorBoard();
+        return;
+      }
+      if (editorState.selectedIdx >= 0) {
+        // Click empty cell → move selected unit here
+        if (editorState.layout[y][x] === "C") {
+          toast("城堡格不能放单位");
+          return;
+        }
+        const u = editorState.initialUnits[editorState.selectedIdx];
+        u.x = x; u.y = y;
+        editorState.selectedIdx = editorState.initialUnits.indexOf(u);
+        renderEditorBoard();
+        return;
+      }
+      return; // no selection, click empty → nothing
+    }
+
     if (tool === "erase") {
       eraseEditorCell(x, y);
       return;
@@ -3347,11 +3416,12 @@ document.addEventListener("DOMContentLoaded", () => {
       editorState.initialUnits.push({
         x, y, type: unitType, color: editorState.color, level: 1,
       });
+      editorState.selectedIdx = editorState.initialUnits.length - 1;
       renderEditorBoard();
       return;
     }
     // Terrain tool: P / F / M / R / C
-    const row = editorState.layout[y];
+    const row = editorState.layout[y][x];
     row[x] = tool;
     renderEditorBoard();
   }
@@ -3389,14 +3459,24 @@ document.addEventListener("DOMContentLoaded", () => {
           document.querySelectorAll(".tool-btn").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
           editorState.tool = btn.dataset.tool;
+          // Clear selection when switching away from select tool
+          if (btn.dataset.tool !== "select") {
+            editorState.selectedIdx = -1;
+            updateSelectedInfo();
+          }
         });
       });
-      // Color buttons
+      // Color buttons — also recolor selected unit if any
       document.querySelectorAll(".color-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           document.querySelectorAll(".color-btn").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
           editorState.color = btn.dataset.color;
+          // Apply color to selected unit
+          if (editorState.selectedIdx >= 0) {
+            editorState.initialUnits[editorState.selectedIdx].color = btn.dataset.color;
+            renderEditorBoard();
+          }
         });
       });
     }
