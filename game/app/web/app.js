@@ -2030,11 +2030,13 @@ const Dialog = {
           { text: "跟随红的勇气", value: "hong" },
         ],
       },
-      { type: "narration", text: "（你做出了选择）" },
+      { type: "dialogue", speaker: "云", speaker_color: "#ffb84d",
+        text: "明智的选择。让我们开始准备吧。" },
+      { type: "narration", text: "（云的身影在月光下格外坚定。你感到一股温暖的力量涌入体内。）" },
       { type: "dialogue", speaker: "系统",
-        text: "🎉 对话框演示完成！" },
+        text: "🎉 立绘集成演示完成！\n「云」的肖像现已接入对话框系统。\n\n更多角色的立绘可以添加到 CHARACTER_PORTRAITS 中。" },
     ]);
-    toast("对话框演示结束");
+    toast("🎭 立绘演示结束");
   },
 
   // ====================== 内部 ======================
@@ -2099,6 +2101,8 @@ const Dialog = {
     const speakerEl = box.querySelector(".dialog-speaker");
     const textEl = box.querySelector(".dialog-text");
     const choicesEl = box.querySelector(".dialog-choices");
+    const avatarEl = box.querySelector(".dialog-avatar");
+    const placeholder = avatarEl && avatarEl.querySelector(".dialog-avatar-placeholder");
 
     speakerEl.textContent = scene.speaker || "";
     speakerEl.classList.toggle("is-narration", !scene.speaker);
@@ -2138,6 +2142,30 @@ const Dialog = {
     box.classList.add("is-typing");
     box.hidden = false;
     this._startTypewriter(textEl, scene.text || "", false);
+  },
+
+  /** Show/hide the standalone portrait panel with the given image. */
+  _setPortraitPanel(speaker, portraitUrl) {
+    const panel = document.getElementById("portrait-panel");
+    const img = document.getElementById("portrait-image");
+    const tag = document.getElementById("portrait-name-tag");
+    if (!panel || !img || !tag) return;
+
+    if (portraitUrl && speaker) {
+      img.src = portraitUrl;
+      img.alt = speaker;
+      tag.textContent = speaker;
+      panel.hidden = false;
+      // Ensure reflow so the transition fires
+      void panel.offsetWidth;
+      panel.style.opacity = "1";
+    } else {
+      panel.style.opacity = "0";
+      // Keep hidden after transition
+      setTimeout(() => {
+        if (panel.style.opacity === "0") panel.hidden = true;
+      }, 300);
+    }
   },
 
   _renderNarration(scene) {
@@ -2642,7 +2670,7 @@ const MainlineView = {
     // 列出所有 mainline 存档并按 chapter+battle 归到槽位
     let saves = [];
     try {
-      const allGames = await api("GET", "/games");
+      const allGames = await api("GET", `/games?user_name=${encodeURIComponent(probeName)}`);
       saves = (allGames || []).filter(g => (g.name || "").startsWith("mainline:"));
     } catch (_) {}
     // 当前用户的 active 主线存档
@@ -3020,6 +3048,9 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "resume-game":
         await tryResumeSession();
+        break;
+      case "goto-free-mode":
+        showView("free-mode");
         break;
       case "goto-settings":
         renderSettings();
