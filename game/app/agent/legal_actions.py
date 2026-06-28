@@ -23,8 +23,6 @@ from app.agent.schemas import LegalAction
 from app.config import (
     AI_AGGRO_RANGE,
     SKILL_DOUBLE_STRIKE,
-    SKILL_HEAL,
-    SKILL_RALLY,
     SKILL_SNIPE,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,

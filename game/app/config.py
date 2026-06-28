@@ -13,7 +13,6 @@ from typing import Dict, Final, List, Tuple
 # ============================================================
 
 MAP_SIZE: Final[int] = 15  # 15x15 grid
-TOTAL_TILES: Final[int] = MAP_SIZE * MAP_SIZE
 
 # Terrain types as string constants (also stored in DB)
 TERRAIN_PLAIN: Final[str] = "plain"
@@ -79,8 +78,6 @@ DEFAULT_PLAYER_COLORS: Final[Tuple[str, ...]] = ("red", "blue", "green", "yellow
 
 SKILL_DOUBLE_STRIKE: Final[str] = "double_strike"
 SKILL_SNIPE:        Final[str] = "snipe"
-SKILL_HEAL:         Final[str] = "heal"
-SKILL_RALLY:        Final[str] = "rally"
 
 
 # ============================================================
@@ -90,8 +87,6 @@ SKILL_RALLY:        Final[str] = "rally"
 BASE_CRIT_RATE: Final[float] = 0.05       # 5%
 CRIT_PER_LEVEL: Final[float] = 0.01       # +1% per level
 CRIT_MULTIPLIER: Final[float] = 1.5
-
-DEFAULT_MELEE_RANGE: Final[int] = 1
 
 
 # ============================================================
@@ -134,7 +129,6 @@ COUNTER_IMMUNE_SKILLS: Final[tuple[str, ...]] = ()
 # AI player
 AI_THINK_DELAY_SECONDS: Final[float] = 1.2  # delay between AI actions so humans can watch
 AI_MAX_ACTIONS_PER_TURN: Final[int] = 5      # safety cap so a buggy AI can't loop forever
-AI_SKILL_HEAL_THRESHOLD_HP: Final[int] = 40  # heal allies below this HP% (relative to max)
 AI_AGGRO_RANGE: Final[int] = 4               # AI prefers targets within this many tiles
 
 # ============================================================
