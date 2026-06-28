@@ -450,7 +450,7 @@ html, body {
   height: 100%;
   padding-top: 8px;
 }
-}
+
 
 /* ============================================================
    Board
@@ -1233,7 +1233,7 @@ html, body {
   font-size: 36px;
   opacity: 0.55;
 }
-}
+
 
 .dialog-box .dialog-body {
   flex: 1;
