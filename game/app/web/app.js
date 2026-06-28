@@ -157,9 +157,12 @@ async function renderSavesView() {
   const mlEl = document.getElementById("saves-mainline");
   openEl.innerHTML = `<p class="muted">加载中…</p>`;
   mlEl.innerHTML = `<p class="muted">加载中…</p>`;
+  // Only fetch the current user's games (don't show other players' saves)
+  const userName = (state.settings.playerName || "").trim();
   let games = [];
   try {
-    games = await api("GET", "/games");
+    const query = userName ? `?user_name=${encodeURIComponent(userName)}` : "";
+    games = await api("GET", "/games" + query);
   } catch (e) {
     openEl.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
     mlEl.innerHTML = "";
@@ -1113,7 +1116,7 @@ function showUnitActionBubble(unit) {
   let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}</div>`;
   html += `<div class="ab-row">`;
   html += `<button class="ab-btn primary" data-ab="move" ${canMove ? "" : "disabled"}>🚶 移动</button>`;
-  html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"}>⚔️ 攻击</button>`;
+  html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"} title="${canAttack ? `可攻击 ${targets.size} 个敌人` : "范围内无目标"}">⚔️ 攻击${canAttack ? "" : ""}</button>`;
   html += `<button class="ab-btn" data-ab="range">🎯 射程</button>`;
   html += `</div><div class="ab-row">`;
   if (canHeal) html += `<button class="ab-btn heal" data-ab="heal">💚 治疗</button>`;
@@ -1227,6 +1230,7 @@ function showPostMoveBubble(unit) {
   const canContinue = unit.mp > 0 && unitCanMoveAfter(unit.unit_type);
   const hasContent = enemyList.length > 0 || canContinue;
   if (!hasContent) {
+    toast("移动完成，当前范围内无目标");
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
@@ -1928,6 +1932,18 @@ function skillName(s) {
 //   - 选项按钮点击 → 选中并 resolve
 // ============================================================
 
+// ── Character asset registry ──
+// Maps speaker names to their visual assets.
+//   crest:    small circular icon shown in the dialog box avatar slot
+//   portrait: full character portrait shown in the standalone portrait panel
+// All portraits should be uniform dimensions for consistent display.
+const CHARACTER_ASSETS = {
+  "云": {
+    crest: "/ui/assets/crest_yun.png",
+    portrait: "/ui/assets/portrait_yun.png",
+  },
+};
+
 const Dialog = {
   // 运行状态
   active: false,         // 是否正在播放
@@ -1995,10 +2011,14 @@ const Dialog = {
   async demo() {
     await this.play([
       { type: "narration", text: "很久以前，这片大陆被黑暗笼罩……" },
+      // "云" 有肖像立绘，会自动显示在对话框左侧
       { type: "dialogue", speaker: "云", speaker_color: "#ffb84d",
-        text: "你好，旅者。我是云，这片大陆的守护者。" },
+        text: "你好，旅者。我是云，这片大陆的守护者。\n\n你的到来让命运之轮再次转动。前方的道路充满艰险，但我会与你同行。" },
+      { type: "dialogue", speaker: "云", speaker_color: "#ffb84d",
+        text: "看那里——远方的山脉之后，便是黑暗军团的要塞。我们必须集结力量，在下次满月之前发起进攻。" },
+      // "红" 没有注册肖像，显示 🎭 占位符
       { type: "dialogue", speaker: "红", speaker_color: "#e85a6a",
-        text: "今天，我们将吹响反击的号角。" },
+        text: "今天，我们将吹响反击的号角。战士们已经准备好了！" },
       { type: "choice",
         question: "你选择相信谁？",
         choices: [
@@ -2083,6 +2103,31 @@ const Dialog = {
     } else {
       speakerEl.style.color = "";
     }
+
+    // ── Dialog crest (small circular icon in the dialog box) ──
+    const oldCrest = avatarEl && avatarEl.querySelector("img");
+    if (oldCrest) oldCrest.remove();
+
+    const assets = scene.speaker ? CHARACTER_ASSETS[scene.speaker] : null;
+    if (assets && assets.crest && avatarEl) {
+      if (placeholder) placeholder.hidden = true;
+      const img = document.createElement("img");
+      img.src = assets.crest;
+      img.alt = scene.speaker || "";
+      img.draggable = false;
+      img.onerror = function () {
+        this.style.display = "none";
+        if (placeholder) placeholder.hidden = false;
+      };
+      avatarEl.appendChild(img);
+    } else {
+      if (placeholder) placeholder.hidden = false;
+      const stray = avatarEl && avatarEl.querySelector("img");
+      if (stray) stray.remove();
+    }
+
+    // ── Standalone portrait panel (outside dialog box) ──
+    this._setPortraitPanel(scene.speaker, assets ? assets.portrait : null);
 
     choicesEl.innerHTML = "";
     box.classList.remove("is-text-done");
@@ -2231,6 +2276,8 @@ const Dialog = {
     box.querySelector(".dialog-text").innerHTML = "";
     narration.querySelector(".dialog-narration-text").innerHTML = "";
     box.querySelector(".dialog-speaker").textContent = "";
+    // Hide the standalone portrait panel
+    this._setPortraitPanel(null, null);
     this.active = false;
     this._currentScene = null;
     this._resolve = null;
@@ -3134,14 +3181,4 @@ document.addEventListener("DOMContentLoaded", () => {
     aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
   }
 
-  // Auto-resume: if a session is in localStorage, try to rejoin before showing the menu.
-  // NOTE: do NOT call showView('menu') on the `!resumed` branch — by the time this promise
-  // resolves, the user may have already clicked into another view (e.g. 新建游戏).
-  // Overriding their navigation back to menu is a UX bug. The initial showView('menu') above
-  // is sufficient for the default case.
-  tryResumeSession().then((resumed) => {
-    if (!resumed) {
-      updateResumeButton(loadSession());
-    }
-  });
 });
