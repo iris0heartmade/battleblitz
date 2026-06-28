@@ -15,7 +15,7 @@ To add a new unit type:
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from typing import ClassVar, Dict, FrozenSet, List, Optional, Tuple
 

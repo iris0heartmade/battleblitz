@@ -33,7 +33,6 @@ from app.agent.llm_client import LLMClient, LLMResponse, TokenUsage
 from app.agent.prompt import build_system_prompt, build_user_prompt
 from app.agent.reactions import (
     Reaction,
-    events_for_action,
     events_from_hp_diff,
     generate_reaction,
 )

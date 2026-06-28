@@ -21,8 +21,6 @@ from app.config import (
     COUNTER_IMMUNE_SKILLS,
     MAP_SIZE,
     SKILL_DOUBLE_STRIKE,
-    SKILL_HEAL,
-    SKILL_RALLY,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
 )

@@ -27,7 +27,6 @@ from app.config import (
 from app.database import get_session
 from app.game_logic import (
     castle_positions,
-    create_initial_units_with_roster,
     generate_map_preset,
     get_roster_for_composition,
     build_ai_player,

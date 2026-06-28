@@ -9,7 +9,7 @@ class DoubleStrikeSkill(BaseSkill):
     is_passive = True
     default_users = ["knight"]
 
-    def modify_attack_damage(self, base_damage: int, attacker, defender, terrain_bonus: int):
+    def modify_attack_damage(self, base_damage: int, attacker, defender, _terrain_bonus: int):
         # The combat engine checks this skill's presence and splits damage
         # into two hits; this hook signals "I'm active".
         return {"damage": base_damage, "hits": 2}

@@ -16,7 +16,7 @@ To add a new skill:
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
 
@@ -99,7 +99,7 @@ class BaseSkill(ABC):
         base_damage: int,
         attacker: Unit,
         defender: Unit,
-        terrain_bonus: int,
+        _terrain_bonus: int,  # noqa: ARG002 — hook contract, reserved for future terrain-aware skills
     ) -> Dict[str, Any]:
         """Called during damage calculation.  Return {'damage': int, 'hits': int, ...}."""
         return {"damage": base_damage, "hits": 1}
