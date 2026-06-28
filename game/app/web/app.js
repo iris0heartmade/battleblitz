@@ -1653,8 +1653,21 @@ function renderUnitInfo(st) {
 
 // ----- API call helpers -----
 
+// Clear transient visual highlights that were meaningful only for the
+// action that just completed. Without this, the previous move-range,
+// attack-range, and hover-path overlays stay painted on the board
+// because renderBoard re-reads these state vars on every refresh.
+function clearVisualState() {
+  state.path = null;
+  state.reachableTiles = null;
+  state.attackTargets = null;
+  state.pendingMove = null;
+  state.pendingAttack = null;
+}
+
 async function doMove(unit, toX, toY) {
   state.actionMode = null;
+  clearVisualState();
   try {
     await api("POST", `/games/${state.me.game_id}/move`, {
       player_id: state.me.player_id,
@@ -1679,11 +1692,13 @@ async function doMove(unit, toX, toY) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
+    clearVisualState();
   }
 }
 
 async function doAttack(attacker, targetId) {
   state.actionMode = null;
+  clearVisualState();
   try {
     const r = await api("POST", `/games/${state.me.game_id}/attack`, {
       player_id: state.me.player_id,
@@ -1715,11 +1730,13 @@ async function doAttack(attacker, targetId) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
+    clearVisualState();
   }
 }
 
 async function doSkill(skill, targetId, unit) {
   state.actionMode = null;
+  clearVisualState();
   try {
     await api("POST", `/games/${state.me.game_id}/skill`, {
       player_id: state.me.player_id,
@@ -1736,11 +1753,13 @@ async function doSkill(skill, targetId, unit) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
+    clearVisualState();
   }
 }
 
 async function doWait(unit) {
   state.actionMode = null;
+  clearVisualState();
   try {
     await api("POST", `/games/${state.me.game_id}/wait`, {
       player_id: state.me.player_id,
@@ -1754,10 +1773,12 @@ async function doWait(unit) {
     hideBubble();
     state.selectedUnit = null;
     state.actionMode = null;
+    clearVisualState();
   }
 }
 
 async function endTurn() {
+  clearVisualState();
   try {
     const r = await api("POST", `/games/${state.me.game_id}/end-turn`, {
       player_id: state.me.player_id,
