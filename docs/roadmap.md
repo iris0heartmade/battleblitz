@@ -8,7 +8,7 @@
 
 ---
 
-# 0. 项目状态概览（2026-06-26 审计）
+# 0. 项目状态概览（2026-06-28 审计）
 
 ## 0.1 已实现功能（✅）
 
@@ -22,19 +22,37 @@
 - ✅ 后台定时器（24h 超时跳过、废弃房间清理）
 - ✅ 战报日志（移动/攻击/技能/死亡/AI 表情）
 - ✅ WebUI（菜单/大厅/棋盘/气泡式交互/参考面板/FLIP 动画）
+- ✅ 对话框系统（`app/web/app.js` Dialog 模块，31/31 jsdom 单测）
+- ✅ 主线/战役模式（`app/mainline/` 4 步全完成，含示例 chapter_01_steel_rebellion）
+- ✅ 主线存档（`PlayerProfile.mainline_progress`，按 user_name 持久化）
+- ✅ 战斗预测面板（forecastSingleHit/forecastAttack，含反击/暴击）
+- ✅ 反击系统（`COUNTER_DAMAGE_MULT=0.5`，连击后反击）
+- ✅ 晋升/等级系统（`app/progression/`，XP + 转职证路线）
+- ✅ 玩家档案 API（`app/routes/profile.py`）
+- ✅ WebSocket 基础设施（`app/protocol/v1.py` + `app/events/bus.py` + Debug WS 端点）
 
 ## 0.2 进行中（🚧）
 
+- 🚧 生产环境 WebSocket 网关（前端 `app.js` 仍用 3s 轮询；debug_ws 端点可用，未对接客户端）
+- 🚧 AI reaction 演出优化（DB 已存 reaction，前端展示链路半成品）
 - 🚧 死代码清理（`doc/dead-code.md` 列了 8 个 config alias + 16 个 dead import）
-- 🚧 前端单元类型显示迁移到 `/units` 接口（已完成，旧的 `UNIT_REF` 已删）
-- 🚧 AI reaction 演出优化（DB 已有 reaction，未充分接入前端展示）
+- 🚧 roadmap 文档同步（刚完成 2026-06-28 审计，状态对齐代码库）
 
 ## 0.3 未实现（⬜）
 
-- ⬜ WebSocket 实时推送（当前靠 3s 轮询）
+- ⬜ P0.1 敌我分阶段（混合轮流 → 标准回合制）
+- ⬜ P0.4 地形增强（城市/工厂/道路/王座等火纹/AW 经典地形）
+- ⬜ P1.1 武器耐久度 & 装备系统
+- ⬜ P1.2 兵种克制扩展（剑→斧→枪 三角）
+- ⬜ P2.1 迷雾战争
+- ⬜ P2.2 指挥官 + CO Power
+- ⬜ P2.3 地图任务多样化（Seize/Defend/Reach/Boss）
+- ⬜ P3.1 支援系统
+- ⬜ P3.2 地形动态（着火/冰面/昼夜/沙尘暴）
+- ⬜ P3.3 单位招募 + 经济系统
+- ⬜ P3.4 战斗动画层
 - ⬜ 法师兵种（克制表里已预留）
-- ⬜ 用户认证系统
-- ⬜ 战役模式（主线 [S0.2](#s0--剧情故事系统优先实现) 进行中）
+- ⬜ 用户认证系统（当前按 user_name 软绑定）
 - ⬜ 多模型投票 / ReAct 沙盘推演
 
 ## 0.4 关键设计决策
@@ -44,7 +62,10 @@
 | MP 系统（替代简单 MOV） | architecture.md §五 7.1 |
 | 士气系统（替代纯 EXP/Level） | architecture.md §五 7.2 |
 | 首玩家公平性规则 | architecture.md §五 7.3 |
-| 兵种/技能模块化 | architecture.md §四 4.5/4.6 |
+| 兵种/技能模块化 | architecture.md §三 3.x |
+| 事件总线（pub/sub by game_id） | architecture.md §十一 11.1 |
+| 主线 JSON 剧情格式 | architecture.md §十二 12.1 |
+| 晋升走 XP 路线（替代"士气满 3 星"） | architecture.md §十三 13.1 |
 
 ---
 
@@ -168,17 +189,18 @@
 - `web/index.html`：剧情模式入口按钮
 - `game/stories/`：剧情 JSON 文件夹
 
-**状态**：[ ]
+**状态**：[✓] （4 步全完成，2026-06-27）
 
-### ⏸ 需要确认的技术细节
+### ⏸ 历史技术细节（已确认）
 
 1. JSON 剧情文件放在哪个目录？
-   - 推荐：`game/stories/`，每章一个 `chapter_01.json`
+   - ✅ `game/mainlines/*.json`（主线配置）+ `game/stories/chapter_XX/*.json`（剧情片段）
 2. 战斗结束后如何继续剧情？
-   - 方案 A：战斗胜利后自动播放 `next_story`
-   - 方案 B：玩家回大厅手动选择下一章
-   - 推荐：方案 A（无缝衔接，更火纹）
-3. 剧情中是否支持插入"教学提示"（为后续 P0/P1 功能准备）？
+   - ✅ 方案 A：战斗胜利后自动播放 `next_story`（`POST /mainlines/{id}/advance`）
+3. 剧情中是否支持插入"教学提示"？
+   - ✅ 通过 `narration` scene 类型支持
+
+详细实施日志见 [mainline/steps.md](mainline/steps.md)、第 1 章配置见 [`game/mainlines/chapter_01_steel_rebellion.json`](../../game/mainlines/chapter_01_steel_rebellion.json)。
 
 ---
 
@@ -223,7 +245,7 @@
   - 读档/存档列表界面
   - 自动存档（每回合开始自动存）
 
-**状态**：[ ]
+**状态**：[✓]（主线存档子集已实装：见 [mainline/steps.md](mainline/steps.md) Step 2，`PlayerProfile.mainline_progress` 字段按 `user_name` 持久化主线战斗序号 + scene_id；23/23 单测通过）。自由模式通用存档 SaveSlot 暂未实装，待 P0+ 平衡后再补。
 
 ### ⏸ 需要确认的技术细节
 
@@ -373,21 +395,22 @@
 
 ## P1.3 晋升系统 (Promotion)
 
-**概述**：士气满 3 星 + 消耗转职证 → 晋升为高级职业，获得新能力和属性提升。
+**概述**：等级达阈（每 60 XP 一级，最多 10 级）+ 消耗 1 张转职证（占领城堡自动 +1）→ 晋升为高级职业，获得新能力和属性提升。
 
 **改动范围**：
-- `models.py`：Unit 加 `class_tier`
-- `config.py`：晋升效果表
-- `routes/game.py`：`POST /games/{id}/promote/{unit_id}` 端点
-- `web/app.js`：晋升后显示差异
+- `models.py`：Unit 加 `class_tier`（已在 progression/models.py）
+- `progression/leveling.py`：PROMOTE_XP_TABLE + 升级判定
+- `progression/api.py`：`POST /progression/units/{id}/promote` 端点
+- `progression/schemas.py`：PromoteRequest/Result
+- `web/app.js`：晋升后显示 tier 差异
 
-**状态**：[✓] （`app/progression/` 已实装：leveling.py 等级/PROMOTE_XP_TABLE、api.py:182 `promote_unit` 端点、schemas.py PromoteRequest/Result；经验值体系替代原路线图"士气满 3 星"条件）
+**状态**：[✓] （`app/progression/` 已实装：leveling.py 等级/PROMOTE_XP_TABLE、api.py `promote_unit` 端点、schemas.py PromoteRequest/Result；经验值体系替代原路线图"士气满 3 星"条件）
 
-### ⏸ 需要确认的技术细节
+### ⏸ 历史技术细节（已确认）
 
-1. 晋升后士气是否重置为 0？（推荐：重置）
-2. 转职证如何获得？（占领城堡自动 +1？每局限 2 个？）
-3. 晋升后名字是否自动改名（剑士-Alpha → 剑圣-Alpha）？
+1. 晋升后士气是否重置为 0？ ✅ 重置为 0
+2. 转职证如何获得？ ✅ 占领城堡自动 +1（apply_end_of_turn 阶段）
+3. 晋升后名字是否自动改名？ ✅ 通过 `class_tier` 字段保留原 name，UI 显示 tier 前缀
 
 ---
 
@@ -536,16 +559,16 @@
 
 ---
 
-# 📋 完整进度看板
+# 📋 完整进度看板（2026-06-28 审计）
 
 ```
 S0 ─────────────────────────────────────────────────────
 S0.1 对话框系统         [✓]  → ⏸ 确认细节 → [✓]  → [✓]
-S0.2 剧情系统            [   ]  → ⏸ 确认细节 → [   ] → [   ]
-S0.3 存档系统            [   ]  → ⏸ 确认细节 → [   ] → [   ]
+S0.2 剧情系统            [✓]  → ⏸ 确认细节 → [✓]  → [✓]  (2026-06-27 4 步全完成)
+S0.3 存档系统            [✓/🚧] 主线存档已完成；自由模式通用 SaveSlot 待做
 
 P0 ─────────────────────────────────────────────────────
-P0.1 敌我分阶段        [   ]  → ⏸ 确认细节 → [   ] → [   ]
+P0.1 敌我分阶段        [   ]  → ⏸ 确认细节 → [   ] → [   ]  ← 下一个重点
 P0.2 战斗预测面板       [✓]  → ⏸ 确认细节 → [✓]  → [✓]
 P0.3 反击系统           [✓]  → ⏸ 确认细节 → [✓]  → [✓]
 P0.4 地形增强+城市/工厂  [   ]  → ⏸ 确认细节 → [   ] → [   ]
@@ -553,7 +576,7 @@ P0.4 地形增强+城市/工厂  [   ]  → ⏸ 确认细节 → [   ] → [   ]
 P1 ─────────────────────────────────────────────────────
 P1.1 武器耐久度         [   ]  → ⏸ 确认细节 → [   ] → [   ]
 P1.2 兵种克制扩展        [   ]  → ⏸ 确认细节 → [   ] → [   ]
-P1.3 晋升系统            [✓]  → ⏸ 确认细节 → [✓]  → [✓]
+P1.3 晋升系统            [✓]  → ⏸ 确认细节 → [✓]  → [✓]  (XP 路线)
 
 P2 ─────────────────────────────────────────────────────
 P2.1 迷雾战争           [   ]  → ⏸ 确认细节 → [   ] → [   ]
@@ -566,11 +589,17 @@ P3.2 地形动态            [   ]  → ⏸ 确认细节 → [   ] → [   ]
 P3.3 招募+经济           [   ]  → ⏸ 确认细节 → [   ] → [   ]
 P3.4 战斗动画层          [   ]  → ⏸ 确认细节 → [   ] → [   ]
 
+🚧 进行中（非路线图项）
+   - 生产 WebSocket 网关（替换 3s 轮询）
+   - AI reaction 前端演出
+   - 死代码清理（dead-code.md）
+   - 主线剧情内容扩充（仅 chapter_01_steel_rebellion 一章）
+
 里程碑:
-  S0 ✓ = 可以写剧情讲故事了
-  P0 + P1 ✓ = 可玩状态
-  P2 ✓      = 可公开发布
-  P3 ✓      = 完整作品
+  S0 ✓  = 可以写剧情讲故事了               ✅ 已达成
+  P0 + P1 ✓ = 可玩状态                    🚧 进行中（剩 P0.1 + P0.4 + P1.x）
+  P2 ✓      = 可公开发布                   ⬜ 待启动
+  P3 ✓      = 完整作品                     ⬜ 待启动
 ```
 
 ---
@@ -586,8 +615,8 @@ P3.4 战斗动画层          [   ]  → ⏸ 确认细节 → [   ] → [   ]
 
 ---
 
-*最后更新: 2026-06-26*
+*最后更新: 2026-06-28*
 
-*状态更新: P0.2 / P0.3 / P1.3 已实装并标记 ✓（commit 0f64054 + app/progression/）；S0.1 已实装并标记 ✓（Dialog 模块 + 31 jsdom 单测）*
+*状态更新: S0.2 剧情系统 4 步全完成（commit 主线 4 步，2026-06-27）；S0.3 主线存档子集已实装（commit Step 2）；S0.1 / P0.2 / P0.3 / P1.3 之前已完成。architecture.md 已同步补齐（事件总线 / WS 协议 / 主线 / 晋升等章节）。*
 *GitHub: https://github.com/iris0heartmade/battleblitz*
 *Pi: http://100.66.50.11:8000*

@@ -2,7 +2,7 @@
 
 > v0.1.0 — 回合制战棋游戏服务器 (Fire Emblem / Advance Wars 风格)
 >
-> 最后更新：2026-06-26
+> 最后更新：2026-06-28
 
 ---
 
@@ -20,20 +20,27 @@
 - ✅ 后台定时器（24h 超时跳过、废弃房间清理）
 - ✅ 战报日志（移动/攻击/技能/死亡/AI 表情）
 - ✅ WebUI（菜单/大厅/棋盘/气泡式交互/参考面板/FLIP 动画）
+- ✅ **对话系统**（Dialog 模块：dialogue/narration/choice/wait 四种 scene，jsdom 31/31 单测通过）
+- ✅ **主线/战役模式**（`app/mainline/`：JSON 剧情加载器 + 章节战斗编排）
+- ✅ **晋升/等级系统**（`app/progression/`：XP 升级 + promote 端点）
+- ✅ **玩家档案**（`app/routes/profile.py`：按 user_name 持久化主线进度）
+- ✅ **WebSocket 基础设施**（`app/protocol/v1.py` + `app/events/bus.py` + Debug WS 端点）
+- ✅ **立绘/军徽资源**（`assets/crest_yun.png`、`portrait_yun.png`，便于剧情演出）
+- ✅ **战斗预测面板**（forecastSingleHit/forecastAttack，含反击/暴击预测）
+- ✅ **反击系统**（`COUNTER_DAMAGE_MULT=0.5`，连击后反击）
 
 ### 0.2 进行中（🚧）
 
-- 🚧 死代码清理（`doc/dead-code.md` 列了 8 个 config alias + 16 个 dead import）
-- 🚧 前端单元类型显示迁移到 `/units` 接口（已完成，旧的 `UNIT_REF` 已删）
-- 🚧 AI reaction 演出优化（DB 已有 reaction，未充分接入前端展示）
+- 🚧 生产环境 WebSocket 网关（前端 `app.js` 仍用 3s 轮询；debug_ws 端点已可用，但未对接客户端）
+- 🚧 AI reaction 演出优化（DB 已存 reaction，前端展示链路半成品）
+- 🚧 死代码清理（`doc/dead-code.md` 列了 8 个 config alias + 16 个 dead import，待清理）
 
 ### 0.3 未实现（⬜）
 
-- ⬜ WebSocket 实时推送（当前靠 3s 轮询）
 - ⬜ 法师兵种（克制表里已预留）
-- ⬜ 用户认证系统
-- ⬜ 战役模式
+- ⬜ 用户认证系统（当前按 user_name 软绑定）
 - ⬜ 多模型投票 / ReAct 沙盘推演
+- ⬜ 迷雾战争 / 指挥官 CO Power / 支援系统 / 地形动态（见 roadmap P2-P3）
 
 ### 0.4 关键设计决策
 
@@ -43,6 +50,9 @@
 | 士气系统（替代纯 EXP/Level） | §五 7.2 |
 | 首玩家公平性规则 | §五 7.3 |
 | 兵种/技能模块化 | §四 4.5/4.6 |
+| 事件总线（pub/sub by game_id） | §十一 11.1 |
+| 主线 JSON 剧情格式 | §十二 12.1 |
+| 晋升走 XP 路线（替代"士气满 3 星"） | §十三 13.1 |
 
 ---
 
@@ -87,23 +97,33 @@ BattleBlitz/
 │   │   ├── main.py              # FastAPI 应用入口 + lifespan 管理
 │   │   ├── config.py            # 地形/战斗/回合/AI 调参常量（兵种已迁出）
 │   │   ├── database.py          # 异步引擎、Session 工厂、表初始化
-│   │   ├── models.py            # ORM 模型：Game / Player / Unit / Tile / ActionLog
+│   │   ├── models.py            # ORM 模型：Game / Player / Unit / Tile / ActionLog / Profile
 │   │   ├── schemas.py           # Pydantic v2 请求体 / 响应体
 │   │   ├── game_logic.py        # 地图生成、战斗计算、回合结算
 │   │   ├── utils.py             # 寻路 (BFS/Dijkstra)、视野、距离计算
+│   │   ├── logging_config.py    # 标准化日志（log levels / HEALTH / structured）
 │   │   ├── classes/             # ✅ 模块化（每个兵种/技能一个文件）
 │   │   │   ├── units/           # 兵种定义（base + swordsman/archer/knight/healer）
 │   │   │   └── units/skills/    # 技能定义（base + heal/rally/snipe/double_strike）
-│   │   ├── agent/               # LLM 对手模块
+│   │   ├── agent/               # LLM 对手模块（agent / integration / legal_actions / llm_client / llm_service / openai_client / prompt / reactions / schemas / snapshot）
+│   │   ├── llm/                 # 重构后的 LLM client（统一 anthropic/openai/llama.cpp 入口）
+│   │   ├── events/              # ✅ 进程内事件总线（GameEventBus + GameEvent 类型）
+│   │   ├── protocol/            # ✅ WebSocket 协议 v1（ActionMove/Attack/Skill Pydantic 契约）
+│   │   ├── mainline/            # ✅ 主线模式（JSON 剧情加载器 + 引擎 + schemas）
+│   │   ├── progression/         # ✅ 晋升/等级系统（leveling/service/repository/api/schemas/models/exceptions）
 │   │   ├── routes/
 │   │   │   ├── __init__.py
 │   │   │   ├── game.py          # /games 生命周期：创建、加入、开始、状态、预设
 │   │   │   ├── actions.py       # /move, /attack, /skill, /wait
-│   │   │   └── turns.py         # /end-turn + 后台定时器（超时、AI 链、清理）
+│   │   │   ├── turns.py         # /end-turn + 后台定时器（超时、AI 链、清理）
+│   │   │   ├── debug_ws.py      # ✅ /debug/ws/games/{id} — 开发者 WebSocket 端点
+│   │   │   ├── mainline.py      # ✅ /mainlines — 主线列表/详情/开战/推进/放弃
+│   │   │   └── profile.py       # ✅ /profile — 按 user_name 的主线进度查询
 │   │   └── web/
-│   │       ├── index.html       # SPA 骨架（菜单/大厅/棋盘/气泡菜单）
-│   │       ├── app.js           # 客户端逻辑（API、视图切换、棋盘渲染、FLIP 动画）
-│   │       └── style.css        # CSS 变量主题、棋盘格子、气泡菜单、横幅动画
+│   │       ├── index.html       # SPA 骨架（菜单/大厅/棋盘/气泡菜单/对话框/主线视图）
+│   │       ├── app.js           # 客户端逻辑（API、视图切换、棋盘渲染、FLIP 动画、Dialog、MainlineView）
+│   │       ├── style.css        # CSS 变量主题、棋盘格子、气泡菜单、横幅动画
+│   │       └── assets/          # ✅ 立绘/军徽资源（crest_yun.png / portrait_yun.png）
 │   ├── requirements.txt
 │   ├── start.bat                # Windows 启动脚本
 │   └── stop.bat                 # Windows 停止脚本
@@ -189,7 +209,7 @@ class HealSkill(BaseSkill):
 | `GET /games/units` | 所有兵种完整 meta（前端不再硬编码） |
 | `GET /games/skills` | 所有技能 meta |
 
-详见 §六。
+详见 §八。
 
 ---
 
@@ -388,13 +408,43 @@ damage = ATK_eff × (ATK_eff / (ATK_eff + DEF_eff)) × type_adv × crit_mult
   - 每 10s 检查超时玩家（24h）→ 自动跳过
   - 每 60s 清理废弃房间（空大厅 30min / 已结束 24h）
 
+#### ✅ `routes/mainline.py` — 主线战役
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/mainlines` | GET | 列出所有可用主线章节 |
+| `/mainlines/{id}` | GET | 章节详情（剧情脚本 + 战斗顺序） |
+| `/mainlines/{id}/start` | POST | 开启主线（创建首个 battle） |
+| `/mainlines/{id}/advance` | POST | 战斗胜利后推进下一 battle 或播放下一剧情 |
+| `/mainlines/{id}/abandon` | POST | 放弃当前主线进度 |
+| `/mainlines/dialogue` | GET | 读取剧情脚本文件 |
+
+#### ✅ `routes/profile.py` — 玩家档案
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/profile/{user_name}` | GET | 查询该玩家所有主线进度 |
+| `/profile/{user_name}/mainlines/{id}` | GET | 单条主线进度 |
+
+#### ✅ `routes/debug_ws.py` — Debug WebSocket
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/debug/ws/games/{id}` | WS | 订阅指定游戏的 GameEvent 流（开发者用） |
+
+#### ✅ `/progression/*` — 晋升/等级
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/progression/profiles` | POST | 创建玩家档案 |
+| `/progression/profiles/{user_name}` | GET | 查询档案 |
+| `/progression/units/{id}/promote` | POST | 晋升单位（消耗转职证，提升 tier） |
+
 ---
 
 ## 五、前端架构
 
+> 当前 `app.js` ~3200 行（含 Dialog、MainlineView、progression UI）
+
 ### 5.1 视图系统
 
-单页应用，7 个视图 (`<section class="view">`)：
+单页应用，9 个视图 (`<section class="view">`)：
 - **menu** — 主菜单（新建/加入/设置/玩法说明/继续游戏）
 - **settings** — 玩家设置（昵称、颜色、主题、刷新间隔）
 - **new-game** — 创建房间表单（地图预设、兵种配置、种子）
@@ -402,6 +452,8 @@ damage = ATK_eff × (ATK_eff / (ATK_eff + DEF_eff)) × type_adv × crit_mult
 - **help** — 玩法说明
 - **lobby** — 等待大厅（玩家列表、添加 AI、开始按钮）
 - **game** — 主游戏界面（棋盘 + 侧边栏）
+- **mainline** — ✅ 主线模式入口（章节选择 / 战斗进度 / 剧情推进）
+- **dialog** — ✅ 对话框（剧情演出，按空格/Enter 推进，Esc 关闭）
 
 ### 5.2 状态管理
 
@@ -411,6 +463,7 @@ damage = ATK_eff × (ATK_eff / (ATK_eff + DEF_eff)) × type_adv × crit_mult
 - `selectedUnit` / `actionMode` / `pendingMove`: 交互状态
 - `refreshTimer` / `lobbyTimer`: 轮询定时器
 - `refPanelOpen` / `refTab`: 参考面板状态
+- ✅ `mainline` / `mainlineGameId` / `mainlinePlayerId` / `mainlineAdvancePending`: 主线模式状态机
 
 ### 5.3 棋盘渲染
 
@@ -454,7 +507,24 @@ damage = ATK_eff × (ATK_eff / (ATK_eff + DEF_eff)) × type_adv × crit_mult
 - `localStorage` 存储：
   - 设置（玩家名、颜色、主题、刷新间隔）
   - 会话（game_id, player_id, user_name）— 支持页面刷新后自动重连
+  - ✅ 主线存档（命名空间 `mainline:<chapter>:<battle>`，与自由模式存档隔离）
 - `/games/{id}/rejoin` API 用于恢复会话
+- `/profile/{user_name}` API 查询主线进度
+
+### 5.8 ✅ 对话系统（Dialog 模块）
+
+剧情演出用底部对话框：
+- 4 种 scene 类型：`dialogue` / `narration` / `choice` / `wait`
+- 打字机效果：dialogue 40 字/秒，narration 25 字/秒
+- 操作：点击/空格/Enter 推进，Esc 关闭
+- jsdom 单测覆盖 31/31
+
+### 5.9 ✅ MainlineView
+
+主线模式专用视图：
+- 章节列表 → 战斗入口 → 战败自动 `advance()` 推进下一章
+- 战斗中复用主游戏 UI（棋盘 + 气泡菜单 + Dialog）
+- `mainlineAdvancePending` 标志位防重入
 
 ---
 
@@ -521,6 +591,23 @@ main.py lifespan:
   └──────────────────────────────────────────────┘
 ```
 
+### 6.3 ✅ 事件总线流（GameEventBus）
+
+```
+[action handler]
+   │  await bus.publish(GameEvent(type, game_id, ...))
+   ▼
+[GameEventBus._subscribers[game_id]]
+   ├─ [debug_ws 端点]    → 转为 WS event.delta 帧
+   ├─ [AI agent 订阅]   → 用于 reaction 表情/日志
+   └─ [未来的生产 WS 网关] → 多客户端广播
+```
+
+特点：
+- 进程内 asyncio.Queue，每个 subscriber 一个队列
+- 单 subscriber 慢不会反压 publisher（满则丢 + warning）
+- 未来多实例部署时整体替换为 Redis pub/sub，API 不变
+
 ---
 
 ## 七、关键设计决策
@@ -570,19 +657,21 @@ main.py lifespan:
 
 ### 局限
 - 仅支持单服务器实例（SQLite 无分布式能力）
-- 无用户认证系统（仅凭 player_id + 同源策略）
-- 无 WebSocket 实时推送（依赖客户端轮询，默认 3s）
+- 用户身份按 `user_name` 软绑定，无登录认证
+- ✅ 主线模式已实装，但仅有 1 个示例章节，剧情内容待扩充
+- WebSocket 实时推送：后端基础设施就绪（事件总线 + debug_ws + 协议 v1），**前端 `app.js` 仍用 3s 轮询**，未对接生产 WS 网关
 - AI 为简单规则引擎，无战略性规划
 - 无音效实现（设置中有开关但未实现）
 - "法师"兵种在配置中预留但未实装
 
 ### 可扩展方向
-- WebSocket 实时通知替代轮询
+- 生产 WebSocket 网关（替换前端轮询）
 - 用户账号系统 + 历史战绩
-- 更智能的 AI（Minimax / MCTS）
+- 更智能的 AI（Minimax / MCTS / 多模型投票）
 - 新增兵种（法师、刺客、投石车等）
-- 战役模式 / 地图编辑器
+- 地图编辑器
 - 国际化 (i18n)
+- 主线章节内容扩充 + 剧情分支
 
 ---
 
@@ -601,7 +690,125 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 #   游戏界面:  http://localhost:8000/
 #   API 文档:  http://localhost:8000/docs
 #   健康检查:  http://localhost:8000/healthz
+#   Debug WS:  ws://localhost:8000/debug/ws/games/{id}
 
-# 测试（未来）
-# pytest
+# 测试
+pytest game/tests/
+
+# Debug WS 用例（需安装 wscat/websocat）
+# wscat -c "ws://localhost:8000/debug/ws/games/1"
 ```
+
+---
+
+## 十一、事件总线与 WebSocket
+
+### 11.1 GameEventBus 设计
+
+`app/events/bus.py` 是进程内 pub/sub，按 `game_id` 分区：
+
+```python
+bus = GameEventBus()
+
+# 发布
+await bus.publish(GameEvent(type="kill", game_id=..., turn=...,
+                             actor_unit_id=..., target_unit_id=..., ...))
+
+# 订阅
+queue = bus.subscribe(game_id)
+try:
+    while True:
+        event = await queue.get()
+        ...
+finally:
+    bus.unsubscribe(game_id, queue)
+```
+
+事件类型见 `app/events/types.py`（`move` / `attack` / `kill` / `skill` / `turn_advance` / `damage` 等）。
+
+### 11.2 WebSocket 协议 v1
+
+`app/protocol/v1.py` 定义 WS 帧 Pydantic 契约：
+
+| 帧类型 | 方向 | Payload |
+|--------|------|---------|
+| `server.hello` | S→C | `{protocol_version, server_time}` |
+| `event.delta` | S→C | `{events: [GameEvent...]}` |
+| `action.move` | C→S | `{game_id, unit_id, to_x, to_y}` |
+| `action.attack` | C→S | `{game_id, attacker_id, target_id}` |
+| `action.skill` | C→S | `{game_id, unit_id, skill, target_id}` |
+| `error` | S→C | `{code, message}` |
+
+### 11.3 当前状态
+
+- ✅ Debug 端点可用：`ws://localhost:8000/debug/ws/games/{id}`
+- 🚧 生产 WS 网关待接入：需要在 `app/main.py` 加新 router，并在 `app.js` 把 3s 轮询替换为 WS 订阅
+
+---
+
+## 十二、主线模式
+
+### 12.1 JSON 剧情格式
+
+主线是一个 JSON 描述的章节序列（`game/stories/chapter_XX_*.json`）：
+
+```json
+{
+  "id": "chapter_01_steel_rebellion",
+  "title": "钢铁叛乱",
+  "battles": [
+    { "id": "battle_01", "map": "mountain_pass", "composition": "classic",
+      "win_condition": "rout", "next": "battle_02" },
+    { "id": "battle_02", "map": "river_crossing", "composition": "aggressive",
+      "win_condition": "rout" }
+  ],
+  "dialogues": {
+    "intro": [
+      { "scene": "dialogue", "speaker": "云", "text": "..." },
+      { "scene": "narration", "text": "..." },
+      { "scene": "choice", "question": "...", "choices": [...] }
+    ]
+  }
+}
+```
+
+Scene 类型：`dialogue` / `narration` / `choice` / `wait`（对齐 §五 5.8 Dialog 模块）
+
+### 12.2 主线引擎（`app/mainline/engine.py`）
+
+- `start_mainline(user_name, chapter_id)` → 创建第一个 battle
+- `advance_mainline(game_id)` → 战斗胜利后自动推进：播放 `next` 剧情 → 准备下一个 battle
+- `abandon_mainline(game_id)` → 放弃并清理进度
+
+### 12.3 进度持久化
+
+- `app/routes/profile.py` 按 `user_name` 存 `MainlineProgress`（战斗序号 + 当前 scene）
+- 前端 `MainlineView.onBattleFinished(st)` 在战斗结束时调用 `POST /mainlines/{id}/advance`
+
+---
+
+## 十三、晋升 / 等级系统
+
+### 13.1 路线（替代 roadmap v1.3 "士气满 3 星"）
+
+`app/progression/leveling.py`：
+- 经验值（XP）来源：击杀 +10 / 助攻 +5 / 命中 +5
+- 升级阈值 `PROMOTE_XP_TABLE`（每 60 XP 一级，最多 10 级）
+- 晋升条件：等级达阈 + 持有 1 张转职证（占领城堡 +1）
+
+### 13.2 模块分层
+
+| 文件 | 职责 |
+|------|------|
+| `models.py` | ORM：`PlayerProfile` / `UnitLeveling` / `PromotionTicket` |
+| `repository.py` | 数据访问 |
+| `service.py` | 业务逻辑（XP 累计、转职证发放、晋升判定）|
+| `api.py` | FastAPI 路由（`/progression/*`） |
+| `schemas.py` | Pydantic 请求/响应 |
+| `exceptions.py` | 业务异常（XP 不足、票不足等） |
+
+### 13.3 与战斗系统的接入
+
+- `app/routes/actions.py` 在攻击结算后调用 `progression_service.record_kill(...)`
+- `apply_end_of_turn()` 触发 XP 累计 + 升级判定
+- `POST /progression/units/{id}/promote` 手动触发晋升（玩家在 UI 主动使用）

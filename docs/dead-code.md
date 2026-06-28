@@ -1,0 +1,160 @@
+# BattleBlitz 死代码清单
+
+> **生成日期**：2026-06-28
+> **检测工具**：[vulture](https://github.com/jendrikseipp/vulture) ≥ 2.x
+> **扫描范围**：`game/app/`（生产代码）
+> **置信度阈值**：高（≥80%）= 确认为死代码；中（60-79%）= 需人工复核
+
+---
+
+## 0. 检测方法
+
+### 0.1 工具选择
+
+**主工具**：[vulture](https://github.com/jendrikseipp/vulture) — 基于静态分析的 Python 死代码检测
+
+理由：
+- 比 `pyflakes` 更激进（能找到 pyflakes 不报的"导出但未用"符号）
+- 比 `autoflake` 范围更广（不仅限于未用 import）
+- 支持配置白名单（`--ignore-decorators`、`--ignore-names`）
+- 输出带置信度百分比，方便筛选
+
+**辅助工具**：`grep` / `rg` — 用于二次验证 vulture 结果（避免误杀）
+
+### 0.2 扫描命令
+
+```bash
+# 高置信度（必杀）
+python -m vulture game/app/ --min-confidence 80
+
+# 中高置信度（需人工）
+python -m vulture game/app/ --min-confidence 60
+```
+
+### 0.3 筛选标准
+
+| 类别 | 判定 | 置信度 |
+|------|------|--------|
+| `import X` 但 `X` 在本文件未用 | ✅ 必杀 | 80-100% |
+| 模块级常量定义但全代码库 0 引用 | ✅ 必杀 | 80-100% |
+| 私有方法 `_foo` 从未调用 | ✅ 必杀 | 60-80% |
+| 公开函数但所有调用方都用反射/动态导入 | ⚠️ 复核 | 60% |
+| 抽象方法基类定义（子类覆盖）| ⚠️ 误杀 | 60% |
+| `argparse` 命令行入口 | ⚠️ 误杀 | 60% |
+
+---
+
+## 1. 高置信度死代码（≥ 80%）— 13 项必删
+
+### 1.1 未使用的 import（9 项）
+
+| 文件 | 行 | 项 | 建议 |
+|------|-----|-----|------|
+| `game/app/agent/agent.py` | 34 | `events_for_action` | 删除 |
+| `game/app/agent/legal_actions.py` | 23 | `SKILL_HEAL` | 删除 |
+| `game/app/agent/legal_actions.py` | 23 | `SKILL_RALLY` | 删除 |
+| `game/app/classes/units/base.py` | 18 | `abstractmethod` | 删除 |
+| `game/app/classes/units/skills/base.py` | 19 | `abstractmethod` | 删除 |
+| `game/app/game_logic.py` | 23 | `AI_SKILL_HEAL_THRESHOLD_HP` | 删除 |
+| `game/app/game_logic.py` | 23 | `DEFAULT_MELEE_RANGE` | 删除 |
+| `game/app/progression/service.py` | 17 | `Awaitable` | 删除 |
+| `game/app/routes/actions.py` | 19 | `SKILL_HEAL` | 删除 |
+| `game/app/routes/actions.py` | 19 | `SKILL_RALLY` | 删除 |
+| `game/app/routes/game.py` | 28 | `create_initial_units_with_roster` | 删除 |
+
+### 1.2 未使用的变量（2 项）
+
+| 文件 | 行 | 项 | 建议 |
+|------|-----|-----|------|
+| `game/app/classes/units/skills/base.py` | 102 | `terrain_bonus` | 删除（钩子参数）|
+| `game/app/classes/units/skills/double_strike.py` | 12 | `terrain_bonus` | 删除（钩子参数）|
+
+> ⚠️ **注意**：这两处是技能钩子 `modify_attack_damage(attacker, defender, terrain_bonus)` 的形参，即使函数体不用，签名也要保留以满足子类 LSP。**改为 `**_` 或加 `# noqa: ARG**` 注释**。
+
+---
+
+## 2. 中置信度死代码（60-79%）— 需人工复核 ~184 项
+
+### 2.1 大概率误杀（不要删）
+
+| 模式 | 文件 | 说明 |
+|------|------|------|
+| `Archer` / `Knight` / `Swordsman` / `Healer` | `classes/units/*.py` | 通过 `__init__.py` 自动注册表反射加载 |
+| `HealSkill` / `RallySkill` / `SnipeSkill` / `DoubleStrikeSkill` | `classes/units/skills/*.py` | 同上 |
+| `events_for_action`（在 `reactions.py`）| `agent/reactions.py:425` | 可能是给其他模块用的导出函数 |
+
+### 2.2 大概率真死（建议删）
+
+| 文件 | 行 | 项 | 建议 |
+|------|-----|-----|------|
+| `game/app/config.py` | 16 | `TOTAL_TILES` | 删除（无引用） |
+| `game/app/config.py` | 82 | `SKILL_HEAL` 常量 | 删除（被 `legal_actions.py` / `routes/actions.py` import 后又未用，反向证明这个常量本身死代码）|
+| `game/app/config.py` | 83 | `SKILL_RALLY` 常量 | 同上 |
+| `game/app/config.py` | 94 | `DEFAULT_MELEE_RANGE` | 删除（game_logic.py 已不引用）|
+| `game/app/config.py` | 137 | `AI_SKILL_HEAL_THRESHOLD_HP` | 删除（game_logic.py 已不引用）|
+| `game/app/agent/agent.py` | 154-155 | `unit_count`, `alive` | 删除或加 `_` 前缀 |
+| `game/app/agent/agent.py` | 529 | `old_hp` | 同上 |
+| `game/app/agent/llm_client.py` | 309 | `health_check` | 删除或加 `_` 标记私有 |
+| `game/app/agent/llm_client.py` | 322 | `aclose` | 同上 |
+| `game/app/agent/openai_client.py` | 258 | `health_check` | 同上 |
+| `game/app/agent/openai_client.py` | 274 | `aclose` | 同上 |
+| `game/app/events/bus.py` | 56 | `_lock` 属性 | 删除（如果确实没用）|
+| `game/app/events/bus.py` | 92 | `subscriber_count` | 删除或加 `# public API` 注释 |
+| `game/app/events/bus.py` | 96 | `total_subscribers` | 同上 |
+
+### 2.3 评审待定
+
+以下函数可能是给未来 API 预留的"接口雏形"，需确认是否仍要保留：
+
+- `agent/integration.py:64` `set_default_llm_client`
+- `agent/llm_service.py:67,129,165,176` `_async_is_local_reachable`, `get_client`, `reset`, `status_report`
+- `agent/schemas.py:94,102` `_check_action_id_format`, `_truncate_reason`
+- `classes/units/__init__.py:94` `type_ids`
+- `classes/units/skills/__init__.py:100` `default_skills_for`
+- `events/types.py:93,98,105` `actor_player_id`, `target_player_id`, `to_dict`
+
+---
+
+## 3. 修正 roadmap / architecture.md 中的错误数据
+
+原 roadmap / architecture 写的是：
+> "列了 8 个 config alias + 16 个 dead import"
+
+实际扫描结果：
+- ❌ **0 个 config alias**（config.py 中没有 `UPPER = UPPER` 的别名模式）
+- ✅ **约 10-13 个 dead import**（接近 16 但略少）
+- ✅ **5 个 config 常量死代码**（`SKILL_HEAL` / `SKILL_RALLY` / `DEFAULT_MELEE_RANGE` / `AI_SKILL_HEAL_THRESHOLD_HP` / `TOTAL_TILES`）— 不是 "alias"，是 unused constant
+
+**建议修订文档措辞**：
+> "🚧 死代码清理（`doc/dead-code.md` 列了 5 个 dead config + 11 个 dead import + 6 个 dead method）"
+
+---
+
+## 4. 清理计划（按风险排序）
+
+| 优先级 | 类别 | 工作量 | 风险 |
+|--------|------|--------|------|
+| **P0** | 高置信度 dead import（§1.1 的 11 项）| 🟢 0.5h | 🟢 极低 |
+| **P0** | 高置信度 dead variable（§1.2 的 2 项）| 🟢 0.5h | 🟢 低（签名保留）|
+| **P1** | 中置信度 unused config constant（§2.2 第 2-6 行）| 🟢 0.5h | 🟢 低 |
+| **P1** | 中置信度 unused method（§2.2 llm_client 等）| 🟡 1h | 🟡 中（确认 public API）|
+| **P2** | 评审待定项（§2.3）| 🟠 半天 | 🟠 中（架构决策）|
+
+**总计**：P0+P1 = 半天搞定；含 P2 = 1 天。
+
+---
+
+## 5. 避免误杀的注意事项
+
+1. **反射加载类不能删**：`app/classes/units/*.py` 中的 `Archer/Knight/...` 是通过 `__init__.py` 的 `__init_subclass__` 自动注册表发现的，静态分析看不到这个动态加载。
+
+2. **钩子签名不能动**：技能基类的 `modify_attack_damage(attacker, defender, terrain_bonus)` 即使内部不用 `terrain_bonus`，签名是 LSP 契约，不能改。
+
+3. **公开 API 要谨慎**：`events/bus.py` 的 `subscriber_count` / `total_subscribers` 看起来没人用，但可能是给监控/调试预留的，需要确认再删。
+
+4. **vulture 60% 阈值偏激进**：本清单用了 60%，实际生产推荐 80% 起步，避免大量误报。
+
+---
+
+*最后更新：2026-06-28*
+*配套：[architecture.md](architecture.md) §0.2、[roadmap.md](roadmap.md) §0.2、[`docs/plan.md`](plan.md) P0 阶段*
