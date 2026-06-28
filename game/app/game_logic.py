@@ -545,7 +545,7 @@ __all__ = [
 import json as _json
 from pathlib import Path as _Path
 
-_MAPS_DIR = _Path(__file__).resolve().parent.parent.parent / "maps"
+_MAPS_DIR = _Path(__file__).resolve().parent.parent / "maps"
 
 
 def _load_map_presets() -> Dict[str, Dict]:

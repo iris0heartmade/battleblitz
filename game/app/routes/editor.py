@@ -184,6 +184,31 @@ def _generate_id(name: str) -> str:
     return f"{base}_{suffix}"
 
 
+def _list_custom_maps(directory: Path) -> List[Dict[str, Any]]:
+    """Read all map JSON files in directory and return summary dicts.
+
+    Reusable by /presets endpoint to merge custom maps with built-in presets.
+    """
+    if not directory.is_dir():
+        return []
+    items: List[Dict[str, Any]] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            items.append({
+                "id": data["id"],
+                "name": data["name"],
+                "width": data["size"]["width"],
+                "height": data["size"]["height"],
+                "biome": data.get("biome", "grass"),
+                "updated_at": data.get("updated_at", 0.0),
+            })
+        except Exception as e:
+            logger.warning("Skipping malformed map file %s: %s", path.name, e)
+    items.sort(key=lambda m: m["updated_at"], reverse=True)
+    return items
+
+
 # ============================================================
 # Endpoints
 # ============================================================
@@ -191,22 +216,7 @@ def _generate_id(name: str) -> str:
 @router.get("", response_model=List[CustomMapListItem])
 async def list_custom_maps() -> List[CustomMapListItem]:
     """List all saved custom maps (id, name, size, biome, updated_at)."""
-    items: List[CustomMapListItem] = []
-    for path in sorted(_CUSTOM_DIR.glob("*.json")):
-        try:
-            data = _json.loads(path.read_text(encoding="utf-8"))
-            items.append(CustomMapListItem(
-                id=data["id"],
-                name=data["name"],
-                width=data["size"]["width"],
-                height=data["size"]["height"],
-                biome=data.get("biome", "grass"),
-                updated_at=data.get("updated_at", 0.0),
-            ))
-        except Exception as e:
-            logger.warning("Skipping malformed map file %s: %s", path.name, e)
-    items.sort(key=lambda m: m.updated_at, reverse=True)
-    return items
+    return [CustomMapListItem(**m) for m in _list_custom_maps(_CUSTOM_DIR)]
 
 
 @router.get("/{map_id}", response_model=CustomMapOut)
