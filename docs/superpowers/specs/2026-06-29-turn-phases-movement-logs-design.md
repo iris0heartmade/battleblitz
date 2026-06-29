@@ -29,12 +29,14 @@
 ```python
 # models.py 新增
 class GamePhase(str, Enum):
-    PLAYER = "player"   # 人类玩家操作阶段
-    AI = "ai"           # 敌方 AI 操作阶段
-    ANIMATING = "animating"  # 留作未来用：本回合所有行动播放中（动画未完）
+    PLAYER = "player"     # 人类玩家操作阶段
+    AI = "ai"             # 敌方 AI 操作阶段
+    ANIMATING = "animating"  # 留作未来用：动画播放中（前端可标记"请等待"）
 ```
 
 加 `Game.phase: Mapped[str] = mapped_column(String(16), default="player")`。
+
+> **关于 `animating`**：当前实现里它不会被主动设置（前端动画是纯展示）。保留它作为「未来扩展点」——比如以后想实现"AI 行动过程中人类可以预操作但需要等动画结束才生效"时能直接用。**当前不参与路由逻辑**。
 
 ### 3.2 阶段切换
 
@@ -89,39 +91,54 @@ async def _run_ai_turn_chain(game_id):
 
 `renderBoard` 拿 oldPositions + newPositions，diff 出 `dx/dy` 一次性 `translate` 动画。**问题**：对单步移动，曼哈顿 = 直线，没差；多步移动就斜着飞。
 
-### 4.2 新动画：path-stepper
+### 4.2 新动画：path-stepper（方案 1：transform 链式动画）
 
-把 FLIP 替换为：
+**关键事实**：DOM 已经在新位置 D（renderBoard 放好的），但动画要"看起来从 A 走到 D"。
+
+**视觉策略**：用 transform 把单位"拉回"A（瞬时），然后 chain transition 走过每个中间点。
+
 ```js
-function animateUnitAlongPath(unitId, pathCells /* [{x,y}, ...] */) {
-  // pathCells[0] 是新位置, pathCells[length-1] 是最终位置
-  // 从 pathCells[length-2] 倒着走到 [0]
-  const board = document.getElementById("board");
-  const cellSize = parseInt(getComputedStyle(board).getPropertyValue("--cell-size"));
-  const stepMs = 220;
+async function animateUnitAlongPath(unitId, pathCells) {
+  // pathCells = [A, B, C, D]，A=旧位置，D=新位置
   const el = document.querySelector(`.unit[data-unit-id="${unitId}"]`);
-  if (!el) return;
-  for (let i = pathCells.length - 1; i > 0; i--) {
-    const from = pathCells[i];     // 旧位置
-    const to = pathCells[i - 1];   // 新位置
-    const dx = (from.x - to.x) * cellSize;
-    const dy = (from.y - to.y) * cellSize;
-    // 先跳到 from（无 transition），再过渡到自然位置
-    el.style.transition = "none";
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.style.transition = `transform ${stepMs}ms linear`;
-        el.style.transform = "";
-      });
-    });
-    // 等待 stepMs 后走下一步
+  if (!el || pathCells.length < 2) return;
+
+  const newPos = pathCells[pathCells.length - 1];
+  const cellSize = parseInt(getComputedStyle(document.getElementById("board"))
+    .getPropertyValue("--cell-size"));
+  const stepMs = 220;
+
+  // Step 1: 无 transition，把视觉瞬移到 A（起点）
+  // 瞬移是 FLIP 架构的固有限制：DOM 已在 D，必须瞬移回 A 才能从 A 起步
+  el.style.transition = "none";
+  el.style.transform = `translate(${(A.x - newPos.x) * cellSize}px, ${(A.y - newPos.y) * cellSize}px)`;
+  el.offsetHeight;  // 强制 reflow
+
+  // Step 2: chain transition，A→B→C→D
+  for (let i = 1; i < pathCells.length; i++) {
+    const pos = pathCells[i];
+    el.style.transition = `transform ${stepMs}ms linear`;
+    el.style.transform = `translate(${(pos.x - newPos.x) * cellSize}px, ${(pos.y - newPos.y) * cellSize}px)`;
     await new Promise(r => setTimeout(r, stepMs));
   }
+
+  // Step 3: 归位（transform 清掉，DOM 已经在 D）
+  el.style.transition = "none";
+  el.style.transform = "";
 }
 ```
 
-**问题**：DOM 实际位置已经是 `to`（renderBoard 把 unit 放到了新格），所以 `el.style.transform` 是相对**新位置**的偏移。我用「先跳到 from（无 transition）→ 过渡到自然位置 = to」实现『从 from 走到 to』的视觉。
+**视觉时序**（A→B→C→D 是 3 步移动）：
+
+```
+帧 0:     视觉 = D（renderBoard 放好）→ 瞬移到 A
+帧 1-13:  transform: A→B（220ms linear）
+帧 14-26: transform: B→C
+帧 27-39: transform: C→D
+帧 40:    transform 清掉，视觉 = D（完成）
+```
+
+**已知 trade-off**：第 0 帧有 1 帧的"瞬移"（D → A），因为 DOM 已在 D。这是 FLIP 架构的固有限制。1 帧 = 16ms，玩家几乎察觉不到。**多格移动才有瞬移感，1 格移动 = 跟之前 FLIP 一样**。
 
 ### 4.3 数据来源
 
