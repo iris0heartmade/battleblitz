@@ -211,18 +211,80 @@ ENV_BG = {
     "desert": (P.sand_l,  P.sand_m),
 }
 
+
+def _draw_mini_pine(img: Image.Image, cx: int, cy_base: int,
+                    total_height: int = 8, base_width: int = 5) -> None:
+    """A small background pine — same 3-tier triangle + trunk shape as
+    draw_pine but compact, used to fill the negative space around the
+    hero trees so forest tiles read as 'dense woods' rather than
+    'three trees in a meadow'."""
+    # trunk
+    trunk_h = 2
+    trunk_w = 1
+    if 0 <= cx < SIZE and cy_base - trunk_h >= 0:
+        rect(img, cx, cy_base - trunk_h, cx, cy_base - 1, P.trunk)
+    # 3 tiers (apex up)
+    tiers = [
+        (total_height // 3 + 1, base_width),    # bottom
+        (total_height // 3 + 1, max(2, base_width - 2)),
+        (total_height - 2 * (total_height // 3 + 1), max(1, base_width - 4)),
+    ]
+    y_top = cy_base - trunk_h - 1
+    for tier_h, hw in tiers:
+        for y in range(y_top - tier_h + 1, y_top + 1):
+            t = (y_top - y) / max(1, tier_h - 1)
+            w = int(hw * t)
+            for x in range(cx - w, cx + w + 1):
+                if 0 <= x < SIZE and 0 <= y < SIZE:
+                    if x < cx:
+                        color = P.tree_mid
+                    elif x > cx:
+                        color = P.tree_dk
+                    else:
+                        color = P.tree_top
+                    px(img, x, y, color)
+        y_top -= tier_h
+
+
 # Tree positions per variant — drawn BACK→MIDDLE→FRONT order
 # (cx, cy_base, total_height, base_width)
+# Trees now stay inside x=[5, 42] so the front tree doesn't get clipped
+# against the cell edge and leave an empty background seam.
 TREE_LAYOUTS = {
     0: [
-        (15,  17, 22, 8),    # BACK: top-center, mid-tall, narrow (perspective)
-        (25,  26, 12, 6),    # MIDDLE: right-bottom, short
-        (7,   29, 28, 12),   # FRONT: left-bottom, tallest, widest
+        # hero tree front-left: tall, wide
+        (12, 38, 30, 13),
+        # mid tree right: shorter
+        (30, 36, 18, 9),
+        # back tree top-center: narrow, perspective
+        (22, 22, 14, 7),
     ],
     1: [
-        (16,  17, 22, 8),    # BACK: top-center, mirror
-        (6,   26, 12, 6),    # MIDDLE: left-bottom
-        (24,  29, 28, 12),   # FRONT: right-bottom, tallest
+        # mirror layout — hero on the right
+        (36, 38, 30, 13),
+        (16, 36, 18, 9),
+        (24, 22, 14, 7),
+    ],
+}
+
+# Background "mini pine" clusters — fill the leftover negative space so
+# the tile reads as dense woods. Each entry is (cx, cy_base, total_h, base_w).
+MINI_PINES = {
+    0: [
+        (4,  44, 6, 3),    # bottom-left edge
+        (44, 44, 6, 3),    # bottom-right edge
+        (3,  28, 8, 4),    # mid-left edge
+        (45, 30, 8, 4),    # mid-right edge
+        (40, 18, 6, 3),    # upper-right
+        (6,  14, 6, 3),    # upper-left
+    ],
+    1: [
+        (4,  44, 6, 3),
+        (44, 44, 6, 3),
+        (3,  30, 8, 4),
+        (45, 28, 8, 4),
+        (6,  18, 6, 3),
+        (40, 14, 6, 3),
     ],
 }
 
@@ -231,13 +293,16 @@ def make_forest(env: str, variant: int) -> Image.Image:
     bg, tuft_color = ENV_BG[env]
     img = Image.new("RGB", (SIZE, SIZE), bg)
     rng = random.Random(0x200 + variant)
-    # Draw trees back→middle→front (later draws occlude earlier)
+    # 1. Background mini pines (drawn first so heroes occlude them)
+    for cx, cy, h, bw in MINI_PINES[variant]:
+        _draw_mini_pine(img, cx, cy, total_height=h, base_width=bw)
+    # 2. Hero trees back→middle→front
     for cx, cy, h, bw in TREE_LAYOUTS[variant]:
         draw_pine(img, cx, cy, total_height=h, base_width=bw)
-    # A few ground texture dots
-    for _ in range(3):
-        x = rng.randint(0, SIZE - 1)
-        y = rng.randint(0, SIZE - 1)
+    # 3. Ground texture dots in the small remaining gaps
+    for _ in range(4):
+        x = rng.randint(1, SIZE - 2)
+        y = rng.randint(SIZE // 2, SIZE - 2)
         rect(img, x, y, x + 1, y, tuft_color)
     return img
 
@@ -281,57 +346,58 @@ def _draw_rocky_peak(img: Image.Image, peak_x: int, peak_y: int,
 
 
 def make_mountain(variant: int) -> Image.Image:
+    """Mountain tiles — fill the whole 48x48 cell with overlapping peaks so
+    no background seam shows when tiles are placed next to each other.
+    v0 = yellow-sand floor + grey rock peaks + white snow caps (warm biome)
+    v1 = full snow floor + snow peaks (cold biome)
+    """
     if variant == 0:
-        # 参考图风格：黄沙底 + 多座灰岩峰 + 雪盖
-        img = Image.new("RGB", (SIZE, SIZE), P.sand_l)  # 黄色沙地
+        # Warm biome: yellow sand floor, grey rock peaks, white snow caps
+        img = Image.new("RGB", (SIZE, SIZE), P.sand_l)
 
-        # 一些沙地纹理（黄色暗斑）
-        for y in range(0, SIZE, 2):
+        # Sand texture (only in the few px that won't be covered by peaks)
+        for y in range(SIZE - 4, SIZE):
             for x in range((y // 2) % 4, SIZE, 6):
                 px(img, x, y, P.sand_m)
 
-        # Back peak (smallest, narrowest, far right) — atmospheric perspective
-        _draw_rocky_peak(img, peak_x=24, peak_y=10, half_width=6,
-                          base_y=SIZE, rock_color=P.rock_m, snow_color=P.snow_cap)
+        # Three peaks — wide enough to overlap and cover the full width.
+        # half_width values sized so peak_x - half_width <= 0 and
+        # peak_x + half_width >= SIZE - 1 for the two outermost peaks,
+        # ensuring the mountain mass reaches both side edges.
+        # Left peak — its left slope runs off the left edge
+        _draw_rocky_peak(img, peak_x=4, peak_y=12, half_width=12,
+                         base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
+        # Back-right peak (taller, behind)
+        _draw_rocky_peak(img, peak_x=38, peak_y=4, half_width=14,
+                         base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
+        # Front-center peak (tallest, dominant)
+        _draw_rocky_peak(img, peak_x=22, peak_y=0, half_width=18,
+                         base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
 
-        # Middle peak (medium, far left)
-        _draw_rocky_peak(img, peak_x=8, peak_y=6, half_width=8,
-                          base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
-
-        # Front peak (tallest, center-right, dominant)
-        _draw_rocky_peak(img, peak_x=17, peak_y=2, half_width=11,
-                          base_y=SIZE, rock_color=P.rock_l, snow_color=P.snow_cap)
-
-        # Subtle dark crevices between rocks (use rock_d color in shadow areas)
-        # Crevice 1: between front and middle peaks
-        for y in range(8, SIZE):
-            px(img, 12, y, P.rock_d)
+        # Dark crevices between peaks (visual separation)
+        for y in range(16, SIZE):
             px(img, 13, y, P.rock_d)
-        # Crevice 2: between back and front
-        for y in range(11, SIZE):
-            px(img, 21, y, P.rock_d)
+            px(img, 14, y, P.rock_d)
+        for y in range(10, SIZE):
+            px(img, 32, y, P.rock_d)
     else:
-        # 雪山版：白底 + 全白雪山峰（白底白峰，主要靠阴影区分）
-        img = Image.new("RGB", (SIZE, SIZE), P.snow_cap)
+        # Cold biome: full snow floor, snow peaks distinguished only by
+        # light-blue shading. Peaks still cover the whole cell.
+        img = Image.new("RGB", (SIZE, SIZE), P.snow_l)
 
-        # Back peak (light blue-gray)
-        _draw_rocky_peak(img, peak_x=24, peak_y=10, half_width=6,
-                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=4, peak_y=12, half_width=12,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=38, peak_y=4, half_width=14,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=22, peak_y=0, half_width=18,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
 
-        # Middle peak
-        _draw_rocky_peak(img, peak_x=8, peak_y=6, half_width=8,
-                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
-
-        # Front peak (largest)
-        _draw_rocky_peak(img, peak_x=17, peak_y=2, half_width=11,
-                          base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
-
-        # Crevices (deeper blue)
-        for y in range(8, SIZE):
-            px(img, 12, y, P.snow_d)
+        # Blue-shadow crevices
+        for y in range(16, SIZE):
             px(img, 13, y, P.snow_d)
-        for y in range(11, SIZE):
-            px(img, 21, y, P.snow_d)
+            px(img, 14, y, P.snow_d)
+        for y in range(10, SIZE):
+            px(img, 32, y, P.snow_d)
     return img
 
 
