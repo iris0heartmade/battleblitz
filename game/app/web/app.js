@@ -931,7 +931,10 @@ async function animateUnitAlongPath(el, pathCells) {
   const board = document.getElementById("board");
   if (!board) return;
   const cellSize = parseInt(getComputedStyle(board).getPropertyValue("--cell-size")) || 24;
-  const stepMs = 220;
+  // Walking is 320ms per cell. Scales down slightly for long paths so a
+  // 5-cell move doesn't take 1.6s, but never below 200ms so single-cell
+  // moves still feel like a deliberate "step".
+  const stepMs = Math.max(200, Math.min(320, 360 - (pathCells.length - 1) * 25));
   const newPos = pathCells[pathCells.length - 1];
 
   // Step 1: jump the visual to the start (no transition).
@@ -3869,8 +3872,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const newW = parseInt(document.getElementById("editor-width").value, 10);
     const newH = parseInt(document.getElementById("editor-height").value, 10);
     if (!Number.isFinite(newW) || !Number.isFinite(newH) ||
-        newW < 15 || newW > 35 || newH < 15 || newH > 40) {
-      toast("尺寸超出范围（宽 15-35, 高 15-40）");
+        newW < 15 || newW > 45 || newH < 15 || newH > 45) {
+      toast("尺寸超出范围（宽 15-45, 高 15-45）");
       return;
     }
     if (newW === editorState.width && newH === editorState.height) return;
