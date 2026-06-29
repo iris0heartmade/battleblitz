@@ -120,6 +120,64 @@ function toast(msg, ms = 2200) {
   toast._t = setTimeout(() => { t.hidden = true; }, ms);
 }
 
+// ============================================================
+// Generic in-game modal — replaces window.alert/confirm/prompt
+// for editor flows. Returns a Promise that resolves with the
+// clicked button's `value`, or null if dismissed.
+// ============================================================
+let _modalResolve = null;
+function showModal({ title = "", body = "", buttons = [] } = {}) {
+  const modal = document.getElementById("generic-modal");
+  const titleEl = document.getElementById("generic-modal-title");
+  const bodyEl = document.getElementById("generic-modal-body");
+  const btnRow = document.getElementById("generic-modal-buttons");
+  if (!modal) return Promise.resolve(null);
+  titleEl.textContent = title;
+  // body can be a string or a DOM node
+  bodyEl.innerHTML = "";
+  if (typeof body === "string") {
+    bodyEl.textContent = body;
+  } else if (body instanceof Node) {
+    bodyEl.appendChild(body);
+  }
+  btnRow.innerHTML = "";
+  buttons.forEach((b) => {
+    const btn = document.createElement("button");
+    btn.className = `btn ${b.kind === "danger" ? "btn-accent" : (b.kind === "primary" ? "btn-primary" : "btn-secondary")}`;
+    btn.textContent = b.label;
+    btn.addEventListener("click", () => {
+      modal.hidden = true;
+      const r = _modalResolve;
+      _modalResolve = null;
+      if (r) r(b.value);
+    });
+    btnRow.appendChild(btn);
+  });
+  modal.hidden = false;
+  return new Promise((resolve) => { _modalResolve = resolve; });
+}
+
+// Convenience: yes/no confirm
+function showConfirm(message, { title = "请确认", confirmLabel = "确定", cancelLabel = "取消", danger = false } = {}) {
+  return showModal({
+    title,
+    body: message,
+    buttons: [
+      { label: cancelLabel, value: false, kind: "secondary" },
+      { label: confirmLabel, value: true, kind: danger ? "danger" : "primary" },
+    ],
+  });
+}
+
+// Convenience: alert/info
+function showAlert(message, { title = "提示", okLabel = "好" } = {}) {
+  return showModal({
+    title,
+    body: message,
+    buttons: [{ label: okLabel, value: true, kind: "primary" }],
+  });
+}
+
 // ----- View renderers -----
 function renderSettings() {
   document.getElementById("setting-name").value = state.settings.playerName;
@@ -3675,6 +3733,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     // Reflect current state into form inputs
     document.getElementById("editor-name").value = editorState.mapName || "";
+    // Clear any stale validation state (e.g. from a previous failed save)
+    const _nameInput = document.getElementById("editor-name");
+    if (_nameInput) _nameInput.classList.remove("is-invalid");
+    const _nameErr = document.getElementById("editor-name-error");
+    if (_nameErr) _nameErr.hidden = true;
     document.getElementById("editor-width").value = editorState.width;
     document.getElementById("editor-height").value = editorState.height;
     document.getElementById("editor-biome").value = editorState.biome;
@@ -3761,8 +3824,15 @@ document.addEventListener("DOMContentLoaded", () => {
     renderEditorBoard();
   }
 
-  function onEditorNew() {
-    if (!confirm("新建空白地图？当前未保存的改动会丢失。")) return;
+  async function onEditorNew() {
+    if (editorState.mapId || (editorState.layout && editorState.layout.join("").replace(/P/g, "").length > 0)) {
+      const ok = await showConfirm("新建空白地图？当前未保存的改动会丢失。", {
+        title: "新建地图",
+        confirmLabel: "新建",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     editorState.layout = makeEmptyLayout(15, 15);
     editorState.initialUnits = [];
     editorState.width = 15;
@@ -3785,21 +3855,39 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (!maps || maps.length === 0) {
-      toast("暂无已保存的地图");
+      await showAlert("暂无已保存的地图", { title: "读取地图" });
       return;
     }
-    const lines = ["📂 已保存的地图："];
-    maps.forEach((m, i) => {
-      lines.push(`${i + 1}. ${m.name}  [${m.width}x${m.height} ${m.biome}]  (id=${m.id})`);
+    // Build an in-game list modal: each map is a clickable row.
+    const list = document.createElement("div");
+    list.className = "choice-list";
+    const BIOME_LABEL_ZH = { grass: "草原", snow: "雪地", desert: "沙漠" };
+    maps.forEach((m) => {
+      const item = document.createElement("button");
+      item.className = "choice-item";
+      item.type = "button";
+      const left = document.createElement("span");
+      left.textContent = m.name;
+      const right = document.createElement("span");
+      right.className = "meta";
+      right.textContent = `${m.width}×${m.height} · ${BIOME_LABEL_ZH[m.biome] || m.biome}`;
+      item.appendChild(left);
+      item.appendChild(right);
+      item.addEventListener("click", () => {
+        // resolve the pending modal promise with this map id, then close.
+        const r = _modalResolve;
+        _modalResolve = null;
+        document.getElementById("generic-modal").hidden = true;
+        if (r) r(m.id);
+      });
+      list.appendChild(item);
     });
-    const choice = prompt(lines.join("\n\n") + "\n\n输入编号读取（或取消）：");
-    if (!choice) return;
-    const idx = parseInt(choice, 10) - 1;
-    if (idx < 0 || idx >= maps.length) {
-      toast("无效编号");
-      return;
-    }
-    await loadEditorMap(maps[idx].id);
+    const result = await showModal({
+      title: `读取地图（${maps.length} 张）`,
+      body: list,
+      buttons: [{ label: "取消", value: null, kind: "secondary" }],
+    });
+    if (result) await loadEditorMap(result);
   }
 
   async function loadEditorMap(mapId) {
@@ -3823,9 +3911,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function onEditorSave() {
-    const name = document.getElementById("editor-name").value.trim();
+    const nameInput = document.getElementById("editor-name");
+    const name = nameInput.value.trim();
     if (!name) {
-      toast("请填写地图名");
+      // Mark the field invalid + show inline error + blocking modal so the
+      // user can't miss it. Clear the error as soon as they start typing.
+      nameInput.classList.add("is-invalid");
+      nameInput.focus();
+      const err = document.getElementById("editor-name-error");
+      if (err) err.hidden = false;
+      const onInput = () => {
+        nameInput.classList.remove("is-invalid");
+        if (err) err.hidden = true;
+        nameInput.removeEventListener("input", onInput);
+      };
+      nameInput.addEventListener("input", onInput);
+      await showAlert("请先填写地图名（地图名用于在地图列表里识别）", { title: "保存失败" });
       return;
     }
     const biome = document.getElementById("editor-biome").value;
@@ -3842,6 +3943,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const m = await api("POST", "/editor/maps", body);
       editorState.mapId = m.id;
       editorState.mapName = m.name;
+      // Clear any prior invalid state
+      nameInput.classList.remove("is-invalid");
+      const err = document.getElementById("editor-name-error");
+      if (err) err.hidden = true;
       toast(`保存成功！id=${m.id}（${m.size.width}x${m.size.height}）`);
     } catch (e) {
       toast("保存失败：" + e.message);

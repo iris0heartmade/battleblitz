@@ -246,6 +246,7 @@
           <div class="form-row">
             <label>地图名</label>
             <input id="editor-name" type="text" maxlength="40" placeholder="我的地图" />
+            <span id="editor-name-error" class="field-error" hidden>请填写地图名后再保存</span>
           </div>
           <div class="form-row-inline">
             <div class="form-row">
@@ -437,6 +438,14 @@
           <h2 id="game-over-title">游戏结束</h2>
           <p id="game-over-body"></p>
           <button class="btn btn-primary" data-action="goto-menu">返回主菜单</button>
+        </div>
+      </div>
+      <!-- Generic in-game modal (replaces browser alert/confirm/prompt) -->
+      <div id="generic-modal" class="modal" hidden>
+        <div class="modal-card">
+          <h2 id="generic-modal-title"></h2>
+          <div id="generic-modal-body"></div>
+          <div id="generic-modal-buttons" class="modal-buttons"></div>
         </div>
       </div>
     </div>
