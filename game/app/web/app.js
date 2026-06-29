@@ -263,6 +263,10 @@ async function fetchUnitClasses() {
       UNIT_CLASSES[u.type_id] = u;
       CAN_MOVE_AFTER[u.type_id] = u.can_move_after_action;
     }
+    // Re-render editor board now that glyphs are known (fixes "?" placeholders
+    // when units are placed before this async fetch completes).
+    if (typeof renderEditorBoard === "function") renderEditorBoard();
+    if (typeof refreshEditorToolGlyphs === "function") refreshEditorToolGlyphs();
     const skills = await api("GET", "/games/skills");
     for (const s of skills) {
       SKILL_REF.push({ name: `${s.display_cn} (${s.skill_id})`, desc: `${s.is_passive ? "被动" : "主动"} · 默认拥有: ${(s.default_users||[]).join(",")}` });
@@ -671,6 +675,15 @@ function tileImageUrl(terrain, biome, x, y) {
   const variant = pickTileVariant(terrain, x, y);
   const base = BIOME_AWARE_TERRAINS.has(terrain) ? `${terrain}_${biome}` : terrain;
   return `/ui/assets/tiles/${base}_v${variant}.png`;
+}
+
+// Editor stores terrain as single chars (P/F/M/R/C) for compact JSON.
+// Convert to full terrain names for rendering and CSS class lookup.
+const TERRAIN_CHAR_TO_NAME = {
+  P: "plain", F: "forest", M: "mountain", R: "river", C: "castle",
+};
+function terrainNameFromChar(ch) {
+  return TERRAIN_CHAR_TO_NAME[ch] || "plain";
 }
 
 function renderBoard(st) {
@@ -3324,6 +3337,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("editor-width").value = editorState.width;
     document.getElementById("editor-height").value = editorState.height;
     document.getElementById("editor-biome").value = editorState.biome;
+    updateEditorBiomeBadge();
     renderEditorBoard();
     updateUndoButtons();
   }
@@ -3356,11 +3370,23 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from({ length: h }, () => fill.repeat(w));
   }
 
+  // editorState.layout is a string[] (one string per row) so it can be sent
+  // straight to the JSON API. Strings are immutable, so layout[y][x] = ch
+  // silently no-ops. Use this helper instead.
+  function setLayoutCell(layout, x, y, ch) {
+    const row = layout[y];
+    layout[y] = row.slice(0, x) + ch + row.slice(x + 1);
+  }
+
   function renderEditorBoard() {
     const board = document.getElementById("editor-board");
     if (!board) return;
     board.innerHTML = "";
     const W = editorState.width, H = editorState.height;
+    // CSS grid uses these vars to size the template. Without them, the grid
+    // stays 15×15 and the extra cells wrap into implicit overflow rows.
+    board.style.setProperty("--w", String(W));
+    board.style.setProperty("--h", String(H));
     // Build unit index + reverse map unitIdx → unit
     const unitMap = new Map();
     const idxAt = new Map();
@@ -3370,7 +3396,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        const terrain = editorState.layout[y][x] || "P";
+        const terrainChar = editorState.layout[y][x] || "P";
+        const terrain = terrainNameFromChar(terrainChar);
         const cell = document.createElement("div");
         cell.className = "editor-cell t-" + terrain;
         cell.dataset.x = x;
@@ -3412,7 +3439,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ? editorState.initialUnits[editorState.selectedIdx]
       : null;
     if (!u) {
-      info.textContent = "未选中单位（用 🔍 工具点击单位即可选中）";
+      info.textContent = "未选中单位（用「选择」工具点击单位即可选中）";
       return;
     }
     info.innerHTML = `
@@ -3503,7 +3530,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const visited = new Set([`${x},${y}`]);
       while (stack.length) {
         const [cx, cy] = stack.pop();
-        editorState.layout[cy][cx] = replacement;
+        setLayoutCell(editorState.layout, cx, cy, replacement);
         const neighbors = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
         for (const [nx, ny] of neighbors) {
           const key = `${nx},${ny}`;
@@ -3524,7 +3551,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const row = editorState.layout[y];
     if (row[x] !== tool) {
       pushUndo();
-      row[x] = tool;
+      setLayoutCell(editorState.layout, x, y, tool);
       lastTerrainBrush = tool;
       renderEditorBoard();
     }
@@ -3551,7 +3578,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let err = dx - dy;
     while (true) {
       if (cx >= 0 && cx < editorState.width && cy >= 0 && cy < editorState.height) {
-        editorState.layout[cy][cx] = brush;
+        setLayoutCell(editorState.layout, cx, cy, brush);
       }
       if (cx === x && cy === y) break;
       const e2 = 2 * err;
@@ -3568,7 +3595,7 @@ document.addEventListener("DOMContentLoaded", () => {
       u => !(u.x === x && u.y === y)
     );
     // Reset terrain to plain
-    editorState.layout[y][x] = "P";
+    setLayoutCell(editorState.layout, x, y, "P");
     editorState.selectedIdx = -1;
     renderEditorBoard();
   }
@@ -3592,6 +3619,13 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("editor-save-btn").addEventListener("click", onEditorSave);
       document.getElementById("editor-undo-btn").addEventListener("click", undoEditor);
       document.getElementById("editor-redo-btn").addEventListener("click", redoEditor);
+      // Biome change → update badge + re-render
+      document.getElementById("editor-biome").addEventListener("change", (ev) => {
+        editorState.biome = ev.target.value;
+        updateEditorBiomeBadge();
+        refreshEditorToolTerrainSwatches();
+        renderEditorBoard();
+      });
       // Keyboard shortcuts (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z) — only when editor view is active
       document.addEventListener("keydown", (ev) => {
         const editorView = document.getElementById("view-editor");
@@ -3625,6 +3659,8 @@ document.addEventListener("DOMContentLoaded", () => {
           document.querySelectorAll(".color-btn").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
           editorState.color = btn.dataset.color;
+          // Update unit-tool swatches so the user sees the new player color
+          refreshEditorToolUnitSwatches();
           // Apply color to selected unit
           if (editorState.selectedIdx >= 0) {
             const u = editorState.initialUnits[editorState.selectedIdx];
@@ -3642,8 +3678,60 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("editor-width").value = editorState.width;
     document.getElementById("editor-height").value = editorState.height;
     document.getElementById("editor-biome").value = editorState.biome;
+    updateEditorBiomeBadge();
+    // Paint tool button previews (tile PNGs + unit glyphs + unit color).
+    refreshEditorToolTerrainSwatches();
+    refreshEditorToolUnitSwatches();
+    refreshEditorToolGlyphs();
     renderEditorBoard();
     updateUndoButtons();
+  }
+
+  // Reflect the current biome into the visible badge.
+  const BIOME_LABEL = { grass: "草原", snow: "雪地", desert: "沙漠" };
+  function updateEditorBiomeBadge() {
+    const el = document.getElementById("editor-biome-badge");
+    if (!el) return;
+    const biome = editorState.biome || "grass";
+    el.textContent = BIOME_LABEL[biome] || biome;
+    el.className = `biome-badge biome-${biome}`;
+  }
+
+  // Populate the unit glyphs inside the tool buttons (剑/弓/骑/疗).
+  // Called once UNIT_CLASSES has loaded.
+  function refreshEditorToolGlyphs() {
+    document.querySelectorAll(".tool-swatch[data-glyph]").forEach((el) => {
+      const type = el.dataset.glyph;
+      const cls = UNIT_CLASSES[type];
+      el.textContent = (cls && cls.glyph) || "?";
+    });
+  }
+
+  // Player color → CSS hex (used for unit swatch background).
+  const EDITOR_COLOR_HEX = {
+    red:    "#e85a6a",
+    blue:   "#5a8ae8",
+    green:  "#5ae87a",
+    yellow: "#e8d65a",
+  };
+  // Refresh the unit swatches: paint them with the current editor player color
+  // so the user can tell at a glance what color the next unit will be.
+  function refreshEditorToolUnitSwatches() {
+    const hex = EDITOR_COLOR_HEX[editorState.color] || "#888";
+    document.querySelectorAll(".tool-swatch.tool-unit-swatch").forEach((el) => {
+      el.style.background = hex;
+    });
+  }
+  // Refresh the terrain swatches with the actual tile PNGs.
+  // Re-runs when biome changes since some tiles are biome-aware.
+  function refreshEditorToolTerrainSwatches() {
+    const biome = editorState.biome || "grass";
+    document.querySelectorAll(".tool-btn[data-tile]").forEach((btn) => {
+      const ch = btn.dataset.tile;
+      const name = TERRAIN_CHAR_TO_NAME[ch] || "plain";
+      const sw = btn.querySelector(".tool-swatch");
+      if (sw) sw.style.backgroundImage = `url(${tileImageUrl(name, biome, 0, 0)})`;
+    });
   }
 
   function onEditorResize() {
@@ -3660,7 +3748,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const newLayout = makeEmptyLayout(newW, newH);
     for (let y = 0; y < Math.min(editorState.height, newH); y++) {
       for (let x = 0; x < Math.min(editorState.width, newW); x++) {
-        newLayout[y][x] = editorState.layout[y][x] || "P";
+        setLayoutCell(newLayout, x, y, editorState.layout[y][x] || "P");
       }
     }
     editorState.width = newW;

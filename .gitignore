@@ -59,6 +59,9 @@ doc
 # ===== Brainstorming / scratch =====
 .superpowers/
 
+# ===== Claude resume debug output =====
+claude --resume *.txt
+
 # ===== user uploads =====
 *.jpg
 *.jpeg

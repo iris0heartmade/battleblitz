@@ -218,6 +218,10 @@ html, body {
 
 .panel h2 { margin: 0 0 8px; }
 
+/* Editor view: use full width and align to the top, not center */
+#view-editor { align-items: flex-start; }
+#view-editor .panel { max-width: none; }
+
 .form-row {
   display: flex;
   flex-direction: column;
@@ -1682,7 +1686,29 @@ html, body {
 .editor-header h2 { flex: 1; margin: 0; }
 .editor-actions { display: flex; gap: 8px; }
 
+/* ============================================================
+   Editor layout: left = map board (bigger), right = tools (narrower)
+   ============================================================ */
+.editor-main {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 0;
+}
+.editor-canvas-wrap {
+  flex: 1 1 auto;
+  min-width: 0;        /* allow grid to shrink and scroll */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+  overflow: auto;
+}
 .editor-toolbar {
+  flex: 0 0 280px;     /* fixed narrow column on the right */
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1712,28 +1738,81 @@ html, body {
 
 .editor-tools {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .tool-btn {
-  width: 40px;
-  height: 40px;
+  min-width: 60px;
+  height: 60px;
   border: 2px solid var(--grid);
   border-radius: 6px;
   background: var(--panel);
-  font-size: 22px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 6px;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.tool-btn .tool-swatch {
+  width: 36px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--grid);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s, border-color 0.1s;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
-.tool-btn:hover { transform: scale(1.08); }
+.tool-btn .tool-label {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text);
+  font-weight: 500;
+}
+.tool-btn:hover { transform: scale(1.05); }
 .tool-btn.active {
   border-color: var(--accent);
   background: var(--bg);
   box-shadow: 0 0 0 2px var(--accent);
 }
+/* Terrain swatch: shows the actual tile PNG (set via JS background-image) */
+.tool-swatch.tool-terrain-swatch {
+  background-color: var(--t-grid);
+  image-rendering: pixelated;
+}
+/* Unit swatch: player color background + glyph */
+.tool-swatch.tool-unit-swatch {
+  background: #888;  /* overridden by JS to editor color */
+}
+/* Utility swatch: muted color */
+.tool-swatch.tool-utility-swatch {
+  background: #3a4256;
+  color: #c8d0e0;
+}
+/* Biome badge — small chip next to the biome dropdown */
+.biome-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--grid);
+}
+.biome-badge.biome-grass  { background: var(--t-forest); }
+.biome-badge.biome-snow   { background: #b9cbe0; color: #1d2433; text-shadow: none; }
+.biome-badge.biome-desert { background: #d4a85a; }
 
 .editor-color-picker {
   display: flex;
@@ -1798,6 +1877,13 @@ html, body {
   z-index: 2;
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+
+/* Color fallbacks matching main board (in case tile images fail to load) */
+.editor-cell.t-plain    { background: var(--t-plain); }
+.editor-cell.t-forest   { background: var(--t-forest); }
+.editor-cell.t-mountain { background: var(--t-mountain); }
+.editor-cell.t-river    { background: var(--t-river); }
+.editor-cell.t-castle   { background: var(--t-castle); }
 
 .editor-cell .unit {
   position: absolute;

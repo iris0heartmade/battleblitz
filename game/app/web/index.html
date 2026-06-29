@@ -238,64 +238,66 @@
         </div>
       </div>
 
-      <div class="editor-toolbar">
-        <div class="form-row">
-          <label>地图名</label>
-          <input id="editor-name" type="text" maxlength="40" placeholder="我的地图" />
+      <div class="editor-main">
+        <div class="editor-canvas-wrap">
+          <div id="editor-board" class="editor-board"></div>
         </div>
-        <div class="form-row-inline">
+        <div class="editor-toolbar">
           <div class="form-row">
-            <label>宽 (15-35)</label>
-            <input id="editor-width" type="number" min="15" max="35" value="15" />
+            <label>地图名</label>
+            <input id="editor-name" type="text" maxlength="40" placeholder="我的地图" />
+          </div>
+          <div class="form-row-inline">
+            <div class="form-row">
+              <label>宽 (15-35)</label>
+              <input id="editor-width" type="number" min="15" max="35" value="15" />
+            </div>
+            <div class="form-row">
+              <label>高 (15-40)</label>
+              <input id="editor-height" type="number" min="15" max="40" value="15" />
+            </div>
+            <div class="form-row">
+              <label>环境类型</label>
+              <select id="editor-biome">
+                <option value="grass">草原</option>
+                <option value="snow">雪地</option>
+                <option value="desert">沙漠</option>
+              </select>
+              <span id="editor-biome-badge" class="biome-badge biome-grass" title="当前环境类型：影响森林/城堡 tile 配色">草原</span>
+            </div>
+            <button id="editor-resize-btn" class="btn btn-secondary">应用尺寸</button>
           </div>
           <div class="form-row">
-            <label>高 (15-40)</label>
-            <input id="editor-height" type="number" min="15" max="40" value="15" />
+            <label>工具（点格子应用）</label>
+            <div class="editor-tools">
+              <button class="tool-btn tool-utility" data-tool="select" title="选择/移动单位"><span class="tool-swatch tool-utility-swatch">选</span><span class="tool-label">选择单位</span></button>
+              <button class="tool-btn tool-terrain active" data-tool="P" data-tile="P" title="平地"><span class="tool-swatch tool-terrain-swatch"></span><span class="tool-label">平地</span></button>
+              <button class="tool-btn tool-terrain" data-tool="F" data-tile="F" title="森林"><span class="tool-swatch tool-terrain-swatch"></span><span class="tool-label">森林</span></button>
+              <button class="tool-btn tool-terrain" data-tool="M" data-tile="M" title="山地"><span class="tool-swatch tool-terrain-swatch"></span><span class="tool-label">山地</span></button>
+              <button class="tool-btn tool-terrain" data-tool="R" data-tile="R" title="河流"><span class="tool-swatch tool-terrain-swatch"></span><span class="tool-label">河流</span></button>
+              <button class="tool-btn tool-terrain" data-tool="C" data-tile="C" title="城堡"><span class="tool-swatch tool-terrain-swatch"></span><span class="tool-label">城堡</span></button>
+              <button class="tool-btn tool-utility" data-tool="fill" title="填充（连通区域，使用最近一次的地形笔刷）"><span class="tool-swatch tool-utility-swatch">填</span><span class="tool-label">填充</span></button>
+              <button class="tool-btn tool-utility" data-tool="line" title="画线（拖拽，使用最近一次的地形笔刷）"><span class="tool-swatch tool-utility-swatch">线</span><span class="tool-label">画线</span></button>
+              <button class="tool-btn tool-unit" data-tool="unit-swordsman" data-glyph="swordsman" title="剑士"><span class="tool-swatch tool-unit-swatch">?</span><span class="tool-label">剑士</span></button>
+              <button class="tool-btn tool-unit" data-tool="unit-archer" data-glyph="archer" title="弓箭手"><span class="tool-swatch tool-unit-swatch">?</span><span class="tool-label">弓箭手</span></button>
+              <button class="tool-btn tool-unit" data-tool="unit-knight" data-glyph="knight" title="骑士"><span class="tool-swatch tool-unit-swatch">?</span><span class="tool-label">骑士</span></button>
+              <button class="tool-btn tool-unit" data-tool="unit-healer" data-glyph="healer" title="治疗师"><span class="tool-swatch tool-unit-swatch">?</span><span class="tool-label">治疗师</span></button>
+              <button class="tool-btn tool-utility" data-tool="erase" title="擦除（变回平地）"><span class="tool-swatch tool-utility-swatch">擦</span><span class="tool-label">擦除</span></button>
+            </div>
+          </div>
+          <div id="editor-selected-info" class="selected-info">
+            未选中单位（用「选择」工具点击单位即可选中 / 拖到空格移动 / 切颜色改色 / 右键删除）
           </div>
           <div class="form-row">
-            <label>生物群系</label>
-            <select id="editor-biome">
-              <option value="grass">草原</option>
-              <option value="snow">雪地</option>
-              <option value="desert">沙漠</option>
-            </select>
-          </div>
-          <button id="editor-resize-btn" class="btn btn-secondary">应用尺寸</button>
-        </div>
-        <div class="form-row">
-          <label>工具（点格子应用）</label>
-          <div class="editor-tools">
-            <button class="tool-btn" data-tool="select" title="选择/移动单位">🔍</button>
-            <button class="tool-btn active" data-tool="P" title="平地">🌱</button>
-            <button class="tool-btn" data-tool="F" title="森林">🌲</button>
-            <button class="tool-btn" data-tool="M" title="山地">⛰</button>
-            <button class="tool-btn" data-tool="R" title="河流">🌊</button>
-            <button class="tool-btn" data-tool="C" title="城堡">🏰</button>
-            <button class="tool-btn" data-tool="fill" title="填充（连通区域）">🪣</button>
-            <button class="tool-btn" data-tool="line" title="画线（拖拽）">📏</button>
-            <button class="tool-btn" data-tool="unit-swordsman" title="剑士">⚔️</button>
-            <button class="tool-btn" data-tool="unit-archer" title="弓手">🏹</button>
-            <button class="tool-btn" data-tool="unit-knight" title="骑士">🐎</button>
-            <button class="tool-btn" data-tool="unit-healer" title="治疗师">💚</button>
-            <button class="tool-btn" data-tool="erase" title="擦除">🧹</button>
+            <label>玩家颜色（放置单位时用）</label>
+            <div class="editor-color-picker">
+              <button class="color-btn active" data-color="red" style="background:#e85a6a">红</button>
+              <button class="color-btn" data-color="blue" style="background:#5a8ae8">蓝</button>
+              <button class="color-btn" data-color="green" style="background:#5ae87a">绿</button>
+              <button class="color-btn" data-color="yellow" style="background:#e8d65a">黄</button>
+            </div>
           </div>
         </div>
-        <div id="editor-selected-info" class="selected-info">
-          未选中单位（用 🔍 工具点击单位即可选中 / 拖到空格移动 / 切颜色改色 / 右键删除）
-        </div>
-        <div class="form-row">
-          <label>玩家颜色（放置单位时用）</label>
-          <div class="editor-color-picker">
-            <button class="color-btn active" data-color="red" style="background:#e85a6a">红</button>
-            <button class="color-btn" data-color="blue" style="background:#5a8ae8">蓝</button>
-            <button class="color-btn" data-color="green" style="background:#5ae87a">绿</button>
-            <button class="color-btn" data-color="yellow" style="background:#e8d65a">黄</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="editor-canvas-wrap">
-        <div id="editor-board" class="editor-board"></div>
       </div>
 
       <p class="hint">提示：先选工具 → 调整尺寸 → 点格子绘制。单位必须放在非城堡格。</p>
