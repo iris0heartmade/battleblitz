@@ -506,11 +506,11 @@ html, body {
   overflow: hidden;
 }
 
-.cell.t-forest    { background: var(--t-forest); }
-.cell.t-mountain  { background: var(--t-mountain); }
-.cell.t-river     { background: var(--t-river); }
+.cell.t-forest    { background-color: var(--t-forest); }
+.cell.t-mountain  { background-color: var(--t-mountain); }
+.cell.t-river     { background-color: var(--t-river); }
 .cell.t-castle    {
-  background: var(--t-castle);
+  background-color: var(--t-castle);
 }
 
 .cell:hover { filter: brightness(1.15); }
@@ -2019,11 +2019,11 @@ html, body {
 }
 
 /* Color fallbacks matching main board (in case tile images fail to load) */
-.editor-cell.t-plain    { background: var(--t-plain); }
-.editor-cell.t-forest   { background: var(--t-forest); }
-.editor-cell.t-mountain { background: var(--t-mountain); }
-.editor-cell.t-river    { background: var(--t-river); }
-.editor-cell.t-castle   { background: var(--t-castle); }
+.editor-cell.t-plain    { background-color: var(--t-plain); }
+.editor-cell.t-forest   { background-color: var(--t-forest); }
+.editor-cell.t-mountain { background-color: var(--t-mountain); }
+.editor-cell.t-river    { background-color: var(--t-river); }
+.editor-cell.t-castle   { background-color: var(--t-castle); }
 
 .editor-cell .unit {
   position: absolute;
