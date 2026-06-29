@@ -212,16 +212,18 @@ playtesting confirms balance.
 
 ## 5. Combat formula (`game/app/game_logic.py`)
 
+The defender's resistance stat is determined by the **attacker's**
+attack type — physical attacks are blocked by `def_`, magic attacks
+by `mdef`. This is the only sensible rule: "physical defense"
+defending against "magic damage" doesn't make sense, and the
+defender doesn't get to choose which stat to block with.
+
 `calculate_damage` (lines 218-256) becomes:
 
 ```python
-# Attacker picks which stat to attack with (its own attack_kind).
-# Defender's resistance type follows the DEFENSE archetype — physical
-# attacks are blocked by the defender's def_ (low for magic units),
-# magic attacks are blocked by the defender's mdef (low for physical
-# units). This is what produces "天生相克": physical units naturally
-# have low mdef so magic hits them hard; magic units naturally have
-# low def_ so physical hits them hard.
+# The damage type is determined by the ATTACKER, not the defender:
+#   - attack_kind == "physical" → attacker uses ATK, defender blocks with DEF
+#   - attack_kind == "magic"    → attacker uses MATK, defender blocks with MDEF
 if attacker.attack_kind == "magic":
     eff_atk = attacker.matk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
     eff_df  = (defender.mdef + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
@@ -230,32 +232,40 @@ else:  # "physical"
     eff_df  = (defender.def_ + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
 ```
 
-**Why this design is correct:**
-- A Swordsman attacks a Warlock: Swordsman uses its ATK (high, 18),
-  Warlock defends with its DEF (low, 10). Damage is high — physical
-  beats magic because magic units invest in MATK/MDEF at the cost of
-  DEF.
-- A Warlock attacks a Swordsman: Warlock uses its MATK (high, 22),
-  Swordsman defends with its MDEF (low, 4). Damage is high — magic
-  beats physical because physical units invest in ATK/DEF at the cost
-  of MDEF.
-- Same-archetype matchups (sword vs sword, warlock vs warlock) deal
-  moderate damage because both sides have invested in their archetype's
-  defense.
+**Why "natural counter" emerges from the stat layout:**
+
+Physical units have high ATK/DEF and low MATK/MDEF. Magic units have
+high MATK/MDEF and low ATK/DEF. The formula above always picks the
+right resistance stat for the incoming damage, so:
+
+| Attacker (kind) → Defender (kind) | Damage formula                 | Why the result                                                |
+|------------------------------------|--------------------------------|---------------------------------------------------------------|
+| Swordsman (physical) → Swordsman   | ATK (18) vs DEF (12)           | moderate — both invested in physical                          |
+| Swordsman (physical) → Warlock     | ATK (18) vs DEF (10)           | **high** — Warlock traded DEF away for MDEF                   |
+| Warlock (magic) → Swordsman        | MATK (22) vs MDEF (4)          | **high** — Swordsman traded MDEF away for DEF                 |
+| Warlock (magic) → Warlock          | MATK (22) vs MDEF (12)         | moderate — both invested in magic                             |
+| Swordsman → Healer                 | ATK (18) vs DEF (9)            | high — Healer (magic) traded DEF away for MDEF                |
+| Warlock → Healer                   | MATK (8) vs MDEF (12)          | low — Healer invested in magic defenses (Warlock is more magic) |
+
+So physical-magic cross-archetype hits hit hard because the
+defender is weak on that side of their stat block. Same-archetype
+matchups are moderate. No explicit `strong_against` is needed — the
+type-advantage table is no longer relied on for the new Warlock.
 
 `attack_with_double_strike` and counter-attack logic do not need to
 change — they only orchestrate hits, not compute damage per hit.
 
-`strong_against` table is left in place but **no longer matters for
-the new Warlock** — the spec no longer sets `strong_against = ["healer"]`
-on the Warlock. The natural counter (Healer's low DEF) is already
-captured by the defender's stat choice.
+`strong_against` table is left in place (Swordsman still has
+`["knight"]`, Knight still has `["archer"]`) — the existing ×1.20
+multiplier will continue to apply on top of the formula above. We
+may remove the table later once playtesting shows whether the explicit
+multiplier is still pulling weight alongside the natural counter.
 
 ---
 
-## 5.1 Updated class profiles
+## 5.1 Class profiles (with corrected labels)
 
-The new "natural counter" model means the four classes get balanced
+The "natural counter" model means each class needs balanced
 MATK/MDEF profiles:
 
 | Class       | ATK | DEF | MATK | MDEF | attack_kind |
@@ -266,14 +276,14 @@ MATK/MDEF profiles:
 | Warlock     | 8   | 10  | 22   | 12   | magic       |
 | Healer      | 5   | 9   | 8    | 12   | magic       |
 
-Physical classes get a small flat MATK/MDEF (4 each) so the value
-is non-zero for UI display but low enough that magic-vs-physical
+Physical classes get a small flat MATK/MDEF (4 each) so the values
+are non-zero for UI display but low enough that magic-vs-physical
 matchups hurt the physical unit a lot. Magic classes have low ATK/DEF
 (intentionally — they don't have a strong physical fallback).
 
 Healer is a magic class but with lower MATK (8) than Warlock (22) —
-it's not a primary attacker, just gains the magic-type magic defense
-archetype. It also keeps its healing role.
+it's not a primary attacker, just gains the magic offense option.
+It also keeps its healing role.
 
 ---
 
