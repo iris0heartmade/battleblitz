@@ -696,8 +696,15 @@ html, body {
   color: var(--text-dim);
 }
 .action-log .entry.system        { color: var(--accent); }
-.action-log .entry.attack        { color: var(--danger); }
-.action-log .entry.move          { color: var(--good); }
+.action-log .entry.attack        { color: #ff8b8b; }   /* 红：攻击 */
+.action-log .entry.move          { color: #8fc7ff; }   /* 蓝：移动 */
+.action-log .entry.heal          { color: #7ee07e; }   /* 绿：治疗 */
+.action-log .entry.skill         { color: #ffce5c; font-weight: 600; }   /* 黄：技能 */
+.action-log .entry.wait          { color: var(--text-dim); }              /* 灰：待命 */
+.action-log .entry.end_turn      { color: var(--text); font-weight: 600; } /* 白：回合切换 */
+.action-log .entry.level_up      { color: #ffce5c; font-weight: 600; }   /* 黄：升级 */
+.action-log .entry.eliminated    { color: #ff8b8b; font-weight: 600; }   /* 红：淘汰 */
+.action-log .entry.turn_end      { color: var(--text-dim); }              /* 灰：回合结算摘要 */
 .action-log .entry.ai_commentary {
   border-bottom: none;
   padding: 4px 6px;
@@ -1117,6 +1124,73 @@ html, body {
 .lobby-player.ai {
   border-left-color: var(--accent);
   background: linear-gradient(90deg, rgba(255,184,77,0.08) 0%, var(--bg-card) 30%);
+}
+
+/* ============================================================
+   Phase banner (persistent indicator above the board)
+   ============================================================ */
+
+.phase-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 12px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  width: fit-content;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+.phase-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--text-dim);
+  box-shadow: 0 0 6px currentColor;
+}
+.phase-banner.phase-player {
+  background: rgba(125, 200, 125, 0.15);
+  border-color: #4f8a47;
+  color: #7ee07e;
+}
+.phase-banner.phase-player .phase-dot {
+  background: #7ee07e;
+}
+.phase-banner.phase-ai {
+  background: rgba(232, 90, 106, 0.15);
+  border-color: var(--danger);
+  color: #ff8b8b;
+}
+.phase-banner.phase-ai .phase-dot {
+  background: var(--danger);
+  animation: phase-pulse 1.2s ease-in-out infinite;
+}
+.phase-banner.phase-animating {
+  background: rgba(255, 184, 77, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.phase-banner.phase-animating .phase-dot {
+  background: var(--accent);
+  animation: phase-pulse 1.2s ease-in-out infinite;
+}
+@keyframes phase-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+/* When AI is acting, gray out the board and disable clicks. */
+.board.phase-disabled .cell {
+  cursor: not-allowed;
+  filter: brightness(0.6) saturate(0.7);
+}
+.board.phase-disabled .cell .unit {
+  /* Units stay visible so the player can see what the AI is doing. */
+  filter: none;
 }
 
 /* ============================================================

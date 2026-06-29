@@ -753,6 +753,25 @@ function renderBoard(st) {
     if (t.y + 1 > boardH) boardH = t.y + 1;
   }
   const biome = st.game?.map_biome || "grass";
+  // Phase indicator + board gray-out for AI phase.
+  const phase = st.game?.phase || "player";
+  const PHASE_LABEL = {
+    player: "你的阶段",
+    ai: "敌方阶段（AI 行动中…）",
+    animating: "动画播放中…",
+  };
+  const banner = document.getElementById("phase-banner");
+  if (banner) {
+    banner.className = `phase-banner phase-${phase}`;
+    const txt = document.getElementById("phase-text");
+    if (txt) txt.textContent = PHASE_LABEL[phase] || phase;
+  }
+  // Disable clicks during non-player phase.
+  if (phase === "player") {
+    board.classList.remove("phase-disabled");
+  } else {
+    board.classList.add("phase-disabled");
+  }
   // Force grid layout via inline style (overrides any CSS issues).
   board.style.display = "grid";
   board.style.gridTemplateColumns = `repeat(${boardW}, var(--cell-size))`;
@@ -860,7 +879,8 @@ function renderBoard(st) {
   board.appendChild(frag);
 
   // FLIP step 2 (Last -> Invert -> Play): for each unit that moved, animate
-  // from its old screen position back to the new one.
+  // from its old screen position back to the new one. Uses path-stepper when
+  // a real path is provided; falls back to a single translate otherwise.
   const newPositions = new Map();
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
@@ -868,6 +888,8 @@ function renderBoard(st) {
     const r = u.getBoundingClientRect();
     newPositions.set(id, { left: r.left, top: r.top });
   }
+  // Map of unitId → path (in cell coords) supplied by MoveResult. Consumed once.
+  const pathByUnit = _consumeMovePaths();
   for (const [id, newPos] of newPositions) {
     const old = oldPositions.get(id);
     if (!old) continue; // brand new unit - no animation
@@ -876,17 +898,59 @@ function renderBoard(st) {
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
     const el = document.querySelector(`.unit[data-unit-id="${id}"]`);
     if (!el) continue;
-    // Invert: jump back to old position with no transition
-    el.style.transition = "none";
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
-    // Play: next frame, animate to natural position
-    requestAnimationFrame(() => {
+    const pathCells = pathByUnit.get(Number(id)) || pathByUnit.get(String(id));
+    if (pathCells && pathCells.length >= 2) {
+      animateUnitAlongPath(el, pathCells);
+    } else {
+      // Fallback: single translate (old FLIP behavior)
+      el.style.transition = "none";
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
       requestAnimationFrame(() => {
-        el.style.transition = "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)";
-        el.style.transform = "";
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)";
+          el.style.transform = "";
+        });
       });
-    });
+    }
   }
+}
+
+// Per-MoveResult paths from the server, consumed on the next renderBoard.
+// We only need them once (for the animation), so drain after reading.
+let _pendingMovePaths = new Map();
+function _consumeMovePaths() {
+  const m = _pendingMovePaths;
+  _pendingMovePaths = new Map();
+  return m;
+}
+
+// path-stepper: animate a unit cell-by-cell along a Manhattan path.
+// pathCells: [{x, y}, ...] including start and end. DOM is already at endPos.
+async function animateUnitAlongPath(el, pathCells) {
+  if (!el || pathCells.length < 2) return;
+  const board = document.getElementById("board");
+  if (!board) return;
+  const cellSize = parseInt(getComputedStyle(board).getPropertyValue("--cell-size")) || 24;
+  const stepMs = 220;
+  const newPos = pathCells[pathCells.length - 1];
+
+  // Step 1: jump the visual to the start (no transition).
+  // FLIP trade-off: DOM is at newPos, but we want the unit to appear walking
+  // from oldPos. The 1-frame snap is acceptable (16ms, almost imperceptible).
+  el.style.transition = "none";
+  el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
+  el.offsetHeight;  // force reflow
+
+  // Step 2: chain transitions, walking one cell at a time.
+  for (let i = 1; i < pathCells.length; i++) {
+    const pos = pathCells[i];
+    el.style.transition = `transform ${stepMs}ms linear`;
+    el.style.transform = `translate(${(pos.x - newPos.x) * cellSize}px, ${(pos.y - newPos.y) * cellSize}px)`;
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+  // Step 3: snap back to natural position (DOM is at newPos).
+  el.style.transition = "none";
+  el.style.transform = "";
 }
 
 // ============================================================
@@ -1769,11 +1833,15 @@ async function doMove(unit, toX, toY) {
   state.actionMode = null;
   clearVisualState();
   try {
-    await api("POST", `/games/${state.me.game_id}/move`, {
+    const r = await api("POST", `/games/${state.me.game_id}/move`, {
       player_id: state.me.player_id,
       unit_id: unit.id,
       to_x: toX, to_y: toY,
     });
+    // Queue the path for the next renderBoard's path-stepper animation.
+    if (r && r.path && r.path.length >= 2) {
+      _pendingMovePaths.set(r.unit_id, r.path.map(([x, y]) => ({ x, y })));
+    }
     toast("移动成功");
     await refreshGame();
     // After move, the unit is at the new position. Show post-move bubble.

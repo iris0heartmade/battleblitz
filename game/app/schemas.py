@@ -146,6 +146,7 @@ class GameSummaryOut(APIModel):
     map_seed: int
     map_preset: Optional[str]
     map_biome: str
+    phase: str = "player"   # "player" | "ai" | "animating"
     created_at: datetime
 
 
@@ -217,6 +218,9 @@ class MoveResult(BaseModel):
     cost: int
     castle_captured: bool = False
     description: str
+    # Path the unit walked: [[x, y], ...] including both endpoints.
+    # Used by the frontend path-stepper to animate cell-by-cell.
+    path: List[List[int]] = Field(default_factory=list)
 
 
 class AttackResult(BaseModel):

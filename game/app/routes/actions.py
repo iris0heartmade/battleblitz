@@ -38,6 +38,7 @@ from app.game_logic import (
 )
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
+from app.log_format import fmt_attack, fmt_move, fmt_wait
 from app.schemas import (
     AttackRequest,
     AttackResult,
@@ -74,6 +75,13 @@ async def _load_active_game(session: AsyncSession, game_id: int) -> Game:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "playing":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"游戏状态不是进行中（当前：{game.status}）")
+    # Phase guard: humans may only act during the "player" phase.
+    # (AI phase = AI is taking its turn; animating = reserved for future use.)
+    if getattr(game, "phase", "player") != "player":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"当前是敌方阶段（phase={game.phase}），请等待",
+        )
     return game
 
 
@@ -269,7 +277,8 @@ async def move_unit(
         to_x=target[0], to_y=target[1],
         cost=cost,
         castle_captured=castle_captured,
-        description=f"{unit.name} moved {len(path) - 1} tiles (cost {cost})",
+        description=fmt_move(unit, path, cost),
+        path=[list(p) for p in path],
     )
 
 
@@ -440,10 +449,8 @@ async def attack(
         assist_unit_ids=assist_ids,
         counter_damage=counter_dmg,
         attacker_hp_after=attacker.hp,
-        description=(
-            f"{attacker.name} hit {target.name} for {total_dmg} damage"
-            + (" [击杀]" if is_kill else f" (HP left {target.hp})")
-            + (f" → counter {counter_dmg}" if counter_dmg > 0 else "")
+        description=fmt_attack(
+            attacker, target, total_dmg, is_kill, target.hp, counter_dmg, len(assist_ids)
         ),
     )
 
@@ -538,7 +545,7 @@ async def wait_action(
 
     unit.has_acted = True
     unit.mp = 0  # wait consumes remaining MP
-    _log(session, game, player, "wait", f"{unit.name} waited")
+    _log(session, game, player, "wait", fmt_wait(unit))
     # Publish to event bus
     await bus.publish(GameEvent(
         type="wait", game_id=game_id, turn=game.turn_number,
@@ -548,4 +555,4 @@ async def wait_action(
         "USER_ACTION | user=player_%d | game=%d | action=WAIT | result=SUCCESS | unit=%d",
         player.id, game_id, unit.id,
     )
-    return WaitResult(unit_id=unit.id, description=f"{unit.name} ends turn")
+    return WaitResult(unit_id=unit.id, description=fmt_wait(unit))

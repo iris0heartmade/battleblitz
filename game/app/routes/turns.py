@@ -30,7 +30,7 @@ from app.config import (
     TURNS_CHECK_INTERVAL_SECONDS,
 )
 from app.database import AsyncSessionLocal, get_session
-from app.game_logic import ai_take_turn, apply_end_of_turn
+from app.game_logic import ai_take_turn, ai_take_one_action, apply_end_of_turn
 from app.agent.integration import dispatch_ai_turn
 from app.logging_config import (
     collect_health_metrics,
@@ -40,6 +40,7 @@ from app.logging_config import (
 )
 from app.models import ActionLog, Game, Player, Unit
 from app.schemas import EndTurnRequest, EndTurnResult, GameStateOut
+from app.log_format import fmt_end_turn, fmt_level_up, fmt_eliminated
 
 logger = logging.getLogger(__name__)
 audit = get_audit_logger()
@@ -116,7 +117,7 @@ async def end_turn(
             turn_number=game.turn_number,
             player_id=player.id,
             action_type="end_turn",
-            description=f"{player.user_name} ended their turn",
+            description=fmt_end_turn(player, acted_count),
         )
     )
     audit.info(
@@ -152,8 +153,13 @@ async def end_turn(
             alive_seats = sorted(p.seat for p in players if p.is_alive)
             if alive_seats:
                 game.current_player_index = alive_seats[0]
+                # If the new round starts with an AI, keep it in 'ai' phase;
+                # otherwise mark as 'player' so the human can act.
+                first_player = next(p for p in players if p.seat == alive_seats[0])
+                game.phase = "ai" if first_player.is_ai else "player"
             else:
                 game.status = "finished"
+                game.phase = "player"
 
         next_id = (
             next((p.id for p in players if p.seat == game.current_player_index), None)
@@ -179,7 +185,10 @@ async def end_turn(
     # If the next player is AI, schedule it to play automatically in the
     # background so the human user can watch without doing anything.
     if next_player.is_ai and game.status == "playing":
+        game.phase = "ai"
         asyncio.create_task(_run_ai_turn_chain(game.id))
+    else:
+        game.phase = "player"
 
     return EndTurnResult(
         next_player_id=next_player.id,
@@ -192,49 +201,66 @@ async def end_turn(
 
 
 async def _run_ai_turn_chain(game_id: int) -> None:
-    """Run AI turns in a loop until the current player is human or game ends."""
-    try:
-        while True:
-            await asyncio.sleep(AI_THINK_DELAY_SECONDS)
-            async with AsyncSessionLocal() as session:
-                game = await session.get(Game, game_id)
-                if game is None or game.status != "playing":
-                    return
-                players = (
-                    await session.execute(
-                        select(Player).where(Player.game_id == game_id)
-                    )
-                ).scalars().all()
-                alive_seats = sorted(p.seat for p in players if p.is_alive)
-                if not alive_seats:
-                    return
-                idx = next(
-                    (i for i, s in enumerate(alive_seats)
-                     if s >= game.current_player_index),
-                    0,
-                )
-                expected_seat = alive_seats[idx % len(alive_seats)]
-                current = next((p for p in players if p.seat == expected_seat), None)
-                if current is None or not current.is_ai:
-                    return
+    """Run AI turns one action at a time, sleeping between each.
 
-                # Run the AI's turn (dispatcher picks rules vs LLM)
-                actions = await dispatch_ai_turn(session, game, current)
+    Plays out the AI's actions slowly so the human can watch. After the AI
+    finishes, advances to the next player. If the next player is also AI,
+    recursively runs them. Stops when the current player is human or the
+    game ends.
+    """
+    try:
+        # Step 1: wait for the "AI thinking" pause before the first action.
+        await asyncio.sleep(AI_THINK_DELAY_SECONDS)
+        async with AsyncSessionLocal() as session:
+            game = await session.get(Game, game_id)
+            if game is None or game.status != "playing":
+                return
+            players = (
+                await session.execute(
+                    select(Player).where(Player.game_id == game_id)
+                )
+            ).scalars().all()
+            alive_seats = sorted(p.seat for p in players if p.is_alive)
+            if not alive_seats:
+                return
+            idx = next(
+                (i for i, s in enumerate(alive_seats)
+                 if s >= game.current_player_index),
+                0,
+            )
+            expected_seat = alive_seats[idx % len(alive_seats)]
+            current = next((p for p in players if p.seat == expected_seat), None)
+            if current is None or not current.is_ai:
+                # Reached a human player — hand control back.
+                game.phase = "player"
+                await session.commit()
+                return
+
+            # Step 2: take ONE action (rules AI path; LLM uses its own
+            # dispatch_ai_turn which still runs the whole turn in one shot).
+            try:
+                acted = await ai_take_one_action(session, game, current)
+            except Exception:
+                logger.exception("AI step failed; aborting chain for game %d", game_id)
+                return
+
+            if not acted:
+                # No more actions — end this AI's turn and advance.
+                current.has_ended_turn = True
                 session.add(ActionLog(
                     game_id=game.id,
                     turn_number=game.turn_number,
                     player_id=current.id,
-                    action_type="ai_turn",
-                    description=f"{current.user_name} 行动了 {actions} 步",
+                    action_type="end_turn",
+                    description=fmt_end_turn(current, 0),
                 ))
-
-                # Advance to the next player; check for round wrap
+                # Advance to the next player. If everyone has ended, resolve.
                 next_idx = (idx + 1) % len(alive_seats)
                 next_seat = alive_seats[next_idx]
                 next_player = next(p for p in players if p.seat == next_seat)
                 if next_player.has_ended_turn:
-                    # Round wrap -> resolve
-                    eot = await apply_end_of_turn(session, game)
+                    # Round wrap -> resolve end-of-turn
+                    await apply_end_of_turn(session, game)
                     for p in players:
                         p.has_ended_turn = False
                     all_units = (
@@ -251,10 +277,29 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                         if new_alive:
                             game.current_player_index = new_alive[0]
                             game.turn_number += 1
+                            first_p = next(p for p in players if p.seat == new_alive[0])
+                            game.phase = "ai" if first_p.is_ai else "player"
+                        else:
+                            game.status = "finished"
+                            game.phase = "player"
                 else:
                     game.current_player_index = next_seat
+                    # Phase decision: if next is AI, keep phase=ai; else player
+                    game.phase = "ai" if next_player.is_ai else "player"
                 await session.commit()
-                # Loop continues if the next player is also AI
+                # If next player is still AI, continue the chain.
+                if game.status == "playing":
+                    is_next_ai = next(
+                        (p.is_ai for p in players if p.seat == game.current_player_index),
+                        False,
+                    )
+                    if is_next_ai:
+                        asyncio.create_task(_run_ai_turn_chain(game_id))
+                return
+
+            # AI still has more actions — commit and recurse to take the next.
+            await session.commit()
+            asyncio.create_task(_run_ai_turn_chain(game_id))
     except Exception:  # noqa: BLE001
         logger.exception("AI turn chain error in game %d", game_id)
 

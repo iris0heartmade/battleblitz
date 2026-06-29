@@ -423,7 +423,7 @@ async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
         result = level_up_if_ready(u)
         if result:
             leveled.append((u.id, result.new_level))
-            logs.append(f"{u.name} reached Lv.{result.new_level}")
+            logs.append(f"{u.name} 升到了 Lv.{result.new_level}！")
 
     # 2. Delete dead units
     dead_ids = await cleanup_dead_units(session, units)
@@ -436,16 +436,16 @@ async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
     for p in players:
         if p.is_alive and alive_counts.get(p.id, 0) == 0:
             p.is_alive = False
-            logs.append(f"{p.user_name} has no units left - eliminated!")
+            logs.append(f"{p.user_name} 已被淘汰！")
 
     # 4. Win check
     survivors = [p for p in players if p.is_alive]
     if len(survivors) <= 1 and game.status == "playing":
         game.status = "finished"
         if survivors:
-            logs.append(f"Game over - {survivors[0].user_name} wins!")
+            logs.append(f"游戏结束 - {survivors[0].user_name} 获胜！")
         else:
-            logs.append("Game over - draw!")
+            logs.append("游戏结束 - 平局！")
 
     # 5. Log summary
     if logs:
@@ -975,3 +975,50 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
         unit.has_acted = True
         actions += 1
     return actions
+
+
+async def ai_take_one_action(
+    session: AsyncSession,
+    game: Game,
+    ai_player: Player,
+) -> bool:
+    """Execute ONE action of an AI's turn and return True, or False if done.
+
+    Used by `_run_ai_turn_chain` to play actions one at a time with sleeps
+    in between so the human can see them progress. Mirrors the priority
+    order of `ai_take_turn` (healers first, then attackers).
+    """
+    # Stop if this AI has ended their turn (set by `end_turn` earlier).
+    if ai_player.has_ended_turn:
+        return False
+    # Find first unit that hasn't acted yet.
+    units_rows = (await session.execute(
+        select(Unit).where(Unit.player_id == ai_player.id)
+    )).scalars().all()
+    pending = [u for u in units_rows if u.hp > 0 and not u.has_acted]
+    if not pending:
+        return False
+    # Priority: healers first, then highest ATK first
+    pending.sort(key=lambda u: (
+        0 if u.unit_type == UNIT_HEALER else 1,
+        -u.atk,
+    ))
+    unit = pending[0]
+    snap = await _load_ai_snapshot(session, game, ai_player)
+    # 1. Skill?
+    if unit.unit_type == UNIT_HEALER:
+        if await _ai_use_skill(session, game, unit, snap):
+            return True
+    # 2. Attack?
+    target = _ai_pick_attack_target(unit, snap)
+    if target is not None:
+        if await _ai_attack(session, unit, target):
+            return True
+    # 3. Move?
+    dest = _ai_pick_move_target(unit, snap)
+    if dest is not None and dest != (unit.x, unit.y):
+        if await _ai_move(session, game, unit, dest):
+            return True
+    # 4. Wait (still counts as an action so we can move on)
+    unit.has_acted = True
+    return True

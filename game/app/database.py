@@ -64,7 +64,29 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # One-shot migrations: SQLAlchemy create_all() doesn't add columns to
+        # existing tables, so we ALTER TABLE for fields added after v1.
+        await conn.run_sync(_run_legacy_migrations)
     logger.info("Database initialized: %s", engine.url.render_as_string(hide_password=True))
+
+
+def _run_legacy_migrations(sync_conn) -> None:
+    """Apply column-level migrations that create_all() can't."""
+    from sqlalchemy import text
+    # 2026-06-28: add games.map_biome
+    # 2026-06-29: add games.phase
+    rows = sync_conn.execute(text("PRAGMA table_info(games)")).fetchall()
+    cols = {r[1] for r in rows}
+    if "map_biome" not in cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN map_biome VARCHAR(16) NOT NULL DEFAULT 'grass'"
+        ))
+        logger.info("Migration: added games.map_biome")
+    if "phase" not in cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN phase VARCHAR(16) NOT NULL DEFAULT 'player'"
+        ))
+        logger.info("Migration: added games.phase")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
