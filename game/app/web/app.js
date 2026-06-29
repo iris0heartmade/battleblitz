@@ -1094,12 +1094,34 @@ async function animateUnitAlongPath(el, pathCells) {
   el.style.borderRadius = "0";            // square corners during walk
   el.style.margin = "0";
   el.style.zIndex = "100";   // draw above every cell and panel
-  el.offsetHeight;  // force reflow so the new position is committed
+  // Force two reflows so the browser fully commits the new parent context
+  // AND the explicit pixel dimensions before we touch transform.
+  el.offsetHeight;
+  void el.getBoundingClientRect();
+  // Safety net: if for any reason the unit still isn't cellSize pixels,
+  // log it and abort the walk (snap to final position, no animation).
+  const sanityR = el.getBoundingClientRect();
+  if (sanityR.width > cellSize * 1.5 || sanityR.height > cellSize * 1.5) {
+    console.warn("[walk] unit size mismatch, aborting walk", {
+      expected: cellSize,
+      actual: { w: sanityR.width, h: sanityR.height },
+    });
+    // Reset to destination cell, no animation
+    el.style.transform = "";
+    el.style.transition = "";
+    return;
+  }
 
   // --- Snap to start (no transition) --------------------------------------
   el.style.transition = "none";
   el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
   el.offsetHeight;  // force reflow
+  // Debug: log the unit's actual rendered size after the snap. If the
+  // width/height blow up to board-size, we know the inset override failed.
+  if (window.__debugWalk) {
+    const r = el.getBoundingClientRect();
+    console.log("[walk] start", { x: pathCells[0], size: { w: r.width, h: r.height } });
+  }
 
   // --- Walk cell by cell --------------------------------------------------
   for (let i = 1; i < pathCells.length; i++) {
@@ -1111,6 +1133,10 @@ async function animateUnitAlongPath(el, pathCells) {
   // --- Snap back to natural pixel position -------------------------------
   el.style.transition = "none";
   el.style.transform = "";
+  if (window.__debugWalk) {
+    const r = el.getBoundingClientRect();
+    console.log("[walk] end", { dest: newPos, size: { w: r.width, h: r.height } });
+  }
 
   // --- Reparent back to the destination cell + clear inline styles ---------
   // The inline styles are removed so the CSS rules (inset: 4%, etc.) take
