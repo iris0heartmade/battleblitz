@@ -4,6 +4,11 @@
 
 const API = "";  // same origin
 
+// Bump this whenever game/app/web/assets/tiles/* pngs are regenerated —
+// the query string busts browser disk cache for tile images. Otherwise
+// Chrome serves the old PNG forever because the filename is unchanged.
+const TILE_ASSET_VERSION = "2026-06-30-river-v1-style";
+
 // ----- Persistent settings (localStorage) -----
 const STORAGE_KEY = "battleblitz.settings.v1";
 const SESSION_KEY = "battleblitz.session.v1";
@@ -747,7 +752,12 @@ function pickTileVariant(terrain, x, y) {
 function tileImageUrl(terrain, biome, x, y) {
   const variant = pickTileVariant(terrain, x, y);
   const base = BIOME_AWARE_TERRAINS.has(terrain) ? `${terrain}_${biome}` : terrain;
-  return `/ui/assets/tiles/${base}_v${variant}.png`;
+  // Bump TILE_ASSET_VERSION whenever game/app/web/assets/tiles/* pngs are
+  // regenerated. The version query string busts browser disk cache so the
+  // new pixel art is fetched immediately on next page load — without it,
+  // Chrome happily serves the old cached PNG forever because the filename
+  // is unchanged.
+  return `/ui/assets/tiles/${base}_v${variant}.png?v=${TILE_ASSET_VERSION}`;
 }
 
 // Editor stores terrain as single chars (P/F/M/R/C) for compact JSON.
