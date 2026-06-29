@@ -773,6 +773,56 @@ html, body {
   color: var(--accent);
   margin-top: 0;
 }
+.modal-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+/* Generic modal: list of choices (used by editor "load map") */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+  text-align: left;
+  margin: 12px 0;
+}
+.choice-list .choice-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+.choice-list .choice-item:hover {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+.choice-list .choice-item .meta {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+/* Inline form validation */
+.form-row input.is-invalid,
+.form-row select.is-invalid {
+  border-color: var(--danger);
+  background: rgba(232, 90, 106, 0.08);
+}
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 2px;
+}
 
 /* ============================================================
    Reference panel (terrain / units / skills)
