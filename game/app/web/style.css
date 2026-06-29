@@ -486,7 +486,13 @@ html, body {
   /* Tile pixel-art rendering: stay sharp at any zoom level (see app.js tileImageUrl) */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  background-size: var(--cell-size) var(--cell-size);
+  /* Fill the cell exactly. The tile images are 48x48 (matches CELL_MAX),
+     so when the cell is at max size the image is 1:1. For smaller cells
+     the image scales down smoothly. +1px oversize covers the cell's
+     1px right/bottom border so the cell's background-color never shows
+     through as a sliver. */
+  background-size: calc(var(--cell-size) + 1px) calc(var(--cell-size) + 1px);
+  background-position: center;
   background-repeat: no-repeat;
   /* Only right + bottom border -> exactly 1px between cells (no doubled seam) */
   border-right: 1px solid var(--t-grid);
@@ -1995,7 +2001,8 @@ html, body {
   background: var(--t-plain);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  background-size: var(--cell-size) var(--cell-size);
+  background-size: calc(var(--cell-size) + 1px) calc(var(--cell-size) + 1px);
+  background-position: center;
   background-repeat: no-repeat;
   position: relative;
   cursor: crosshair;

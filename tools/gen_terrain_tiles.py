@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 OUT = Path("game/app/web/assets/tiles")
 OUT.mkdir(parents=True, exist_ok=True)
 
-SIZE = 32
+SIZE = 48  # matches CELL_MAX in style.css; tile fills cell at max size
 
 
 # ============================================================
