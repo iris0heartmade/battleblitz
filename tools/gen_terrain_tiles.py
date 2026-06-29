@@ -217,25 +217,33 @@ def _draw_mini_pine(img: Image.Image, cx: int, cy_base: int,
     """A small background pine — same 3-tier triangle + trunk shape as
     draw_pine but compact, used to fill the negative space around the
     hero trees so forest tiles read as 'dense woods' rather than
-    'three trees in a meadow'."""
-    # trunk
+    'three trees in a meadow'.
+
+    Triangle convention: apex at TOP (narrow), base at BOTTOM (wide) —
+    matches draw_pine. Each tier is drawn BOTTOM-to-TOP so the widest
+    tier sits just above the trunk.
+    """
     trunk_h = 2
-    trunk_w = 1
     if 0 <= cx < SIZE and cy_base - trunk_h >= 0:
         rect(img, cx, cy_base - trunk_h, cx, cy_base - 1, P.trunk)
-    # 3 tiers (apex up)
+    # 3 tiers BOTTOM-to-TOP, widest first (apex points up — correct pine)
+    tier_h_common = max(2, total_height // 3)
     tiers = [
-        (total_height // 3 + 1, base_width),    # bottom
-        (total_height // 3 + 1, max(2, base_width - 2)),
-        (total_height - 2 * (total_height // 3 + 1), max(1, base_width - 4)),
+        (tier_h_common, base_width),                              # BOTTOM (widest)
+        (tier_h_common, max(2, base_width - 2)),                  # MID
+        (max(1, total_height - 2 * tier_h_common), max(1, base_width - 4)),  # TOP (pointiest)
     ]
-    y_top = cy_base - trunk_h - 1
+    y_cursor = cy_base - trunk_h  # top of trunk
     for tier_h, hw in tiers:
-        for y in range(y_top - tier_h + 1, y_top + 1):
-            t = (y_top - y) / max(1, tier_h - 1)
+        y_bot = y_cursor
+        y_top = y_bot - tier_h + 1
+        for y in range(y_top, y_bot + 1):
+            if y < 0:
+                continue
+            t = (y - y_top) / max(1, y_bot - y_top)  # 0 at top (apex), 1 at bottom (base)
             w = int(hw * t)
             for x in range(cx - w, cx + w + 1):
-                if 0 <= x < SIZE and 0 <= y < SIZE:
+                if 0 <= x < SIZE:
                     if x < cx:
                         color = P.tree_mid
                     elif x > cx:
@@ -243,7 +251,7 @@ def _draw_mini_pine(img: Image.Image, cx: int, cy_base: int,
                     else:
                         color = P.tree_top
                     px(img, x, y, color)
-        y_top -= tier_h
+        y_cursor = y_top  # next tier sits on top of this one
 
 
 # Tree positions per variant — drawn BACK→MIDDLE→FRONT order
