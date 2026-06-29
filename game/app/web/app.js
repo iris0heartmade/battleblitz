@@ -7,7 +7,7 @@ const API = "";  // same origin
 // Bump this whenever game/app/web/assets/tiles/* pngs are regenerated —
 // the query string busts browser disk cache for tile images. Otherwise
 // Chrome serves the old PNG forever because the filename is unchanged.
-const TILE_ASSET_VERSION = "2026-06-30-forest-mountain-fill";
+const TILE_ASSET_VERSION = "2026-06-30-mini-pine-upright";
 
 // ----- Persistent settings (localStorage) -----
 const STORAGE_KEY = "battleblitz.settings.v1";
