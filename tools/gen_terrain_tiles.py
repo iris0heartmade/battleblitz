@@ -428,52 +428,61 @@ def make_river(variant: int) -> Image.Image:
 
 
 # ============================================================
-# Castle (城堡)
+# Castle (城堡) — sized to fill the full 48×48 tile
+# (Previous version used 32×32-style coordinates and left ~20px of right
+# margin empty, which read as a "background bar" when tiles were placed
+# next to each other.)
 # ============================================================
 def draw_castle(img: Image.Image, style: int) -> None:
-    # Stone base
-    rect(img, 4, 12, 27, 27, P.stone)
-    # Stone outline
-    rect(img, 4, 12, 27, 12, P.stone_d)
-    rect(img, 4, 12, 4, 27, P.stone_d)
+    # Stone base — fills nearly the whole tile width with a 4-px margin
+    rect(img, 4, 16, 43, 39, P.stone)
+    # Stone outline (top + left shadow strip)
+    rect(img, 4, 16, 43, 16, P.stone_d)
+    rect(img, 4, 16, 4, 39, P.stone_d)
     if style == 0:
-        # Crenellations (red-topped walls) — 5 teeth across top
-        for i in range(5):
-            x0 = 5 + i * 5
-            rect(img, x0, 8, x0 + 2, 11, P.red)
-            rect(img, x0, 11, x0 + 2, 11, P.red_d)
-            # gap between teeth
-            if i < 4:
-                rect(img, x0 + 3, 11, x0 + 4, 11, P.outline)
-        # Door (dark)
-        rect(img, 14, 20, 17, 27, P.outline)
+        # Wide castle with 5 crenellations across the top (5 teeth spread
+        # over x=5..40, so each tooth is ~4-5px wide with ~4-5px gaps).
+        # Teeth sit on top of the wall at y=12..15 (above wall top y=16).
+        tooth_w = 4
+        gap = 4
+        x = 5
+        teeth = []
+        while x + tooth_w <= 41:
+            teeth.append(x)
+            x += tooth_w + gap
+        for x0 in teeth:
+            rect(img, x0, 12, x0 + tooth_w - 1, 15, P.red)
+            rect(img, x0, 15, x0 + tooth_w - 1, 15, P.red_d)
+        # Door (dark) — centered (roughly x=21..26, height y=28..39)
+        rect(img, 21, 28, 26, 39, P.outline)
         # Gold flag in center
-        rect(img, 15, 4, 16, 8, P.flag)
-        rect(img, 16, 4, 16, 8, P.outline)
+        rect(img, 22, 4, 24, 12, P.flag)
+        rect(img, 24, 4, 24, 12, P.outline)
         # small banner triangle
-        px(img, 16, 4, P.gold)
-        px(img, 17, 5, P.gold)
+        px(img, 24, 4, P.gold)
+        px(img, 25, 5, P.gold)
     else:
-        # Tall tower style
-        rect(img, 10, 6, 21, 27, P.stone)
-        rect(img, 10, 6, 10, 27, P.stone_d)
-        rect(img, 10, 6, 21, 6, P.stone_d)
-        # Top crenellations
+        # Tall tower style — tower body x=15..32, height y=8..39
+        rect(img, 15, 8, 32, 39, P.stone)
+        rect(img, 15, 8, 15, 39, P.stone_d)
+        rect(img, 15, 8, 32, 8, P.stone_d)
+        # Top crenellations (3 teeth across the tower top)
         for i in range(3):
-            x0 = 11 + i * 4
-            rect(img, x0, 3, x0 + 2, 5, P.red)
+            x0 = 16 + i * 6
+            rect(img, x0, 4, x0 + 4, 7, P.red)
         # Window
-        rect(img, 14, 12, 17, 15, P.outline)
-        px(img, 15, 13, P.gold)
+        rect(img, 21, 16, 26, 21, P.outline)
+        px(img, 23, 18, P.gold)
         # Door
-        rect(img, 14, 22, 17, 27, P.outline)
+        rect(img, 21, 30, 26, 39, P.outline)
         # Gold door highlight
-        px(img, 14, 22, P.gold)
-        px(img, 17, 22, P.gold)
-    # Outlines
-    rect(img, 4, 27, 27, 28, P.outline)
-    rect(img, 4, 12, 4, 27, P.outline)
-    rect(img, 27, 12, 27, 27, P.outline)
+        px(img, 21, 30, P.gold)
+        px(img, 26, 30, P.gold)
+    # Outlines — close the right + bottom edges of the wall so there's no
+    # background seam at x=43 / y=39
+    rect(img, 4, 39, 43, 40, P.outline)
+    rect(img, 43, 16, 43, 39, P.outline)
+    rect(img, 4, 16, 4, 39, P.outline)
 
 
 def make_castle(env: str, variant: int) -> Image.Image:
@@ -569,7 +578,7 @@ def make_snow(variant: int) -> Image.Image:
     img = Image.new("RGB", (SIZE, SIZE), P.snow_l)
     if variant == 0:
         # 稀疏雪面波纹（淡蓝阴影，少而精）
-        for y in range(SIZE):
+        for y in range(SIZE - 1):  # skip last row to avoid background seam
             for x in range(SIZE):
                 if (x + y) % 11 == 0 and (x // 3) % 2 == 0:
                     px(img, x, y, P.snow_shadow)
