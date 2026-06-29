@@ -1063,37 +1063,76 @@ function buildLShapedPath(x0, y0, x1, y1) {
 // path-stepper: animate a unit cell-by-cell along a Manhattan path.
 // pathCells: [{x, y}, ...] including start and end. DOM is already at endPos.
 //
-// The unit stays in its destination cell. We use transform to walk the visual
-// through the intermediate cells. .cell has overflow:visible so the unit
-// isn't clipped at its own cell boundary.
+// Approach (this time around):
+//   1. Reparent the unit to the board, with EXPLICIT pixel dimensions
+//      (overrides the CSS's `inset: 4%` which is parent-relative and was
+//      causing the "huge unit" bug when the unit's parent changed).
+//   2. Snap visual to start (no transition), then chain transitions to
+//      walk one cell at a time. z-index:10 keeps the unit on top of cells.
+//   3. After the walk, snap to natural position, reparent back to the
+//      destination cell, and reset all inline styles so the CSS rules
+//      (inset: 4%) take over again.
 async function animateUnitAlongPath(el, pathCells) {
   if (!el || pathCells.length < 2) return;
   const board = document.getElementById("board");
   if (!board) return;
   const cellSize = parseInt(getComputedStyle(board).getPropertyValue("--cell-size")) || 24;
-  // Walking is 320ms per cell. Scales down slightly for long paths so a
-  // 5-cell move doesn't take 1.6s, but never below 200ms so single-cell
-  // moves still feel like a deliberate "step".
   const stepMs = Math.max(200, Math.min(320, 360 - (pathCells.length - 1) * 25));
   const newPos = pathCells[pathCells.length - 1];
 
-  // Step 1: jump the visual to the start (no transition). 1-frame snap is
-  // acceptable (16ms) — the unit is at newPos in the DOM but we want it to
-  // appear walking from oldPos.
+  // --- Reparent with explicit pixel size ----------------------------------
+  const originalParent = el.parentElement;
+  const originalNext = el.nextSibling;
+  // Position unit in pixel space at the destination cell.
+  board.appendChild(el);
+  el.style.position = "absolute";
+  el.style.left = `${newPos.x * cellSize}px`;
+  el.style.top = `${newPos.y * cellSize}px`;
+  el.style.width = `${cellSize}px`;
+  el.style.height = `${cellSize}px`;
+  el.style.inset = "0";                   // override CSS inset
+  el.style.borderRadius = "0";            // square corners during walk
+  el.style.margin = "0";
+  el.style.zIndex = "100";   // draw above every cell and panel
+  el.offsetHeight;  // force reflow so the new position is committed
+
+  // --- Snap to start (no transition) --------------------------------------
   el.style.transition = "none";
   el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
   el.offsetHeight;  // force reflow
 
-  // Step 2: chain transitions, walking one cell at a time.
+  // --- Walk cell by cell --------------------------------------------------
   for (let i = 1; i < pathCells.length; i++) {
     const pos = pathCells[i];
     el.style.transition = `transform ${stepMs}ms linear`;
     el.style.transform = `translate(${(pos.x - newPos.x) * cellSize}px, ${(pos.y - newPos.y) * cellSize}px)`;
     await new Promise(r => setTimeout(r, stepMs));
   }
-  // Step 3: snap back to natural position (DOM is at newPos, transform=0).
+  // --- Snap back to natural pixel position -------------------------------
   el.style.transition = "none";
   el.style.transform = "";
+
+  // --- Reparent back to the destination cell + clear inline styles ---------
+  // The inline styles are removed so the CSS rules (inset: 4%, etc.) take
+  // over again. This is critical: leaving the inline width/height/etc.
+  // would override the CSS and break subsequent renders.
+  const newCell = board.querySelector(`.cell[data-x="${newPos.x}"][data-y="${newPos.y}"]`);
+  if (newCell) {
+    newCell.appendChild(el);
+  } else if (originalParent) {
+    originalParent.insertBefore(el, originalNext);
+  }
+  el.style.position = "";
+  el.style.left = "";
+  el.style.top = "";
+  el.style.width = "";
+  el.style.height = "";
+  el.style.inset = "";
+  el.style.borderRadius = "";
+  el.style.margin = "";
+  el.style.zIndex = "";
+  el.style.transform = "";
+  el.style.transition = "";
 }
 
 // ============================================================
