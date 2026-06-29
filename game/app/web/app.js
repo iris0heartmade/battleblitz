@@ -814,23 +814,13 @@ function renderBoard(st) {
     for (const u of p.units) unitMap.set(`${u.x},${u.y}`, { unit: u, player: p });
   }
 
-  // FLIP step 1 (First): capture old positions of every unit currently in the
-  // DOM. We track both screen (for FLIP fallback) and cell coords (to detect
-  // moves and reconstruct a Manhattan path for AI actions where the server
-  // doesn't tell us the path).
-  const oldPositions = new Map(); // unit_id -> {left, top, x, y}
+  // FLIP step 1 (First): capture old positions of every unit currently in the DOM.
+  const oldPositions = new Map(); // unit_id -> {left, top}
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
     if (!id) continue;
     const r = u.getBoundingClientRect();
-    // The unit's parent cell carries its (x, y) coordinates.
-    const cell = u.closest(".cell");
-    oldPositions.set(id, {
-      left: r.left,
-      top: r.top,
-      x: cell ? Number(cell.dataset.x) : NaN,
-      y: cell ? Number(cell.dataset.y) : NaN,
-    });
+    oldPositions.set(id, { left: r.left, top: r.top });
   }
 
   const frag = document.createDocumentFragment();
@@ -917,11 +907,7 @@ function renderBoard(st) {
   board.appendChild(frag);
 
   // FLIP step 2 (Last -> Invert -> Play): for each unit that moved, animate
-  // from its old screen position back to the new one. Uses path-stepper when
-  // a real path is provided (human move) or when we can reconstruct one
-  // (AI move: we know the old (x, y) and the new (x, y) and the current
-  // terrain, so we BFS a Manhattan path here). Falls back to a single
-  // translate if the unit only shifted by a fraction of a cell.
+  // from its old screen position back to the new one. Simple single-translate.
   const newPositions = new Map();
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
@@ -929,8 +915,6 @@ function renderBoard(st) {
     const r = u.getBoundingClientRect();
     newPositions.set(id, { left: r.left, top: r.top });
   }
-  // Server-supplied paths (from human MoveResult). Consumed once.
-  const pathByUnit = _consumeMovePaths();
   for (const [id, newPos] of newPositions) {
     const old = oldPositions.get(id);
     if (!old) continue; // brand new unit - no animation
@@ -939,226 +923,19 @@ function renderBoard(st) {
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
     const el = document.querySelector(`.unit[data-unit-id="${id}"]`);
     if (!el) continue;
-    // Decide which path to use for the animation.
-    let pathCells = pathByUnit.get(Number(id)) || pathByUnit.get(String(id));
-    if (!pathCells && old.x === old.x /* not NaN */ && Number.isInteger(old.x)) {
-      // AI move: reconstruct a Manhattan path from old (x,y) to the unit's
-      // current cell. The server already placed the unit at its new cell, so
-      // we read it from the DOM.
-      const newCell = el.closest(".cell");
-      if (newCell) {
-        const nx = Number(newCell.dataset.x);
-        const ny = Number(newCell.dataset.y);
-        if (nx === nx && (nx !== old.x || ny !== old.y)) {
-          pathCells = bfsManhattanPath(old.x, old.y, nx, ny, st);
-        }
-      }
-    }
-    if (pathCells && pathCells.length >= 2) {
-      animateUnitAlongPath(el, pathCells);
-    } else {
-      // Fallback: single translate (very small drift)
-      el.style.transition = "none";
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.transition = "none";
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          el.style.transition = "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)";
-          el.style.transform = "";
-        });
+        el.style.transition = "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)";
+        el.style.transform = "";
       });
-    }
+    });
   }
   // Speed up polling while the AI is acting so the player sees each
   // action appear in near real-time. We do it here (not in renderGame) so
   // the `phase` local is in scope.
   adjustPollInterval(phase);
-}
-
-// Per-MoveResult paths from the server, consumed on the next renderBoard.
-// We only need them once (for the animation), so drain after reading.
-let _pendingMovePaths = new Map();
-function _consumeMovePaths() {
-  const m = _pendingMovePaths;
-  _pendingMovePaths = new Map();
-  return m;
-}
-
-// BFS over a Manhattan grid to find a shortest path from (x0,y0) to (x1,y1).
-// Treats the moving unit's old position as unblocked and any *other* live
-// unit's new position as blocked. Returns [{x, y}, ...] including both
-// endpoints, or null if no path exists.
-function bfsManhattanPath(x0, y0, x1, y1, st) {
-  const tileMap = new Map();
-  for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
-  // Treat the mover as unblocked at (x0, y0); block other live units at
-  // their *new* positions, but never block the goal square.
-  const blocked = new Set();
-  for (const p of st.players) {
-    for (const u of p.units) {
-      if (u.hp <= 0) continue;
-      if (u.x === x1 && u.y === y1) continue;   // goal is the moving unit
-      blocked.add(`${u.x},${u.y}`);
-    }
-  }
-  blocked.delete(`${x0},${y0}`);  // start is where the mover was
-  // Simple BFS — 4-directional, ignore terrain cost for animation.
-  const queue = [[x0, y0]];
-  const cameFrom = new Map([[`${x0},${y0}`, null]]);
-  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  while (queue.length) {
-    const [cx, cy] = queue.shift();
-    if (cx === x1 && cy === y1) {
-      // Reconstruct
-      const path = [{ x: cx, y: cy }];
-      let cur = `${cx},${cy}`;
-      while (cameFrom.get(cur) !== null) {
-        cur = cameFrom.get(cur);
-        const [px, py] = cur.split(",").map(Number);
-        path.unshift({ x: px, y: py });
-      }
-      return path;
-    }
-    for (const [dx, dy] of dirs) {
-      const nx = cx + dx, ny = cy + dy;
-      const k = `${nx},${ny}`;
-      if (cameFrom.has(k)) continue;
-      // Bounds: use the board's current dimensions
-      const maxX = Math.max(...st.tiles.map(t => t.x)) + 1;
-      const maxY = Math.max(...st.tiles.map(t => t.y)) + 1;
-      if (nx < 0 || ny < 0 || nx >= maxX || ny >= maxY) continue;
-      if (blocked.has(k)) continue;
-      // Don't cross castle tiles owned by other players
-      const tile = tileMap.get(k);
-      if (!tile) continue;
-      cameFrom.set(k, `${cx},${cy}`);
-      queue.push([nx, ny]);
-    }
-  }
-  // Fallback: build an L-shaped Manhattan path. We ALWAYS want to walk
-  // cell-by-cell rather than teleport diagonally, even if the BFS got
-  // blocked by some terrain detail.
-  return buildLShapedPath(x0, y0, x1, y1);
-}
-
-function buildLShapedPath(x0, y0, x1, y1) {
-  // Two variants: horizontal-first or vertical-first. Either is a valid
-  // Manhattan walk; pick the shorter one.
-  const horizontalFirst = [];
-  const verticalFirst = [];
-  // Horizontal first: x changes, then y
-  let x = x0, y = y0;
-  horizontalFirst.push({ x, y });
-  const stepX1 = x1 > x0 ? 1 : -1;
-  while (x !== x1) { x += stepX1; horizontalFirst.push({ x, y }); }
-  const stepY1 = y1 > y0 ? 1 : -1;
-  while (y !== y1) { y += stepY1; horizontalFirst.push({ x, y }); }
-  // Vertical first: y changes, then x
-  x = x0; y = y0;
-  verticalFirst.push({ x, y });
-  while (y !== y1) { y += stepY1; verticalFirst.push({ x, y }); }
-  while (x !== x1) { x += stepX1; verticalFirst.push({ x, y }); }
-  return horizontalFirst;  // both are valid; pick one
-}
-
-// path-stepper: animate a unit cell-by-cell along a Manhattan path.
-// pathCells: [{x, y}, ...] including start and end. DOM is already at endPos.
-//
-// Approach (this time around):
-//   1. Reparent the unit to the board, with EXPLICIT pixel dimensions
-//      (overrides the CSS's `inset: 4%` which is parent-relative and was
-//      causing the "huge unit" bug when the unit's parent changed).
-//   2. Snap visual to start (no transition), then chain transitions to
-//      walk one cell at a time. z-index:10 keeps the unit on top of cells.
-//   3. After the walk, snap to natural position, reparent back to the
-//      destination cell, and reset all inline styles so the CSS rules
-//      (inset: 4%) take over again.
-async function animateUnitAlongPath(el, pathCells) {
-  if (!el || pathCells.length < 2) return;
-  const board = document.getElementById("board");
-  if (!board) return;
-  const cellSize = parseInt(getComputedStyle(board).getPropertyValue("--cell-size")) || 24;
-  const stepMs = Math.max(200, Math.min(320, 360 - (pathCells.length - 1) * 25));
-  const newPos = pathCells[pathCells.length - 1];
-
-  // --- Reparent with explicit pixel size ----------------------------------
-  const originalParent = el.parentElement;
-  const originalNext = el.nextSibling;
-  // Position unit in pixel space at the destination cell.
-  board.appendChild(el);
-  el.style.position = "absolute";
-  el.style.left = `${newPos.x * cellSize}px`;
-  el.style.top = `${newPos.y * cellSize}px`;
-  el.style.width = `${cellSize}px`;
-  el.style.height = `${cellSize}px`;
-  el.style.inset = "0";                   // override CSS inset
-  el.style.borderRadius = "0";            // square corners during walk
-  el.style.margin = "0";
-  el.style.zIndex = "100";   // draw above every cell and panel
-  // Force two reflows so the browser fully commits the new parent context
-  // AND the explicit pixel dimensions before we touch transform.
-  el.offsetHeight;
-  void el.getBoundingClientRect();
-  // Safety net: if for any reason the unit still isn't cellSize pixels,
-  // log it and abort the walk (snap to final position, no animation).
-  const sanityR = el.getBoundingClientRect();
-  if (sanityR.width > cellSize * 1.5 || sanityR.height > cellSize * 1.5) {
-    console.warn("[walk] unit size mismatch, aborting walk", {
-      expected: cellSize,
-      actual: { w: sanityR.width, h: sanityR.height },
-    });
-    // Reset to destination cell, no animation
-    el.style.transform = "";
-    el.style.transition = "";
-    return;
-  }
-
-  // --- Snap to start (no transition) --------------------------------------
-  el.style.transition = "none";
-  el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
-  el.offsetHeight;  // force reflow
-  // Debug: log the unit's actual rendered size after the snap. If the
-  // width/height blow up to board-size, we know the inset override failed.
-  if (window.__debugWalk) {
-    const r = el.getBoundingClientRect();
-    console.log("[walk] start", { x: pathCells[0], size: { w: r.width, h: r.height } });
-  }
-
-  // --- Walk cell by cell --------------------------------------------------
-  for (let i = 1; i < pathCells.length; i++) {
-    const pos = pathCells[i];
-    el.style.transition = `transform ${stepMs}ms linear`;
-    el.style.transform = `translate(${(pos.x - newPos.x) * cellSize}px, ${(pos.y - newPos.y) * cellSize}px)`;
-    await new Promise(r => setTimeout(r, stepMs));
-  }
-  // --- Snap back to natural pixel position -------------------------------
-  el.style.transition = "none";
-  el.style.transform = "";
-  if (window.__debugWalk) {
-    const r = el.getBoundingClientRect();
-    console.log("[walk] end", { dest: newPos, size: { w: r.width, h: r.height } });
-  }
-
-  // --- Reparent back to the destination cell + clear inline styles ---------
-  // The inline styles are removed so the CSS rules (inset: 4%, etc.) take
-  // over again. This is critical: leaving the inline width/height/etc.
-  // would override the CSS and break subsequent renders.
-  const newCell = board.querySelector(`.cell[data-x="${newPos.x}"][data-y="${newPos.y}"]`);
-  if (newCell) {
-    newCell.appendChild(el);
-  } else if (originalParent) {
-    originalParent.insertBefore(el, originalNext);
-  }
-  el.style.position = "";
-  el.style.left = "";
-  el.style.top = "";
-  el.style.width = "";
-  el.style.height = "";
-  el.style.inset = "";
-  el.style.borderRadius = "";
-  el.style.margin = "";
-  el.style.zIndex = "";
-  el.style.transform = "";
-  el.style.transition = "";
 }
 
 // ============================================================
@@ -2046,10 +1823,6 @@ async function doMove(unit, toX, toY) {
       unit_id: unit.id,
       to_x: toX, to_y: toY,
     });
-    // Queue the path for the next renderBoard's path-stepper animation.
-    if (r && r.path && r.path.length >= 2) {
-      _pendingMovePaths.set(r.unit_id, r.path.map(([x, y]) => ({ x, y })));
-    }
     toast("移动成功");
     await refreshGame();
     // After move, the unit is at the new position. Show post-move bubble.

@@ -278,7 +278,6 @@ async def move_unit(
         cost=cost,
         castle_captured=castle_captured,
         description=fmt_move(unit, path, cost),
-        path=[list(p) for p in path],
     )
 
 
