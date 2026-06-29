@@ -1034,15 +1034,38 @@ function bfsManhattanPath(x0, y0, x1, y1, st) {
       queue.push([nx, ny]);
     }
   }
-  return null;  // unreachable
+  // Fallback: build an L-shaped Manhattan path. We ALWAYS want to walk
+  // cell-by-cell rather than teleport diagonally, even if the BFS got
+  // blocked by some terrain detail.
+  return buildLShapedPath(x0, y0, x1, y1);
+}
+
+function buildLShapedPath(x0, y0, x1, y1) {
+  // Two variants: horizontal-first or vertical-first. Either is a valid
+  // Manhattan walk; pick the shorter one.
+  const horizontalFirst = [];
+  const verticalFirst = [];
+  // Horizontal first: x changes, then y
+  let x = x0, y = y0;
+  horizontalFirst.push({ x, y });
+  const stepX1 = x1 > x0 ? 1 : -1;
+  while (x !== x1) { x += stepX1; horizontalFirst.push({ x, y }); }
+  const stepY1 = y1 > y0 ? 1 : -1;
+  while (y !== y1) { y += stepY1; horizontalFirst.push({ x, y }); }
+  // Vertical first: y changes, then x
+  x = x0; y = y0;
+  verticalFirst.push({ x, y });
+  while (y !== y1) { y += stepY1; verticalFirst.push({ x, y }); }
+  while (x !== x1) { x += stepX1; verticalFirst.push({ x, y }); }
+  return horizontalFirst;  // both are valid; pick one
 }
 
 // path-stepper: animate a unit cell-by-cell along a Manhattan path.
 // pathCells: [{x, y}, ...] including start and end. DOM is already at endPos.
 //
-// CRITICAL: cells have overflow:hidden so the unit normally gets clipped at
-// its own cell boundary. To walk across cells we temporarily reparent the
-// unit to the board (which has no overflow) and restore it after the walk.
+// The unit stays in its destination cell. We use transform to walk the visual
+// through the intermediate cells. .cell has overflow:visible so the unit
+// isn't clipped at its own cell boundary.
 async function animateUnitAlongPath(el, pathCells) {
   if (!el || pathCells.length < 2) return;
   const board = document.getElementById("board");
@@ -1054,15 +1077,9 @@ async function animateUnitAlongPath(el, pathCells) {
   const stepMs = Math.max(200, Math.min(320, 360 - (pathCells.length - 1) * 25));
   const newPos = pathCells[pathCells.length - 1];
 
-  // Reparent the unit to the board so transforms aren't clipped by cell bounds.
-  const originalParent = el.parentElement;
-  const originalNext = el.nextSibling;
-  board.appendChild(el);
-  // Make sure it draws above any cell.
-  el.style.zIndex = "10";
-  el.style.position = "absolute";
-
-  // Step 1: jump the visual to the start (no transition).
+  // Step 1: jump the visual to the start (no transition). 1-frame snap is
+  // acceptable (16ms) — the unit is at newPos in the DOM but we want it to
+  // appear walking from oldPos.
   el.style.transition = "none";
   el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
   el.offsetHeight;  // force reflow
@@ -1074,21 +1091,9 @@ async function animateUnitAlongPath(el, pathCells) {
     el.style.transform = `translate(${(pos.x - newPos.x) * cellSize}px, ${(pos.y - newPos.y) * cellSize}px)`;
     await new Promise(r => setTimeout(r, stepMs));
   }
-  // Step 3: snap back to natural position (DOM is at newPos).
+  // Step 3: snap back to natural position (DOM is at newPos, transform=0).
   el.style.transition = "none";
   el.style.transform = "";
-  el.style.zIndex = "";
-  el.style.position = "";
-
-  // Reparent back to the cell at newPos so subsequent renders/queries find it.
-  // The unit's `data-unit-id` doesn't change; CSS classes preserved via the
-  // element itself.
-  const newCell = board.querySelector(`.cell[data-x="${newPos.x}"][data-y="${newPos.y}"]`);
-  if (newCell) {
-    newCell.appendChild(el);
-  } else if (originalParent) {
-    originalParent.insertBefore(el, originalNext);
-  }
 }
 
 // ============================================================

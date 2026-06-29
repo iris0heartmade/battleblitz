@@ -497,7 +497,10 @@ html, body {
   font-size: 11px;
   font-weight: 700;
   box-sizing: border-box;
-  overflow: hidden;
+  /* overflow: visible so a unit can walk across cell boundaries without
+     being clipped. The background tile is sized to fit the cell so it
+     doesn't bleed; only the absolutely-positioned .unit children extend
+     outside, and they're drawn above neighboring cells via z-index. */
 }
 
 .cell.t-forest    { background: var(--t-forest); }
@@ -549,6 +552,9 @@ html, body {
   border-radius: calc(var(--cell-size) * 0.09);
   display: flex;
   align-items: center;
+  /* Draw above neighbouring cells during the path-walk animation, where
+     the unit's transform briefly extends past its own cell boundary. */
+  z-index: 5;
   justify-content: center;
   font-size: clamp(10px, calc(var(--cell-size) * 0.36), 18px);  /* ~16px @ 44px, ~8px @ 22px */
   color: white;
