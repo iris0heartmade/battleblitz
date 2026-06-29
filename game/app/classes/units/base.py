@@ -41,6 +41,9 @@ class UnitClassProfile:
     can_move_after_action: bool
     min_attack_range: int = 0 # 0 = can melee at d=1; 1 = must keep distance (ranged-only)
     strong_against: FrozenSet[str] = frozenset()  # e.g. {"knight"}
+    attack_kind: str = "physical"  # "physical" | "magic" — drives damage formula
+    base_matk: int = 0
+    base_mdef: int = 0
 
 
 # ----------------------------------------------------------------
@@ -67,8 +70,16 @@ class BaseUnitClass(ABC):
     base_mov: ClassVar[int]              # 3
     mp_pool: ClassVar[int]               # 5
 
+    # ── Magic stats ────────────────────────────────────────────
+    # Physical units have low matk/mdef; magic units have high matk/mdef
+    # and low atk/def. The damage formula picks which stat pair to use
+    # based on the attacker's attack_kind.
+    base_matk: ClassVar[int] = 0
+    base_mdef: ClassVar[int] = 0
+    attack_kind: ClassVar[str] = "physical"   # "physical" | "magic"
+
     # ── Skills ─────────────────────────────────────────────────
-    default_skills: ClassVar[List[str]]  # [] / ["snipe"] / ["heal", "rally"]
+    default_skills: ClassVar[List[str]]  # [] / ["snipe"] / ["heal"]
     attack_range: ClassVar[int] = 1      # 1 = melee, 2+ = ranged (max Manhattan)
     min_attack_range: ClassVar[int] = 0 # 0 = can attack d=1; 1 = ranged-only (no melee)
 
@@ -96,4 +107,7 @@ class BaseUnitClass(ABC):
             min_attack_range=cls.min_attack_range,
             can_move_after_action=cls.can_move_after_action,
             strong_against=frozenset(cls.strong_against),
+            attack_kind=cls.attack_kind,
+            base_matk=cls.base_matk,
+            base_mdef=cls.base_mdef,
         )

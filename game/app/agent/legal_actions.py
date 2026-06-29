@@ -223,15 +223,6 @@ def _legal_actions_for_unit(
                     params={"skill": "heal", "target_id": a.id},
                     description=sk.describe(_SkillCtx(user=unit, target=a)),
                 ))
-        elif sk.skill_id == "rally":
-            ctx = _SkillCtx(user=unit, ally_units=ally_units)
-            if sk.can_use(ctx):
-                actions.append(LegalAction(
-                    action_id=f"skill_rally_{unit.id}",
-                    kind="skill", unit_id=unit.id,
-                    params={"skill": "rally"},
-                    description=sk.describe(ctx),
-                ))
 
     return actions
 

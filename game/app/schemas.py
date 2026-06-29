@@ -101,6 +101,8 @@ class UnitOut(APIModel):
     max_hp: int
     atk: int
     def_: int
+    matk: int = 0
+    mdef: int = 0
     mov: int
     mp: int = 0
     morale: int = 0
@@ -179,7 +181,7 @@ class AttackRequest(BaseModel):
 class SkillRequest(BaseModel):
     player_id: int
     unit_id: int
-    skill: str  # "heal" | "rally" | "double_strike" (auto on attack) | "snipe" (auto)
+    skill: str  # "heal" | "double_strike" (auto on attack) | "snipe" (auto)
     target_id: Optional[int] = None  # for heal: the ally to heal
 
 

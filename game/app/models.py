@@ -148,6 +148,11 @@ class Unit(Base):
     atk: Mapped[int] = mapped_column(Integer, nullable=False)
     # Trailing underscore to avoid clashing with Python `def` keyword.
     def_: Mapped[int] = mapped_column("def_", Integer, nullable=False)
+    # Magic stats. matk = magic attack output, mdef = magic defense.
+    # Always read via the attacker's attack_kind: magic attackers use
+    # matk, magic defenders (any unit) block with mdef.
+    matk: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mdef: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     mov: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Movement points remaining this turn. Reset to `mov` at the start of
@@ -166,7 +171,7 @@ class Unit(Base):
     # a unit can move AND then attack/heal within the same turn.
     has_moved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # JSON array of skill strings, e.g. ["snipe", "rally"].
+    # JSON array of skill strings, e.g. ["snipe", "heal"].
     skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     player: Mapped["Player"] = relationship("Player", back_populates="units")
