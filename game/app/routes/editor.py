@@ -40,8 +40,8 @@ _VALID_COLORS = {"red", "blue", "green", "yellow"}
 
 # Size constraints (per requirements)
 MIN_SIZE = 15
-MAX_W = 35
-MAX_H = 40
+MAX_W = 45
+MAX_H = 45
 
 
 # ============================================================
