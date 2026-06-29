@@ -471,7 +471,7 @@ async def start_game(
             turn_number=game.turn_number,
             player_id=None,
             action_type="system",
-            description=f"游戏开始，玩家： {len(players)} players",
+            description=f"游戏开始，玩家：{len(players)} 人",
         )
     )
 

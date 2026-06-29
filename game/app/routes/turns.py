@@ -174,8 +174,8 @@ async def end_turn(
             actions_taken=acted_count,
             actions_required=required_actions,
             description=(
-                f"Turn {game.turn_number - 1} resolved."
-                + (f" Leveled: {len(leveled_ids)}." if leveled_ids else "")
+                f"第 {game.turn_number - 1} 回合结算完毕。"
+                + (f" 升级单位：{len(leveled_ids)}。" if leveled_ids else "")
             ),
         )
 
@@ -196,7 +196,7 @@ async def end_turn(
         game_status=game.status,
         actions_taken=acted_count,
         actions_required=required_actions,
-        description=f"{player.user_name} ended turn. Next: {next_player.user_name}.",
+        description=f"{player.user_name} 结束回合。下一位：{next_player.user_name}。",
     )
 
 
@@ -472,7 +472,7 @@ async def _check_stale_turns() -> None:
                         turn_number=game.turn_number,
                         player_id=current.id,
                         action_type="auto_skip",
-                        description=f"{current.user_name} auto-skipped (timeout)",
+                        description=f"{current.user_name} 因超时自动跳过",
                     )
                 )
                 audit.warning(

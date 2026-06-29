@@ -815,7 +815,21 @@ function renderBoard(st) {
   }
 
   // FLIP step 1 (First): capture old positions of every unit currently in the DOM.
+  // CRITICAL: clear any in-flight transform first, otherwise units still mid-
+  // animation from a prior render will report their interpolated (wrong)
+  // position, and every unit — not just the one that actually moved — will
+  // get a translate() applied, producing the "whole field shakes" bug.
   const oldPositions = new Map(); // unit_id -> {left, top}
+  for (const u of document.querySelectorAll(".unit")) {
+    const id = u.dataset.unitId;
+    if (!id) continue;
+    u.style.transition = "none";
+    u.style.transform = "";
+  }
+  // Force a synchronous reflow so the cleared transforms take effect before
+  // we measure.
+  // eslint-disable-next-line no-unused-expressions
+  document.body.offsetHeight;
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
     if (!id) continue;

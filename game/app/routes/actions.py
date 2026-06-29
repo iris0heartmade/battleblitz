@@ -380,8 +380,8 @@ async def attack(
         apply_damage(attacker, counter_dmg)
         _log(
             session, game, player, "counter",
-            f"{target.name} counter → {attacker.name}: {counter_dmg} dmg "
-            f"(x{COUNTER_DAMAGE_MULT})",
+            f"{target.name} 反击 → {attacker.name}：{counter_dmg} 点伤害"
+            f"（×{COUNTER_DAMAGE_MULT}）",
         )
 
     # Mark attacker as having acted.
@@ -402,12 +402,11 @@ async def attack(
         exp_gained = 5
 
     _log(session, game, player, "attack",
-         f"{attacker.name} -> {target.name}: {total_dmg} dmg"
-         + (" [击杀]" if is_kill else "")
-         + (f" crit={hits[0].is_crit}" if hits and hits[0].is_crit else ""))
+         fmt_attack(attacker, target, total_dmg, is_kill,
+                    target.hp, counter_dmg, len(assist_ids)))
 
     if is_kill:
-        _log(session, game, player, "death", f"{target.name} was slain")
+        _log(session, game, player, "death", f"{target.name} 被击杀了")
 
     # ── Immediately remove dead units (don't wait for end-of-turn) ──
     # Units killed by the attack or killed by the counter-attack
