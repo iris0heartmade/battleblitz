@@ -650,12 +650,6 @@ function renderGame(st) {
   renderUnitInfo(st);
   renderPlayersList(st);
   renderActionLog(st);
-  // Speed up polling while the AI is acting so the player sees each
-  // action appear in near real-time. Otherwise the user might see the
-  // final post-AI state only.
-  if (typeof adjustPollInterval === "function") {
-    adjustPollInterval(phase);
-  }
 }
 
 function showTurnBanner(player, turnNum) {
@@ -974,6 +968,10 @@ function renderBoard(st) {
       });
     }
   }
+  // Speed up polling while the AI is acting so the player sees each
+  // action appear in near real-time. We do it here (not in renderGame) so
+  // the `phase` local is in scope.
+  adjustPollInterval(phase);
 }
 
 // Per-MoveResult paths from the server, consumed on the next renderBoard.
@@ -1041,6 +1039,10 @@ function bfsManhattanPath(x0, y0, x1, y1, st) {
 
 // path-stepper: animate a unit cell-by-cell along a Manhattan path.
 // pathCells: [{x, y}, ...] including start and end. DOM is already at endPos.
+//
+// CRITICAL: cells have overflow:hidden so the unit normally gets clipped at
+// its own cell boundary. To walk across cells we temporarily reparent the
+// unit to the board (which has no overflow) and restore it after the walk.
 async function animateUnitAlongPath(el, pathCells) {
   if (!el || pathCells.length < 2) return;
   const board = document.getElementById("board");
@@ -1052,9 +1054,15 @@ async function animateUnitAlongPath(el, pathCells) {
   const stepMs = Math.max(200, Math.min(320, 360 - (pathCells.length - 1) * 25));
   const newPos = pathCells[pathCells.length - 1];
 
+  // Reparent the unit to the board so transforms aren't clipped by cell bounds.
+  const originalParent = el.parentElement;
+  const originalNext = el.nextSibling;
+  board.appendChild(el);
+  // Make sure it draws above any cell.
+  el.style.zIndex = "10";
+  el.style.position = "absolute";
+
   // Step 1: jump the visual to the start (no transition).
-  // FLIP trade-off: DOM is at newPos, but we want the unit to appear walking
-  // from oldPos. The 1-frame snap is acceptable (16ms, almost imperceptible).
   el.style.transition = "none";
   el.style.transform = `translate(${(pathCells[0].x - newPos.x) * cellSize}px, ${(pathCells[0].y - newPos.y) * cellSize}px)`;
   el.offsetHeight;  // force reflow
@@ -1069,6 +1077,18 @@ async function animateUnitAlongPath(el, pathCells) {
   // Step 3: snap back to natural position (DOM is at newPos).
   el.style.transition = "none";
   el.style.transform = "";
+  el.style.zIndex = "";
+  el.style.position = "";
+
+  // Reparent back to the cell at newPos so subsequent renders/queries find it.
+  // The unit's `data-unit-id` doesn't change; CSS classes preserved via the
+  // element itself.
+  const newCell = board.querySelector(`.cell[data-x="${newPos.x}"][data-y="${newPos.y}"]`);
+  if (newCell) {
+    newCell.appendChild(el);
+  } else if (originalParent) {
+    originalParent.insertBefore(el, originalNext);
+  }
 }
 
 // ============================================================
