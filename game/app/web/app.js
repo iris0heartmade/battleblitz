@@ -543,10 +543,25 @@ async function startGame() {
 async function enterGame() {
   showView("game");
   await refreshGame();
-  // start polling
+  // start polling. Use a fast cadence during AI phase (so the player can
+  // see each action as it happens) and the user-configured cadence otherwise.
   clearInterval(state.refreshTimer);
-  const interval = Math.max(1000, state.settings.refreshSeconds * 1000);
-  state.refreshTimer = setInterval(refreshGame, interval);
+  const baseInterval = Math.max(1000, state.settings.refreshSeconds * 1000);
+  state.refreshTimer = setInterval(refreshGame, baseInterval);
+  state.baseRefreshMs = baseInterval;
+}
+
+// Re-arm the poll interval based on the current phase. While AI is acting
+// we poll fast (400ms) so the user sees each action in near real-time; in
+// other phases we fall back to the user's configured refresh rate.
+function adjustPollInterval(phase) {
+  if (!state.refreshTimer) return;
+  const target = (phase === "ai" || phase === "animating")
+    ? 400
+    : state.baseRefreshMs;
+  // setInterval has a minimum granularity; calling it again resets cleanly.
+  clearInterval(state.refreshTimer);
+  state.refreshTimer = setInterval(refreshGame, target);
 }
 
 async function refreshGame() {
@@ -635,6 +650,12 @@ function renderGame(st) {
   renderUnitInfo(st);
   renderPlayersList(st);
   renderActionLog(st);
+  // Speed up polling while the AI is acting so the player sees each
+  // action appear in near real-time. Otherwise the user might see the
+  // final post-AI state only.
+  if (typeof adjustPollInterval === "function") {
+    adjustPollInterval(phase);
+  }
 }
 
 function showTurnBanner(player, turnNum) {
@@ -799,13 +820,23 @@ function renderBoard(st) {
     for (const u of p.units) unitMap.set(`${u.x},${u.y}`, { unit: u, player: p });
   }
 
-  // FLIP step 1 (First): capture old positions of every unit currently in the DOM
-  const oldPositions = new Map(); // unit_id -> {left, top}
+  // FLIP step 1 (First): capture old positions of every unit currently in the
+  // DOM. We track both screen (for FLIP fallback) and cell coords (to detect
+  // moves and reconstruct a Manhattan path for AI actions where the server
+  // doesn't tell us the path).
+  const oldPositions = new Map(); // unit_id -> {left, top, x, y}
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
     if (!id) continue;
     const r = u.getBoundingClientRect();
-    oldPositions.set(id, { left: r.left, top: r.top });
+    // The unit's parent cell carries its (x, y) coordinates.
+    const cell = u.closest(".cell");
+    oldPositions.set(id, {
+      left: r.left,
+      top: r.top,
+      x: cell ? Number(cell.dataset.x) : NaN,
+      y: cell ? Number(cell.dataset.y) : NaN,
+    });
   }
 
   const frag = document.createDocumentFragment();
@@ -893,7 +924,10 @@ function renderBoard(st) {
 
   // FLIP step 2 (Last -> Invert -> Play): for each unit that moved, animate
   // from its old screen position back to the new one. Uses path-stepper when
-  // a real path is provided; falls back to a single translate otherwise.
+  // a real path is provided (human move) or when we can reconstruct one
+  // (AI move: we know the old (x, y) and the new (x, y) and the current
+  // terrain, so we BFS a Manhattan path here). Falls back to a single
+  // translate if the unit only shifted by a fraction of a cell.
   const newPositions = new Map();
   for (const u of document.querySelectorAll(".unit")) {
     const id = u.dataset.unitId;
@@ -901,7 +935,7 @@ function renderBoard(st) {
     const r = u.getBoundingClientRect();
     newPositions.set(id, { left: r.left, top: r.top });
   }
-  // Map of unitId → path (in cell coords) supplied by MoveResult. Consumed once.
+  // Server-supplied paths (from human MoveResult). Consumed once.
   const pathByUnit = _consumeMovePaths();
   for (const [id, newPos] of newPositions) {
     const old = oldPositions.get(id);
@@ -911,11 +945,25 @@ function renderBoard(st) {
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
     const el = document.querySelector(`.unit[data-unit-id="${id}"]`);
     if (!el) continue;
-    const pathCells = pathByUnit.get(Number(id)) || pathByUnit.get(String(id));
+    // Decide which path to use for the animation.
+    let pathCells = pathByUnit.get(Number(id)) || pathByUnit.get(String(id));
+    if (!pathCells && old.x === old.x /* not NaN */ && Number.isInteger(old.x)) {
+      // AI move: reconstruct a Manhattan path from old (x,y) to the unit's
+      // current cell. The server already placed the unit at its new cell, so
+      // we read it from the DOM.
+      const newCell = el.closest(".cell");
+      if (newCell) {
+        const nx = Number(newCell.dataset.x);
+        const ny = Number(newCell.dataset.y);
+        if (nx === nx && (nx !== old.x || ny !== old.y)) {
+          pathCells = bfsManhattanPath(old.x, old.y, nx, ny, st);
+        }
+      }
+    }
     if (pathCells && pathCells.length >= 2) {
       animateUnitAlongPath(el, pathCells);
     } else {
-      // Fallback: single translate (old FLIP behavior)
+      // Fallback: single translate (very small drift)
       el.style.transition = "none";
       el.style.transform = `translate(${dx}px, ${dy}px)`;
       requestAnimationFrame(() => {
@@ -935,6 +983,60 @@ function _consumeMovePaths() {
   const m = _pendingMovePaths;
   _pendingMovePaths = new Map();
   return m;
+}
+
+// BFS over a Manhattan grid to find a shortest path from (x0,y0) to (x1,y1).
+// Treats the moving unit's old position as unblocked and any *other* live
+// unit's new position as blocked. Returns [{x, y}, ...] including both
+// endpoints, or null if no path exists.
+function bfsManhattanPath(x0, y0, x1, y1, st) {
+  const tileMap = new Map();
+  for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
+  // Treat the mover as unblocked at (x0, y0); block other live units at
+  // their *new* positions, but never block the goal square.
+  const blocked = new Set();
+  for (const p of st.players) {
+    for (const u of p.units) {
+      if (u.hp <= 0) continue;
+      if (u.x === x1 && u.y === y1) continue;   // goal is the moving unit
+      blocked.add(`${u.x},${u.y}`);
+    }
+  }
+  blocked.delete(`${x0},${y0}`);  // start is where the mover was
+  // Simple BFS — 4-directional, ignore terrain cost for animation.
+  const queue = [[x0, y0]];
+  const cameFrom = new Map([[`${x0},${y0}`, null]]);
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  while (queue.length) {
+    const [cx, cy] = queue.shift();
+    if (cx === x1 && cy === y1) {
+      // Reconstruct
+      const path = [{ x: cx, y: cy }];
+      let cur = `${cx},${cy}`;
+      while (cameFrom.get(cur) !== null) {
+        cur = cameFrom.get(cur);
+        const [px, py] = cur.split(",").map(Number);
+        path.unshift({ x: px, y: py });
+      }
+      return path;
+    }
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx, ny = cy + dy;
+      const k = `${nx},${ny}`;
+      if (cameFrom.has(k)) continue;
+      // Bounds: use the board's current dimensions
+      const maxX = Math.max(...st.tiles.map(t => t.x)) + 1;
+      const maxY = Math.max(...st.tiles.map(t => t.y)) + 1;
+      if (nx < 0 || ny < 0 || nx >= maxX || ny >= maxY) continue;
+      if (blocked.has(k)) continue;
+      // Don't cross castle tiles owned by other players
+      const tile = tileMap.get(k);
+      if (!tile) continue;
+      cameFrom.set(k, `${cx},${cy}`);
+      queue.push([nx, ny]);
+    }
+  }
+  return null;  // unreachable
 }
 
 // path-stepper: animate a unit cell-by-cell along a Manhattan path.
