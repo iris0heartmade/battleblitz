@@ -755,19 +755,32 @@ function renderBoard(st) {
   const biome = st.game?.map_biome || "grass";
   // Phase indicator + board gray-out for AI phase.
   const phase = st.game?.phase || "player";
-  const PHASE_LABEL = {
-    player: "你的阶段",
-    ai: "敌方阶段（AI 行动中…）",
-    animating: "动画播放中…",
-  };
+  // Resolve the current player so the banner can show their name (otherwise
+  // it would just say "你的阶段" forever in human-vs-human games).
+  const meId = state.me?.player_id;
+  const currentPlayer = st.players?.find(p => p.id === st.current_player_id);
+  let bannerClass = `phase-${phase}`;
+  let label;
+  if (phase === "ai" && currentPlayer) {
+    label = `敌方阶段（${currentPlayer.user_name} 行动中…）`;
+  } else if (phase === "animating") {
+    label = "动画播放中…";
+  } else if (currentPlayer && meId !== currentPlayer.id) {
+    label = `等待 ${currentPlayer.user_name} 操作`;
+    bannerClass = "phase-waiting";
+  } else {
+    label = "你的阶段";
+  }
   const banner = document.getElementById("phase-banner");
   if (banner) {
-    banner.className = `phase-banner phase-${phase}`;
+    banner.className = `phase-banner ${bannerClass}`;
     const txt = document.getElementById("phase-text");
-    if (txt) txt.textContent = PHASE_LABEL[phase] || phase;
+    if (txt) txt.textContent = label;
   }
-  // Disable clicks during non-player phase.
-  if (phase === "player") {
+  // Disable clicks when it's not your turn (AI acting, animating, or other
+  // human's turn). Only the "your phase" case is interactive.
+  const isMyTurn = currentPlayer && meId === currentPlayer.id && phase === "player";
+  if (isMyTurn) {
     board.classList.remove("phase-disabled");
   } else {
     board.classList.add("phase-disabled");

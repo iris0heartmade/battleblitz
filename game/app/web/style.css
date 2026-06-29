@@ -448,8 +448,8 @@ html, body {
 
 .game-main {
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;     /* center children (phase-banner + board) horizontally */
   overflow: auto;
   height: 100%;
   padding-top: 8px;
@@ -1160,6 +1160,15 @@ html, body {
 }
 .phase-banner.phase-player .phase-dot {
   background: #7ee07e;
+}
+/* Human-vs-human: "waiting for other player". Visually muted (not green/AI). */
+.phase-banner.phase-waiting {
+  background: rgba(154, 163, 184, 0.15);
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+.phase-banner.phase-waiting .phase-dot {
+  background: var(--text-dim);
 }
 .phase-banner.phase-ai {
   background: rgba(232, 90, 106, 0.15);
