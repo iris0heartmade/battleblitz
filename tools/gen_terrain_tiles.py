@@ -338,81 +338,92 @@ def make_mountain(variant: int) -> Image.Image:
 # ============================================================
 # River (河流)
 # ============================================================
+def _draw_rock(img: Image.Image, cx: int, cy: int, w: int = 3, h: int = 2) -> None:
+    """Draw a small rock: stone body + dark shadow on right/bottom + 1-2 highlight px on top-left."""
+    # body
+    rect(img, cx, cy, cx + w - 1, cy + h - 1, P.stone)
+    # right edge shadow
+    rect(img, cx + w, cy, cx + w, cy + h - 1, P.stone_d)
+    # bottom edge shadow
+    rect(img, cx, cy + h, cx + w, cy + h, P.stone_d)
+    # top-left highlight
+    px(img, cx, cy, P.mtn_high)
+    if w >= 4:
+        px(img, cx + 1, cy, P.mtn_high)
+
+
+def _scatter_sparkles(img: Image.Image, rng: random.Random, n: int,
+                       avoid: list[tuple[int, int, int, int]] | None = None) -> None:
+    """Place n single-pixel foam sparkles at random positions, optionally
+    avoiding rectangular regions (used so sparkles don't land on rocks)."""
+    avoid = avoid or []
+    placed: list[tuple[int, int]] = []
+    tries = 0
+    while len(placed) < n and tries < n * 8:
+        tries += 1
+        x = rng.randint(1, SIZE - 2)
+        y = rng.randint(1, SIZE - 2)
+        # skip if inside any avoid rect
+        if any(ax <= x <= ax + aw - 1 and ay <= y <= ay + ah - 1
+               for ax, ay, aw, ah in avoid):
+            continue
+        # skip if too close to an already placed sparkle
+        if any(abs(x - px_) + abs(y - py_) < 4 for px_, py_ in placed):
+            continue
+        px(img, x, y, P.foam)
+        placed.append((x, y))
+
+
+def _scatter_shadow_dots(img: Image.Image, rng: random.Random, n: int) -> None:
+    """Place n short 1-2px deep-water shadow dots (NOT rows)."""
+    for _ in range(n):
+        x = rng.randint(1, SIZE - 2)
+        y = rng.randint(1, SIZE - 2)
+        px(img, x, y, P.water_d)
+        # sometimes a paired neighbor pixel to suggest depth (but NOT a row)
+        if rng.random() < 0.3 and x + 1 < SIZE - 1:
+            px(img, x + 1, y, P.water_d)
+
+
 def make_river(variant: int) -> Image.Image:
+    """River tiles — v1 style: clean water with scattered foam sparkles, a
+    couple of small rocks, and a few deep-water shadow dots. No long
+    horizontal lines, no diagonal streaks, no "speed-line" rows — those
+    patterns tile badly because adjacent cells line up into obvious
+    visual seams.
+    """
     rng = random.Random(0x400 + variant)
-    img = Image.new("RGB", (SIZE, SIZE), P.water_m)
-    # Lighter blue base
-    rect(img, 0, 0, SIZE - 1, SIZE - 1, P.water_l)
+    img = Image.new("RGB", (SIZE, SIZE), P.water_l)
+
     if variant == 0:
-        # Horizontal flow with wavy white foam lines
-        for y in [6, 14, 22]:
-            for x in range(0, SIZE, 2):
-                # alternating wave dots
-                if (x // 2 + y) % 2 == 0:
-                    px(img, x, y, P.foam)
-                # foam highlight
-                if x % 3 == 0 and x > 0:
-                    px(img, x - 1, y, P.foam)
-        # deeper water lines (shadow)
-        for y in [10, 18, 26]:
-            for x in range(1, SIZE, 2):
-                px(img, x, y, P.water_d)
+        # Mostly open water with a few sparkles + 1 rock cluster on the left
+        _scatter_sparkles(img, rng, n=9)
+        _draw_rock(img, cx=4, cy=18, w=4, h=2)
+        _draw_rock(img, cx=20, cy=30, w=3, h=2)
+        _scatter_shadow_dots(img, rng, n=6)
     elif variant == 1:
-        # Wider river with rocks
-        rect(img, 0, 0, SIZE - 1, SIZE - 1, P.water_m)
-        # foam sparkle
-        for x, y in [(3, 5), (10, 8), (20, 4), (28, 12), (5, 22), (15, 26), (24, 20)]:
+        # v1's exact look: 7 sparkles, 2 rocks, shadow ripple dots top & bottom
+        for x, y in [(3, 5), (10, 8), (20, 4), (28, 12),
+                     (5, 22), (15, 26), (24, 20)]:
             px(img, x, y, P.foam)
-        # 2 small rocks
         for cx, cy in [(8, 14), (24, 18)]:
-            rect(img, cx, cy, cx + 2, cy + 1, P.stone)
-            rect(img, cx + 2, cy, cx + 2, cy, P.stone_d)
-            rect(img, cx, cy + 2, cx + 2, cy + 2, P.stone_d)
-        # deeper shadow ripples
+            _draw_rock(img, cx, cy, w=3, h=2)
         for x in range(2, SIZE, 4):
             px(img, x, 3, P.water_d)
             px(img, x + 2, 28, P.water_d)
     elif variant == 2:
-        # 弯曲河道 + 1 块大石头 + 多反光
-        rect(img, 0, 0, SIZE - 1, SIZE - 1, P.water_l)
-        # 弯曲水面高光（沿对角）
-        for i in range(SIZE):
-            if 2 <= i <= 28:
-                px(img, i, SIZE - 1 - i, P.foam)  # main diagonal sparkle
-            if 4 <= i <= 26:
-                px(img, i, SIZE - 3 - i, P.water_m)
-        # random foam sparkles
-        for _ in range(12):
-            x, y = rng.randint(1, SIZE - 2), rng.randint(1, SIZE - 2)
-            px(img, x, y, P.foam)
-        # 1 big rock in lower-right
-        cx, cy = 22, 18
-        rect(img, cx, cy, cx + 4, cy + 3, P.stone)
-        rect(img, cx + 4, cy, cx + 4, cy + 3, P.stone_d)
-        rect(img, cx, cy + 3, cx + 4, cy + 3, P.stone_d)
-        # rock top highlight
-        px(img, cx + 1, cy, P.mtn_high)
-        px(img, cx + 2, cy, P.mtn_high)
+        # Open water + 1 large rock cluster lower-right + lots of sparkles
+        _draw_rock(img, cx=22, cy=18, w=5, h=3)
+        _scatter_sparkles(img, rng, n=12,
+                          avoid=[(22, 18, 6, 4)])  # keep sparkles off the rock
+        _scatter_shadow_dots(img, rng, n=8)
     else:  # variant 3
-        # 湍急水面（多反光密集）+ 3 块小石头
-        rect(img, 0, 0, SIZE - 1, SIZE - 1, P.water_l)
-        # dense horizontal ripples
-        for y in range(3, SIZE - 1, 2):
-            offset = (y * 3) % 5
-            for x in range(offset, SIZE, 5):
-                px(img, x, y, P.foam)
-                if x + 1 < SIZE:
-                    px(img, x + 1, y, P.water_l)
-        # darker shadow streaks
-        for y in range(5, SIZE, 4):
-            for x in range(1, SIZE, 6):
-                px(img, x, y, P.water_d)
-        # 3 small scattered rocks
+        # 3 small scattered rocks + many sparkles + shadow dots
         for cx, cy in [(5, 6), (20, 14), (26, 24)]:
-            rect(img, cx, cy, cx + 2, cy + 1, P.stone)
-            rect(img, cx + 2, cy, cx + 2, cy, P.stone_d)
-            rect(img, cx, cy + 1, cx + 2, cy + 1, P.stone_d)
-            px(img, cx, cy, P.mtn_high)
+            _draw_rock(img, cx, cy, w=3, h=2)
+        _scatter_sparkles(img, rng, n=11,
+                          avoid=[(5, 6, 4, 3), (20, 14, 4, 3), (26, 24, 4, 3)])
+        _scatter_shadow_dots(img, rng, n=10)
     return img
 
 
