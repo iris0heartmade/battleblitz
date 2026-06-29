@@ -14,6 +14,11 @@ class Swordsman(BaseUnitClass):
     base_mov = 3
     mp_pool = 5
 
+    # Magic stats — physical unit, low magic offense/defense.
+    base_matk = 4
+    base_mdef = 4
+    attack_kind = "physical"
+
     default_skills = []
     attack_range = 1
     can_move_after_action = False

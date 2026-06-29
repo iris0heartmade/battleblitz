@@ -14,6 +14,11 @@ class Knight(BaseUnitClass):
     base_mov = 5
     mp_pool = 8
 
+    # Magic stats — physical unit, low magic offense/defense.
+    base_matk = 4
+    base_mdef = 4
+    attack_kind = "physical"
+
     default_skills = ["double_strike"]
     attack_range = 1
     can_move_after_action = True

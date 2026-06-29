@@ -151,6 +151,8 @@ def create_initial_units(
                         max_hp=uc.base_hp,
                         atk=uc.base_atk,
                         def_=uc.base_def,
+                        matk=uc.base_matk,
+                        mdef=uc.base_mdef,
                         mov=uc.mp_pool,
                         mp=uc.mp_pool,
                         morale=0,
@@ -215,6 +217,20 @@ def _crit_chance(unit: Unit) -> float:
     return min(1.0, BASE_CRIT_RATE + CRIT_PER_LEVEL * (unit.level - 1))
 
 
+def _attack_kind_of(unit: Unit) -> str:
+    """Return the attack_kind ("physical" or "magic") of a unit.
+
+    Looks up the compiled UnitClassProfile from the unit's type_id so the
+    damage formula doesn't need a column on Unit itself. Falls back to
+    "physical" for unknown types so legacy units keep working.
+    """
+    try:
+        profile = _get_unit(unit.unit_type)
+    except Exception:
+        return "physical"
+    return getattr(profile, "attack_kind", "physical") or "physical"
+
+
 def calculate_damage(
     attacker: Unit,
     defender: Unit,
@@ -225,9 +241,13 @@ def calculate_damage(
 ) -> DamageResult:
     """Compute one attack's damage.
 
+    The damage type is determined by the ATTACKER's attack_kind:
+      - "physical": attacker uses ATK, defender blocks with DEF (+ terrain)
+      - "magic"   : attacker uses MATK, defender blocks with MDEF (+ terrain)
+
     Morale modifiers:
-      effective_atk = atk  * (1 + attacker.morale * MORALE_ATK_PER_STAR)
-      effective_def = (def + terrain) * (1 + defender.morale * MORALE_DEF_PER_STAR)
+      effective_atk = X * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+      effective_def = (Y + terrain) * (1 + defender.morale * MORALE_DEF_PER_STAR)
 
     damage = eff_atk * (eff_atk / (eff_atk + eff_def)) * type_adv * crit_mult
     """
@@ -235,8 +255,12 @@ def calculate_damage(
     if crit is None:
         crit = rng.random() < _crit_chance(attacker)
 
-    eff_atk = attacker.atk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
-    eff_df = (defender.def_ + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
+    if _attack_kind_of(attacker) == "magic":
+        eff_atk = attacker.matk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+        eff_df = (defender.mdef + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
+    else:
+        eff_atk = attacker.atk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+        eff_df = (defender.def_ + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
     eff_atk = max(1, eff_atk)
     eff_df = max(1, eff_df)
 
@@ -384,6 +408,12 @@ async def _load_game_actors(session: AsyncSession, game: Game) -> Tuple[List[Pla
     units = (
         await session.execute(select(Unit).where(Unit.player_id.in_(player_ids)))
     ).scalars().all()
+    # Migration: the `rally` skill was removed in the 2026-06-30 magic-combat
+    # refactor. Strip it from any unit that still has it so the engine
+    # doesn't try to call into a non-existent skill.
+    for u in units:
+        if u.skills and "rally" in u.skills:
+            u.skills = [s for s in u.skills if s != "rally"]
     return list(players), list(units)
 
 
@@ -652,6 +682,8 @@ def create_initial_units_with_roster(
                         max_hp=uc.base_hp,
                         atk=uc.base_atk,
                         def_=uc.base_def,
+                        matk=uc.base_matk,
+                        mdef=uc.base_mdef,
                         mov=uc.mp_pool,
                         mp=uc.mp_pool,
                         morale=0,

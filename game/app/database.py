@@ -87,6 +87,19 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE games ADD COLUMN phase VARCHAR(16) NOT NULL DEFAULT 'player'"
         ))
         logger.info("Migration: added games.phase")
+    # 2026-06-30: add units.matk and units.mdef for magic combat
+    unit_rows = sync_conn.execute(text("PRAGMA table_info(units)")).fetchall()
+    unit_cols = {r[1] for r in unit_rows}
+    if "matk" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN matk INTEGER NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added units.matk")
+    if "mdef" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN mdef INTEGER NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added units.mdef")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

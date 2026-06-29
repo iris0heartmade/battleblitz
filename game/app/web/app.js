@@ -9,6 +9,21 @@ const API = "";  // same origin
 // Chrome serves the old PNG forever because the filename is unchanged.
 const TILE_ASSET_VERSION = "2026-06-30-mini-pine-upright";
 
+// Stat labels used everywhere the side panel renders a unit's numbers.
+// Centralised so adding a new stat (e.g. crit chance) only requires
+// updating this map.
+const UNIT_STAT_LABEL = {
+  hp:    "生命",
+  atk:   "攻击",
+  def_:  "防御",
+  matk:  "魔攻",
+  mdef:  "魔防",
+  mov:   "移动",
+  level: "等级",
+  morale:"士气",
+  range: "射程",
+};
+
 // ----- Persistent settings (localStorage) -----
 const STORAGE_KEY = "battleblitz.settings.v1";
 const SESSION_KEY = "battleblitz.session.v1";
@@ -868,7 +883,7 @@ function renderBoard(st) {
         uEl.className = `unit u-${occupant.player.color}` + (u.has_acted ? " acted" : "");
         uEl.dataset.unitId = u.id;
         uEl.textContent = unitGlyph(u.unit_type);
-        uEl.title = `${u.name} (Lv.${u.level}) HP ${u.hp}/${u.max_hp} MP ${u.mp ?? u.mov}/${u.mov} 士气 ${u.morale ?? 0}/3`;
+        uEl.title = `${u.name}（${UNIT_STAT_LABEL.level} ${u.level}） ${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} ${UNIT_STAT_LABEL.mov} ${u.mp ?? u.mov}/${u.mov} ${UNIT_STAT_LABEL.morale} ${u.morale ?? 0}/3`;
         const hp = document.createElement("div");
         hp.className = "hpbar";
         const fill = document.createElement("div");
@@ -1093,8 +1108,19 @@ function forecastSingleHit(attacker, defender, tileDefBonus, crit) {
 
   const atkM = attacker.morale || 0;
   const defM = defender.morale || 0;
-  const effAtk = Math.max(1, attacker.atk * (1 + atkM * MORALE_ATK_PER_STAR));
-  const effDef = Math.max(1, (defender.def_ + tileDefBonus) * (1 + defM * MORALE_DEF_PER_STAR));
+  // The damage type is determined by the ATTACKER's attack_kind:
+  // physical → ATK vs DEF (+ tile), magic → MATK vs MDEF (+ tile).
+  // Defender's own attack_kind is irrelevant — physical defense can
+  // only block physical damage, magic defense can only block magic.
+  const attackerKind = UNIT_CLASSES[attacker.unit_type]?.attack_kind || "physical";
+  let effAtk, effDef;
+  if (attackerKind === "magic") {
+    effAtk = Math.max(1, (attacker.matk ?? 0) * (1 + atkM * MORALE_ATK_PER_STAR));
+    effDef = Math.max(1, ((defender.mdef ?? 0) + tileDefBonus) * (1 + defM * MORALE_DEF_PER_STAR));
+  } else {
+    effAtk = Math.max(1, attacker.atk * (1 + atkM * MORALE_ATK_PER_STAR));
+    effDef = Math.max(1, (defender.def_ + tileDefBonus) * (1 + defM * MORALE_DEF_PER_STAR));
+  }
 
   const base = effAtk * (effAtk / (effAtk + effDef));
   const typeMult = getTypeMultiplier(attacker.unit_type, defender.unit_type);
@@ -1258,12 +1284,12 @@ function renderUnitHtml(u, p) {
   const pct = u.max_hp ? Math.round(u.hp / u.max_hp * 100) : 0;
   const barColor = pct >= 50 ? "var(--good)" : pct >= 25 ? "var(--accent)" : "var(--danger)";
   return `
-    <p class="name">${escapeHtml(u.name)} <span class="muted small">Lv.${u.level}</span></p>
+    <p class="name">${escapeHtml(u.name)} <span class="muted small">${UNIT_STAT_LABEL.level} ${u.level}</span></p>
     <p class="muted small">${unitTypeName(u.unit_type)} · ${escapeHtml(p.user_name)}</p>
     <div style="background:var(--bg);height:6px;border-radius:3px;margin:6px 0;overflow:hidden;">
       <div style="width:${pct}%;height:100%;background:${barColor};"></div>
     </div>
-    <p class="muted small">HP ${u.hp}/${u.max_hp} · ATK ${u.atk} · DEF ${u.def_} · MOV ${u.mov}</p>
+    <p class="muted small">${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} · ${UNIT_STAT_LABEL.atk} ${u.atk} · ${UNIT_STAT_LABEL.matk} ${u.matk ?? 0} · ${UNIT_STAT_LABEL.def_} ${u.def_} · ${UNIT_STAT_LABEL.mdef} ${u.mdef ?? 0} · ${UNIT_STAT_LABEL.mov} ${u.mov}</p>
     ${u.skills?.length ? `<p class="muted small">技能：${u.skills.map(skillName).join("、")}</p>` : ""}
   `;
 }
@@ -1283,7 +1309,6 @@ function showUnitActionBubble(unit) {
   const canMove = reachable.size > 0;
   const canAttack = targets.size > 0;
   const canHeal = (unit.skills || []).includes("heal");
-  const canRally = (unit.skills || []).includes("rally");
   const canWait = true;
 
   let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}</div>`;
@@ -1293,7 +1318,6 @@ function showUnitActionBubble(unit) {
   html += `<button class="ab-btn" data-ab="range">🎯 射程</button>`;
   html += `</div><div class="ab-row">`;
   if (canHeal) html += `<button class="ab-btn heal" data-ab="heal">💚 治疗</button>`;
-  if (canRally) html += `<button class="ab-btn rally" data-ab="rally">📯 集结</button>`;
   html += `<button class="ab-btn" data-ab="info">👁 状态</button>`;
   html += `<button class="ab-btn cancel" data-ab="wait" ${canWait ? "" : "disabled"}>⏭ 待机</button>`;
   html += `</div>`;
@@ -1354,16 +1378,16 @@ function showAttackConfirmBubble(attacker, target) {
       <div class="forecast-row">
         <div class="forecast-side">
           <div class="forecast-name">${escapeHtml(attacker.name)}</div>
-          <div class="forecast-meta">${stars(attacker.morale || 0)} · Lv.${attacker.level || 1}</div>
-          <div class="forecast-stat">ATK ${attacker.atk}</div>
-          <div class="forecast-hp">HP ${attacker.hp || "?"}/${attacker.max_hp || "?"}</div>
+          <div class="forecast-meta">${stars(attacker.morale || 0)} · ${UNIT_STAT_LABEL.level} ${attacker.level || 1}</div>
+          <div class="forecast-stat">${UNIT_STAT_LABEL.atk} ${attacker.atk} · ${UNIT_STAT_LABEL.matk} ${attacker.matk ?? 0}</div>
+          <div class="forecast-hp">${UNIT_STAT_LABEL.hp} ${attacker.hp || "?"}/${attacker.max_hp || "?"}</div>
         </div>
         <div class="forecast-vs">VS</div>
         <div class="forecast-side">
           <div class="forecast-name">${escapeHtml(target.name)}</div>
-          <div class="forecast-meta">${stars(target.morale || 0)} · Lv.${target.level || 1}</div>
-          <div class="forecast-stat">DEF ${target.def_}</div>
-          <div class="forecast-hp">HP ${target.hp || "?"}/${target.max_hp || "?"}</div>
+          <div class="forecast-meta">${stars(target.morale || 0)} · ${UNIT_STAT_LABEL.level} ${target.level || 1}</div>
+          <div class="forecast-stat">${UNIT_STAT_LABEL.def_} ${target.def_} · ${UNIT_STAT_LABEL.mdef} ${target.mdef ?? 0}</div>
+          <div class="forecast-hp">${UNIT_STAT_LABEL.hp} ${target.hp || "?"}/${target.max_hp || "?"}</div>
         </div>
       </div>
       <div class="forecast-line forecast-dmg">💥 预计伤害：${m.damage}${killLine}</div>
@@ -1517,9 +1541,6 @@ async function onBubbleClick(action, unit, targetId) {
       break;
     case "heal":
       enterHealMode(unit);
-      return;
-    case "rally":
-      await doSkill("rally", null, unit);
       return;
     case "confirm-move": {
       const m = state.pendingMove;
@@ -1917,7 +1938,7 @@ async function doSkill(skill, targetId, unit) {
       skill,
       target_id: targetId,
     });
-    toast(skill === "heal" ? "治疗成功" : skill === "rally" ? "集结成功" : "技能释放成功");
+    toast(skill === "heal" ? "治疗成功" : "技能释放成功");
     await refreshGame();
     hideBubble();
     state.selectedUnit = null;
@@ -2053,23 +2074,32 @@ function renderRefContent() {
     el.innerHTML = Object.values(UNIT_CLASSES).map(u => {
       const rangeText = u.attack_range === 0 ? "无" : `射程 ${u.attack_range}`;
       const skillNames = (u.default_skills || []).map(skillName).join("、");
+      const kindLabel = u.attack_kind === "magic" ? "魔法" : "物理";
       return `
         <div class="ref-unit">
           <div class="glyph" style="background:${colors[u.type_id] || "#888"}">${u.glyph}</div>
           <div class="info">
-            <div class="name">${u.display_cn} <span class="muted small">(${rangeText})</span></div>
-            <div class="stats">HP ${u.base_hp} · ATK ${u.base_atk} · DEF ${u.base_def} · MOV ${u.base_mov}</div>
+            <div class="name">${u.display_cn} <span class="muted small">(${rangeText} · ${kindLabel})</span></div>
+            <div class="stats">生命 ${u.base_hp} · 攻击 ${u.base_atk} · 魔攻 ${u.base_matk ?? 0} · 防御 ${u.base_def} · 魔防 ${u.base_mdef ?? 0} · 移动 ${u.base_mov}</div>
             ${skillNames ? `<div class="skills">技能：${skillNames}</div>` : ""}
           </div>
         </div>`;
     }).join("");
   } else if (state.refTab === "skills") {
-    el.innerHTML = SKILL_REF.map(s => `
-      <div class="ref-skill">
-        <div class="name">${s.name}</div>
-        <div class="desc">${s.desc}</div>
-      </div>
-    `).join("");
+    el.innerHTML = SKILL_REF.map(s => {
+      // Convert default_users type_ids to Chinese display names
+      const users = (s.default_users || []).map(t =>
+        UNIT_CLASSES[t]?.display_cn || t
+      ).join("、");
+      const usersLine = users ? `<div class="muted small">默认拥有：${users}</div>` : "";
+      return `
+        <div class="ref-skill">
+          <div class="name">${s.name}</div>
+          <div class="desc">${s.desc}</div>
+          ${usersLine}
+        </div>
+      `;
+    }).join("");
   }
 }
 

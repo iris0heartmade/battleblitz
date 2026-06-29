@@ -14,9 +14,14 @@ class Archer(BaseUnitClass):
     base_mov = 3
     mp_pool = 5
 
+    # Magic stats — physical unit, low magic offense/defense.
+    base_matk = 4
+    base_mdef = 4
+    attack_kind = "physical"
+
     default_skills = ["snipe"]
     attack_range = 2
     min_attack_range = 1   # Fire-Emblem style: must keep distance, no melee
     can_move_after_action = True
 
-    strong_against = []   # reserved for future "mage"
+    strong_against = []   # reserved for future matchup against Warlock

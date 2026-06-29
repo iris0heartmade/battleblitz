@@ -42,6 +42,8 @@ def _stub_unit(
     *,
     atk: int = 20,
     def_: int = 10,
+    matk: int = 0,
+    mdef: int = 0,
     hp: int = 50,
     morale: int = 0,
     skills: list | None = None,
@@ -59,6 +61,8 @@ def _stub_unit(
         max_hp=hp,
         atk=atk,
         def_=def_,
+        matk=matk,
+        mdef=mdef,
         mov=5,
         mp=5,
         morale=morale,
@@ -120,6 +124,97 @@ class TestCalculateDamage:
         assert r_yes.damage > r_no.damage
         assert r_yes.is_crit is True
         assert r_no.is_crit is False
+
+    # ----- Magic combat (2026-06-30 refactor) -----
+
+    def test_warlock_deals_magic_damage_to_swordsman(self):
+        # Warlock (magic) attacks Swordsman (physical). Damage type is
+        # magic → MATK vs MDEF. Swordsman's mdef is 0, so the hit is
+        # near-max. Compare a high-MDEF variant to confirm the formula
+        # picks MDEF (the magic path) — if it accidentally picked DEF,
+        # the two values would be equal.
+        warlock = _stub_unit(unit_type="warlock", atk=8, matk=22, hp=999)
+        sword   = _stub_unit(unit_type="swordsman", def_=12, mdef=0, hp=999)
+        sword_high_mdef = _stub_unit(unit_type="swordsman", def_=12,
+                                     mdef=15, hp=999)
+        r = calculate_damage(warlock, sword, tile_def_bonus=0,
+                             crit=False, rng=random.Random(0))
+        r_high = calculate_damage(warlock, sword_high_mdef, 0, crit=False,
+                                  rng=random.Random(0))
+        assert r.damage > 15, (
+            "Magic damage path (MATK=22 vs MDEF=0) should be near max."
+        )
+        assert r.damage > r_high.damage, (
+            "Raising MDEF must reduce damage — confirms the formula is "
+            "using MDEF for the magic attack. If it had used DEF, both "
+            "values would be equal."
+        )
+
+    def test_swordsman_deals_physical_damage_to_warlock(self):
+        # Swordsman (physical) attacks Warlock (magic). Damage type is
+        # physical → ATK vs DEF. Warlock's DEF is 10, so the hit lands
+        # near max. Compare against the physical fallback on the
+        # defender to confirm the formula picks DEF, not MDEF.
+        sword   = _stub_unit(unit_type="swordsman", atk=18, matk=4, hp=999)
+        warlock = _stub_unit(unit_type="warlock", def_=10, mdef=12, hp=999)
+        r = calculate_damage(sword, warlock, tile_def_bonus=0,
+                             crit=False, rng=random.Random(0))
+        # If the formula wrongly used MDEF=12 instead of DEF=10, damage
+        # would be smaller. We sanity-check by comparing against a
+        # variant with DEF inflated — physical damage should react to it.
+        warlock_high_def = _stub_unit(unit_type="warlock", def_=20, mdef=12,
+                                      hp=999)
+        r_high = calculate_damage(sword, warlock_high_def, 0, crit=False,
+                                  rng=random.Random(0))
+        assert r.damage > r_high.damage, (
+            "Physical attack path must use DEF, so raising DEF should "
+            "reduce damage. If the formula picked MDEF by mistake the "
+            "two values would be equal."
+        )
+
+    def test_healer_blocks_magic_damage_with_mdef(self):
+        # Healer is now magic-type (attack_kind="magic"). A Warlock's
+        # magic attack should be blocked by Healer's MDEF (12), not its
+        # DEF (9). Verify by comparing damage with high vs low MDEF.
+        warlock = _stub_unit(unit_type="warlock", atk=8, matk=22, hp=999)
+        healer  = _stub_unit(unit_type="healer", def_=9, mdef=12, hp=999)
+        r = calculate_damage(warlock, healer, tile_def_bonus=0,
+                             crit=False, rng=random.Random(0))
+        healer_low_mdef = _stub_unit(unit_type="healer", def_=9, mdef=2,
+                                     hp=999)
+        r_low = calculate_damage(warlock, healer_low_mdef, 0, crit=False,
+                                rng=random.Random(0))
+        assert r.damage < r_low.damage, (
+            "Healer is a magic unit, so a magic attacker should hit its "
+            "MDEF. Lowering MDEF should INCREASE damage. If the formula "
+            "used DEF instead, the two values would be equal."
+        )
+
+    def test_counter_attack_picks_attackers_own_kind(self):
+        """Counter-attack damage type must follow the COUNTER's
+        attack_kind, not the original attacker's. Otherwise a
+        Swordsman hitting a Warlock would trigger a physical counter
+        (Swordsman doesn't have MATK), making the counter basically
+        harmless even though Warlocks are squishy. The existing
+        attack_with_double_strike(target=counter, attacker=original)
+        signature must route through the same calculate_damage
+        function so this test stays the single source of truth."""
+        sword   = _stub_unit(unit_type="swordsman", atk=18, matk=4, hp=999)
+        warlock = _stub_unit(unit_type="warlock", atk=8, matk=22, def_=10,
+                             mdef=12, hp=999)
+        # Counter path: warlock attacks swordsman.
+        r = attack_with_double_strike(warlock, sword, tile_def_bonus=0,
+                                      rng=random.Random(0))
+        # Total damage should be substantial — warlock's MATK=22 hits
+        # swordsman's MDEF=4 (high damage). If the formula mistakenly
+        # used warlock's atk=8 against swordsman's def_=12 instead, the
+        # damage would be much smaller.
+        total = sum(h.damage for h in r)
+        assert total >= 12, (
+            f"Counter should be magic (high damage, expected >=12, "
+            f"got {total}). If the counter used physical (ATK=8 vs "
+            f"DEF=12) the total would be tiny."
+        )
 
 
 # ============================================================
