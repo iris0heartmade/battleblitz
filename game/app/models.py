@@ -61,6 +61,24 @@ class Game(Base):
     # Fairness: the first player (seat 0) is limited to 1 action on their first
     # turn; once they've ended it, everyone gets 2 actions per turn going forward.
     first_player_done_first_turn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # P2.3 — victory condition. Default "rout" preserves the legacy
+    # behaviour (last team with alive units wins). Other values:
+    #   "seize"  — capture the opponent's HQ tile (universal)
+    #   "reach"  — a unit on game.reach_tile_id (mission only)
+    #   "defend" — survive game.defend_turns full rounds (mission only)
+    win_condition: Mapped[str] = mapped_column(String(16), nullable=False, default="rout")
+    # P2.3 — when win_condition == "reach", this tile is the target.
+    reach_tile_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("tiles.id", ondelete="SET NULL"), nullable=True
+    )
+    # P2.3 — when win_condition == "defend", this is the round count
+    # at which the last surviving team wins. A "round" = all living
+    # players each taking 1 turn.
+    defend_turns: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    # P2.3 — populated when the game ends ("rout" | "seize" | "reach" |
+    # "defend" | "draw"). Used by the front-end to pick the right
+    # victory banner copy.
+    win_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )
@@ -75,6 +93,12 @@ class Game(Base):
         "Tile",
         back_populates="game",
         cascade="all, delete-orphan",
+        # P2.3 — Tile has two FKs back to Game: the regular
+        # `game_id` (one tile per (x, y) in the map) and the
+        # `reach_tile_id` we just added for reach-mode targeting.
+        # Disambiguate so SQLAlchemy picks the right one for
+        # the parent/child join.
+        foreign_keys="Tile.game_id",
     )
     action_logs: Mapped[List["ActionLog"]] = relationship(
         "ActionLog",
@@ -109,6 +133,12 @@ class Player(Base):
     # Personality preset name (e.g. "aggressive" / "defensive" / "balanced"
     # / "trickster"); only used when agent_kind == "llm".
     agent_personality: Mapped[str] = mapped_column(String(32), nullable=False, default="balanced")
+    # P2.3 — team grouping. When NULL, the front-end falls back to
+    # `color` so 1V1 free-for-all (legacy) keeps working unchanged.
+    # Multiple players with the same team_id are treated as one
+    # logical side for win-condition checks (Rout / Seize / Reach /
+    # Defend). When unset, the team defaults to the player's color.
+    team_id: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Per-game gold (P0.4 economy). Reset to 0 at game start; grows via
     # income from owned income-yielding terrains; spent on recruit.
     gold: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -210,7 +240,14 @@ class Tile(Base):
         ForeignKey("units.id", ondelete="SET NULL"), nullable=True
     )
 
-    game: Mapped["Game"] = relationship("Game", back_populates="tiles")
+    game: Mapped["Game"] = relationship(
+        "Game", back_populates="tiles",
+        # P2.3 — Tile has two FKs back to Game: `game_id` (the per-tile
+        # link) and `reach_tile_id` (the P2.3 reach-mode target).
+        # Disambiguate so the back-ref matches Game.tiles' forward
+        # foreign_keys="Tile.game_id".
+        foreign_keys="Tile.game_id",
+    )
 
     __table_args__ = (
         UniqueConstraint("game_id", "x", "y", name="uq_tile_coord_per_game"),

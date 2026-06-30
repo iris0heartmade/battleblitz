@@ -435,7 +435,142 @@ async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> Li
         await cancel_claim_sessions_for_unit(session, u.id)
     for u in dead:
         await session.delete(u)
+    # P2.3 — re-evaluate the win condition after the dead are gone.
+    # For "rout" mode this is the trigger: a team dropping to 0
+    # units is the rout condition. Other modes (seize / reach /
+    # defend) re-check here too so they always have a chance to
+    # finish even if no other trigger fires.
+    game = await _resolve_game(session, dead[0].game_id)
+    if game is not None and game.status == "playing":
+        await check_win_condition(session, game)
     return dead_ids
+
+
+# ============================================================
+# P2.3 — win-condition dispatcher
+# ============================================================
+
+async def _resolve_game(session: AsyncSession, game_id: int):
+    """Tiny helper to look up a Game by id; the dead-unit path
+    needs the game to evaluate the win condition but doesn't have
+    it in hand."""
+    from sqlalchemy import select as _sel
+    return (await session.execute(
+        _sel(Game).where(Game.id == game_id)
+    )).scalars().first()
+
+
+def _team_of(player: Player) -> str:
+    """Resolve the logical 'team' id for win-condition aggregation.
+    A player with team_id explicitly set wins; otherwise fall back
+    to their color (1V1 free-for-all)."""
+    return player.team_id or player.color or "neutral"
+
+
+async def _alive_teams(session: AsyncSession, game: Game) -> list:
+    """Return the sorted list of teams that still have at least one
+    unit with hp > 0 in this game. Used by all 4 win conditions."""
+    from sqlalchemy import func, select as _sel
+    rows = (await session.execute(
+        _sel(Player.team_id, Player.color, func.count(Unit.id))
+        .join(Unit, Unit.player_id == Player.id)
+        .join(Game, Game.id == Player.game_id)
+        .where(Game.id == game.id, Unit.hp > 0)
+        .group_by(Player.id)
+    )).all()
+    teams = set()
+    for team_id, color, _count in rows:
+        teams.add(team_id or color or "neutral")
+    return sorted(teams)
+
+
+def _finish_game(
+    game: Game,
+    winner_team: Optional[str],
+    win_reason: str,
+) -> None:
+    """Mark a game as finished and stash the winner / reason so the
+    front-end can render the right banner copy."""
+    game.status = "finished"
+    game.win_reason = win_reason
+    # Stash the winning team on a transient attribute so the state
+    # endpoint can include it without us adding yet another column.
+    game._winner_team = winner_team
+
+
+async def check_win_condition(session: AsyncSession, game: Game) -> bool:
+    """Evaluate the current win condition for `game`. If a winner
+    emerges, set status='finished' + win_reason and return True.
+    Otherwise return False (game continues).
+
+    Called from:
+      - cleanup_dead_units (rout + post-attack recheck)
+      - apply_end_of_turn (defend + final rout recheck)
+      - move_unit (reach, when a unit lands on the target)
+      - claim_tile (seize, when ownership flips)
+    """
+    if game.status != "playing":
+        return game.status == "finished"
+
+    # Always recompute alive-teams so a 0-team left means 'draw'.
+    alive = await _alive_teams(session, game)
+
+    if game.win_condition == "rout":
+        if len(alive) == 1:
+            _finish_game(game, alive[0], "rout")
+            return True
+        if len(alive) == 0:
+            _finish_game(game, None, "draw")
+            return True
+        return False
+
+    if game.win_condition == "defend":
+        if game.turn_number >= game.defend_turns and len(alive) == 1:
+            _finish_game(game, alive[0], "defend")
+            return True
+        if len(alive) == 0:
+            _finish_game(game, None, "draw")
+            return True
+        return False
+
+    if game.win_condition == "reach":
+        # A unit is currently on the target tile.
+        if game.reach_tile_id is not None:
+            from sqlalchemy import select as _sel
+            tile = await session.get(Tile, game.reach_tile_id)
+            if tile is not None and tile.occupied_unit_id is not None:
+                winner_unit = (await session.execute(
+                    _sel(Unit).where(Unit.id == tile.occupied_unit_id)
+                )).scalars().first()
+                if winner_unit is not None and winner_unit.hp > 0:
+                    winner_player = (await session.execute(
+                        _sel(Player).where(Player.id == winner_unit.player_id)
+                    )).scalars().first()
+                    _finish_game(game, _team_of(winner_player), "reach")
+                    return True
+        # Rout still applies as a backup: only 1 team left = they win
+        # even in reach mode (the opponent got wiped before the unit
+        # reached the goal).
+        if len(alive) == 1:
+            _finish_game(game, alive[0], "rout")
+            return True
+        if len(alive) == 0:
+            _finish_game(game, None, "draw")
+            return True
+        return False
+
+    if game.win_condition == "seize":
+        # Seize wins at the moment ownership flips (handled in
+        # claim_tile). Here we only handle the rout fallback.
+        if len(alive) == 1:
+            _finish_game(game, alive[0], "rout")
+            return True
+        if len(alive) == 0:
+            _finish_game(game, None, "draw")
+            return True
+        return False
+
+    return False
 
 
 async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:

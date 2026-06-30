@@ -284,7 +284,22 @@ async def create_game(
         map_preset=body.map_preset,
         map_biome=body.map_biome,
         unit_composition=body.unit_composition,
+        # P2.3 — victory condition.
+        win_condition=body.win_condition,
+        defend_turns=body.defend_turns,
     )
+    # P2.3 — for "reach" mode, look up the target tile so we can
+    # render the goal pulse on the client + drive the win check.
+    # We don't have tiles yet (those are created in _start_battle_internal
+    # after the lobby is filled), so we stash the (x, y) on the Game
+    # row for now and translate to reach_tile_id at start time.
+    if body.win_condition == "reach" and body.reach_tile:
+        # Persist as a transient attribute; the migration in
+        # _start_battle_internal reads it back before populating
+        # reach_tile_id. Cheaper than adding a second column.
+        game._pending_reach_xy = (
+            int(body.reach_tile["x"]), int(body.reach_tile["y"])
+        )
     session.add(game)
     await session.flush()
     logger.info(
@@ -318,12 +333,17 @@ async def join_game(
     used_colors = [p.color for p in existing]
     color = body.color if body.color and body.color not in used_colors else _next_color(used_colors)
     seat = len(existing)
+    # P2.3 — team_id defaults to color when the joiner doesn't pick
+    # one. The first team to claim each color becomes that team; later
+    # joiners can pick an existing color's team via the lobby UI.
+    team_id = body.team if body.team else color
 
     player = Player(
         game_id=game_id,
         user_name=body.user_name,
         color=color,
         seat=seat,
+        team_id=team_id,
     )
     session.add(player)
     try:

@@ -140,6 +140,36 @@ def _run_legacy_migrations(sync_conn) -> None:
             "CREATE INDEX ix_claim_sessions_game_id ON claim_sessions(game_id)"
         ))
         logger.info("Migration: created claim_sessions table")
+    # 2026-06-30: P2.3 victory conditions + team mode.
+    game_rows = sync_conn.execute(text("PRAGMA table_info(games)")).fetchall()
+    game_cols = {r[1] for r in game_rows}
+    if "win_condition" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN win_condition VARCHAR(16) NOT NULL DEFAULT 'rout'"
+        ))
+        logger.info("Migration: added games.win_condition")
+    if "reach_tile_id" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN reach_tile_id INTEGER"
+        ))
+        logger.info("Migration: added games.reach_tile_id")
+    if "defend_turns" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN defend_turns INTEGER NOT NULL DEFAULT 10"
+        ))
+        logger.info("Migration: added games.defend_turns")
+    if "win_reason" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN win_reason VARCHAR(32)"
+        ))
+        logger.info("Migration: added games.win_reason")
+    player_rows = sync_conn.execute(text("PRAGMA table_info(players)")).fetchall()
+    player_cols = {r[1] for r in player_rows}
+    if "team_id" not in player_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE players ADD COLUMN team_id VARCHAR(16)"
+        ))
+        logger.info("Migration: added players.team_id")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

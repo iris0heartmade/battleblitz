@@ -7,7 +7,7 @@ without touching the DB layer.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,11 +31,23 @@ class CreateGameRequest(BaseModel):
     map_preset: Optional[str] = None  # e.g. "classic" / "open_plains" / "mountain_pass"
     map_biome: str = Field(default="grass")  # "grass" | "snow" | "desert"
     unit_composition: Optional[str] = None  # e.g. "classic" / "aggressive" / "defensive"
+    # P2.3 — victory condition. "rout" (default) / "seize" / "reach" /
+    # "defend". The last two only make sense on mission maps.
+    win_condition: str = "rout"
+    # P2.3 — when win_condition == "reach", the target tile.
+    reach_tile: Optional[Dict[str, int]] = None  # {"x": int, "y": int}
+    # P2.3 — when win_condition == "defend", the round count at
+    # which the surviving team wins.
+    defend_turns: int = 10
 
 
 class JoinGameRequest(BaseModel):
     user_name: str = Field(min_length=1, max_length=64)
     color: Optional[str] = None  # auto-assigned if missing
+    # P2.3 — team grouping. None falls back to `color` (1V1 free-for-all
+    # behaviour preserved). Multiple players with the same team_id are
+    # treated as one logical side for win-condition checks.
+    team: Optional[str] = None
 
 
 class RejoinGameRequest(BaseModel):
@@ -129,6 +141,9 @@ class PlayerOut(APIModel):
     agent_kind: str = "rules"
     agent_personality: str = "balanced"
     gold: int = 0
+    # P2.3 — team grouping. May equal `color` for 1V1 free-for-all
+    # (the front-end treats them identically in that case).
+    team: Optional[str] = None
     units: List[UnitOut] = []
 
 
@@ -151,6 +166,10 @@ class GameSummaryOut(APIModel):
     map_preset: Optional[str]
     map_biome: str
     phase: str = "player"   # "player" | "ai" | "animating"
+    # P2.3 — victory-condition metadata. The front-end reads these
+    # to render the right victory banner copy.
+    win_condition: str = "rout"
+    win_reason: Optional[str] = None
     created_at: datetime
 
 
