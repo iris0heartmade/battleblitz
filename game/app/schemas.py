@@ -195,6 +195,30 @@ class ClaimResult(BaseModel):
     description: str
 
 
+class RecruitRequest(BaseModel):
+    """P0.4 — body of POST /games/{id}/recruit.
+
+    Spend gold to spawn a new unit on the barracks tile where the
+    `unit_id` (the recruiter) is currently standing. The recruiter
+    must belong to the player who owns the barracks, and the new
+    unit is created with has_acted=True, has_moved=True, mp=0 (it
+    cannot act this turn — same as Fire-Emblem's "summon" timing).
+    """
+    player_id: int
+    unit_id: int          # recruiter standing on the barracks
+    unit_type: str        # type_id of the new unit (e.g. "swordsman")
+
+
+class RecruitResult(BaseModel):
+    ok: bool = True
+    recruiter_unit_id: int
+    new_unit_id: int
+    new_unit_type: str
+    cost: int
+    gold_remaining: int
+    description: str
+
+
 class SkillRequest(BaseModel):
     player_id: int
     unit_id: int
