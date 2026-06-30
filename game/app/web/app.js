@@ -359,6 +359,12 @@ async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
   const unitsSel = document.getElementById("new-unit-composition");
+  // Bug fix: the create-game view is shown repeatedly as the user
+  // enters and leaves the lobby. Each time we'd appendChild new
+  // <option>s without clearing the previous ones, so the dropdown
+  // grew by 7 maps × N visits. Reset both selects before refilling.
+  mapSel.innerHTML = "";
+  unitsSel.innerHTML = "";
   for (const m of presets.maps) {
     const opt = document.createElement("option");
     opt.value = m.id;
