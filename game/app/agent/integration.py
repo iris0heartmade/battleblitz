@@ -107,9 +107,8 @@ async def dispatch_ai_turn(
             max_decisions_per_turn=AI_MAX_ACTIONS_PER_TURN,
         )
 
-        # Determine budget: 2 actions per turn (first player 1 on turn 1)
-        from app.routes.actions import _actions_per_turn
-        budget = _actions_per_turn(player, game)
+        # Each unit acts independently; no per-player budget cap.
+        budget = 5
 
         logger.info(
             "LLM agent turn start: player=%s, turn=%d, budget=%d, personality=%s",

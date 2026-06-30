@@ -35,7 +35,7 @@ class SkillContext:
     user: Unit
     target: Optional[Unit] = None
     terrain_bonus: int = 0           # defender's tile def bonus (attack skills)
-    ally_units: List[Unit] = None    # for rally / aoe skills
+    ally_units: List[Unit] = None    # for heal / aoe skills
     enemy_units: List[Unit] = None
 
     def __post_init__(self):

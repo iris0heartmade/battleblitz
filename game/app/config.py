@@ -5,7 +5,7 @@ All gameplay tuning values live here. Keep magic numbers out of logic modules.
 """
 from __future__ import annotations
 
-from typing import Dict, Final, List, Tuple
+from typing import Dict, Final, Tuple
 
 
 # ============================================================
@@ -124,9 +124,6 @@ RECRUIT_COST: Final[Dict[str, int]] = {
     "warlock":   300,
     "healer":    350,
 }
-
-# Per-player cap on owned vaults (one king-of-the-hill at a time).
-MAX_VAULT_PER_PLAYER: Final[int] = 1
 
 # Relative spawn weight for procedural map generation (excluding castle).
 # More weights = more of that terrain. Tuned for ~30% passable forest/mountain mix.

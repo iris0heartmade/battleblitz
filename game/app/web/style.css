@@ -529,7 +529,6 @@ html, body {
 
 .cell:hover { filter: brightness(1.15); }
 .cell.selected { box-shadow: inset 0 0 0 3px var(--accent); z-index: 2; }
-.cell.in-range  { box-shadow: inset 0 0 0 2px var(--good); }
 .cell.target    { box-shadow: inset 0 0 0 2px var(--danger); }
 .cell.move-hint {
   box-shadow: inset 0 0 0 2px rgba(95, 176, 232, 0.7), inset 0 0 0 999px rgba(95, 176, 232, 0.15);
@@ -583,17 +582,6 @@ html, body {
 
 .unit.acted { opacity: 0.5; }
 .unit.dead  { display: none; }
-
-.unit .label {
-  position: absolute;
-  bottom: calc(var(--cell-size) * -0.32);             /* ~-14px @ 44px, ~-7px @ 22px */
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: clamp(7px, calc(var(--cell-size) * 0.20), 11px);  /* ~9px @ 44px, ~5px @ 22px */
-  color: var(--text);
-  text-shadow: 0 0 2px black;
-  white-space: nowrap;
-}
 
 /* hp bar */
 .unit .hpbar {
@@ -651,20 +639,8 @@ html, body {
 .unit.acted .morale-stars { opacity: 0.6; }
 
 /* ============================================================
-   Side panel
+   Side panel — DEPRECATED, kept for reference
    ============================================================ */
-
-.side-panel {
-  background: var(--bg-soft);
-  border-left: 1px solid var(--border);
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.panel-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -681,15 +657,6 @@ html, body {
 
 #unit-info p { margin: 4px 0; font-size: 13px; }
 #unit-info .name { font-size: 15px; font-weight: 600; color: var(--accent); }
-
-.action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.action-buttons .btn { font-size: 12px; padding: 6px 10px; }
 
 #players-list .player-card {
   display: flex;
@@ -749,7 +716,6 @@ html, body {
   font-family: inherit;
 }
 /* ── AI Chat panel ── */
-#chat-panel { max-height: 200px; overflow-y: auto; }
 .chat-box { font-size: 13px; }
 .chat-msg {
   display: flex; align-items: center; gap: 6px;
@@ -1068,7 +1034,6 @@ html, body {
 .ab-btn.danger   { background: var(--danger); color: white; border-color: var(--danger); }
 .ab-btn.cancel   { background: transparent; border-color: var(--border); color: var(--text-dim); }
 .ab-btn.heal     { background: var(--good); color: #0d1f12; border-color: var(--good); font-weight: 700; }
-.ab-btn.rally    { background: #b58a3a; color: #1a1a1a; border-color: #b58a3a; }
 .ab-btn.claim    { background: #8a4f9b; color: white; border-color: #8a4f9b; font-weight: 700; }
 .ab-btn.recruit  { background: #f0c75e; color: #1a1a1a; border-color: #f0c75e; font-weight: 700; }
 
@@ -1137,7 +1102,6 @@ html, body {
   font-weight: 700;
   color: var(--good);
 }
-.forecast-hp.low { color: var(--danger); }
 
 .forecast-vs {
   font-size: 14px;
@@ -1293,7 +1257,7 @@ html, body {
   font-weight: 600;
 }
 
-/* Action counter */
+/* Action counter — DEPRECATED, kept for backwards compat */
 .action-counter {
   display: inline-block;
   background: var(--accent);
@@ -2070,15 +2034,6 @@ html, body {
 .color-btn.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
-}
-
-.editor-canvas-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 16px;
-  background: var(--bg);
-  border-radius: 8px;
-  overflow: auto;
 }
 
 .editor-board {

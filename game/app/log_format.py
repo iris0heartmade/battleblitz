@@ -52,21 +52,6 @@ def fmt_attack(
     return "".join(parts)
 
 
-def fmt_skill(unit, skill_cn: str, target_name: str | None = None, restored: int = 0) -> str:
-    """"治疗师 发动「治疗」，为 剑士 恢复 15 点 HP" """
-    head = f"{unit.name} 发动「{skill_cn}」"
-    if target_name and restored > 0:
-        return f"{head}，为 {target_name} 恢复 {restored} 点 HP"
-    if target_name:
-        return f"{head}（目标：{target_name}）"
-    return head
-
-
-def fmt_heal(unit, target, restored: int) -> str:
-    """"治疗师 治疗 剑士，恢复 15 点 HP" (default heal skill) """
-    return f"{unit.name} 治疗 {target.name}，恢复 {restored} 点 HP"
-
-
 def fmt_wait(unit) -> str:
     return f"{unit.name} 原地待命"
 
@@ -83,5 +68,3 @@ def fmt_eliminated(player) -> str:
     return f"{player.user_name} 已被淘汰！"
 
 
-def fmt_turn_start(turn_number: int) -> str:
-    return f"=== 第 {turn_number} 回合开始 ==="

@@ -119,27 +119,6 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     return player
 
 
-def _actions_per_turn(player: Player, game: Game) -> int:
-    """Max units this player can act with this turn.
-
-    First player (seat 0) is limited to 1 action on their first turn; everyone
-    else (and first player on later turns) gets 2 actions per turn.
-    """
-    if player.seat == 0 and not game.first_player_done_first_turn:
-        return 5
-    return 5
-
-
-async def _check_action_budget(session: AsyncSession, player: Player, unit: Unit) -> None:
-    """No-op stub: each unit acts independently, no per-player cap.
-
-    The per-unit `has_acted` flag (checked in each action handler) is the
-    only constraint. Players may end their turn at any time via
-    /games/{id}/end-turn — no "must do N actions first" rule.
-    """
-    return
-
-
 async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coord, str], Dict[Coord, Optional[int]], Dict[Coord, Optional[int]]]:
     tiles = (
         await session.execute(select(Tile).where(Tile.game_id == game_id))
@@ -189,7 +168,6 @@ async def move_unit(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_moved:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已移动过")
-    await _check_action_budget(session, player, unit)
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
 
@@ -315,7 +293,6 @@ async def attack(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "攻击者不属于你")
     if attacker.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "攻击者本回合已行动过")
-    await _check_action_budget(session, player, attacker)
 
     target = await _load_unit(session, body.target_id)
     if target.player_id == player.id:
@@ -490,7 +467,6 @@ async def use_skill(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
-    await _check_action_budget(session, player, unit)
 
     skill_id = body.skill
     try:
@@ -556,7 +532,6 @@ async def wait_action(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
     if unit.has_acted:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
-    await _check_action_budget(session, player, unit)
 
     unit.has_acted = True
     unit.mp = 0  # wait consumes remaining MP
