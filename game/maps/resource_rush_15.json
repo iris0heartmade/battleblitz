@@ -1,0 +1,35 @@
+{
+  "id": "resource_rush_15",
+  "name": "资源竞速·15×15",
+  "description": "2 人经济速战：2 村落 + 2 佣兵站 + 道路，节奏快、强调占领与招募",
+  "biome": "grass",
+  "size": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle",
+    "v": "village",
+    "b": "barracks",
+    "r": "road",
+    "g": "gate"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPP",
+    "PPCCvvCCCCCCvCC",
+    "PPPrPrPrPrPrPrP",
+    "PPCrCCCCCCCCrCP",
+    "PPPrPrPrPrPrPrP",
+    "PPCCbbCCCCCCbCC",
+    "PPPrPrPrPrPrPrP",
+    "PPPPrPrPrPrPrPP",
+    "PPPrPrPrPrPrPrP",
+    "PPCrCCCCCCCCrCP",
+    "PPPrPrPrPrPrPrP",
+    "PPCCvvCCCCCCvCC",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPPPPPPPPP"
+  ]
+}
