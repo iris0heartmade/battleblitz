@@ -588,6 +588,21 @@ async function refreshGame() {
   if (!state.me.game_id) return;
   try {
     const st = await api("GET", `/games/${state.me.game_id}/state`);
+    // P0.4: detect new income/recruit/claim_complete log entries since
+    // last refresh and toast them so the player sees the side effects
+    // immediately. Logs are returned in DESC id order, so the
+    // newest is at the front.
+    if (state.lastState?.logs && state.me?.player_id) {
+      const seenIds = new Set(state.lastState.logs.map(l => l.id));
+      for (const log of st.logs) {
+        if (seenIds.has(log.id)) break;  // hit an already-seen log
+        if (log.action_type === "income" && log.player_id === state.me.player_id) {
+          // log.description looks like "玩家A 获得 +50 金币（村落×1）"
+          toast("💰 " + (log.description.replace(/^[^ ]+ /, "")), 2500);
+        }
+      }
+    }
+    state.lastState = st;
     state.game = st;
     renderGame(st);
   } catch (e) {
@@ -1308,6 +1323,22 @@ function renderUnitHtml(u, p) {
   `;
 }
 
+// ============================================================
+// P0.4: claimable / recruit helpers
+// ============================================================
+const CLAIMABLE_FRONT = new Set(["village", "barracks", "castle_vault"]);
+
+function getTileAt(st, x, y) {
+  for (const t of st.tiles) {
+    if (t.x === x && t.y === y) return t;
+  }
+  return null;
+}
+
+function getCurrentPlayer(st) {
+  return st.players.find(p => p.id === st.current_player_id) || null;
+}
+
 function showUnitActionBubble(unit) {
   state.selectedUnit = unit;
   const targets = computeAttackTargets(unit);
@@ -1324,14 +1355,30 @@ function showUnitActionBubble(unit) {
   const canAttack = targets.size > 0;
   const canHeal = (unit.skills || []).includes("heal");
   const canWait = true;
+  // P0.4: claim button shows ONLY when the unit is on a claimable
+  // tile (village / barracks / castle_vault) AND the tile isn't
+  // already owned by this player. Recruit button shows ONLY when
+  // the unit is on a barracks owned by this player.
+  const st = state.lastState;
+  const myPlayer = state.me ? st?.players?.find(p => p.id === state.me.player_id) : null;
+  const myGold = myPlayer?.gold ?? 0;
+  const tile = st ? getTileAt(st, unit.x, unit.y) : null;
+  const onClaimable = tile && CLAIMABLE_FRONT.has(tile.terrain);
+  const onOwnUnclaimed = onClaimable && tile.owner_id !== (myPlayer?.id ?? -1);
+  const onOwnBarracks =
+    tile && tile.terrain === "barracks" && tile.owner_id === (myPlayer?.id ?? -1);
+  // Cheap swordsman cost to drive the "not enough gold" tooltip.
+  const swordsmanCost = 200;
 
-  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov}</div>`;
+  let html = `<div class="ab-title">${escapeHtml(unit.name)} · ⚡${unit.mp ?? unit.mov}/${unit.mov} · 💰${myGold}</div>`;
   html += `<div class="ab-row">`;
   html += `<button class="ab-btn primary" data-ab="move" ${canMove ? "" : "disabled"}>🚶 移动</button>`;
   html += `<button class="ab-btn danger" data-ab="attack" ${canAttack ? "" : "disabled"} title="${canAttack ? `可攻击 ${targets.size} 个敌人` : "范围内无目标"}">⚔️ 攻击${canAttack ? "" : ""}</button>`;
   html += `<button class="ab-btn" data-ab="range">🎯 射程</button>`;
   html += `</div><div class="ab-row">`;
   if (canHeal) html += `<button class="ab-btn heal" data-ab="heal">💚 治疗</button>`;
+  if (onOwnUnclaimed) html += `<button class="ab-btn claim" data-ab="claim" title="开始占领该地块（2 回合）">🚩 占领</button>`;
+  if (onOwnBarracks) html += `<button class="ab-btn recruit" data-ab="recruit" title="在此佣兵站花费金币招募新单位">💰 招募</button>`;
   html += `<button class="ab-btn" data-ab="info">👁 状态</button>`;
   html += `<button class="ab-btn cancel" data-ab="wait" ${canWait ? "" : "disabled"}>⏭ 待机</button>`;
   html += `</div>`;
@@ -1555,6 +1602,12 @@ async function onBubbleClick(action, unit, targetId) {
       break;
     case "heal":
       enterHealMode(unit);
+      return;
+    case "claim":
+      await doClaim(unit);
+      return;
+    case "recruit":
+      showRecruitModal(unit);
       return;
     case "confirm-move": {
       const m = state.pendingMove;
@@ -1985,6 +2038,106 @@ async function doWait(unit) {
   }
 }
 
+// ============================================================
+// P0.4 claim + recruit handlers
+// ============================================================
+async function doClaim(unit) {
+  state.actionMode = null;
+  clearVisualState();
+  try {
+    const r = await api("POST", `/games/${state.me.game_id}/claim`, {
+      player_id: state.me.player_id,
+      unit_id: unit?.id || state.selectedUnit?.id,
+    });
+    if (r.started) {
+      toast(`🚩 开始占领（${r.completes_turn} 回合完成）`);
+    } else if (r.completed) {
+      toast(`🚩 占领完成！`);
+    }
+    await refreshGame();
+    hideBubble();
+    state.selectedUnit = null;
+  } catch (e) {
+    toast("占领失败：" + e.message);
+    hideBubble();
+    state.selectedUnit = null;
+    state.actionMode = null;
+    clearVisualState();
+  }
+}
+
+// Recruit modal — lists affordable unit types and posts /recruit.
+const RECRUIT_UNIT_TYPES = [
+  { id: "swordsman", display_cn: "剑士", cost: 200 },
+  { id: "archer",    display_cn: "弓箭手", cost: 250 },
+  { id: "warlock",   display_cn: "术士", cost: 300 },
+  { id: "healer",    display_cn: "治疗师", cost: 350 },
+  { id: "knight",    display_cn: "骑士", cost: 400 },
+];
+
+async function showRecruitModal(recruiterUnit) {
+  const myPlayer = state.lastState?.players?.find(p => p.id === state.me.player_id);
+  const gold = myPlayer?.gold ?? 0;
+  const tile = getTileAt(state.lastState, recruiterUnit.x, recruiterUnit.y);
+  // Foreign-barracks guard for paranoid double-check (server also
+  // validates). We should never get here if the bubble was correctly
+  // hidden, but defence-in-depth.
+  if (tile?.owner_id !== state.me.player_id) {
+    const ownerName = state.lastState.players.find(p => p.id === tile.owner_id)?.user_name || "其他玩家";
+    toast(`该佣兵站属于 ${ownerName}，无法招募`);
+    return;
+  }
+  const body = `
+    <div class="recruit-modal">
+      <p class="muted small">佣兵站 (${recruiterUnit.x},${recruiterUnit.y}) · 当前金币 💰 ${gold}</p>
+      <div class="recruit-list">
+        ${RECRUIT_UNIT_TYPES.map(t => {
+          const canAfford = gold >= t.cost;
+          return `
+            <button class="recruit-row${canAfford ? "" : " disabled"}" data-type="${t.id}" ${canAfford ? "" : "disabled"}>
+              <span class="recruit-name">${escapeHtml(t.display_cn)}</span>
+              <span class="recruit-cost">💰 ${t.cost}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+  showModal({
+    title: "招募单位",
+    body,
+    buttons: [{ label: "取消", value: "cancel" }],
+  });
+  // After modal renders, attach per-row click handlers.
+  const rows = document.querySelectorAll(".recruit-row:not(.disabled)");
+  rows.forEach(row => {
+    row.addEventListener("click", async () => {
+      const unitType = row.dataset.type;
+      hideModal();
+      await doRecruit(recruiterUnit, unitType);
+    });
+  });
+}
+
+async function doRecruit(recruiterUnit, unitType) {
+  try {
+    const r = await api("POST", `/games/${state.me.game_id}/recruit`, {
+      player_id: state.me.player_id,
+      unit_id: recruiterUnit.id,
+      unit_type: unitType,
+    });
+    const cn = RECRUIT_UNIT_TYPES.find(t => t.id === unitType)?.display_cn || unitType;
+    toast(`💰 招募成功：${cn}（-${r.cost} 金币 · 剩余 ${r.gold_remaining}）`);
+    await refreshGame();
+    hideBubble();
+    state.selectedUnit = null;
+  } catch (e) {
+    toast("招募失败：" + e.message);
+    hideBubble();
+    state.selectedUnit = null;
+  }
+}
+
 async function endTurn() {
   clearVisualState();
   try {
@@ -2009,9 +2162,13 @@ function renderPlayersList(st) {
     const aliveUnits = p.units.filter(u => u.hp > 0).length;
     let badge = "";
     if (p.is_ai) badge = `<span class="ai-badge">AI</span>`;
+    const gold = p.gold ?? 0;
     div.innerHTML = `
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
-      <div>${escapeHtml(p.user_name)}${p.is_alive ? "" : " (淘汰)"} · ${aliveUnits}/${p.units.length}${badge}</div>
+      <div class="player-meta">
+        <div class="player-name">${escapeHtml(p.user_name)}${p.is_alive ? "" : " (淘汰)"}${badge}</div>
+        <div class="player-sub">单位 ${aliveUnits}/${p.units.length} · <span class="gold-pill" title="金币">💰 ${gold}</span></div>
+      </div>
     `;
     el.appendChild(div);
   }
