@@ -182,6 +182,33 @@ class GameStateOut(APIModel):
     logs: List[ActionLogOut] = []
 
 
+class LobbyTeamOut(APIModel):
+    """P2.3 — summary of a single team in the lobby. Lets the
+    front-end render 'join the red team' dropdowns without
+    having to compute aggregates client-side."""
+    team: str
+    player_count: int
+    color: Optional[str] = None  # representative color (most common)
+    is_full: bool = False  # True if game is at max_players and this team is full
+    # If max_players per team is enforced (e.g. 2 per side in 2v2), this
+    # is the soft cap. We don't currently enforce it server-side
+    # but expose it so the UI can grey out 'Join' buttons.
+    capacity: int = 0  # 0 = no cap (free-for-all)
+
+
+class LobbyInfoOut(APIModel):
+    """P2.3 — minimal lobby view. Returned by GET /games/{id}/lobby
+    so the front-end can show 'Red team: 2/2, Blue team: 1/2' etc.
+    """
+    game_id: int
+    status: str
+    max_players: int
+    player_count: int
+    teams: List[LobbyTeamOut]
+    win_condition: str = "rout"
+    win_reason: Optional[str] = None
+
+
 # ============================================================
 # Action requests
 # ============================================================

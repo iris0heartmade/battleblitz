@@ -43,6 +43,8 @@ from app.schemas import (
     GameStateOut,
     GameSummaryOut,
     JoinGameRequest,
+    LobbyInfoOut,
+    LobbyTeamOut,
     PlayerOut,
     PresetInfo,
     PresetsResponse,
@@ -354,12 +356,28 @@ async def join_game(
         raise HTTPException(status.HTTP_409_CONFLICT, "此游戏中用户名已被占用")
 
     used_colors = [p.color for p in existing]
-    color = body.color if body.color and body.color not in used_colors else _next_color(used_colors)
+    # P2.3 — team-mode join. team_id is an INDEPENDENT identifier
+    # from color. Two players on the same team just share team_id;
+    # they still each get their own color (the (game_id, color)
+    # UNIQUE constraint is preserved — that's what prevents two
+    # players from rendering the same tile).
+    #   * If the joiner specifies a color, use it (must be free).
+    #   * Otherwise, allocate the next free color.
+    # team_id defaults to "color" when unset, which keeps 1V1
+    # free-for-all working unchanged.
+    if body.color and body.color not in used_colors:
+        color = body.color
+    else:
+        color = _next_color(used_colors)
     seat = len(existing)
-    # P2.3 — team_id defaults to color when the joiner doesn't pick
-    # one. The first team to claim each color becomes that team; later
-    # joiners can pick an existing color's team via the lobby UI.
-    team_id = body.team if body.team else color
+    # P2.3 — team_id resolution. We store the EXPLICIT team if the
+    # joiner picks one. If the joiner doesn't pick a team, we
+    # leave team_id NULL and let `_team_of` fall back to player_<id>
+    # for 1V1 free-for-all (so check_win_condition treats each
+    # player as their own team and Rout/Seize/Reach/Defend all work
+    # without forcing the joiner to set a team). The lobby
+    # endpoint also uses _team_of, so its view stays consistent.
+    team_id = body.team if body.team else None
 
     player = Player(
         game_id=game_id,
@@ -371,8 +389,17 @@ async def join_game(
     session.add(player)
     try:
         await session.flush()
-    except IntegrityError:
+        # P2.3 — commit so other sessions (and follow-up HTTP calls
+        # in the same request) immediately see the new row. Without
+        # this, the team's color-resolution step in the next join
+        # doesn't see the just-created Player.
+        await session.commit()
+    except IntegrityError as e:
         await session.rollback()
+        # Surface the actual constraint that fired for diagnostics
+        # (the client's Chinese 409 message is fine either way).
+        import logging
+        logging.getLogger(__name__).warning("join IntegrityError: %s", e)
         audit.warning(
             "USER_ACTION | user=%s | game=%d | action=JOIN | result=FAIL | reason=constraint_violation",
             body.user_name, game_id,
@@ -397,6 +424,8 @@ async def join_game(
         has_ended_turn=player.has_ended_turn,
         seat=player.seat,
         is_ai=player.is_ai,
+        team=player.team_id,
+        gold=player.gold or 0,
         units=[],
     )
 
@@ -533,6 +562,64 @@ async def start_game(
     )
 
     return await _build_state(session, game)
+
+
+@router.get("/{game_id}/lobby", response_model=LobbyInfoOut)
+async def get_lobby_info(
+    game_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> LobbyInfoOut:
+    """P2.3 — compact lobby view that lets the front-end render
+    'join the red team' dropdowns without first fetching the full
+    game state.
+
+    Aggregates the players in the game by team_id (or by color
+    when team_id is unset). The capacity field is 0 today
+    (no enforced per-team cap); when we add 2v2 hard caps, the
+    front-end can grey out the Join button when capacity is hit.
+    """
+    from collections import Counter
+    from app.schemas import LobbyTeamOut
+
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+
+    players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+
+    # Use the same team_id resolution as check_win_condition: 1V1
+    # free-for-all (no team_id set) becomes its own team per player
+    # so the rout / seize / reach / defend logic works without
+    # forcing the joiner to set an explicit team.
+    from app.game_logic import _team_of
+    team_buckets: dict[str, list] = {}
+    for p in players:
+        t = _team_of(p)
+        team_buckets.setdefault(t, []).append(p)
+
+    teams_out: list[LobbyTeamOut] = []
+    for t, members in sorted(team_buckets.items()):
+        colors = Counter(m.color for m in members)
+        rep_color, _count = colors.most_common(1)[0]
+        teams_out.append(LobbyTeamOut(
+            team=t,
+            player_count=len(members),
+            color=rep_color,
+            is_full=len(players) >= MAX_PLAYERS and len(members) >= 1,
+            capacity=0,
+        ))
+
+    return LobbyInfoOut(
+        game_id=game.id,
+        status=game.status,
+        max_players=MAX_PLAYERS,
+        player_count=len(players),
+        teams=teams_out,
+        win_condition=game.win_condition,
+        win_reason=game.win_reason,
+    )
 
 
 @router.get("/{game_id}/state", response_model=GameStateOut)
