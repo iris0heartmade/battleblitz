@@ -35,6 +35,7 @@ from app.game_logic import (
     cleanup_dead_units,
     unit_attack_range,
     unit_min_attack_range,
+    _unit_name,
 )
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
@@ -47,6 +48,8 @@ from app.schemas import (
     DamageInfo,
     MoveRequest,
     MoveResult,
+    RecruitRequest,
+    RecruitResult,
     SkillRequest,
     SkillResult,
     WaitRequest,
@@ -700,4 +703,143 @@ async def claim_tile(
             f"占领完成：({tile.x},{tile.y}) 现在归属于 {player.user_name}。"
             f"下一回合开始时可收取金币。"
         ),
+    )
+
+
+# ============================================================
+# Recruit (P0.4) — spend gold to spawn a unit on an owned barracks
+# ============================================================
+
+@router.post("/{game_id}/recruit", response_model=RecruitResult)
+async def recruit_unit(
+    game_id: int,
+    body: RecruitRequest,
+    session: AsyncSession = Depends(get_session),
+) -> RecruitResult:
+    """Recruit a new unit by spending gold at an owned barracks.
+
+    Mechanics (see docs/superpowers/specs/2026-06-30-terrain-economy-
+    claim-spec.md §5.4):
+      - The `unit_id` in the request is the *recruiter* (a unit
+        already on the field) — its role is just to be on the
+        barracks tile. It spends MP/has_acted like any other
+        action.
+      - The new unit spawns on the same (x, y) tile, with
+        has_acted=True, has_moved=True, mp=0 (cannot act this
+        turn — matches Fire-Emblem summon timing).
+      - Cost: RECRUIT_COST[unit_type]. If the player can't afford
+        the unit, the request 400s and the recruiter is NOT
+        consumed.
+    """
+    from app.config import RECRUIT_COST, TERRAIN_BARRACKS
+
+    game = await _load_active_game(session, game_id)
+    player = await _ensure_current_player(session, game, body.player_id)
+    recruiter = await _load_unit(session, body.unit_id)
+    if recruiter.player_id != player.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
+    if recruiter.has_acted:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
+
+    # Recruiter must be standing on a barracks owned by this player.
+    tile = (
+        await session.execute(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.x == recruiter.x,
+                Tile.y == recruiter.y,
+            )
+        )
+    ).scalars().first()
+    if tile is None or tile.terrain != TERRAIN_BARRACKS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"该位置不是佣兵站（{tile.terrain if tile else 'no tile'}）",
+        )
+    if tile.owner_id != player.id:
+        owner_name = next(
+            (p.user_name for p in (
+                await session.execute(select(Player).where(Player.id == tile.owner_id))
+            ).scalars() if p.id == tile.owner_id),
+            "其他玩家",
+        ) if tile.owner_id is not None else "无主"
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"该佣兵站属于 {owner_name}，无法招募",
+        )
+    # The recruiter's own tile must not be occupied by a different unit.
+    if tile.occupied_unit_id not in (None, recruiter.id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "该佣兵站已有其他单位驻守",
+        )
+
+    cost = RECRUIT_COST.get(body.unit_type)
+    if cost is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"未知兵种：{body.unit_type}",
+        )
+    if (player.gold or 0) < cost:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"金币不足（{body.unit_type} 需要 {cost}，当前 {(player.gold or 0)}）",
+        )
+
+    # Count existing units of this type for naming.
+    from sqlalchemy import func as _func
+    n_existing = (await session.execute(
+        select(_func.count(Unit.id)).where(
+            Unit.player_id == player.id,
+            Unit.unit_type == body.unit_type,
+        )
+    )).scalar() or 0
+
+    # All checks pass — perform the recruit.
+    player.gold = (player.gold or 0) - cost
+    profile = _get_unit(body.unit_type)
+    new_unit = Unit(
+        player_id=player.id,
+        unit_type=body.unit_type,
+        name=_unit_name(body.unit_type, int(n_existing)),
+        level=1, exp=0,
+        hp=profile.base_hp, max_hp=profile.base_hp,
+        atk=profile.base_atk, def_=profile.base_def,
+        matk=profile.base_matk, mdef=profile.base_mdef,
+        # Fire-Emblem summon timing: new unit cannot act this turn —
+        # mov gets the full pool so next turn it can move, but mp and
+        # has_acted/has_moved are 0/True so it can't act or move now.
+        mov=profile.mp_pool, mp=0,
+        morale=0,
+        x=tile.x, y=tile.y,
+        has_acted=True,    # can't act this turn
+        has_moved=True,    # can't move this turn
+        skills=list(profile.default_skills),
+    )
+    session.add(new_unit)
+    await session.flush()  # populate new_unit.id
+    # Park the new unit on the barracks tile.
+    tile.occupied_unit_id = new_unit.id
+    # The recruiter also has acted.
+    recruiter.has_acted = True
+    recruiter.mp = 0
+
+    description = (
+        f"{player.user_name} 在 ({tile.x},{tile.y}) 花费 {cost} 金币招募了"
+        f" {profile.display_cn}（剩余 {player.gold} 金币）"
+    )
+    _log(session, game, player, "recruit", description)
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=RECRUIT | result=SUCCESS | "
+        "recruiter=%d | new_unit=%d | type=%s | cost=%d | gold_left=%d",
+        player.id, game_id, recruiter.id, new_unit.id, body.unit_type,
+        cost, player.gold,
+    )
+    return RecruitResult(
+        recruiter_unit_id=recruiter.id,
+        new_unit_id=new_unit.id,
+        new_unit_type=body.unit_type,
+        cost=cost,
+        gold_remaining=player.gold,
+        description=description,
     )
