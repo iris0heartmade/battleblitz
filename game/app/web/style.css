@@ -20,6 +20,10 @@
   --t-mountain: #8c8c8c;
   --t-river: #5fb0e8;
   --t-castle: #f0c75e;
+  --t-village: #d9c98e;
+  --t-barracks: #b58a4a;
+  --t-road: #bda07a;
+  --t-gate: #2a2520;
   --t-grid: rgba(0,0,0,0.18);
 
   /* Player colors */
@@ -35,6 +39,10 @@
   --t-mountain: #3b3b48;
   --t-river: #1e4a72;
   --t-castle: #6f5421;
+  --t-village: #5a4f30;
+  --t-barracks: #4d3a20;
+  --t-road: #524330;
+  --t-gate: #15110d;
   --t-grid: rgba(255,255,255,0.06);
   --bg: #0a0d15;
   --bg-soft: #11151f;
@@ -509,8 +517,14 @@ html, body {
 .cell.t-forest    { background-color: var(--t-forest); }
 .cell.t-mountain  { background-color: var(--t-mountain); }
 .cell.t-river     { background-color: var(--t-river); }
-.cell.t-castle    {
-  background-color: var(--t-castle);
+.cell.t-castle    { background-color: var(--t-castle); }
+/* P0.4 new terrains */
+.cell.t-village   { background-color: var(--t-village); }
+.cell.t-barracks  { background-color: var(--t-barracks); }
+.cell.t-road      { background-color: var(--t-road); }
+.cell.t-gate      {
+  background-color: var(--t-gate);
+  box-shadow: inset 0 0 0 2px #ff6b6b;
 }
 
 .cell:hover { filter: brightness(1.15); }
@@ -2024,6 +2038,10 @@ html, body {
 .editor-cell.t-mountain { background-color: var(--t-mountain); }
 .editor-cell.t-river    { background-color: var(--t-river); }
 .editor-cell.t-castle   { background-color: var(--t-castle); }
+.editor-cell.t-village   { background-color: var(--t-village); }
+.editor-cell.t-barracks  { background-color: var(--t-barracks); }
+.editor-cell.t-road      { background-color: var(--t-road); }
+.editor-cell.t-gate      { background-color: var(--t-gate); box-shadow: inset 0 0 0 2px #ff6b6b; }
 
 .editor-cell .unit {
   position: absolute;

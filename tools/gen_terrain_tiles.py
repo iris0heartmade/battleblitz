@@ -673,13 +673,212 @@ def make_snow(variant: int) -> Image.Image:
 
 
 # ============================================================
+# Village / Barracks / Road / Gate (P0.4 new terrains)
+# ============================================================
+
+def make_village(variant: int) -> Image.Image:
+    """Small cluster of thatched-roof huts on grass."""
+    rng = random.Random(0x600 + variant)
+    img = Image.new("RGB", (SIZE, SIZE), P.grass_l)
+    # 2 huts per tile (deterministic positions; variant-dependent)
+    huts = [
+        (8, 14, 11, 8),    # left hut
+        (28, 20, 31, 18),  # right hut
+    ] if variant == 0 else [
+        (4, 18, 7, 12),    # bottom-left hut
+        (24, 8, 28, 16),   # top-right hut (different variant)
+        (16, 28, 20, 36),  # bottom-middle hut
+    ]
+    for x0, y0, x1, y1 in huts:
+        # walls (stone-ish grey)
+        rect(img, x0, y0, x1, y1, P.stone)
+        # roof (warm brown, A-frame by triangular peak)
+        peak_x = (x0 + x1) // 2
+        for y in range(y0 - 4, y0):
+            width = y1 - y0 + 1 - (y - (y0 - 4)) * 2
+            if width < 1:
+                continue
+            for x in range(peak_x - width // 2, peak_x + width // 2 + 1):
+                if 0 <= x < SIZE:
+                    px(img, x, y, P.trunk)
+        # outline + door
+        rect(img, x0, y1, x1, y1, P.outline)
+        door_x = (x0 + x1) // 2
+        for dy in range(y1 - 3, y1 + 1):
+            px(img, door_x, dy, P.outline)
+    return img
+
+
+def make_barracks(variant: int) -> Image.Image:
+    """Tented military camp — visible from grass as fortified flag."""
+    rng = random.Random(0x700 + variant)
+    img = Image.new("RGB", (SIZE, SIZE), P.grass_l)
+    # central flagpole + banner
+    pole_x = SIZE // 2
+    pole_h = 16
+    # pole
+    for y in range(2, 2 + pole_h):
+        px(img, pole_x, y, P.outline)
+    # banner triangle (red)
+    for dx in range(6):
+        for y_off in range(4):
+            if dx + y_off < 6:
+                px(img, pole_x + dx, 3 + y_off, P.red)
+    # 3 tents at bottom
+    tents = [(6, 14, 4), (22, 12, 4), (38, 14, 4)] if variant == 0 else \
+            [(10, 16, 5), (28, 18, 5)]
+    for cx, cy, base in tents:
+        # triangular tent
+        for dy in range(base):
+            for x in range(cx - (base - dy), cx + (base - dy) + 1):
+                if 0 <= x < SIZE and 0 <= cy + dy < SIZE:
+                    px(img, x, cy + dy, P.stone if dy == 0 else P.trunk)
+        # flag on top
+        px(img, cx, cy - 1, P.red)
+        px(img, cx - 1, cy - 1, P.gold)
+    return img
+
+
+def make_road(variant: int) -> Image.Image:
+    """Dirt/cobblestone road tile — neutral mid-tone with cross-path texture."""
+    img = Image.new("RGB", (SIZE, SIZE), (172, 145, 110))  # dirt mid
+    # Cobblestone dots — variant 0 horizontal layout, v1 staggered
+    if variant == 0:
+        for y in range(0, SIZE, 4):
+            x_off = (y // 4) % 2 * 2
+            for x in range(x_off, SIZE, 4):
+                px(img, x, y, (190, 165, 125))  # light highlight
+                px(img, x + 1, y, (155, 128, 95))  # dark shadow
+    else:
+        for y in range(2, SIZE, 6):
+            for x in range(2, SIZE, 6):
+                rect(img, x, y, x + 1, y, (190, 165, 125))
+                if x + 2 < SIZE and y + 1 < SIZE:
+                    px(img, x + 2, y + 1, (155, 128, 95))
+    return img
+
+
+def make_gate(variant: int) -> Image.Image:
+    """Impassable gate — bold dark visual to show 'do not enter'."""
+    img = Image.new("RGB", (SIZE, SIZE), (40, 35, 30))  # dark base
+    # diagonal hazard stripes
+    for i in range(SIZE):
+        stripe = i % 6
+        if stripe < 3:
+            for j in range(SIZE):
+                if (i + j) % 6 < 3:
+                    px(img, i, j, (220, 180, 40))  # yellow hazard
+    # central red barrier X
+    for i in range(SIZE):
+        j = SIZE - 1 - i
+        if 0 <= j < SIZE:
+            px(img, i, j, P.red)
+            if i + 1 < SIZE and j + 1 < SIZE:
+                px(img, i, j, P.red_d)
+    # 4 corner bolts
+    for cx, cy in [(2, 2), (SIZE - 3, 2), (2, SIZE - 3), (SIZE - 3, SIZE - 3)]:
+        px(img, cx, cy, P.stone_d)
+        px(img, cx - 1, cy - 1, P.stone) if 0 <= cx - 1 < SIZE and 0 <= cy - 1 < SIZE else None
+    return img
+
+
+# ============================================================
+# Castle sub-features (P0.4) — biome-aware like existing castle
+# ============================================================
+
+def make_castle_floor(env: str, variant: int) -> Image.Image:
+    """Sturdy stone floor visible inside a castle."""
+    bg, _ = ENV_BG[env] if env != "desert" else (P.sand_l, P.sand_m)
+    img = Image.new("RGB", (SIZE, SIZE), bg)
+    # stone blocks
+    for y in range(0, SIZE, 6):
+        offset = (y // 6) % 2 * 3
+        for x in range(-offset, SIZE, 6):
+            rect(img, x, y, x + 4, y + 4, P.stone)
+            rect(img, x, y, x + 4, y, P.stone_d)
+            rect(img, x + 4, y, x + 4, y + 4, P.stone_d)
+    return img
+
+
+def make_castle_wall(env: str, variant: int) -> Image.Image:
+    """Solid blocky wall — used for castle edges & interior partitions."""
+    bg, _ = (P.sand_l, P.sand_m) if env == "desert" else ENV_BG.get(env, (P.grass_l, P.grass_d))
+    img = Image.new("RGB", (SIZE, SIZE), bg)
+    # big blocky stone
+    rect(img, 0, 0, SIZE - 1, SIZE - 1, P.stone)
+    rect(img, 0, 0, SIZE - 1, 3, P.stone_d)
+    rect(img, 0, 0, 3, SIZE - 1, P.stone_d)
+    # 4 corner crenellation blocks
+    for cx, cy in [(4, 4), (SIZE - 8, 4), (4, SIZE - 8), (SIZE - 8, SIZE - 8)]:
+        rect(img, cx, cy, cx + 3, cy + 3, P.stone_d)
+        px(img, cx, cy, P.outline)
+    return img
+
+
+def make_castle_throne(env: str, variant: int) -> Image.Image:
+    """The King's seat — golden throne on stone dais."""
+    img = Image.new("RGB", (SIZE, SIZE), P.stone)
+    # raised dais (slightly different shade)
+    rect(img, 8, 18, SIZE - 9, SIZE - 9, P.stone_d)
+    rect(img, 8, 18, SIZE - 9, 18, P.outline)
+    # chair back at top
+    cx = SIZE // 2
+    rect(img, cx - 7, 4, cx + 7, 18, P.gold)
+    rect(img, cx - 7, 4, cx + 7, 6, P.gold_d)
+    # crown jewels on top
+    for dx in [-5, -2, 1, 4]:
+        px(img, cx + dx, 2, P.flag)
+        if cx + dx + 1 < SIZE:
+            px(img, cx + dx + 1, 2, P.gold)
+    return img
+
+
+def make_castle_stairs(env: str, variant: int) -> Image.Image:
+    """Stone steps."""
+    img = Image.new("RGB", (SIZE, SIZE), P.stone)
+    for i in range(5):
+        y_top = 4 + i * 8
+        for x in range(i, SIZE - i, 2):
+            px(img, x, y_top, P.stone_d)
+        if i > 0:
+            for x in range(i, SIZE - i, 2):
+                px(img, x, y_top - 1, P.stone)
+    return img
+
+
+def make_castle_vault(env: str, variant: int) -> Image.Image:
+    """Treasure chamber — gold coins stacked."""
+    img = Image.new("RGB", (SIZE, SIZE), P.stone_d)
+    # 5x5 grid of gold coin shapes
+    for cy in range(6, SIZE - 4, 7):
+        for cx in range(6, SIZE - 4, 8):
+            rect(img, cx, cy, cx + 4, cy + 4, P.gold)
+            rect(img, cx, cy, cx + 4, cy, P.gold_d)
+            px(img, cx + 1, cy + 1, P.foam)  # highlight
+    return img
+
+
+def make_castle_door(env: str, variant: int) -> Image.Image:
+    """Wooden door set in stone arch."""
+    img = Image.new("RGB", (SIZE, SIZE), P.stone)
+    # arch outline
+    rect(img, 12, 8, SIZE - 13, SIZE - 9, P.outline)
+    # door itself
+    rect(img, 14, 14, SIZE - 15, SIZE - 10, P.trunk)
+    rect(img, 14, 14, SIZE - 15, 18, P.trunk_dk)
+    # handle
+    px(img, SIZE - 17, SIZE // 2 + 4, P.gold)
+    return img
+
+
+# ============================================================
 # Driver
 # ============================================================
 def main() -> None:
     # Tiles that depend on environment (forest, castle get 3 envs each)
     ENV_AWARE = ("forest", "castle")
     ENVS = ("grass", "snow", "desert")
-    VARIANTS_2 = ("plain", "mountain", "desert", "snow")
+    VARIANTS_2 = ("plain", "mountain", "desert", "snow", "village", "barracks", "road", "gate")
     VARIANTS_4 = ("river",)
 
     # Env-aware tiles (forest_grass_v0/v1, forest_snow_v0/v1, etc.)
@@ -693,11 +892,15 @@ def main() -> None:
                 print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
 
     # Plain tiles (2 variants each, no env variation)
+    PLAIN_GEN = {
+        "plain": make_plain, "mountain": make_mountain,
+        "desert": make_desert, "snow": make_snow,
+        "village": make_village, "barracks": make_barracks,
+        "road": make_road, "gate": make_gate,
+    }
     for name in VARIANTS_2:
-        gen_fn = {"plain": make_plain, "mountain": make_mountain,
-                  "desert": make_desert, "snow": make_snow}[name]
         for v in range(2):
-            tile = gen_fn(v)
+            tile = PLAIN_GEN[name](v)
             path = OUT / f"{name}_v{v}.png"
             tile.save(path)
             print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
@@ -708,6 +911,26 @@ def main() -> None:
         path = OUT / f"river_v{v}.png"
         tile.save(path)
         print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
+
+    # Castle sub-features: 6 features × 3 biomes × 2 variants = 36 PNGs.
+    # Stored with `castle_` prefix as the terrain part (so URL is
+    # /ui/assets/tiles/castle_<subfeature>_<env>_v<n>.png). The
+    # frontend's BIOME_AWARE_TERRAINS list already includes 'castle',
+    # but sub-feature tiles use a different URL pattern — for now we
+    # store them under a dedicated prefix to keep tileImageUrl simple.
+    CASTLE_SUB = ("floor", "wall", "throne", "stairs", "vault", "door")
+    for sub in CASTLE_SUB:
+        gen_fn = {
+            "floor": make_castle_floor, "wall": make_castle_wall,
+            "throne": make_castle_throne, "stairs": make_castle_stairs,
+            "vault": make_castle_vault, "door": make_castle_door,
+        }[sub]
+        for env in ENVS:
+            for v in range(2):
+                tile = gen_fn(env, v)
+                path = OUT / f"castle_{sub}_{env}_v{v}.png"
+                tile.save(path)
+                print(f"wrote {path}  ({tile.size[0]}x{tile.size[1]})")
 
 
 if __name__ == "__main__":

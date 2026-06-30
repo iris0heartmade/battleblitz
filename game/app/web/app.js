@@ -7,7 +7,7 @@ const API = "";  // same origin
 // Bump this whenever game/app/web/assets/tiles/* pngs are regenerated —
 // the query string busts browser disk cache for tile images. Otherwise
 // Chrome serves the old PNG forever because the filename is unchanged.
-const TILE_ASSET_VERSION = "2026-06-30-mini-pine-upright";
+const TILE_ASSET_VERSION = "2026-06-30-p04-terrain-castle-sub";
 
 // Stat labels used everywhere the side panel renders a unit's numbers.
 // Centralised so adding a new stat (e.g. crit chance) only requires
@@ -751,9 +751,20 @@ if (document.readyState === "loading") {
 // variant count per terrain:
 const TILE_VARIANTS = {
   plain: 2, forest: 2, mountain: 2, river: 4, castle: 2, desert: 2, snow: 2,
+  // P0.4 new terrains
+  village: 2, barracks: 2, road: 2, gate: 2,
+  // Castle sub-features are biome-aware like the legacy 'castle' tile.
+  castle_floor: 2, castle_wall: 2, castle_throne: 2,
+  castle_stairs: 2, castle_vault: 2, castle_door: 2,
 };
 // Terrains whose palette depends on game biome
-const BIOME_AWARE_TERRAINS = new Set(["forest", "castle"]);
+const BIOME_AWARE_TERRAINS = new Set([
+  "forest", "castle",
+  // Castle sub-features also depend on biome (asset filename is
+  // castle_{subfeature}_{biome}_v{n}.png).
+  "castle_floor", "castle_wall", "castle_throne",
+  "castle_stairs", "castle_vault", "castle_door",
+]);
 
 function pickTileVariant(terrain, x, y) {
   const n = TILE_VARIANTS[terrain] || 2;
@@ -775,10 +786,13 @@ function tileImageUrl(terrain, biome, x, y) {
   return `/ui/assets/tiles/${base}_v${variant}.png?v=${TILE_ASSET_VERSION}`;
 }
 
-// Editor stores terrain as single chars (P/F/M/R/C) for compact JSON.
-// Convert to full terrain names for rendering and CSS class lookup.
+// Editor stores terrain as single chars (P/F/M/R/C + v/b/r/g) for
+// compact JSON. Convert to full terrain names for rendering and CSS
+// class lookup.
 const TERRAIN_CHAR_TO_NAME = {
   P: "plain", F: "forest", M: "mountain", R: "river", C: "castle",
+  // P0.4 new terrains
+  v: "village", b: "barracks", r: "road", g: "gate",
 };
 function terrainNameFromChar(ch) {
   return TERRAIN_CHAR_TO_NAME[ch] || "plain";
@@ -2051,7 +2065,12 @@ const TERRAIN_REF = [
   { id: "forest",   name: "森林",   color: "#4f8a47", move: 2, def: 2, note: "防御+2，远程视野受阻" },
   { id: "mountain", name: "山地",   color: "#8c8c8c", move: 3, def: 3, note: "防御+3，移动慢" },
   { id: "river",    name: "河流",   color: "#5fb0e8", move: 3, def: 0, note: "移动慢，但无防御" },
-  { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "防御+5，需占 1 回合" },
+  { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "需占 2 回合，敌不可入" },
+  // P0.4 new terrains
+  { id: "village",  name: "村落",   color: "#d9c98e", move: 1, def: 0, note: "归属后每回合 +50 金" },
+  { id: "barracks", name: "佣兵站", color: "#b58a4a", move: 1, def: 1, note: "归属后可招募新单位 +100 金/回合" },
+  { id: "road",     name: "道路",   color: "#bda07a", move: 0.5, def: 0, note: "移动消耗减半" },
+  { id: "gate",     name: "关卡",   color: "#2a2520", move: 0, def: 0, note: "敌方设置的阻拦格，不可通行" },
 ];
 
 let SKILL_REF = [];  // fetched from /skills endpoint

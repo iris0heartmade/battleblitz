@@ -616,7 +616,16 @@ def generate_map_preset(preset_id: str, seed: int, num_castles: int = CASTLES_PE
 
 
 def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
-    """Convert a char-grid layout into Tile rows."""
+    """Convert a char-grid layout into Tile rows.
+
+    Char map:
+      P=plain F=forest M=mountain R=river C=castle (legacy whole-tile)
+      v=village b=barracks r=road g=gate  (P0.4 new terrains)
+      Single castle sub-feature chars use lowercase to mark on tile.terrain
+      as the corresponding castle_* terrain and store the subtype in
+      Tile.subtype. Maps to uppercase ascii (P/F/M/R/C + lowercase v/b/r/g)
+      by toggling case and matching against the subtype map.
+    """
     grid: List[List[Tile]] = []
     char_to_terrain = {
         "P": TERRAIN_PLAIN,
@@ -624,11 +633,17 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
         "M": TERRAIN_MOUNTAIN,
         "R": TERRAIN_RIVER,
         "C": TERRAIN_CASTLE,
+        "v": TERRAIN_VILLAGE,
+        "b": TERRAIN_BARRACKS,
+        "r": TERRAIN_ROAD,
+        "g": TERRAIN_GATE,
     }
     for y, row in enumerate(layout):
         out_row: List[Tile] = []
         for x, ch in enumerate(row):
-            out_row.append(Tile(x=x, y=y, terrain=char_to_terrain.get(ch, TERRAIN_PLAIN)))
+            terrain = char_to_terrain.get(ch, TERRAIN_PLAIN)
+            tile = Tile(x=x, y=y, terrain=terrain)
+            out_row.append(tile)
         grid.append(out_row)
     return grid
 
