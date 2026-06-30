@@ -633,13 +633,10 @@ def _rules_ai_pick(legal: List[LegalAction]) -> LegalAction:
         )
         return attacks[0]
 
-    # 2. Then skills (heal preferred over rally)
+    # 2. Then skills (heal)
     heals = [a for a in legal if a.kind == "skill" and a.params.get("skill") == "heal"]
     if heals:
         return heals[0]
-    rallies = [a for a in legal if a.kind == "skill"]
-    if rallies:
-        return rallies[0]
 
     # 3. Then moves (any non-end_turn move)
     moves = [a for a in legal if a.kind == "move"]

@@ -44,7 +44,6 @@ from app.schemas import (
     GameSummaryOut,
     JoinGameRequest,
     LobbyInfoOut,
-    LobbyTeamOut,
     PlayerOut,
     PresetInfo,
     PresetsResponse,
@@ -66,11 +65,6 @@ def _next_color(used_colors: List[str]) -> str:
         if c not in used_colors:
             return c
     raise HTTPException(status.HTTP_409_CONFLICT, "没有可用的颜色")
-
-
-async def _ensure_started_or_400(game: Game) -> None:
-    if game.status not in ("waiting", "playing"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已结束")
 
 
 # ============================================================

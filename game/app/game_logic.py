@@ -124,50 +124,6 @@ def _spawn_xy_for_castle(castle_xy: Tuple[int, int], unit_index: int) -> Tuple[i
     return x, y
 
 
-def create_initial_units(
-    game: Game,
-    players: Sequence[Player],
-    castle_positions_map: Dict[int, Tuple[int, int]],
-) -> List[Unit]:
-    """Create the starting 5 units for each player (placed near their castle).
-
-    Unit stats/skills come from the unit class registry.
-    """
-    units: List[Unit] = []
-    for player in players:
-        castle_xy = castle_positions_map[player.seat]
-        unit_index = 0
-        for unit_type, count in default_roster().items():
-            uc = _get_unit(unit_type)
-            for _ in range(count):
-                x, y = _spawn_xy_for_castle(castle_xy, unit_index)
-                units.append(
-                    Unit(
-                        player_id=player.id,
-                        unit_type=unit_type,
-                        name=_unit_name(unit_type, unit_index),
-                        level=1,
-                        exp=0,
-                        hp=uc.base_hp,
-                        max_hp=uc.base_hp,
-                        atk=uc.base_atk,
-                        def_=uc.base_def,
-                        matk=uc.base_matk,
-                        mdef=uc.base_mdef,
-                        mov=uc.mp_pool,
-                        mp=uc.mp_pool,
-                        morale=0,
-                        x=x,
-                        y=y,
-                        has_acted=False,
-                        has_moved=False,
-                        skills=list(uc.default_skills),
-                    )
-                )
-                unit_index += 1
-    return units
-
-
 # ============================================================
 # Combat
 # ============================================================
@@ -814,36 +770,11 @@ async def cancel_claim_sessions_for_unit(
     return n
 
 
-async def check_victory_by_castles(
-    session: AsyncSession,
-    game: Game,
-    total_castles: int,
-) -> Optional[int]:
-    """If one player owns all castles, declare them the winner."""
-    from sqlalchemy import func
-
-    rows = (
-        await session.execute(
-            select(Tile.owner_id, func.count(Tile.id))
-            .where(Tile.game_id == game.id, Tile.terrain == TERRAIN_CASTLE)
-            .group_by(Tile.owner_id)
-        )
-    ).all()
-    if not rows:
-        return None
-    top_owner, top_count = max(rows, key=lambda r: r[1])
-    if top_count >= total_castles and top_owner is not None:
-        game.status = "finished"
-        return int(top_owner)
-    return None
-
-
 __all__ = [
     "DamageResult",
     "EndTurnResult",
     "LevelUpResult",
     "MAP_PRESETS",
-    "UNIT_COMPOSITIONS",
     "apply_damage",
     "apply_end_of_turn",
     "attack_with_double_strike",
@@ -852,10 +783,8 @@ __all__ = [
     "build_ai_player",
     "calculate_damage",
     "castle_positions",
-    "check_victory_by_castles",
     "claim_castle_if_present",
     "cleanup_dead_units",
-    "create_initial_units",
     "generate_map",
     "generate_map_preset",
     "level_up_if_ready",
@@ -975,17 +904,8 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
 from app.classes.units import list_compositions as _list_compositions
 from app.classes.units import get_roster_for_composition as _unit_get_roster
 
-UNIT_COMPOSITIONS: Dict[str, Dict] = {
-    c["id"]: {**c, "roster": _unit_get_roster(c["id"])}
-    for c in _list_compositions()
-}
-
 def get_roster_for_composition(composition_id: Optional[str]) -> Dict[str, int]:
     return _unit_get_roster(composition_id)
-
-
-# Override create_initial_units to honour an explicit roster
-_ORIG_CREATE_UNITS = create_initial_units
 
 
 def create_initial_units_with_roster(

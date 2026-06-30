@@ -372,11 +372,11 @@
       <div class="lobby-actions">
         <div class="lobby-ai-row">
           <button class="btn btn-secondary" id="lobby-add-ai-btn" data-action="add-ai">🤖 加入 AI</button>
-          <select id="lobby-ai-kind" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-lobby);color:var(--text);border:1px solid var(--border-bg);cursor:pointer;">
+          <select id="lobby-ai-kind" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);cursor:pointer;">
             <option value="rules">规则 AI</option>
             <option value="llm">LLM Agent</option>
           </select>
-          <select id="lobby-ai-personality" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-lobby);color:var(--text);border:1px solid var(--border-bg);cursor:pointer;">
+          <select id="lobby-ai-personality" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);cursor:pointer;">
             <option value="balanced">均衡</option>
             <option value="aggressive">激进</option>
             <option value="defensive">谨慎</option>
@@ -397,6 +397,7 @@
         <div class="game-header-left">
           <button class="btn btn-secondary btn-sm" data-action="toggle-ref-panel">📖 参考</button>
           <button class="btn btn-secondary btn-sm" data-action="refresh-state">🔄</button>
+          <span id="game-map-name" class="muted small" style="margin-left:8px"></span>
         </div>
         <div class="game-header-center">
           <span class="badge" id="game-thinking" hidden>🤖 电脑思考中…</span>

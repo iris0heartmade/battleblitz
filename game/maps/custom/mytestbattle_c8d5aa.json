@@ -1,0 +1,37 @@
+{
+  "id": "mytestbattle_c8d5aa",
+  "name": "MyTestBattle",
+  "size": {
+    "width": 15,
+    "height": 15
+  },
+  "biome": "snow",
+  "layout": [
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC",
+    "PPFFMMCCCCCCCCC"
+  ],
+  "initial_units": [
+    {
+      "x": 1,
+      "y": 1,
+      "type": "swordsman",
+      "color": "red",
+      "level": 2
+    }
+  ],
+  "created_at": 1782679012.8421438,
+  "updated_at": 1782679012.8421438
+}

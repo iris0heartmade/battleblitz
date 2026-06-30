@@ -36,7 +36,6 @@ from app.config import (
 )
 from app.database import AsyncSessionLocal, get_session
 from app.game_logic import ai_take_turn, ai_take_one_action, apply_end_of_turn, check_pending_claims
-from app.agent.integration import dispatch_ai_turn
 from app.logging_config import (
     collect_health_metrics,
     format_health_line,
@@ -44,8 +43,8 @@ from app.logging_config import (
     get_health_logger,
 )
 from app.models import ActionLog, Game, Player, Tile, Unit
-from app.schemas import EndTurnRequest, EndTurnResult, GameStateOut
-from app.log_format import fmt_end_turn, fmt_level_up, fmt_eliminated
+from app.schemas import EndTurnRequest, EndTurnResult
+from app.log_format import fmt_end_turn
 
 logger = logging.getLogger(__name__)
 audit = get_audit_logger()
@@ -152,21 +151,13 @@ async def end_turn(
     if player.id != expected_player.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "现在不是你的回合")
 
-    # Fairness rule: first player (seat 0) gets 1 action on first turn only;
-    # everyone else (and first player on later turns) needs 2 actions per turn.
-    required_actions = 5
-    if player.seat == 0 and not game.first_player_done_first_turn:
-        required_actions = 5
-
-    # Count units that have already acted this turn
+    # Count units that have acted (for the action log message)
     player_units = (
         await session.execute(
             select(Unit).where(Unit.player_id == player.id)
         )
     ).scalars().all()
     acted_count = sum(1 for u in player_units if u.has_acted)
-    # (No enforcement: any player can end their turn at any time, even
-    # without acting. The action counter is now advisory only.)
 
     # Lock in the first-player handicap after they end their first turn.
     if player.seat == 0 and not game.first_player_done_first_turn:
@@ -188,8 +179,8 @@ async def end_turn(
     await check_pending_claims(session, game)
     audit.info(
         "USER_ACTION | user=player_%d | game=%d | action=END_TURN | result=SUCCESS | "
-        "seat=%d | acted_count=%d | required=%d | turn=%d",
-        player.id, game_id, player.seat, acted_count, required_actions, game.turn_number,
+        "seat=%d | acted_count=%d | turn=%d",
+        player.id, game_id, player.seat, acted_count, game.turn_number,
     )
 
     # Find next alive seat after the current one (with wrap-around).
@@ -244,7 +235,7 @@ async def end_turn(
             leveled_units=leveled_ids,
             eliminated_players=eliminated,
             actions_taken=acted_count,
-            actions_required=required_actions,
+            actions_required=5,
             description=(
                 f"第 {game.turn_number - 1} 回合结算完毕。"
                 + (f" 升级单位：{len(leveled_ids)}。" if leveled_ids else "")
@@ -267,7 +258,7 @@ async def end_turn(
         turn_number=game.turn_number,
         game_status=game.status,
         actions_taken=acted_count,
-        actions_required=required_actions,
+        actions_required=5,
         description=f"{player.user_name} 结束回合。下一位：{next_player.user_name}。",
     )
 

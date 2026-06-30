@@ -21,7 +21,6 @@ const UNIT_STAT_LABEL = {
   mov:   "移动",
   level: "等级",
   morale:"士气",
-  range: "射程",
 };
 
 // ----- Persistent settings (localStorage) -----
@@ -175,6 +174,15 @@ function showModal({ title = "", body = "", buttons = [] } = {}) {
   });
   modal.hidden = false;
   return new Promise((resolve) => { _modalResolve = resolve; });
+}
+
+// Close the generic modal (needed by recruit modal and other places)
+function hideModal() {
+  const modal = document.getElementById("generic-modal");
+  if (modal) modal.hidden = true;
+  const r = _modalResolve;
+  _modalResolve = null;
+  if (r) r(null);
 }
 
 // Convenience: yes/no confirm
@@ -1169,13 +1177,6 @@ function findUnitAt(st, x, y) {
   return null;
 }
 
-function findEnemyAt(st, x, y) {
-  const occ = findUnitAt(st, x, y);
-  if (!occ) return null;
-  if (occ.player.id === state.me.player_id) return null;
-  return occ;
-}
-
 function computeReachable(unit) {
   // Estimate reachable tiles client-side (server pathfind is authoritative).
   // Budget is the unit's remaining MP (falls back to full MOV if MP is unset).
@@ -1463,9 +1464,7 @@ function renderUnitHtml(u, p) {
   `;
 }
 
-// ============================================================
 // P0.4: claimable / recruit helpers
-// ============================================================
 const CLAIMABLE_FRONT = new Set(["village", "barracks", "castle_vault"]);
 
 function getTileAt(st, x, y) {
@@ -1473,10 +1472,6 @@ function getTileAt(st, x, y) {
     if (t.x === x && t.y === y) return t;
   }
   return null;
-}
-
-function getCurrentPlayer(st) {
-  return st.players.find(p => p.id === st.current_player_id) || null;
 }
 
 function showUnitActionBubble(unit) {
@@ -2579,7 +2574,7 @@ const Dialog = {
         text: "明智的选择。让我们开始准备吧。" },
       { type: "narration", text: "（云的身影在月光下格外坚定。你感到一股温暖的力量涌入体内。）" },
       { type: "dialogue", speaker: "系统",
-        text: "🎉 立绘集成演示完成！\n「云」的肖像现已接入对话框系统。\n\n更多角色的立绘可以添加到 CHARACTER_PORTRAITS 中。" },
+        text: "🎉 立绘集成演示完成！\n「云」的肖像现已接入对话框系统。\n\n更多角色的立绘可以添加到 CHARACTER_ASSETS 中。" },
     ]);
     toast("🎭 立绘演示结束");
   },
