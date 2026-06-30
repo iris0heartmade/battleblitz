@@ -84,10 +84,22 @@ def terrain_passable(
     owner_id: Optional[int],
     viewer_owner_id: Optional[int],
 ) -> bool:
-    """A castle is only passable for its owner (or unowned at game start)."""
+    """Whether a unit may stand on this terrain.
+
+    Rules:
+      - castle and gate: only passable for the owner (or unowned).
+      - castle_wall, gate, and any terrain missing from TERRAIN_MOVE_COST
+        are impassable for everyone.
+      - everything else: passable.
+    """
+    # Impassable blockers — explicitly listed to avoid relying on missing
+    # keys, and to keep the rule self-documenting.
+    if terrain in ("castle_wall", "gate"):
+        return False
     if terrain == TERRAIN_CASTLE:
         return owner_id is None or owner_id == viewer_owner_id
-    # River and mountain still passable, just expensive (cost handled in BFS).
+    # River, mountain, village, barracks, road, and all castle sub-features
+    # are passable; their cost is handled by the BFS (cost=2, road=1).
     return terrain in TERRAIN_MOVE_COST
 
 
@@ -103,20 +115,24 @@ def bfs_reachable(
 ) -> Dict[Coord, int]:
     """BFS with terrain cost; returns {coord: cost_so_far} for tiles reachable within `mov`.
 
-    Cost is integer movement points (matches `TERRAIN_MOVE_COST`).
-    `blocked_units` excludes the moving unit's own tile.
+    `mov` is the unit's MP pool (integer). Internally we work in
+    "half-MP" units (TERRAIN_MOVE_COST values × 2) so road=1 (real cost
+    0.5) can be represented without floats. The internal budget is
+    `mov * 2`, and returned costs are also in "half-MP" units — callers
+    that want to compare to MP should divide by 2.
     """
     blocked_units = blocked_units or set()
     if start not in terrain:
         return {}
 
+    budget = mov * 2
     dist: Dict[Coord, int] = {start: 0}
     queue: deque[Coord] = deque([start])
 
     while queue:
         x, y = queue.popleft()
         cur = dist[(x, y)]
-        if cur >= mov:
+        if cur >= budget:
             continue
         for nx, ny in neighbors(x, y):
             if not in_bounds(nx, ny, size):
@@ -130,7 +146,7 @@ def bfs_reachable(
             if (nx, ny) in blocked_units:
                 continue
             new_cost = cur + TERRAIN_MOVE_COST[t]
-            if new_cost > mov:
+            if new_cost > budget:
                 continue
             key = (nx, ny)
             if key not in dist or new_cost < dist[key]:
@@ -153,14 +169,16 @@ def pathfind(
 ) -> Optional[List[Coord]]:
     """Cheapest path from start to goal within `mov` movement points.
 
-    Returns a list of coords from start (inclusive) to goal (inclusive), or
-    None if unreachable.
+    MP-to-cost conversion: internal cost budget is `mov * 2` (so road's
+    cost=1 means "half a MP"). Returns the list of coords from start to
+    goal, or None if unreachable.
     """
     if start == goal:
         return [start]
     blocked_units = (blocked_units or set()) - {start}  # allow standing on own tile
+    budget = mov * 2
 
-    # Dijkstra over integer costs (max cost is 3, so BFS by cost bucket works too).
+    # Dijkstra over integer costs.
     import heapq
 
     counter = 0
@@ -179,7 +197,7 @@ def pathfind(
             return path
         if cost > best.get(node, float("inf")):
             continue
-        if cost >= mov:
+        if cost >= budget:
             continue
         for nx, ny in neighbors(*node):
             if not in_bounds(nx, ny, size):
@@ -194,7 +212,7 @@ def pathfind(
                 continue
             step_cost = TERRAIN_MOVE_COST[t]
             new_cost = cost + step_cost
-            if new_cost > mov:
+            if new_cost > budget:
                 continue
             key = (nx, ny)
             if new_cost < best.get(key, float("inf")):
