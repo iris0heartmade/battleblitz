@@ -462,9 +462,17 @@ async def _resolve_game(session: AsyncSession, game_id: int):
 
 def _team_of(player: Player) -> str:
     """Resolve the logical 'team' id for win-condition aggregation.
-    A player with team_id explicitly set wins; otherwise fall back
-    to their color (1V1 free-for-all)."""
-    return player.team_id or player.color or "neutral"
+
+    Priority:
+      1. player.team_id if set (explicit team mode, e.g. 2v2 where
+         two players share "red" or "blue")
+      2. f"player_{player.id}" (1V1 free-for-all: each player is
+         their own team so Rout/Reach/Defend work without an
+         explicit team join)
+    """
+    if player.team_id:
+        return player.team_id
+    return f"player_{player.id}"
 
 
 async def _alive_teams(session: AsyncSession, game: Game) -> list:
@@ -525,6 +533,13 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
         return False
 
     if game.win_condition == "defend":
+        # Owner rule: "survive to round N" — interpreted as the
+        # attacker has failed to wipe all defenders in N rounds.
+        # Outcomes at the target turn:
+        #   * exactly 1 team alive → that team wins ("defend")
+        #   * 0 teams alive → draw
+        #   * 2+ teams alive → the game continues (no one was wiped
+        #     yet, but the scoreboard shows "Round N/N: hold on")
         if game.turn_number >= game.defend_turns and len(alive) == 1:
             _finish_game(game, alive[0], "defend")
             return True
@@ -607,14 +622,23 @@ async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
             p.is_alive = False
             logs.append(f"{p.user_name} 已被淘汰！")
 
-    # 4. Win check
-    survivors = [p for p in players if p.is_alive]
-    if len(survivors) <= 1 and game.status == "playing":
-        game.status = "finished"
-        if survivors:
-            logs.append(f"游戏结束 - {survivors[0].user_name} 获胜！")
-        else:
+    # 4. Win check — P2.3 dispatches through check_win_condition,
+    # which understands rout / seize / reach / defend based on
+    # game.win_condition. Survives the legacy '<=1 survivor' rout
+    # behaviour as the fallback.
+    if game.status == "playing":
+        await check_win_condition(session, game)
+    if game.status == "finished":
+        # Translate the win_reason + winner into a human-readable
+        # summary line for the turn-end ActionLog.
+        winner_team = getattr(game, "_winner_team", None)
+        if game.win_reason == "draw":
             logs.append("游戏结束 - 平局！")
+        elif winner_team is not None:
+            logs.append(f"游戏结束 - 阵营 {winner_team} 获胜（{game.win_reason}）！")
+        else:
+            # Defensive: status finished but no winner_team.
+            logs.append(f"游戏结束 - {game.win_reason} 胜出！")
 
     # 5. Log summary
     if logs:

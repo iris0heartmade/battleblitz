@@ -245,6 +245,12 @@ async def test_seize_hq_takeover_triggers_victory(db_session, tmp_db_path):
     turns. When the claim completes, the seizing team wins the match."""
     from app.config import CLAIM_TURNS_REQUIRED
     game, players = await _make_seize_game(db_session)
+    # Pin the team_id to the colour so the win banner reads "blue" /
+    # "red" instead of the auto-generated "player_2" / "player_1"
+    # that 1V1 free-for-all uses (the default for `_make_seize_game`).
+    players[0].team_id = "red"
+    players[1].team_id = "blue"
+    await db_session.flush()
     # player 0's HQ at (0, 0) — castle
     hq = Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_CASTLE, owner_id=players[0].id)
     db_session.add(hq)
@@ -495,3 +501,116 @@ async def test_reach_team_id_respected(db_session, tmp_db_path):
     assert ended is True
     assert game.status == "finished"
     assert game.win_reason == "reach"
+
+
+# ============================================================
+# Phase 4 — Defend mode (survive N rounds)
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_defend_survive_to_target_turn_wins(db_session, tmp_db_path):
+    """Defend mode: 2 players sharing a team_id survive to the
+    target turn while the opposing team's last unit is wiped —
+    the surviving team wins with win_reason='defend'."""
+    # 2v1: alpha+alpha vs beta. Alpha team is the "defender".
+    game, players = await _make_game(
+        db_session, num_players=3, teams=["alpha", "alpha", "beta"]
+    )
+    game.win_condition = "defend"
+    game.defend_turns = 5
+    await db_session.flush()
+    a1 = await _add_alive_unit(db_session, game, players[0], 0, 0)
+    a2 = await _add_alive_unit(db_session, game, players[1], 1, 1)
+    b1 = await _add_alive_unit(db_session, game, players[2], 9, 9)
+    # The beta team's only unit dies — alpha holds the line.
+    await _mark_dead(db_session, b1)
+    game.turn_number = 5
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "defend"
+
+
+@pytest.mark.asyncio
+async def test_defend_continues_before_target_turn(db_session, tmp_db_path):
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "defend"
+    game.defend_turns = 10
+    players[0].team_id = "red"
+    players[1].team_id = "blue"
+    await db_session.flush()
+    await _add_alive_unit(db_session, game, players[0], 0, 0)
+    await _add_alive_unit(db_session, game, players[1], 5, 5)
+    game.turn_number = 5  # NOT yet at the target
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is False
+    assert game.status == "playing"
+
+
+@pytest.mark.asyncio
+async def test_defend_target_turn_but_no_survivor_is_draw(db_session, tmp_db_path):
+    """Both teams dead by the target turn = draw."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "defend"
+    game.defend_turns = 5
+    players[0].team_id = "red"
+    players[1].team_id = "blue"
+    await db_session.flush()
+    u1 = await _add_alive_unit(db_session, game, players[0], 0, 0)
+    u2 = await _add_alive_unit(db_session, game, players[1], 5, 5)
+    game.turn_number = 5
+    await _mark_dead(db_session, u1)
+    await _mark_dead(db_session, u2)
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "draw"
+
+
+@pytest.mark.asyncio
+async def test_defend_target_turn_two_teams_alive_continues(db_session, tmp_db_path):
+    """Defend mode at the target turn: 2+ teams alive = the
+    attacker hasn't wiped anyone yet. The scoreboard shows
+    'Round N/N: hold on'. The game continues so the attacker
+    can still try to win by rout. The single-team-left condition
+    is the only thing that ends a defend-mode game."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "defend"
+    game.defend_turns = 5
+    players[0].team_id = "red"
+    players[1].team_id = "blue"
+    await db_session.flush()
+    await _add_alive_unit(db_session, game, players[0], 0, 0)
+    await _add_alive_unit(db_session, game, players[1], 5, 5)
+    game.turn_number = 5
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is False
+    assert game.status == "playing"
+
+
+@pytest.mark.asyncio
+async def test_defend_team_aggregation_alpha_team_wins(db_session, tmp_db_path):
+    """In 2v1 (alpha+alpha vs beta), the attacker team beta's last
+    unit dies before the target round. The remaining alpha team is
+    the only survivor at the target turn -> alpha wins defend."""
+    game, players = await _make_game(
+        db_session, num_players=3, teams=["alpha", "alpha", "beta"]
+    )
+    game.win_condition = "defend"
+    game.defend_turns = 5
+    await db_session.flush()
+    a1 = await _add_alive_unit(db_session, game, players[0], 0, 0)
+    a2 = await _add_alive_unit(db_session, game, players[1], 1, 0)
+    b1 = await _add_alive_unit(db_session, game, players[2], 9, 9)
+    # Beta team's only unit dies before the target turn.
+    await _mark_dead(db_session, b1)
+    game.turn_number = 5
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "defend"

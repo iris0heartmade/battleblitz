@@ -1,0 +1,42 @@
+{
+  "id": "defend_15_turns_20",
+  "name": "坚守15回合·20×20",
+  "description": "Defend 模式：2 人对战，守方撑过 15 回合即胜",
+  "biome": "grass",
+  "size": 20,
+  "win_condition": "defend",
+  "defend_turns": 15,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle",
+    "v": "village",
+    "b": "barracks",
+    "r": "road",
+    "g": "gate"
+  },
+  "layout": [
+    "CCvCCCCCCCCCCCCCCvCC",
+    "CCCbCCCCCCCCCCCCCCCP",
+    "CCCCCCCCCCCCCCCCCCCP",
+    "CCCPPPPPPPPPPPPCCCCP",
+    "CCCPrrrrrrrrrrPCCCCP",
+    "CCCPrCCCCCCCCrPCCCCP",
+    "CCCPrCFFFFFFFCCrPCCP",
+    "CCCPrCFFFFFFFFCrPCPP",
+    "CCCPrCFFFFFFFCCrPCCP",
+    "CCCPrCCCCCCCCrPCCCCP",
+    "CCCPrCFFFFFFFCCrPCCP",
+    "CCCPrCFFFFFFFCCrPCCP",
+    "CCCPrCCCCCCCCrPCCCCP",
+    "CCCPrrrrrrrrrrPCCCCP",
+    "CCCPPPPPPPPPPPPCCCCP",
+    "CCCCCCCCCCCCCCCCCCCP",
+    "CCCbCCCCCCCCCCCCCCCP",
+    "CCvCCCCCCCCCCCCCCvCC",
+    "CCCCCCCCCCCCCCCCCCCP",
+    "PPPPPPPPPPPPPPPPPPPP"
+  ]
+}

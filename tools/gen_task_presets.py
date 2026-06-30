@@ -7,9 +7,13 @@ declare a `size` and emit that many rows of `size` chars.
 
 Maps produced:
 
-  reach_heaven_25    25x25  reach  (2, 2)  -- 1v1 速战
-  reach_corner_30     30x30  reach  (0, 0)  -- 2p 抢角
-  reach_corner_40     40x40  reach  (0, 0)  -- 4p 抢角
+  Reach:
+    reach_heaven_25    25x25  reach  (2, 2)  -- 1v1 速战
+    reach_corner_30     30x30  reach  (0, 0)  -- 2p 抢角
+    reach_corner_40     40x40  reach  (0, 0)  -- 4p 抢角
+  Defend:
+    defend_15_turns_20 20x20  defend 15 rounds
+    defend_25_turns_30 30x30  defend 25 rounds
 """
 from __future__ import annotations
 
@@ -187,11 +191,112 @@ def make_reach_corner_40() -> dict:
     }
 
 
+# ============================================================
+# Defend presets
+# ============================================================
+
+def make_defend_15_turns_20() -> dict:
+    """20x20 Defend 15 rounds. 2 castles 1v1, 4 villages + 2 barracks
+    for income, road network for fast movement. The attacker has
+    to wipe the defender in 15 rounds or the defender wins."""
+    size = 20
+    rows = _char_grid([
+        "CCvCCCCCCCCCCCCCCvCC",
+        "CCCbCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCC",
+        "CCCPPPPPPPPPPPPCCCC",
+        "CCCPrrrrrrrrrrPCCCC",
+        "CCCPrCCCCCCCCrPCCCC",
+        "CCCPrCFFFFFFFCCrPCC",
+        "CCCPrCFFFFFFFFCrPC",
+        "CCCPrCFFFFFFFCCrPCC",
+        "CCCPrCCCCCCCCrPCCCC",
+        "CCCPrCFFFFFFFCCrPCC",
+        "CCCPrCFFFFFFFCCrPCC",
+        "CCCPrCCCCCCCCrPCCCC",
+        "CCCPrrrrrrrrrrPCCCC",
+        "CCCPPPPPPPPPPPPCCCC",
+        "CCCCCCCCCCCCCCCCCCC",
+        "CCCbCCCCCCCCCCCCCCC",
+        "CCvCCCCCCCCCCCCCCvCC",
+        "CCCCCCCCCCCCCCCCCCC",
+        "PPPPPPPPPPPPPPPPPPP",
+    ], size)
+    return {
+        "id": "defend_15_turns_20",
+        "name": "坚守15回合·20×20",
+        "description": "Defend 模式：2 人对战，守方撑过 15 回合即胜",
+        "biome": "grass",
+        "size": size,
+        "win_condition": "defend",
+        "defend_turns": 15,
+        "chars": {
+            "P": "plain", "F": "forest", "M": "mountain", "R": "river", "C": "castle",
+            "v": "village", "b": "barracks", "r": "road", "g": "gate",
+        },
+        "layout": rows,
+    }
+
+
+def make_defend_25_turns_30() -> dict:
+    """30x30 Defend 25 rounds. 4 castles 4 players, mountains
+    block the middle, road network connects corners."""
+    size = 30
+    rows = _char_grid([
+        "CCvCCCCCCCCCCCCCCCCCCvCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCbCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCPPPPPPPPPPPPPPCCCCCCCCCC",
+        "CCCPrrrrrrrrrrrPCCCCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCCCCCCCCCCCCrPCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCFFFFFFFFFFrPCCCCCCCC",
+        "CCCPrCCCCCCMMMMCrPCCCCCCCC",
+        "CCCPrCCCCCCMMMMCrPCCCCCCCC",
+        "CCCPrCCCCCCMMMMCrPCCCCCCCC",
+        "CCCPrCCCCCCMMMMCrPCCCCCCCC",
+        "CCCPrCCCCCCCCCCCCrPCCCCCCCC",
+        "CCCPrrrrrrrrrrrrPCCCCCCCCCC",
+        "CCCPPPPPPPPPPPPPPCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCbCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCvCCCCCCCCCCCCCCCCCCvCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCbCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "CCvCCCCCCCCCCCCCCCCCCvCCCCC",
+    ], size)
+    return {
+        "id": "defend_25_turns_30",
+        "name": "坚守25回合·30×30",
+        "description": "Defend 模式：4 城堡，撑过 25 回合即胜",
+        "biome": "grass",
+        "size": size,
+        "win_condition": "defend",
+        "defend_turns": 25,
+        "chars": {
+            "P": "plain", "F": "forest", "M": "mountain", "R": "river", "C": "castle",
+            "v": "village", "b": "barracks", "r": "road", "g": "gate",
+        },
+        "layout": rows,
+    }
+
+
 def main() -> None:
     PRESETS = [
         make_reach_heaven_25(),
         make_reach_corner_30(),
         make_reach_corner_40(),
+        make_defend_15_turns_20(),
+        make_defend_25_turns_30(),
     ]
     for p in PRESETS:
         path = OUT / f"{p['id']}.json"
@@ -200,15 +305,17 @@ def main() -> None:
         n_v = sum(r.count("v") for r in p["layout"])
         n_b = sum(r.count("b") for r in p["layout"])
         n_c = sum(r.count("C") for r in p["layout"])
+        reach = p.get("reach_tile", "-")
+        defend = p.get("defend_turns", "-")
         print(f"wrote {path}  ({p['size']}x{p['size']}, win={p['win_condition']}, "
-              f"reach={p['reach_tile']}, {n_v}v {n_b}b {n_c}C)")
+              f"reach={reach}, defend={defend}, {n_v}v {n_b}b {n_c}C)")
     # Verify
     for p in PRESETS:
         rows = p["layout"]
         assert len(rows) == p["size"]
         for r in rows:
             assert len(r) == p["size"]
-    print("All Reach presets verified.")
+    print("All mission presets verified.")
 
 
 if __name__ == "__main__":
