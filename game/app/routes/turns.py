@@ -25,7 +25,12 @@ from app.config import (
     ABANDONED_FINISHED_HOURS,
     ABANDONED_LOBBY_MINUTES,
     AI_THINK_DELAY_SECONDS,
+    INCOME_PER_TURN,
+    INCOME_TERRAINS,
     LOBBY_CLEANUP_INTERVAL_SECONDS,
+    TERRAIN_BARRACKS,
+    TERRAIN_VILLAGE,
+    CASTLE_VAULT,
     TURN_TIMEOUT_HOURS,
     TURNS_CHECK_INTERVAL_SECONDS,
 )
@@ -38,7 +43,7 @@ from app.logging_config import (
     get_audit_logger,
     get_health_logger,
 )
-from app.models import ActionLog, Game, Player, Unit
+from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import EndTurnRequest, EndTurnResult, GameStateOut
 from app.log_format import fmt_end_turn, fmt_level_up, fmt_eliminated
 
@@ -47,6 +52,63 @@ audit = get_audit_logger()
 health = get_health_logger()
 
 router = APIRouter(prefix="/games", tags=["turns"])
+
+
+# ============================================================
+# Per-turn income (P0.4 economy)
+# ============================================================
+
+async def _collect_income_for_player(
+    session: AsyncSession,
+    game: Game,
+    player: Player,
+) -> Dict[str, int]:
+    """Award gold to `player` for every tile they own that yields income.
+
+    Called at the start of every player turn (not end-of-turn) so income
+    fires once per round per player, regardless of how many turn-end calls
+    happen between rounds. Returns a {terrain_id: count} breakdown for the
+    ActionLog entry and the front-end toast.
+    """
+    rows = (
+        await session.execute(
+            select(Tile).where(
+                Tile.game_id == game.id,
+                Tile.owner_id == player.id,
+            )
+        )
+    ).scalars().all()
+
+    breakdown: Dict[str, int] = {}
+    for tile in rows:
+        if tile.terrain in INCOME_TERRAINS:
+            breakdown[tile.terrain] = breakdown.get(tile.terrain, 0) + 1
+
+    gold_gain = sum(
+        INCOME_PER_TURN[t] * count for t, count in breakdown.items()
+    )
+    if gold_gain > 0:
+        player.gold = (player.gold or 0) + gold_gain
+        # Chinese description: "玩家 X 获得 +N 金币（来源：村落×2 + 金库×1）"
+        source_str = " + ".join(
+            f"{INCOME_TERRAIN_CN.get(t, t)}×{n}" for t, n in breakdown.items()
+        )
+        session.add(ActionLog(
+            game_id=game.id,
+            turn_number=game.turn_number,
+            player_id=player.id,
+            action_type="income",
+            description=f"{player.user_name} 获得 +{gold_gain} 金币（{source_str}）",
+        ))
+    return breakdown
+
+
+# Display names for income terrains in ActionLog descriptions.
+INCOME_TERRAIN_CN: Dict[str, str] = {
+    TERRAIN_VILLAGE:  "村落",
+    TERRAIN_BARRACKS: "佣兵站",
+    CASTLE_VAULT:     "金库",
+}
 
 
 # ============================================================
@@ -130,6 +192,12 @@ async def end_turn(
     idx = alive_seats.index(expected_seat)
     next_seat = alive_seats[(idx + 1) % len(alive_seats)]
     next_player = next(p for p in players if p.seat == next_seat)
+
+    # P0.4 income: collect gold for the NEXT player at the start of their
+    # turn. Done here (right before we hand control to next_player) so the
+    # income ActionLog and the gold field are both flushed in the same
+    # transaction as the end_turn action.
+    await _collect_income_for_player(session, game, next_player)
 
     # If the next player has already ended, we've wrapped around -> resolve round.
     if next_player.has_ended_turn:

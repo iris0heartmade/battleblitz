@@ -127,6 +127,7 @@ class PlayerOut(APIModel):
     is_ai: bool = False
     agent_kind: str = "rules"
     agent_personality: str = "balanced"
+    gold: int = 0
     units: List[UnitOut] = []
 
 
