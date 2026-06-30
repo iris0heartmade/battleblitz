@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import TERRAIN_PLAIN
-from app.game_logic import check_win_condition
-from app.models import Game, Player, Tile, Unit
+from app.config import TERRAIN_CASTLE, TERRAIN_PLAIN, TERRAIN_VILLAGE
+from app.game_logic import check_win_condition, check_pending_claims
+from app.models import ActionLog, ClaimSession, Game, Player, Tile, Unit
 from sqlalchemy import select
 
 
@@ -206,3 +206,173 @@ async def test_check_win_noop_when_game_already_finished(db_session, tmp_db_path
     # Already finished -> returns True but doesn't re-set anything.
     assert ended is True
     assert game.win_reason == "rout"
+
+
+# ============================================================
+# Phase 2 — Seize mode (ownership flip on a castle tile wins)
+# ============================================================
+
+async def _make_seize_game(db_session):
+    """Create a 2-player game with a single castle tile assigned to
+    player 0. Both players have one unit; player 1 will try to seize
+    player 0's HQ."""
+    game = Game(
+        name="seize-test", status="playing", map_seed=0,
+        map_preset="classic", turn_number=1,
+        current_player_index=0, phase="player",
+        win_condition="seize",
+    )
+    db_session.add(game)
+    await db_session.flush()
+    colors = ("red", "blue")
+    players = []
+    for i in range(2):
+        p = Player(
+            game_id=game.id, user_name=f"P{i}", color=colors[i],
+            seat=i, is_alive=True, has_ended_turn=False,
+            is_ai=False, agent_kind="rules", agent_personality="balanced",
+            team_id=None,
+        )
+        db_session.add(p)
+        await db_session.flush()
+        players.append(p)
+    return game, players
+
+
+@pytest.mark.asyncio
+async def test_seize_hq_takeover_triggers_victory(db_session, tmp_db_path):
+    """Player 1 claims player 0's castle (HQ) for CLAIM_TURNS_REQUIRED
+    turns. When the claim completes, the seizing team wins the match."""
+    from app.config import CLAIM_TURNS_REQUIRED
+    game, players = await _make_seize_game(db_session)
+    # player 0's HQ at (0, 0) — castle
+    hq = Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_CASTLE, owner_id=players[0].id)
+    db_session.add(hq)
+    await db_session.flush()
+    # Both players have 1 unit. Place attacker on the HQ (the
+    # starting tile is fine — claim is "I'm standing on it").
+    attacker = await _add_alive_unit(db_session, game, players[1], 0, 0)
+    defender_unit = await _add_alive_unit(db_session, game, players[0], 5, 5)
+    await db_session.flush()
+    # Set up a ClaimSession whose completes_turn is now (so the
+    # next call to check_pending_claims finalises it).
+    cs = ClaimSession(
+        game_id=game.id, tile_id=hq.id, unit_id=attacker.id,
+        target_player_id=players[1].id,
+        started_turn=1,
+        completes_turn=game.turn_number,
+    )
+    db_session.add(cs)
+    await db_session.flush()
+
+    flipped = await check_pending_claims(db_session, game)
+    await db_session.flush()
+    assert hq.id in flipped
+    # The seizing team (player 1's color/team = 'blue') should win.
+    assert game.status == "finished"
+    assert game.win_reason == "seize"
+    # A "victory" ActionLog was written.
+    logs = (await db_session.execute(
+        select(ActionLog).where(
+            ActionLog.game_id == game.id,
+            ActionLog.action_type == "victory",
+        )
+    )).scalars().all()
+    assert len(logs) == 1
+    assert "blue" in logs[0].description
+
+
+@pytest.mark.asyncio
+async def test_seize_non_castle_claim_does_not_trigger_victory(db_session, tmp_db_path):
+    """Only castle tiles are HQs. A claim on a village is a normal
+    P0.4 income flip — no seize win."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "seize"
+    await db_session.flush()
+    village = Tile(game_id=game.id, x=2, y=2, terrain=TERRAIN_VILLAGE, owner_id=None)
+    db_session.add(village)
+    await db_session.flush()
+    attacker = await _add_alive_unit(db_session, game, players[1], 2, 2)
+    await _add_alive_unit(db_session, game, players[0], 5, 5)
+    await db_session.flush()
+    cs = ClaimSession(
+        game_id=game.id, tile_id=village.id, unit_id=attacker.id,
+        target_player_id=players[1].id,
+        started_turn=1, completes_turn=game.turn_number,
+    )
+    db_session.add(cs)
+    await db_session.flush()
+    await check_pending_claims(db_session, game)
+    await db_session.flush()
+    # Village flipped to blue's ownership but no win.
+    assert village.owner_id == players[1].id
+    assert game.status == "playing"
+    assert game.win_reason is None
+
+
+@pytest.mark.asyncio
+async def test_seize_2v1_team_share_hq_both_players_can_trigger(db_session, tmp_db_path):
+    """In team mode, taking an opponent HQ ends the match for the
+    seizing team. The losing team's shared HQ is captured by a
+    single player on the winning team — that single player's
+    team_id wins."""
+    game, players = await _make_game(
+        db_session, num_players=3, teams=["blue", "red", "red"]
+    )
+    game.win_condition = "seize"
+    await db_session.flush()
+    # The red team (players 1, 2) own a single castle HQ at (3, 3).
+    red_hq = Tile(game_id=game.id, x=3, y=3, terrain=TERRAIN_CASTLE, owner_id=players[1].id)
+    db_session.add(red_hq)
+    await db_session.flush()
+    blue_unit = await _add_alive_unit(db_session, game, players[0], 3, 3)
+    await _add_alive_unit(db_session, game, players[1], 8, 8)
+    await _add_alive_unit(db_session, game, players[2], 8, 9)
+    await db_session.flush()
+    cs = ClaimSession(
+        game_id=game.id, tile_id=red_hq.id, unit_id=blue_unit.id,
+        target_player_id=players[0].id,
+        started_turn=1, completes_turn=game.turn_number,
+    )
+    db_session.add(cs)
+    await db_session.flush()
+    await check_pending_claims(db_session, game)
+    await db_session.flush()
+    assert game.status == "finished"
+    assert game.win_reason == "seize"
+    # blue team won; the description should mention blue.
+    log = (await db_session.execute(
+        select(ActionLog).where(
+            ActionLog.game_id == game.id,
+            ActionLog.action_type == "victory",
+        )
+    )).scalars().first()
+    assert "blue" in log.description
+
+
+@pytest.mark.asyncio
+async def test_rout_mode_unaffected_by_claim_completion(db_session, tmp_db_path):
+    """In rout mode (default), a claim completing on a castle just
+    transfers ownership without ending the game — only rout decides."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "rout"  # override
+    await db_session.flush()
+    hq = Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_CASTLE, owner_id=players[0].id)
+    db_session.add(hq)
+    await db_session.flush()
+    attacker = await _add_alive_unit(db_session, game, players[1], 0, 0)
+    await _add_alive_unit(db_session, game, players[0], 5, 5)
+    await db_session.flush()
+    cs = ClaimSession(
+        game_id=game.id, tile_id=hq.id, unit_id=attacker.id,
+        target_player_id=players[1].id,
+        started_turn=1, completes_turn=game.turn_number,
+    )
+    db_session.add(cs)
+    await db_session.flush()
+    await check_pending_claims(db_session, game)
+    await db_session.flush()
+    # Both players still alive → game continues.
+    assert hq.owner_id == players[1].id  # ownership DID flip
+    assert game.status == "playing"
+    assert game.win_reason is None

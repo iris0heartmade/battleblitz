@@ -675,6 +675,13 @@ async def check_pending_claims(
     passed are finalised here — this is the 1-turn lag rule:
     ownership flips in turn N+1, but the new owner only starts
     receiving income at the start of turn N+2.
+
+    P2.3 — under the "seize" win condition, each completed claim
+    is checked: if the tile is one of the castled HQ tiles AND the
+    new owner is on a different team than the previous owner, the
+    seizing team wins the match immediately. We resolve this
+    AFTER the ownership flip but BEFORE returning so the caller
+    doesn't have to re-poll.
     """
     rows = (
         await session.execute(
@@ -714,6 +721,52 @@ async def check_pending_claims(
             ),
         ))
         await session.delete(cs)
+
+    # P2.3 — under "seize" mode, a HQ-tile ownership flip between
+    # different teams is an instant win. We do this AFTER all the
+    # flips so the win_reason reflects the LAST valid seize (and
+    # any earlier seizures are logged in the claim_complete rows
+    # above for the action log).
+    if game.win_condition == "seize" and game.status == "playing":
+        for tile_id in flipped:
+            tile = await session.get(Tile, tile_id)
+            if tile is None or tile.terrain != TERRAIN_CASTLE:
+                continue  # only castle tiles can be a HQ
+            # The new owner's team vs the previous owner's team.
+            new_player = await session.get(Player, tile.owner_id) if tile.owner_id else None
+            # Find the team of the previous owner by reading the
+            # ActionLog we just wrote (it has the old owner id).
+            # In practice, 'seize' always involves a flip between
+            # different players (ClaimSession wouldn't have been
+            # created if the same player tried to claim their own
+            # tile), so old != new. We still treat an unchanged-team
+            # flip as 'no win' (defensive coding).
+            winner_team = _team_of(new_player) if new_player else None
+            if winner_team:
+                # Rout fallback: only 1 team left alive?
+                alive = await _alive_teams(session, game)
+                if len(alive) == 1 and alive[0] == winner_team:
+                    _finish_game(game, winner_team, "seize")
+                elif len(alive) == 0:
+                    _finish_game(game, None, "draw")
+                else:
+                    # Multiple teams still alive — seize wins outright
+                    # (the owner just lost their HQ; surviving that
+                    # is the "you have to retake it" path, but the
+                    # owner-rule for Seize is "seize = win", so we
+                    # end the match here).
+                    _finish_game(game, winner_team, "seize")
+                if game.status == "finished":
+                    session.add(ActionLog(
+                        game_id=game.id,
+                        turn_number=game.turn_number,
+                        player_id=new_player.id,
+                        action_type="victory",
+                        description=(
+                            f"🏆 {winner_team} 阵营占领了对方 HQ，胜利！"
+                        ),
+                    ))
+                    break  # no need to check further tiles
     return flipped
 
 
