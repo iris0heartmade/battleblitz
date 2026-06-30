@@ -703,6 +703,17 @@ html, body {
 #players-list .swatch { width: 12px; height: 12px; border-radius: 50%; }
 #players-list .player-card.active { color: var(--accent); font-weight: 600; }
 #players-list .player-card.dead { opacity: 0.4; }
+#players-list .player-meta { flex: 1; min-width: 0; }
+#players-list .player-name { font-size: 13px; }
+#players-list .player-sub  { font-size: 11px; color: var(--text-dim); }
+#players-list .gold-pill {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(240, 199, 94, 0.18);
+  color: #f0c75e;
+  font-weight: 600;
+}
 
 .action-log {
   max-height: 180px;
@@ -725,6 +736,10 @@ html, body {
 .action-log .entry.level_up      { color: #ffce5c; font-weight: 600; }   /* 黄：升级 */
 .action-log .entry.eliminated    { color: #ff8b8b; font-weight: 600; }   /* 红：淘汰 */
 .action-log .entry.turn_end      { color: var(--text-dim); }              /* 灰：回合结算摘要 */
+.action-log .entry.income        { color: #f0c75e; font-weight: 600; }   /* 金：金币收入 */
+.action-log .entry.claim_start   { color: var(--text-dim); }              /* 灰：开始占领 */
+.action-log .entry.claim_complete{ color: #f0c75e; font-weight: 600; }   /* 金：占领完成 */
+.action-log .entry.recruit       { color: #ffce5c; font-weight: 600; }   /* 黄：招募 */
 .action-log .entry.ai_commentary {
   border-bottom: none;
   padding: 4px 6px;
@@ -1054,6 +1069,8 @@ html, body {
 .ab-btn.cancel   { background: transparent; border-color: var(--border); color: var(--text-dim); }
 .ab-btn.heal     { background: var(--good); color: #0d1f12; border-color: var(--good); font-weight: 700; }
 .ab-btn.rally    { background: #b58a3a; color: #1a1a1a; border-color: #b58a3a; }
+.ab-btn.claim    { background: #8a4f9b; color: white; border-color: #8a4f9b; font-weight: 700; }
+.ab-btn.recruit  { background: #f0c75e; color: #1a1a1a; border-color: #f0c75e; font-weight: 700; }
 
 /* Move-mode hint bubble (single-row compact) */
 .action-bubble.compact { min-width: auto; padding: 4px; }
@@ -2096,3 +2113,27 @@ html, body {
   margin-left: 4px;
   border-radius: 4px;
 }
+
+/* P0.4 recruit modal */
+.recruit-modal { display: flex; flex-direction: column; gap: 12px; min-width: 240px; }
+.recruit-modal .recruit-list { display: flex; flex-direction: column; gap: 6px; }
+.recruit-modal .recruit-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+}
+.recruit-modal .recruit-row:hover:not(.disabled) {
+  background: rgba(240, 199, 94, 0.18);
+  border-color: #f0c75e;
+}
+.recruit-modal .recruit-row.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.recruit-modal .recruit-name { font-weight: 600; }
+.recruit-modal .recruit-cost { color: #f0c75e; font-weight: 600; }
