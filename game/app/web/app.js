@@ -297,12 +297,23 @@ async function renderJoinList() {
         </div>
         <div class="arrow">→</div>
       `;
-      item.addEventListener("click", () => joinGame(g.id));
+      item.addEventListener("click", () => promptJoinGame(g.id, g.name, g.map_seed));
       list.appendChild(item);
     }
   } catch (e) {
     list.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
   }
+}
+
+// P2.3 — win condition sub-controls visibility
+function setupWinConditionUI() {
+  const sel = document.getElementById("new-win-condition");
+  const reachRow = document.getElementById("new-reach-tile-row");
+  const defendRow = document.getElementById("new-defend-turns-row");
+  sel.addEventListener("change", () => {
+    reachRow.hidden = sel.value !== "reach";
+    defendRow.hidden = sel.value !== "defend";
+  });
 }
 
 async function createGame() {
@@ -311,21 +322,48 @@ async function createGame() {
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
   const unitComp = document.getElementById("new-unit-composition").value;
+  const winCondition = document.getElementById("new-win-condition").value;
   const errEl = document.getElementById("new-error");
   errEl.hidden = true;
   try {
-    const body = { name, max_players: max };
+    const myTeam = (document.getElementById("new-team").value || "").trim() || undefined;
+    const body = { name, max_players: max, win_condition: winCondition };
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
     if (unitComp) body.unit_composition = unitComp;
+    if (winCondition === "reach") {
+      body.reach_tile = {
+        x: parseInt(document.getElementById("new-reach-x").value) || 14,
+        y: parseInt(document.getElementById("new-reach-y").value) || 14,
+      };
+    }
+    if (winCondition === "defend") {
+      body.defend_turns = parseInt(document.getElementById("new-defend-turns").value) || 10;
+    }
     const g = await api("POST", "/games", body);
+    // Save team choice for rejoin
+    if (myTeam) state.me.team = myTeam;
     // Immediately join as creator
-    await joinGame(g.id);
+    await joinGame(g.id, myTeam);
   } catch (e) {
     errEl.textContent = "创建失败：" + e.message;
     errEl.hidden = false;
   }
 }
+
+// Win condition display labels
+const WIN_CONDITION_LABEL = {
+  rout: "全灭 — 消灭所有敌方单位",
+  seize: "占领 — 占领敌方王座/据点",
+  reach: "到达 — 指定单位到达目标格",
+  defend: "坚守 — 坚持指定回合存活",
+};
+const WIN_REASON_LABEL = {
+  rout: "全部敌方单位已被消灭",
+  seize: "已占领敌方王座/据点",
+  reach: "指定单位已到达目标区域",
+  defend: "坚守回合数已达成，存活方获胜",
+};
 
 async function loadPresets() {
   if (state.presets) return state.presets;
@@ -391,12 +429,68 @@ function updatePresetDescription(sel, target) {
   target.textContent = opt?.dataset?.desc || "";
 }
 
-async function joinGame(gid) {
+// P2.3 — show team selector before joining, then call joinGame
+async function promptJoinGame(gid) {
+  // Fetch lobby info to see available teams
+  let lobby;
+  try {
+    lobby = await api("GET", `/games/${gid}/lobby`);
+  } catch {
+    // fallback: join without team
+    return joinGame(gid);
+  }
+  if (!lobby || !lobby.teams || lobby.teams.length <= 1) {
+    // Free-for-all: no team selection needed
+    return joinGame(gid);
+  }
+  // Show team picker modal
+  const teamNames = lobby.teams.filter(t => !t.team.startsWith("player_"));
+  if (teamNames.length <= 1) {
+    return joinGame(gid);
+  }
+  const chosenTeam = await new Promise((resolve) => {
+    const modal = document.getElementById("generic-modal");
+    const titleEl = document.getElementById("generic-modal-title");
+    const bodyEl = document.getElementById("generic-modal-body");
+    const btnRow = document.getElementById("generic-modal-buttons");
+    titleEl.textContent = "选择队伍";
+    bodyEl.innerHTML = `<p class="muted small">游戏含有队伍模式，请选择你的队伍：</p>`;
+    const list = document.createElement("div");
+    list.className = "choice-list";
+    teamNames.forEach(t => {
+      const colorDot = t.color
+        ? `<span class="swatch" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${playerColorCss(t.color)};vertical-align:middle;margin-right:6px;"></span>`
+        : "";
+      const item = document.createElement("div");
+      item.className = "choice-item";
+      item.innerHTML = `${colorDot}${escapeHtml(t.team)} 队伍 (${t.player_count}人)`;
+      item.addEventListener("click", () => {
+        modal.hidden = true;
+        resolve(t.team);
+      });
+      list.appendChild(item);
+    });
+    bodyEl.appendChild(list);
+    btnRow.innerHTML = `<button class="btn btn-secondary" id="team-picker-free">自由加入 (无队伍)</button>`;
+    btnRow.querySelector("#team-picker-free").addEventListener("click", () => {
+      modal.hidden = true;
+      resolve(null);
+    });
+    modal.hidden = false;
+  });
+  if (!chosenTeam) {
+    return joinGame(gid);
+  }
+  return joinGame(gid, chosenTeam);
+}
+
+async function joinGame(gid, teamOverride) {
   const userName = (state.settings.playerName || "").trim() || `玩家-${Math.floor(Math.random() * 999)}`;
   try {
     const p = await api("POST", `/games/${gid}/join`, {
       user_name: userName,
       color: state.settings.preferredColor || undefined,
+      team: teamOverride || undefined,
     });
     state.me = {
       player_id: p.id, user_name: p.user_name, color: p.color,
@@ -467,8 +561,12 @@ async function enterLobby(gid) {
 
 async function refreshLobby(gid) {
   try {
-    const st = await api("GET", `/games/${gid}/state`);
-    renderLobby(st);
+    // Fetch both the game state (for player list) and lobby info (for teams + win condition)
+    const [st, lobby] = await Promise.all([
+      api("GET", `/games/${gid}/state`),
+      api("GET", `/games/${gid}/lobby`),
+    ]);
+    renderLobby(st, lobby);
     // Auto-start: if creator (seat 0) and 2+ players and still waiting → maybe auto-start
     // We let user click Start manually.
   } catch (e) {
@@ -477,11 +575,13 @@ async function refreshLobby(gid) {
   }
 }
 
-function renderLobby(st) {
+function renderLobby(st, lobby) {
   const status = document.getElementById("lobby-status");
   const list = document.getElementById("lobby-players");
   const startBtn = document.getElementById("lobby-start-btn");
   const addAiBtn = document.getElementById("lobby-add-ai-btn");
+  const teamsEl = document.getElementById("lobby-teams");
+  const winBanner = document.getElementById("lobby-win-banner");
 
   if (st.game.status === "playing") {
     clearInterval(state.lobbyTimer);
@@ -495,6 +595,26 @@ function renderLobby(st) {
 
   const realPlayerCount = st.players.filter(p => !p.is_ai).length;
   status.textContent = `等待玩家加入…（${st.players.length} / ${st.game.status === "waiting" ? "..." : ""}, 真人 ${realPlayerCount}）`;
+
+  // P2.3 — Team aggregation display
+  if (lobby && lobby.teams && lobby.teams.length > 0) {
+    teamsEl.hidden = false;
+    teamsEl.innerHTML = lobby.teams.map(t => {
+      const colorDot = t.color
+        ? `<span class="swatch" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${playerColorCss(t.color)};vertical-align:middle;margin-right:4px;"></span>`
+        : "";
+      const label = t.team.startsWith("player_") ? "自由" : escapeHtml(t.team);
+      return `<span class="lobby-team-chip">${colorDot}${label} ${t.player_count}人</span>`;
+    }).join(" ");
+  } else {
+    teamsEl.hidden = true;
+  }
+
+  // P2.3 — Victory condition banner
+  const wc = lobby?.win_condition || st.game?.win_condition || "rout";
+  const wcLabel = WIN_CONDITION_LABEL[wc] || wc;
+  winBanner.textContent = `🏁 ${wcLabel}`;
+
   list.innerHTML = "";
   for (const p of st.players) {
     const div = document.createElement("div");
@@ -503,6 +623,10 @@ function renderLobby(st) {
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
       <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}</div>
     `;
+    // P2.3 — team badge
+    if (p.team && p.team.startsWith && !p.team.startsWith("player_")) {
+      html += `<span class="team-badge">${escapeHtml(p.team)}</span>`;
+    }
     if (p.is_ai) {
       const kind = p.agent_kind || "rules";
       const pers = p.agent_personality || "balanced";
@@ -673,17 +797,24 @@ function renderGame(st) {
       });
     } else {
       document.getElementById("game-over-modal").hidden = false;
+      const wc = st.game.win_reason || "";
       const alive = st.players.filter(p => p.is_alive);
+      const winnerTeam = st.game.win_reason ? "blue/red" : ""; // server stores _winner_team internally, not on schema
+      // P2.3 — use win_reason for better copy
+      const reasonLabel = WIN_REASON_LABEL[wc] || WIN_REASON_LABEL[st.game.win_condition] || "";
       if (alive.length === 1) {
         document.getElementById("game-over-title").textContent = `🏆 ${alive[0].user_name} 获胜！`;
-        document.getElementById("game-over-body").textContent = `对手全灭。`;
+        document.getElementById("game-over-body").textContent = reasonLabel || `对手全灭。`;
       } else if (alive.length === 0) {
         document.getElementById("game-over-title").textContent = `⚖️ 平局`;
         document.getElementById("game-over-body").textContent = `所有玩家都被淘汰。`;
       } else {
         document.getElementById("game-over-title").textContent = `🏆 游戏结束`;
-        document.getElementById("game-over-body").textContent = `有玩家获胜了。`;
+        document.getElementById("game-over-body").textContent = reasonLabel || `有玩家获胜了。`;
       }
+      // Show the condition + reason detail
+      const condLabel = WIN_CONDITION_LABEL[st.game.win_condition] || "";
+      document.getElementById("game-over-win-reason").textContent = condLabel ? `胜利条件：${condLabel}` : "";
     }
   } else {
     document.getElementById("game-over-modal").hidden = true;
@@ -2171,11 +2302,16 @@ function renderPlayersList(st) {
     const aliveUnits = p.units.filter(u => u.hp > 0).length;
     let badge = "";
     if (p.is_ai) badge = `<span class="ai-badge">AI</span>`;
+    // P2.3 — team label
+    let teamLabel = "";
+    if (p.team && !p.team.startsWith("player_")) {
+      teamLabel = `<span class="team-pill" title="队伍">${escapeHtml(p.team)}</span>`;
+    }
     const gold = p.gold ?? 0;
     div.innerHTML = `
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
       <div class="player-meta">
-        <div class="player-name">${escapeHtml(p.user_name)}${p.is_alive ? "" : " (淘汰)"}${badge}</div>
+        <div class="player-name">${escapeHtml(p.user_name)}${p.is_alive ? "" : " (淘汰)"}${badge}${teamLabel}</div>
         <div class="player-sub">单位 ${aliveUnits}/${p.units.length} · <span class="gold-pill" title="金币">💰 ${gold}</span></div>
       </div>
     `;
@@ -3487,6 +3623,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("new-name").value = state.settings.playerName ? `${state.settings.playerName}的房间` : "";
         document.getElementById("new-error").hidden = true;
         populatePresetSelects().catch(() => {});
+        setupWinConditionUI();
         showView("new-game");
         break;
       case "goto-join-game":

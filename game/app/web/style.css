@@ -1311,6 +1311,74 @@ html, body {
   background: var(--danger);
 }
 
+/* P2.3 — Team chip display in lobby */
+.lobby-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.lobby-team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.lobby-team-chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* P2.3 — Victory condition banner in lobby */
+.lobby-win-banner {
+  padding: 6px 12px;
+  background: rgba(255, 184, 77, 0.12);
+  border: 1px solid rgba(255, 184, 77, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+}
+
+/* P2.3 — Team badge next to player name (lobby) */
+.lobby-player .team-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: rgba(255, 184, 77, 0.12);
+  border: 1px solid rgba(255, 184, 77, 0.3);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+/* P2.3 — Team pill in player list (side panel) */
+#players-list .team-pill {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(255, 184, 77, 0.10);
+  border: 1px solid rgba(255, 184, 77, 0.2);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
 .lobby-player .ai-badge {
   margin-left: auto;
   background: var(--accent);
