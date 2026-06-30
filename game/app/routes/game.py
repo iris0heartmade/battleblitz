@@ -536,6 +536,7 @@ async def list_presets() -> PresetsResponse:
         PresetInfo(
             id=p["id"], name=p["name"], description=p["description"],
             biome=p.get("biome", "grass"),
+            size=int(p.get("size", 15)),
         )
         for p in MAP_PRESETS.values()
     ]

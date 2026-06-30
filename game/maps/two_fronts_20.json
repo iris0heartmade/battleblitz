@@ -1,0 +1,40 @@
+{
+  "id": "two_fronts_20",
+  "name": "双向战线·20×20",
+  "description": "2-3 人东西对峙：河流分两半，各有 2 村落 + 1 佣兵站；2 条渡河道路鼓励穿插",
+  "biome": "grass",
+  "size": 20,
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle",
+    "v": "village",
+    "b": "barracks",
+    "r": "road",
+    "g": "gate"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPPPPPPP",
+    "PPCCvvCCCCCCvvCCPPPP",
+    "PPCrrCCCCCCrrCCCCPPP",
+    "PPCrCCCCCCCCCrCCCCPP",
+    "PPCrCCbCCPPCCbCCCrPP",
+    "PPPrCCPPPPPPCCrCCPPP",
+    "PPCCCCPPFFFFPPCCCCPP",
+    "PPCCCCFFPPPPFFCCPPPP",
+    "PPFFFFPPFFFFPPPPFFPP",
+    "PPFFFFFPPRRRRPPPFFPP",
+    "PPFFFFFPPRRRRPPFFFPP",
+    "PPFFFFFPPRRRRPPPFFPP",
+    "PPFFFFPPFFFFPPPPFFPP",
+    "PPCCCCFFPPPPFFCCPPPP",
+    "PPCCCCPPFFFFPPCCCCPP",
+    "PPPrCCPPPPPPCCrCCPPP",
+    "PPCrCCvCCCCvCCCrCPPP",
+    "PPCrCCCCCCCCCrCCCCPP",
+    "PPCrrCCCCCCrrCCCCPPP",
+    "PPCCvvCCCCCCvvCCPPPP"
+  ]
+}

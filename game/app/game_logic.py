@@ -29,8 +29,8 @@ from app.config import (
     MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
     SKILL_DOUBLE_STRIKE,
     TERRAIN_BARRACKS, TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
-    TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER, TERRAIN_SPAWN_WEIGHTS,
-    TERRAIN_VILLAGE, CASTLE_VAULT,
+    TERRAIN_GATE, TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER,
+    TERRAIN_ROAD, TERRAIN_SPAWN_WEIGHTS, TERRAIN_VILLAGE, CASTLE_VAULT,
 )
 
 UNIT_HEALER = "healer"
@@ -674,7 +674,12 @@ _MAPS_DIR = _Path(__file__).resolve().parent.parent / "maps"
 
 
 def _load_map_presets() -> Dict[str, Dict]:
-    """Load all map preset JSON files from game/maps/ at import time."""
+    """Load all map preset JSON files from game/maps/ at import time.
+
+    Each preset can declare its own 'size' in the JSON; the rows in
+    'layout' must be that size. We no longer hard-require MAP_SIZE=15,
+    so presets can be 15×15 / 20×20 / 30×30 / 45×45 etc.
+    """
     presets: Dict[str, Dict] = {
         # "classic" is special: empty layout → falls back to procedural generation
         "classic": {
@@ -682,6 +687,7 @@ def _load_map_presets() -> Dict[str, Dict]:
             "name": "经典随机",
             "description": "按种子随机生成的标准地图",
             "biome": "grass",
+            "size": MAP_SIZE,
             "layout": [],
         },
     }
@@ -690,8 +696,14 @@ def _load_map_presets() -> Dict[str, Dict]:
             data = _json.loads(path.read_text(encoding="utf-8"))
             layout = data.get("layout", [])
             if layout:
-                assert len(layout) == MAP_SIZE and all(len(r) == MAP_SIZE for r in layout), \
-                    f"Preset {data.get('id', path.stem)} must be {MAP_SIZE}x{MAP_SIZE}"
+                expected = int(data.get("size", MAP_SIZE))
+                if len(layout) != expected or any(len(r) != expected for r in layout):
+                    raise AssertionError(
+                        f"Preset {data.get('id', path.stem)}: layout must be "
+                        f"{expected}x{expected} (got {len(layout)} rows)"
+                    )
+            else:
+                data["size"] = data.get("size", MAP_SIZE)
             # Default biome to "grass" if not specified in JSON
             data.setdefault("biome", "grass")
             presets[data["id"]] = data

@@ -362,7 +362,10 @@ async function populatePresetSelects() {
   for (const m of presets.maps) {
     const opt = document.createElement("option");
     opt.value = m.id;
-    opt.textContent = `${m.name} — ${m.description}`;
+    // P0.4: surface the grid size in the option text so the user
+    // can pick a small / medium / huge map at a glance.
+    const sizeLabel = m.size ? ` [${m.size}×${m.size}]` : "";
+    opt.textContent = `${m.name}${sizeLabel} — ${m.description}`;
     opt.dataset.desc = m.description;
     mapSel.appendChild(opt);
   }

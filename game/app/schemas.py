@@ -67,6 +67,7 @@ class PresetInfo(BaseModel):
     name: str
     description: str
     biome: Optional[str] = None  # "grass" | "snow" | "desert" (preset's visual theme)
+    size: int = 15  # Edge length of the square grid (P0.4+ supports 15–45)
 
 
 class PresetsResponse(BaseModel):
