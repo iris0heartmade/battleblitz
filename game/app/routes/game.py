@@ -260,6 +260,29 @@ async def _start_battle_internal(
                 t.occupied_unit_id = u.id
                 break
 
+    # P2.3 — convert the reach-mode target (x, y) that was stashed
+    # on the Game row at create-game time into a real Tile FK. We do
+    # this AFTER the tiles have been created so we can look up the
+    # tile_id reliably. If the (x, y) doesn't exist (bad preset or
+    # someone set reach on a 15x15 map pointing at (99, 99)) we
+    # just clear the pending value and the game falls back to rout
+    # when no team has units (the existing default).
+    if game.win_condition == "reach":
+        xy = getattr(game, "_pending_reach_xy", None)
+        if xy is not None:
+            for t in tiles:
+                if t.x == xy[0] and t.y == xy[1]:
+                    game.reach_tile_id = t.id
+                    break
+        if game.reach_tile_id is None:
+            # No valid target found — quietly demote to rout so the
+            # game still ends in a sane way.
+            game.win_condition = "rout"
+        # Clean up the transient attribute so it never reaches the
+        # session and pollutes future model serializations.
+        if hasattr(game, "_pending_reach_xy"):
+            del game._pending_reach_xy
+
     game.status = "playing"
     game.current_player_index = 0
     for p in players:

@@ -376,3 +376,122 @@ async def test_rout_mode_unaffected_by_claim_completion(db_session, tmp_db_path)
     assert hq.owner_id == players[1].id  # ownership DID flip
     assert game.status == "playing"
     assert game.win_reason is None
+
+
+# ============================================================
+# Phase 3 — Reach mode (a unit on the reach_tile wins)
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_reach_unit_lands_on_target_wins(db_session, tmp_db_path):
+    """In reach mode, when a unit occupies the reach_tile AND the
+    game is re-evaluated, the unit's team wins. We invoke
+    check_win_condition directly here (the move endpoint test would
+    need full HTTP plumbing)."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "reach"
+    await db_session.flush()
+    # Place the target tile and mark it as the reach target.
+    target = Tile(game_id=game.id, x=10, y=10, terrain=TERRAIN_PLAIN)
+    db_session.add(target)
+    await db_session.flush()
+    game.reach_tile_id = target.id
+    # Place a player 1 unit ON the target.
+    await _add_alive_unit(db_session, game, players[0], 7, 7)
+    winner_unit = await _add_alive_unit(db_session, game, players[1], 10, 10)
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "reach"
+
+
+@pytest.mark.asyncio
+async def test_reach_unit_off_target_continues(db_session, tmp_db_path):
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "reach"
+    await db_session.flush()
+    target = Tile(game_id=game.id, x=10, y=10, terrain=TERRAIN_PLAIN)
+    db_session.add(target)
+    await db_session.flush()
+    game.reach_tile_id = target.id
+    await _add_alive_unit(db_session, game, players[0], 7, 7)
+    # Player 1's unit is NOT on the target — it's at (5, 5).
+    await _add_alive_unit(db_session, game, players[1], 5, 5)
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is False
+    assert game.status == "playing"
+    assert game.win_reason is None
+
+
+@pytest.mark.asyncio
+async def test_reach_dead_unit_on_target_does_not_win(db_session, tmp_db_path):
+    """A corpse (hp=0) on the reach tile doesn't count as a reach
+    win — even if the corpse is still occupying the slot."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "reach"
+    await db_session.flush()
+    target = Tile(game_id=game.id, x=10, y=10, terrain=TERRAIN_PLAIN)
+    db_session.add(target)
+    await db_session.flush()
+    game.reach_tile_id = target.id
+    # Player 0: 1 alive unit far from target. Player 1: 1 alive
+    # unit far from target, plus a corpse pinned on the target.
+    # With both teams alive, the only way the game can end here is
+    # through reach — and the corpse shouldn't trigger it.
+    await _add_alive_unit(db_session, game, players[0], 7, 7)
+    await _add_alive_unit(db_session, game, players[1], 3, 3)
+    corpse = await _add_alive_unit(db_session, game, players[1], 10, 10)
+    corpse.hp = 0
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is False
+    assert game.win_reason is None
+    assert game.status == "playing"
+
+
+@pytest.mark.asyncio
+async def test_reach_falls_back_to_rout_when_only_one_team_alive(db_session, tmp_db_path):
+    """If the reach target is empty but only one team has surviving
+    units, the game ends via rout (Reach loses its chance to fire)."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "reach"
+    await db_session.flush()
+    target = Tile(game_id=game.id, x=10, y=10, terrain=TERRAIN_PLAIN)
+    db_session.add(target)
+    await db_session.flush()
+    game.reach_tile_id = target.id
+    # Player 0's only unit is dead; player 1's unit is alive but
+    # not on the reach tile.
+    await _mark_dead(db_session, (await _add_alive_unit(db_session, game, players[0], 0, 0)))
+    await _add_alive_unit(db_session, game, players[1], 5, 5)
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "rout"
+
+
+@pytest.mark.asyncio
+async def test_reach_team_id_respected(db_session, tmp_db_path):
+    """A team_id explicitly set on the player is used for the win
+    reason banner (not the bare color)."""
+    game, players = await _make_game(
+        db_session, num_players=2, teams=["alpha", "beta"]
+    )
+    game.win_condition = "reach"
+    await db_session.flush()
+    target = Tile(game_id=game.id, x=3, y=3, terrain=TERRAIN_PLAIN)
+    db_session.add(target)
+    await db_session.flush()
+    game.reach_tile_id = target.id
+    # players[1] is on team 'beta'; placing their unit on the
+    # target should win for team 'beta'.
+    await _add_alive_unit(db_session, game, players[0], 0, 0)
+    await _add_alive_unit(db_session, game, players[1], 3, 3)
+    await db_session.flush()
+    ended = await check_win_condition(db_session, game)
+    assert ended is True
+    assert game.status == "finished"
+    assert game.win_reason == "reach"

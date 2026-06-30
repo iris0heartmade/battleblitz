@@ -1,0 +1,50 @@
+{
+  "id": "reach_heaven_25",
+  "name": "抵达天堂·25×25",
+  "description": "Reach 模式：单位冲到对方城堡后角即胜",
+  "biome": "grass",
+  "size": 25,
+  "win_condition": "reach",
+  "reach_tile": {
+    "x": 2,
+    "y": 2
+  },
+  "chars": {
+    "P": "plain",
+    "F": "forest",
+    "M": "mountain",
+    "R": "river",
+    "C": "castle",
+    "v": "village",
+    "b": "barracks",
+    "r": "road",
+    "g": "gate"
+  },
+  "layout": [
+    "PPPPPPPPPPPPPPPPPPPPPPPPP",
+    "PvCCCCCCCCCCCCCCCCCCCCCCP",
+    "PCCCCCCCCCCCCCCCCCCCCCCCP",
+    "PCCCCCCCCCCbCCCCCCCCCCCCP",
+    "PCCCCCCCCCCCCCCCCCCCCCCCP",
+    "PCCCCCCCCCCCCCCCCCCCCFFFP",
+    "PCCCCCCCCCCCCCCCCCCCFFFFP",
+    "PCCCCCCCCCCCCCCCCCCFFFFFP",
+    "PCCCCCCCCCCCCCCCCCCFFFFFP",
+    "PCCCCCCCCCCCCCCCCCCFFFFFP",
+    "PPCCCCCCCCCCCCCCCCFFFFFFP",
+    "PFFCCCCCCCCCCCCCCCFFFFFFP",
+    "PFFCCCCCCCCCCCCCCCFFFFFFP",
+    "PFFCCCCCCCCCCCCCCFFFFFFFP",
+    "PPFFCCCMMMMCCCCFFFFFFFFFP",
+    "PFFCCCMMMMCCCCFFFFFFFFFPP",
+    "PFFCCCMMMMCCCCFFFFFFFFFPP",
+    "PFFCCCMMMMCCCCFFFFFFFFFPP",
+    "PFFCCCMMMMCCCCFFFFFFFFFPP",
+    "PFFCCCCCCCCCCCFFFFFFFFFFP",
+    "PPCCCCCCCCCCCCCFFFFFFFFFF",
+    "PPCvCCCCCCCCCCFFFFFFFFFFP",
+    "PCCCCCCCCCCCCCFFFFFFFFFPP",
+    "PCCCCCCCCCCCCCCCCCCCCCCPP",
+    "PPPPPPPPPPPPPPPPPPPPPPPPP"
+  ]
+}

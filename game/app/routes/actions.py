@@ -31,6 +31,7 @@ from app.game_logic import (
     award_exp,
     calculate_damage,
     can_attack_from_position,
+    check_win_condition,
     claim_castle_if_present,
     cleanup_dead_units,
     unit_attack_range,
@@ -259,6 +260,14 @@ async def move_unit(
     _log(session, game, player, "move",
          f"{unit.name} moved to ({target[0]}, {target[1]}) cost={cost}"
          + (" [captured castle]" if castle_captured else ""))
+
+    # P2.3 — Reach victory check. The unit just landed on (to_x, to_y);
+    # if the game is in "reach" mode and that tile is the reach tile,
+    # see if the unit is alive and triggers an instant win. Rout-style
+    # re-evaluation handles the "everybody died" fallback if multiple
+    # teams all wiped at the same time.
+    if game.win_condition == "reach" and game.reach_tile_id is not None:
+        await check_win_condition(session, game)
 
     # Publish to in-process event bus (consumed by AI replay / commentary / WS gateway)
     await bus.publish(GameEvent(
