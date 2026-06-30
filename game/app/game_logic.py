@@ -22,20 +22,21 @@ from app.classes.units import (
 )
 from app.config import (
     AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN,
-    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS,
+    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS, CLAIM_TURNS_REQUIRED,
     CRIT_MULTIPLIER, CRIT_PER_LEVEL,
     EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
     LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAX_LEVEL, MAP_SIZE,
     MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
     SKILL_DOUBLE_STRIKE,
-    TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
+    TERRAIN_BARRACKS, TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
     TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER, TERRAIN_SPAWN_WEIGHTS,
+    TERRAIN_VILLAGE, CASTLE_VAULT,
 )
 
 UNIT_HEALER = "healer"
 UNIT_KNIGHT = "knight"
 
-from app.models import ActionLog, Game, Player, Tile, Unit
+from app.models import ActionLog, ClaimSession, Game, Player, Tile, Unit
 from app.utils import bfs_reachable, has_line_of_sight, manhattan, pathfind
 
 
@@ -429,6 +430,9 @@ async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> Li
         .where(Tile.occupied_unit_id.in_(dead_ids))
         .values(occupied_unit_id=None)
     )
+    # Cancel any pending claim sessions owned by a dying unit.
+    for u in dead:
+        await cancel_claim_sessions_for_unit(session, u.id)
     for u in dead:
         await session.delete(u)
     return dead_ids
@@ -505,6 +509,97 @@ def claim_castle_if_present(tile: Tile, unit: Unit) -> bool:
         return False
     tile.owner_id = unit.player_id
     return True
+
+
+# ============================================================
+# Claim mechanic (P0.4) — see docs/superpowers/specs/2026-06-30-
+# terrain-economy-claim-spec.md §4.
+# ============================================================
+
+# Terrains a unit can perform the active `claim` action on.
+CLAIMABLE_TERRAINS = frozenset({TERRAIN_VILLAGE, TERRAIN_BARRACKS, CASTLE_VAULT})
+
+
+def is_claimable(terrain: str) -> bool:
+    return terrain in CLAIMABLE_TERRAINS
+
+
+async def check_pending_claims(
+    session: AsyncSession,
+    game: Game,
+) -> List[int]:
+    """Resolve any ClaimSession whose completes_turn <= current turn.
+
+    For each completed session, flip the tile's owner_id to the
+    target_player, write an ActionLog, and delete the session. Returns
+    the list of tile_ids whose ownership changed so the caller can
+    emit events.
+
+    Called from end_turn after the round resolves and the turn
+    number has been bumped. Sessions whose `completes_turn` has
+    passed are finalised here — this is the 1-turn lag rule:
+    ownership flips in turn N+1, but the new owner only starts
+    receiving income at the start of turn N+2.
+    """
+    rows = (
+        await session.execute(
+            select(ClaimSession).where(
+                ClaimSession.game_id == game.id,
+                ClaimSession.completes_turn <= game.turn_number,
+            )
+        )
+    ).scalars().all()
+
+    flipped: List[int] = []
+    for cs in rows:
+        tile = await session.get(Tile, cs.tile_id)
+        if tile is None:
+            await session.delete(cs)
+            continue
+        unit = await session.get(Unit, cs.unit_id)
+        # If the unit died, do NOT flip ownership.
+        if unit is None or unit.hp <= 0:
+            await session.delete(cs)
+            continue
+        # If the unit moved off the tile, do NOT flip ownership.
+        if (unit.x, unit.y) != (tile.x, tile.y):
+            await session.delete(cs)
+            continue
+        old_owner = tile.owner_id
+        tile.owner_id = cs.target_player_id
+        flipped.append(tile.id)
+        session.add(ActionLog(
+            game_id=game.id,
+            turn_number=game.turn_number,
+            player_id=cs.target_player_id,
+            action_type="claim_complete",
+            description=(
+                f"占领完成：({tile.x},{tile.y}) 由阵营 {old_owner or '无主'}"
+                f" 变更为阵营 {cs.target_player_id}"
+            ),
+        ))
+        await session.delete(cs)
+    return flipped
+
+
+async def cancel_claim_sessions_for_unit(
+    session: AsyncSession,
+    unit_id: int,
+) -> int:
+    """Delete any active ClaimSession for a given unit. Returns count.
+
+    Called when the unit dies, moves, or is removed for any reason.
+    """
+    rows = (
+        await session.execute(
+            select(ClaimSession).where(ClaimSession.unit_id == unit_id)
+        )
+    ).scalars().all()
+    n = 0
+    for cs in rows:
+        await session.delete(cs)
+        n += 1
+    return n
 
 
 async def check_victory_by_castles(

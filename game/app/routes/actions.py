@@ -42,6 +42,8 @@ from app.log_format import fmt_attack, fmt_move, fmt_wait
 from app.schemas import (
     AttackRequest,
     AttackResult,
+    ClaimRequest,
+    ClaimResult,
     DamageInfo,
     MoveRequest,
     MoveResult,
@@ -231,6 +233,9 @@ async def move_unit(
         if (t.x, t.y) == target:
             t.occupied_unit_id = unit.id
     unit.x, unit.y = target
+    # P0.4 claim: moving cancels any active claim session for this unit.
+    from app.game_logic import cancel_claim_sessions_for_unit
+    await cancel_claim_sessions_for_unit(session, unit.id)
     # Spend movement points; unit can still attack (or continue moving for
     # classes with can_move_after_action).
     unit.mp = max(0, unit.mp - cost)
@@ -554,3 +559,145 @@ async def wait_action(
         player.id, game_id, unit.id,
     )
     return WaitResult(unit_id=unit.id, description=fmt_wait(unit))
+
+
+# ============================================================
+# Claim (P0.4)
+# ============================================================
+
+@router.post("/{game_id}/claim", response_model=ClaimResult)
+async def claim_tile(
+    game_id: int,
+    body: ClaimRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ClaimResult:
+    """Start or complete a 2-turn ownership claim on a village /
+    barracks / castle_vault tile.
+
+    Behaviour (see docs/superpowers/specs/2026-06-30-terrain-economy-
+    claim-spec.md §4):
+      - Turn N: this call. Creates ClaimSession(started_turn=N,
+        completes_turn=N+1). Ownership is NOT yet transferred.
+      - Turn N+1: this call again. check_pending_claims() runs
+        after end_turn resolves and flips ownership. The new owner
+        starts receiving income from the start of turn N+2.
+      - The unit may NOT move between the two calls; if it does,
+        the session is cancelled silently.
+    """
+    from app.config import CLAIM_TURNS_REQUIRED
+    from app.game_logic import (
+        cancel_claim_sessions_for_unit,
+        check_pending_claims,
+        is_claimable,
+    )
+    from app.models import ClaimSession
+
+    game = await _load_active_game(session, game_id)
+    player = await _ensure_current_player(session, game, body.player_id)
+    unit = await _load_unit(session, body.unit_id)
+    if unit.player_id != player.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
+    if unit.has_acted:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
+
+    # The unit must be standing on a claim-eligible tile.
+    tile = (
+        await session.execute(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.x == unit.x,
+                Tile.y == unit.y,
+            )
+        )
+    ).scalars().first()
+    if tile is None or not is_claimable(tile.terrain):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"当前位置 ({unit.x},{unit.y}) 不可占领（地形 {tile.terrain if tile else 'none'}）",
+        )
+    if tile.owner_id == player.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"该地块已归你所有，无需再占领",
+        )
+
+    # Look up any existing session for THIS (game, tile). Per spec only
+    # one active session per tile at a time.
+    existing = (
+        await session.execute(
+            select(ClaimSession).where(
+                ClaimSession.game_id == game_id,
+                ClaimSession.tile_id == tile.id,
+            )
+        )
+    ).scalars().first()
+
+    if existing is None:
+        # First turn: start a new session.
+        cs = ClaimSession(
+            game_id=game_id,
+            tile_id=tile.id,
+            unit_id=unit.id,
+            target_player_id=player.id,
+            started_turn=game.turn_number,
+            completes_turn=game.turn_number + CLAIM_TURNS_REQUIRED - 1,
+        )
+        session.add(cs)
+        # Lock the unit in place: mark has_acted and drain MP.
+        unit.has_acted = True
+        unit.mp = 0
+        _log(session, game, player, "claim_start",
+             f"{unit.name} 开始占领 ({tile.x},{tile.y})（还需 {CLAIM_TURNS_REQUIRED - 1} 回合）")
+        audit.info(
+            "USER_ACTION | user=player_%d | game=%d | action=CLAIM | result=START | "
+            "unit=%d | tile=(%d,%d) | completes_turn=%d",
+            player.id, game_id, unit.id, tile.x, tile.y, cs.completes_turn,
+        )
+        return ClaimResult(
+            started=True,
+            completes_turn=cs.completes_turn,
+            description=f"开始占领 ({tile.x},{tile.y})，还需 {CLAIM_TURNS_REQUIRED - 1} 回合",
+        )
+
+    # Second+ call. Confirm the same unit is still on the tile and
+    # the target is still the same player; if so, force completion
+    # immediately (bypasses the auto check at end_turn so the player
+    # gets instant feedback).
+    if existing.unit_id != unit.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "该地块已有占领在进行中（来自其他单位）",
+        )
+    if existing.target_player_id != player.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "该地块的占领目标不是本阵营",
+        )
+    if (unit.x, unit.y) != (tile.x, tile.y):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "该单位已离开占领位置，请重新开始",
+        )
+
+    # Force completion: flip ownership and clear the session now.
+    old_owner = tile.owner_id
+    tile.owner_id = player.id
+    await session.delete(existing)
+    unit.has_acted = True
+    unit.mp = 0
+    _log(session, game, player, "claim_complete",
+         f"{unit.name} 完成占领 ({tile.x},{tile.y})（原归属：{old_owner or '无主'}）")
+    audit.info(
+        "USER_ACTION | user=player_%d | game=%d | action=CLAIM | result=COMPLETE | "
+        "unit=%d | tile=(%d,%d) | old_owner=%s",
+        player.id, game_id, unit.id, tile.x, tile.y, old_owner,
+    )
+    return ClaimResult(
+        completed=True,
+        new_owner_id=player.id,
+        completes_turn=existing.completes_turn,
+        description=(
+            f"占领完成：({tile.x},{tile.y}) 现在归属于 {player.user_name}。"
+            f"下一回合开始时可收取金币。"
+        ),
+    )

@@ -179,6 +179,22 @@ class AttackRequest(BaseModel):
     target_id: int
 
 
+class ClaimRequest(BaseModel):
+    """P0.4 — body of POST /games/{id}/claim. Unit must be standing on
+    a claim-eligible tile (village / barracks / castle_vault)."""
+    player_id: int
+    unit_id: int
+
+
+class ClaimResult(BaseModel):
+    ok: bool = True
+    started: bool = False        # True if this call started a new session
+    completed: bool = False      # True if this call flipped ownership
+    new_owner_id: Optional[int] = None
+    completes_turn: int = 0
+    description: str
+
+
 class SkillRequest(BaseModel):
     player_id: int
     unit_id: int

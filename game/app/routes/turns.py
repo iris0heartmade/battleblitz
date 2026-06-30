@@ -35,7 +35,7 @@ from app.config import (
     TURNS_CHECK_INTERVAL_SECONDS,
 )
 from app.database import AsyncSessionLocal, get_session
-from app.game_logic import ai_take_turn, ai_take_one_action, apply_end_of_turn
+from app.game_logic import ai_take_turn, ai_take_one_action, apply_end_of_turn, check_pending_claims
 from app.agent.integration import dispatch_ai_turn
 from app.logging_config import (
     collect_health_metrics,
@@ -182,6 +182,10 @@ async def end_turn(
             description=fmt_end_turn(player, acted_count),
         )
     )
+
+    # P0.4: resolve any claim sessions whose completes_turn has arrived.
+    # Runs at every end_turn; only sessions whose timer expired will flip.
+    await check_pending_claims(session, game)
     audit.info(
         "USER_ACTION | user=player_%d | game=%d | action=END_TURN | result=SUCCESS | "
         "seat=%d | acted_count=%d | required=%d | turn=%d",
