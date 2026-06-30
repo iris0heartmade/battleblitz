@@ -20,6 +20,19 @@ TERRAIN_FOREST: Final[str] = "forest"
 TERRAIN_MOUNTAIN: Final[str] = "mountain"
 TERRAIN_RIVER: Final[str] = "river"
 TERRAIN_CASTLE: Final[str] = "castle"
+# New terrains (2026-06-30 P0.4)
+TERRAIN_VILLAGE: Final[str] = "village"   # 村落
+TERRAIN_BARRACKS: Final[str] = "barracks" # 佣兵站
+TERRAIN_ROAD: Final[str] = "road"         # 道路（MP 减半）
+TERRAIN_GATE: Final[str] = "gate"         # 关卡（敌方阻拦，不可走）
+
+# Castle interior sub-features (stored in Tile.subtype column)
+CASTLE_FLOOR: Final[str] = "castle_floor"     # 地板
+CASTLE_WALL: Final[str] = "castle_wall"       # 墙壁（不可走）
+CASTLE_THRONE: Final[str] = "castle_throne"   # 王座
+CASTLE_STAIRS: Final[str] = "castle_stairs"   # 阶梯
+CASTLE_VAULT: Final[str] = "castle_vault"     # 金库
+CASTLE_DOOR: Final[str] = "castle_door"       # 门扉
 
 TERRAIN_TYPES: Final[Tuple[str, ...]] = (
     TERRAIN_PLAIN,
@@ -27,16 +40,44 @@ TERRAIN_TYPES: Final[Tuple[str, ...]] = (
     TERRAIN_MOUNTAIN,
     TERRAIN_RIVER,
     TERRAIN_CASTLE,
+    TERRAIN_VILLAGE,
+    TERRAIN_BARRACKS,
+    TERRAIN_ROAD,
+    TERRAIN_GATE,
 )
 
-# Tile movement cost when entering the tile.
-# Castle is impassable for non-owner units (cost handled in game_logic).
+CASTLE_SUBTYPES: Final[Tuple[str, ...]] = (
+    CASTLE_FLOOR,
+    CASTLE_WALL,
+    CASTLE_THRONE,
+    CASTLE_STAIRS,
+    CASTLE_VAULT,
+    CASTLE_DOOR,
+)
+
+# Tile movement cost when entering the tile, expressed as INTEGER × 2 so
+# we never hit float precision in the BFS pathfinder. Road costs `1`
+# (i.e. half a plain tile). Blockers cost a high sentinel so the BFS
+# filters them out before consulting terrain_passable().
+#
+# Real cost = integer_cost / 2.
 TERRAIN_MOVE_COST: Final[Dict[str, int]] = {
-    TERRAIN_PLAIN: 1,
-    TERRAIN_FOREST: 2,
-    TERRAIN_MOUNTAIN: 3,
-    TERRAIN_RIVER: 3,
-    TERRAIN_CASTLE: 1,  # owned castle counts as plain; enemy castle blocked elsewhere
+    TERRAIN_PLAIN: 2,
+    TERRAIN_FOREST: 4,
+    TERRAIN_MOUNTAIN: 6,
+    TERRAIN_RIVER: 6,
+    TERRAIN_CASTLE: 2,
+    TERRAIN_VILLAGE: 2,
+    TERRAIN_BARRACKS: 2,
+    TERRAIN_ROAD: 1,   # road = half cost
+    TERRAIN_GATE: 9999,  # impassable
+    # Castle sub-features
+    CASTLE_FLOOR: 2,
+    CASTLE_WALL: 9999,   # impassable
+    CASTLE_THRONE: 2,
+    CASTLE_STAIRS: 2,
+    CASTLE_VAULT: 2,
+    CASTLE_DOOR: 2,
 }
 
 # Defense bonus added to a defender's DEF when calculating damage.
@@ -45,17 +86,65 @@ TERRAIN_DEF_BONUS: Final[Dict[str, int]] = {
     TERRAIN_FOREST: 2,
     TERRAIN_MOUNTAIN: 3,
     TERRAIN_RIVER: 0,
-    TERRAIN_CASTLE: 5,
+    TERRAIN_CASTLE: 5,  # legacy; new code uses CASTLE_SUBTYPE_DEF_BONUS
+    TERRAIN_VILLAGE: 0,
+    TERRAIN_BARRACKS: 1,
+    TERRAIN_ROAD: 0,
+    TERRAIN_GATE: 0,
+    # Castle sub-features: throne is the safest spot, vault is also strong
+    CASTLE_FLOOR: 3,
+    CASTLE_WALL: 99,   # blocking tile, never actually defends
+    CASTLE_THRONE: 6,
+    CASTLE_STAIRS: 3,
+    CASTLE_VAULT: 5,
+    CASTLE_DOOR: 4,
 }
+
+# Subset of terrains that produce gold income for their owner.
+INCOME_TERRAINS: Final[Tuple[str, ...]] = (
+    TERRAIN_VILLAGE,
+    TERRAIN_BARRACKS,
+    CASTLE_VAULT,
+)
+
+# Per-turn gold income by terrain (occupying player gains this much at
+# the start of their turn). Placeholder values — owner will tune later.
+INCOME_PER_TURN: Final[Dict[str, int]] = {
+    TERRAIN_VILLAGE: 50,
+    TERRAIN_BARRACKS: 100,
+    CASTLE_VAULT: 150,
+}
+
+# Recruit cost (gold) for spawning a new unit at an owned barracks.
+# Placeholder values.
+RECRUIT_COST: Final[Dict[str, int]] = {
+    "swordsman": 200,
+    "archer":    250,
+    "knight":    400,
+    "warlock":   300,
+    "healer":    350,
+}
+
+# Per-player cap on owned vaults (one king-of-the-hill at a time).
+MAX_VAULT_PER_PLAYER: Final[int] = 1
 
 # Relative spawn weight for procedural map generation (excluding castle).
 # More weights = more of that terrain. Tuned for ~30% passable forest/mountain mix.
 TERRAIN_SPAWN_WEIGHTS: Final[Dict[str, int]] = {
-    TERRAIN_PLAIN: 60,
-    TERRAIN_FOREST: 18,
-    TERRAIN_MOUNTAIN: 10,
-    TERRAIN_RIVER: 12,
+    TERRAIN_PLAIN: 55,
+    TERRAIN_FOREST: 14,
+    TERRAIN_MOUNTAIN: 8,
+    TERRAIN_RIVER: 10,
+    TERRAIN_VILLAGE: 5,
+    TERRAIN_BARRACKS: 2,
+    TERRAIN_ROAD: 5,
+    TERRAIN_GATE: 1,  # rare; gates are enemy-built blockers, often placed by hand
 }
+
+# Claim mechanic: units must stand on a claim-eligible tile for this many
+# of their own turns (the unit performs the claim action each turn) before
+# ownership flips.
+CLAIM_TURNS_REQUIRED: Final[int] = 2
 
 # Castle spawn config: one castle per player, on the map's symmetric edges.
 CASTLES_PER_GAME: Final[int] = 4  # max players; we generate up to 4 castles

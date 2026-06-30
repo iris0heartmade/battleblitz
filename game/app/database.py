@@ -100,6 +100,46 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN mdef INTEGER NOT NULL DEFAULT 0"
         ))
         logger.info("Migration: added units.mdef")
+    # 2026-06-30: P0.4 — players.gold, tiles.subtype for the economy +
+    # castle-sub-features feature. The `claim_sessions` table is created
+    # by create_all() above (it's a new table, not an ALTER on existing).
+    player_rows = sync_conn.execute(text("PRAGMA table_info(players)")).fetchall()
+    player_cols = {r[1] for r in player_rows}
+    if "gold" not in player_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE players ADD COLUMN gold INTEGER NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added players.gold")
+    tile_rows = sync_conn.execute(text("PRAGMA table_info(tiles)")).fetchall()
+    tile_cols = {r[1] for r in tile_rows}
+    if "subtype" not in tile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE tiles ADD COLUMN subtype VARCHAR(16)"
+        ))
+        logger.info("Migration: added tiles.subtype")
+    # confirm claim_sessions table exists (create_all covers new games;
+    # this handles existing DBs that were initialized before the table
+    # was declared in models.py).
+    cs_rows = sync_conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='claim_sessions'"
+    )).fetchall()
+    if not cs_rows:
+        sync_conn.execute(text("""
+            CREATE TABLE claim_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+                tile_id INTEGER NOT NULL REFERENCES tiles(id) ON DELETE CASCADE,
+                unit_id INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+                target_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                started_turn INTEGER NOT NULL,
+                completes_turn INTEGER NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+        """))
+        sync_conn.execute(text(
+            "CREATE INDEX ix_claim_sessions_game_id ON claim_sessions(game_id)"
+        ))
+        logger.info("Migration: created claim_sessions table")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

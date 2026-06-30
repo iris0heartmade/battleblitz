@@ -109,6 +109,9 @@ class Player(Base):
     # Personality preset name (e.g. "aggressive" / "defensive" / "balanced"
     # / "trickster"); only used when agent_kind == "llm".
     agent_personality: Mapped[str] = mapped_column(String(32), nullable=False, default="balanced")
+    # Per-game gold (P0.4 economy). Reset to 0 at game start; grows via
+    # income from owned income-yielding terrains; spent on recruit.
+    gold: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     game: Mapped["Game"] = relationship("Game", back_populates="players")
     units: Mapped[List["Unit"]] = relationship(
@@ -195,6 +198,11 @@ class Tile(Base):
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)
     terrain: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Castle sub-feature (P0.4). NULL on legacy tiles or non-castle tiles;
+    # one of CASTLE_SUBTYPES for castle_* tiles. Used for layout rules
+    # (castle_wall blocks; castle_door is the entry; castle_throne is
+    # the future Seize objective; castle_vault yields income).
+    subtype: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     owner_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("players.id", ondelete="SET NULL"), nullable=True
     )
@@ -207,6 +215,50 @@ class Tile(Base):
     __table_args__ = (
         UniqueConstraint("game_id", "x", "y", name="uq_tile_coord_per_game"),
         Index("ix_tile_game_coord", "game_id", "x", "y"),
+    )
+
+
+# ============================================================
+# ClaimSession (active claim mechanic — P0.4)
+# ============================================================
+# A unit performing a `claim` action parks here for CLAIM_TURNS_REQUIRED
+# full player-turns. While parked, the unit cannot move. The unit is
+# removed from this table when ownership flips, the unit dies, or the
+# unit moves away (cancelled). Only one open session per tile at a time.
+
+class ClaimSession(Base):
+    __tablename__ = "claim_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    game_id: Mapped[int] = mapped_column(
+        ForeignKey("games.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tile_id: Mapped[int] = mapped_column(
+        ForeignKey("tiles.id", ondelete="CASCADE"), nullable=False
+    )
+    unit_id: Mapped[int] = mapped_column(
+        ForeignKey("units.id", ondelete="CASCADE"), nullable=False
+    )
+    target_player_id: Mapped[int] = mapped_column(
+        ForeignKey("players.id", ondelete="CASCADE"), nullable=False
+    )
+    # The turn in which the session was started (for diagnostics / UI).
+    started_turn: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The turn number at which the session completes and ownership flips.
+    completes_turn: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_utcnow
+    )
+
+    game: Mapped["Game"] = relationship("Game")
+    tile: Mapped["Tile"] = relationship("Tile")
+    unit: Mapped["Unit"] = relationship("Unit")
+    target_player: Mapped["Player"] = relationship("Player")
+
+    __table_args__ = (
+        # Only one active session per (game, tile).
+        UniqueConstraint("game_id", "tile_id", "claim_sessions_uq_active",
+                         name=None) if False else None,
     )
 
 
