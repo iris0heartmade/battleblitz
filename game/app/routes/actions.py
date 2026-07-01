@@ -197,15 +197,25 @@ async def move_unit(
     if path is None or path[-1] != target:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目的地不可达")
 
-    # Compute actual cost along the chosen path
+    # Compute actual cost along the chosen path.
+    # NOTE: TERRAIN_MOVE_COST values are DOUBLED integers (see config.py
+    # comment: "Real cost = integer_cost / 2").  We keep the doubled value
+    # for the comparison / deduction so we never lose the half-MP that
+    # road tiles (cost=1) consume.
     from app.config import TERRAIN_MOVE_COST
-    cost = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
+    cost_x2 = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
 
-    # Enforce MP budget
-    if cost > unit.mp:
+    # Enforce MP budget — double unit.mp to match the doubled cost scale.
+    if cost_x2 > unit.mp * 2:
+        # Show the user a human-friendly real-MP string in the error.
+        need_real = cost_x2 // 2
+        if cost_x2 % 2:
+            need_str = f"{need_real}.5"
+        else:
+            need_str = str(need_real)
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"移动力不足（需要 {cost}，剩余 {unit.mp}）",
+            f"移动力不足（需要 {need_str}，剩余 {unit.mp}）",
         )
 
     # Apply move: free old tile, occupy new tile
@@ -218,9 +228,11 @@ async def move_unit(
     # P0.4 claim: moving cancels any active claim session for this unit.
     from app.game_logic import cancel_claim_sessions_for_unit
     await cancel_claim_sessions_for_unit(session, unit.id)
-    # Spend movement points; unit can still attack (or continue moving for
-    # classes with can_move_after_action).
-    unit.mp = max(0, unit.mp - cost)
+    # Spend movement points (convert back from doubled to real MP).
+    # Floor division means the half-MP from road tiles is free — a small
+    # generosity that makes roads feel good without breaking balance.
+    spent_mp = cost_x2 // 2
+    unit.mp = max(0, unit.mp - spent_mp)
     # Track move separately from has_acted so the unit can still attack/heal
     # this turn after moving. has_moved blocks further moves; has_acted blocks
     # further non-move actions.
@@ -236,7 +248,7 @@ async def move_unit(
                 break
 
     _log(session, game, player, "move",
-         f"{unit.name} moved to ({target[0]}, {target[1]}) cost={cost}"
+         f"{unit.name} moved to ({target[0]}, {target[1]}) cost={spent_mp}"
          + (" [captured castle]" if castle_captured else ""))
 
     # P2.3 — Reach victory check. The unit just landed on (to_x, to_y);
@@ -254,7 +266,7 @@ async def move_unit(
         context={
             "from_x": path[0][0], "from_y": path[0][1],
             "to_x": target[0], "to_y": target[1],
-            "mp_cost": cost, "mp_remaining": unit.mp,
+            "mp_cost": spent_mp, "mp_remaining": unit.mp,
             "castle_captured": castle_captured,
         },
     ))
@@ -263,16 +275,16 @@ async def move_unit(
         "USER_ACTION | user=player_%d | game=%d | action=MOVE | result=SUCCESS | "
         "unit=%d | from=(%d,%d) | to=(%d,%d) | cost=%d | castle_captured=%s",
         player.id, game_id, unit.id, path[0][0], path[0][1],
-        target[0], target[1], cost, castle_captured,
+        target[0], target[1], spent_mp, castle_captured,
     )
 
     return MoveResult(
         unit_id=unit.id,
         from_x=path[0][0], from_y=path[0][1],
         to_x=target[0], to_y=target[1],
-        cost=cost,
+        cost=spent_mp,
         castle_captured=castle_captured,
-        description=fmt_move(unit, path, cost),
+        description=fmt_move(unit, path, spent_mp),
     )
 
 

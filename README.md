@@ -122,6 +122,115 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ---
 
+## 🎨 美术资产
+
+### 地形图块（48×48 像素风）
+
+所有地形图块位于 `game/app/web/assets/tiles/`，每张 48×48 像素 PNG。每种地形提供 2 个视觉变体（`_v0` / `_v1`），城堡系列额外支持 3 种生态主题（grass / desert / snow）。合计 **64 张**。
+
+> 图块通过 `tools/gen_terrain_tiles.py` 批量生成。
+
+#### 🏞️ 基础地形
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/plain_v0.png" width="48" height="48" title="平原 v0">
+  <img src="game/app/web/assets/tiles/plain_v1.png" width="48" height="48" title="平原 v1">
+  &emsp;平原&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/desert_v0.png" width="48" height="48" title="沙漠 v0">
+  <img src="game/app/web/assets/tiles/desert_v1.png" width="48" height="48" title="沙漠 v1">
+  &emsp;沙漠&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/snow_v0.png" width="48" height="48" title="雪地 v0">
+  <img src="game/app/web/assets/tiles/snow_v1.png" width="48" height="48" title="雪地 v1">
+  &emsp;雪地
+</p>
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/forest_grass_v0.png" width="48" height="48" title="森林(草地) v0">
+  <img src="game/app/web/assets/tiles/forest_grass_v1.png" width="48" height="48" title="森林(草地) v1">
+  <img src="game/app/web/assets/tiles/forest_desert_v0.png" width="48" height="48" title="森林(沙漠) v0">
+  <img src="game/app/web/assets/tiles/forest_desert_v1.png" width="48" height="48" title="森林(沙漠) v1">
+  <img src="game/app/web/assets/tiles/forest_snow_v0.png" width="48" height="48" title="森林(雪地) v0">
+  <img src="game/app/web/assets/tiles/forest_snow_v1.png" width="48" height="48" title="森林(雪地) v1">
+  &emsp;森林（草地 / 沙漠 / 雪地）
+</p>
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/mountain_v0.png" width="48" height="48" title="山地 v0">
+  <img src="game/app/web/assets/tiles/mountain_v1.png" width="48" height="48" title="山地 v1">
+  &emsp;山地&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/river_v0.png" width="48" height="48" title="河流 v0">
+  <img src="game/app/web/assets/tiles/river_v1.png" width="48" height="48" title="河流 v1">
+  <img src="game/app/web/assets/tiles/river_v2.png" width="48" height="48" title="河流 v2">
+  <img src="game/app/web/assets/tiles/river_v3.png" width="48" height="48" title="河流 v3">
+  &emsp;河流（4 方向变体）
+</p>
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/road_v0.png" width="48" height="48" title="道路 v0">
+  <img src="game/app/web/assets/tiles/road_v1.png" width="48" height="48" title="道路 v1">
+  &emsp;道路&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/village_v0.png" width="48" height="48" title="村庄 v0">
+  <img src="game/app/web/assets/tiles/village_v1.png" width="48" height="48" title="村庄 v1">
+  &emsp;村庄&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/gate_v0.png" width="48" height="48" title="城门 v0">
+  <img src="game/app/web/assets/tiles/gate_v1.png" width="48" height="48" title="城门 v1">
+  &emsp;城门&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/barracks_v0.png" width="48" height="48" title="兵营 v0">
+  <img src="game/app/web/assets/tiles/barracks_v1.png" width="48" height="48" title="兵营 v1">
+  &emsp;兵营
+</p>
+
+#### 🏰 城堡系列（3 生态 × 7 部件 × 2 变体）
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/castle_grass_v0.png" width="48" height="48" title="城堡(草地)">
+  <img src="game/app/web/assets/tiles/castle_desert_v0.png" width="48" height="48" title="城堡(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_snow_v0.png" width="48" height="48" title="城堡(雪地)">
+  &emsp;城堡&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/castle_floor_grass_v0.png" width="48" height="48" title="地板(草地)">
+  <img src="game/app/web/assets/tiles/castle_floor_desert_v0.png" width="48" height="48" title="地板(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_floor_snow_v0.png" width="48" height="48" title="地板(雪地)">
+  &emsp;地板
+</p>
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/castle_wall_grass_v0.png" width="48" height="48" title="墙壁(草地)">
+  <img src="game/app/web/assets/tiles/castle_wall_desert_v0.png" width="48" height="48" title="墙壁(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_wall_snow_v0.png" width="48" height="48" title="墙壁(雪地)">
+  &emsp;墙壁&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/castle_door_grass_v0.png" width="48" height="48" title="门(草地)">
+  <img src="game/app/web/assets/tiles/castle_door_desert_v0.png" width="48" height="48" title="门(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_door_snow_v0.png" width="48" height="48" title="门(雪地)">
+  &emsp;门&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/castle_stairs_grass_v0.png" width="48" height="48" title="楼梯(草地)">
+  <img src="game/app/web/assets/tiles/castle_stairs_desert_v0.png" width="48" height="48" title="楼梯(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_stairs_snow_v0.png" width="48" height="48" title="楼梯(雪地)">
+  &emsp;楼梯
+</p>
+
+<p align="center">
+  <img src="game/app/web/assets/tiles/castle_throne_grass_v0.png" width="48" height="48" title="王座(草地)">
+  <img src="game/app/web/assets/tiles/castle_throne_desert_v0.png" width="48" height="48" title="王座(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_throne_snow_v0.png" width="48" height="48" title="王座(雪地)">
+  &emsp;王座&emsp;&emsp;
+  <img src="game/app/web/assets/tiles/castle_vault_grass_v0.png" width="48" height="48" title="宝库(草地)">
+  <img src="game/app/web/assets/tiles/castle_vault_desert_v0.png" width="48" height="48" title="宝库(沙漠)">
+  <img src="game/app/web/assets/tiles/castle_vault_snow_v0.png" width="48" height="48" title="宝库(雪地)">
+  &emsp;宝库
+</p>
+
+### 角色立绘
+
+<p align="center">
+  <img src="game/app/web/assets/portrait_yun.png" width="200" title="主角「云」半身立绘">
+  &emsp;
+  <img src="game/app/web/assets/crest_yun.png" width="80" title="「云」家族纹章">
+</p>
+
+> 立绘通过独立的 AI 生成管线产出，手动放置到 `assets/` 目录。
+
+---
+
 ## 🗂️ 项目结构
 
 ```
