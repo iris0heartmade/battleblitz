@@ -573,29 +573,36 @@ html, body {
   color: white;
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
   border: 2px solid rgba(255,255,255,0.4);
+  overflow: hidden;
 }
 
-.unit.u-red    { background: var(--p-red); }
-.unit.u-blue   { background: var(--p-blue); }
-.unit.u-green  { background: var(--p-green); }
-.unit.u-yellow { background: var(--p-yellow); color: #222; text-shadow: none; }
+.unit.u-red    { background-color: transparent; border-color: var(--p-red); }
+.unit.u-blue   { background-color: transparent; border-color: var(--p-blue); }
+.unit.u-green  { background-color: transparent; border-color: var(--p-green); }
+.unit.u-yellow { background-color: transparent; border-color: var(--p-yellow); color: #222; text-shadow: none; }
 
-/* Team-colour dot: a small filled circle at the top-left corner of the
-   unit ball.  Inline --team-color is set by computeTeamColor(). */
-.unit.has-team {
-  position: relative;
+/* Sprite unit — background-image is set inline by app.js */
+.unit.unit-sprite {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
-.unit.has-team::before {
-  content: "";
+
+/* Color indicator — small box at top-left, top=team bottom=player */
+.unit-color-bar {
   position: absolute;
   top: 1px;
   left: 1px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--team-color);
-  border: 1.5px solid rgba(0, 0, 0, 0.35);
-  z-index: 2;
+  width: calc(var(--cell-size) * 0.22);
+  height: calc(var(--cell-size) * 0.22);
+  min-width: 5px;
+  min-height: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  z-index: 3;
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 .unit.acted { opacity: 0.5; }

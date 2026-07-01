@@ -229,6 +229,21 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 > 立绘通过独立的 AI 生成管线产出，手动放置到 `assets/` 目录。
 
+### 经典棋子头像
+
+5 个兵种各有一张像素风经典头像，替代默认方块汉字显示在棋盘格中。位置：`assets/classic/`。
+
+<p align="center">
+  <img src="game/app/web/assets/classic/swordsman.png" width="64" title="剑士">
+  <img src="game/app/web/assets/classic/heavy_armor.png" width="64" title="重装">
+  <img src="game/app/web/assets/classic/knight.png" width="64" title="骑士">
+  <img src="game/app/web/assets/classic/healer.png" width="64" title="治疗师">
+  <img src="game/app/web/assets/classic/archer.png" width="64" title="弓箭手">
+  <img src="game/app/web/assets/classic/warlock.png" width="64" title="术士">
+</p>
+
+头像随 `--cell-size` 自动缩放，`image-rendering: pixelated` 保证小尺寸下仍然清晰；每个棋子在左上角还带有一个 **团队/玩家色小方块**（上 = 团队色，下 = 玩家色），便于多人队伍模式下快速区分归属。
+
 ---
 
 ## 🗂️ 项目结构
@@ -263,7 +278,8 @@ BattleBlitz/
 │   │   │   ├── index.html
 │   │   │   ├── style.css
 │   │   │   ├── app.js
-│   │   │   └── assets/tiles/ # 地形像素图（48×48）
+│   │   │   ├── assets/classic/ # 经典棋子头像（自动缩放）
+│   │   │   └── assets/tiles/   # 地形像素图（48×48）
 │   │   └── routes/
 │   │       ├── game.py       # /games, /join, /start, /state, /presets, /add-ai, /units
 │   │       ├── actions.py    # /move, /attack, /skill, /wait
