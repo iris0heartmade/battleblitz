@@ -50,6 +50,12 @@ class JoinGameRequest(BaseModel):
     team: Optional[str] = None
 
 
+class UpdateTeamRequest(BaseModel):
+    """Update a player's team in the lobby."""
+    team: Optional[str] = Field(None, max_length=32)
+    caller_player_id: int  # who is making this request (permission check)
+
+
 class RejoinGameRequest(BaseModel):
     """Resume an existing player in a game (e.g. after browser refresh)."""
     player_id: int
