@@ -623,6 +623,12 @@ function renderLobby(st, lobby) {
   const wcLabel = WIN_CONDITION_LABEL[wc] || wc;
   winBanner.textContent = `🏁 ${wcLabel}`;
 
+  // Collect all unique named teams for the dropdown options.
+  const existingTeams = [...new Set(st.players
+    .map(p => p.team)
+    .filter(t => t && !t.startsWith("player_"))
+  )];
+
   list.innerHTML = "";
   for (const p of st.players) {
     const div = document.createElement("div");
@@ -631,10 +637,28 @@ function renderLobby(st, lobby) {
       <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
       <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}</div>
     `;
-    // P2.3 — team badge
-    if (p.team && p.team.startsWith && !p.team.startsWith("player_")) {
-      html += `<span class="team-badge">${escapeHtml(p.team)}</span>`;
+
+    // P3.0 — Team selector:
+    //   Host (seat 0) sees a dropdown for EVERY player (including AI).
+    //   Non-host sees a dropdown only for themselves.
+    const canEditTeam = state.me.seat === 0 || p.id === state.me.player_id;
+    if (canEditTeam) {
+      const curTeam = p.team && !p.team.startsWith("player_") ? p.team : "";
+      html += `<select class="team-select" data-player-id="${p.id}" data-cur="${escapeHtml(curTeam)}">`;
+      html += `<option value="">自由模式</option>`;
+      for (const t of existingTeams) {
+        const sel = t === curTeam ? " selected" : "";
+        html += `<option value="${escapeHtml(t)}"${sel}>${escapeHtml(t)}</option>`;
+      }
+      html += `<option value="__new__">➕ 新建队伍…</option>`;
+      html += `</select>`;
+    } else {
+      // Non-host, other players: show static team badge if any.
+      if (p.team && p.team.startsWith && !p.team.startsWith("player_")) {
+        html += `<span class="team-badge">${escapeHtml(p.team)}</span>`;
+      }
     }
+
     if (p.is_ai) {
       const kind = p.agent_kind || "rules";
       const pers = p.agent_personality || "balanced";
@@ -649,6 +673,33 @@ function renderLobby(st, lobby) {
     }
     div.innerHTML = html;
     list.appendChild(div);
+  }
+
+  // Wire up team-select change events (attach after innerHTML is parsed).
+  for (const sel of list.querySelectorAll(".team-select")) {
+    sel.addEventListener("change", async () => {
+      let val = sel.value;
+      if (val === "__new__") {
+        val = prompt("输入新队伍名称：");
+        if (!val || !val.trim()) {
+          sel.value = sel.dataset.cur || "";
+          return;
+        }
+        val = val.trim().slice(0, 32);
+      }
+      const pid = parseInt(sel.dataset.playerId, 10);
+      try {
+        await api("PATCH", `/games/${state.me.game_id}/players/${pid}/team`, {
+          team: val || null,
+          caller_player_id: state.me.player_id,
+        });
+        sel.dataset.cur = val;
+        await refreshLobby(state.me.game_id);
+      } catch (e) {
+        toast("修改队伍失败：" + e.message, 3000);
+        sel.value = sel.dataset.cur || "";
+      }
+    });
   }
 
   // Only creator can add AI, and only while game is waiting and slots available
@@ -869,6 +920,29 @@ function updateActionCounter() {
 // resize / orientationchange, plus called once at startup and at the
 // start of every renderBoard (cheap: ~5 arithmetic ops + 1 setProperty).
 const BOARD_SIZE = 15;            // MAP_SIZE — keep in sync with backend
+// Terrain movement costs (doubled to match server TERRAIN_MOVE_COST, so
+// road=1 means 0.5 MP, plain=2 means 1 MP).  Budget is also doubled:
+// unit.mp × 2.  This avoids floating-point comparisons for road=0.5.
+const TERRAIN_COST_X2 = {
+  plain: 2,
+  forest: 4,
+  mountain: 6,
+  river: 6,
+  castle: 2,
+  village: 2,
+  barracks: 2,
+  road: 1,            // 0.5 MP — fast movement
+  gate: 9999,         // impassable
+  castle_floor: 2,
+  castle_throne: 2,
+  castle_stairs: 2,
+  castle_vault: 2,
+  castle_door: 2,
+  castle_wall: 9999,  // impassable
+};
+// Terrains that are outright impassable (checked before cost lookup).
+const TERRAIN_BLOCKED = new Set(["gate", "castle_wall"]);
+
 const CELL_MIN = 14;              // hard floor so tiles stay readable
 const CELL_MAX = 48;              // hard ceiling (desktop default 44)
 
@@ -1057,7 +1131,17 @@ function renderBoard(st) {
       if (occupant) {
         const u = occupant.unit;
         const uEl = document.createElement("div");
-        uEl.className = `unit u-${occupant.player.color}` + (u.has_acted ? " acted" : "");
+        const pColor = occupant.player.color;
+        uEl.className = `unit u-${pColor}` + (u.has_acted ? " acted" : "");
+        // Team-colour dot: if the player belongs to a multi-player team,
+        // a small filled circle appears at the top-left corner of the unit.
+        if (st && st.players) {
+          const teamColor = computeTeamColor(occupant.player, st.players);
+          if (teamColor && teamColor !== pColor) {
+            uEl.classList.add("has-team");
+            uEl.style.setProperty("--team-color", playerColorHex(teamColor));
+          }
+        }
         uEl.dataset.unitId = u.id;
         uEl.textContent = unitGlyph(u.unit_type);
         uEl.title = `${u.name}（${UNIT_STAT_LABEL.level} ${u.level}） ${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} ${UNIT_STAT_LABEL.mov} ${u.mp ?? u.mov}/${u.mov} ${UNIT_STAT_LABEL.morale} ${u.morale ?? 0}/3`;
@@ -1178,8 +1262,8 @@ function findUnitAt(st, x, y) {
 }
 
 function computeReachable(unit) {
-  // Estimate reachable tiles client-side (server pathfind is authoritative).
-  // Budget is the unit's remaining MP (falls back to full MOV if MP is unset).
+  // Client-side BFS mirroring server's bfs_reachable() for instant preview.
+  // Budget is doubled (unit.mp × 2) to match TERRAIN_COST_X2.
   const st = state.game;
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
@@ -1187,24 +1271,24 @@ function computeReachable(unit) {
   for (const p of st.players) for (const u of p.units) {
     if (u.id !== unit.id && u.hp > 0) occupied.add(`${u.x},${u.y}`);
   }
-  const budget = (typeof unit.mp === "number" && unit.mp > 0) ? unit.mp : unit.mov;
+  const budget = ((typeof unit.mp === "number" && unit.mp > 0) ? unit.mp : unit.mov) * 2;
   const reachable = new Set();
   const queue = [{ x: unit.x, y: unit.y, cost: 0 }];
   const visited = new Map([[`${unit.x},${unit.y}`, 0]]);
   // Manhattan-adjacency only (no diagonals): movement is 4-directional.
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
   while (queue.length) {
     const cur = queue.shift();
     for (const [dx, dy] of dirs) {
       const nx = cur.x + dx, ny = cur.y + dy;
-      if (nx < 0 || nx >= 15 || ny < 0 || ny >= 15) continue;
+      if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
       const key = `${nx},${ny}`;
       const t = tileMap.get(key);
       if (!t) continue;
+      if (TERRAIN_BLOCKED.has(t.terrain)) continue;
       if (t.terrain === "castle" && t.owner_id !== null && t.owner_id !== state.me.player_id) continue;
       if (occupied.has(key)) continue;
-      const stepCost = costs[t.terrain] ?? 1;
+      const stepCost = TERRAIN_COST_X2[t.terrain] ?? 2;   // fallback = plain (2)
       const newCost = cur.cost + stepCost;
       if (newCost > budget) continue;
       if ((visited.get(key) ?? Infinity) <= newCost) continue;
@@ -1398,7 +1482,7 @@ function computeThreatArea(unit, reachableTiles) {
         if (d > prof.maxRange) continue;
         const nx = px + dx;
         const ny = py + dy;
-        if (nx < 0 || nx >= 15 || ny < 0 || ny >= 15) continue;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
         threat.add(`${nx},${ny}`);
       }
     }
@@ -1530,19 +1614,19 @@ function showMoveConfirmBubble(unit, toX, toY) {
   state.pendingMove = { toX, toY };
   state.actionMode = "move-confirm";
   const steps = state.path ? state.path.length - 1 : "?";
-  const cost = state.path ? (() => {
+  const displayCost = state.path ? (() => {
     const tileMap = new Map();
     for (const t of state.game.tiles) tileMap.set(`${t.x},${t.y}`, t);
-    const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
-    let total = 0;
+    let totalX2 = 0;
     for (let i = 1; i < state.path.length; i++) {
       const t = tileMap.get(`${state.path[i].x},${state.path[i].y}`);
-      total += costs[t?.terrain] ?? 1;
+      totalX2 += TERRAIN_COST_X2[t?.terrain] ?? 2;
     }
-    return total;
+    // Convert from doubled to real MP for display
+    return totalX2 / 2;
   })() : "?";
   const html = `
-    <div class="ab-title">移动到 (${toX}, ${toY}) · ${steps} 步 ⚡${cost}</div>
+    <div class="ab-title">移动到 (${toX}, ${toY}) · ${steps} 步 ⚡${displayCost} MP</div>
     <div class="ab-row">
       <button class="ab-btn primary" data-ab="confirm-move">✅ 确认移动</button>
       <button class="ab-btn cancel" data-ab="cancel-move">❌ 取消</button>
@@ -1865,7 +1949,7 @@ function computeClientPath(unit, toX, toY, reachable) {
   for (const p of st.players) for (const u of p.units) {
     if (u.id !== unit.id && u.hp > 0) occupied.add(`${u.x},${u.y}`);
   }
-  const costs = { plain: 1, forest: 2, mountain: 3, river: 3, castle: 1 };
+  const budget = ((typeof unit.mp === "number" && unit.mp > 0) ? unit.mp : unit.mov) * 2;
 
   // Dijkstra / A* with cost
   const start = { x: unit.x, y: unit.y };
@@ -1892,15 +1976,16 @@ function computeClientPath(unit, toX, toY, reachable) {
     if (cur.cost > bestCost.get(ck)) continue;
     for (const [dx, dy] of dirs) {
       const nx = cur.x + dx, ny = cur.y + dy;
-      if (nx < 0 || nx >= 15 || ny < 0 || ny >= 15) continue;
+      if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
       const k = `${nx},${ny}`;
       const t = tileMap.get(k);
       if (!t) continue;
+      if (TERRAIN_BLOCKED.has(t.terrain)) continue;
       if (t.terrain === "castle" && t.owner_id !== null && t.owner_id !== state.me.player_id) continue;
       if (occupied.has(k)) continue;
-      const step = costs[t.terrain] ?? 1;
+      const step = TERRAIN_COST_X2[t.terrain] ?? 2;
       const newCost = cur.cost + step;
-      if (newCost > unit.mp) continue;
+      if (newCost > budget) continue;
       if ((bestCost.get(k) ?? Infinity) <= newCost) continue;
       bestCost.set(k, newCost);
       cameFrom.set(k, { x: cur.x, y: cur.y });
@@ -2437,6 +2522,33 @@ function playerColorCss(c) {
     red: "var(--p-red)", blue: "var(--p-blue)",
     green: "var(--p-green)", yellow: "var(--p-yellow)",
   })[c] || "#888";
+}
+
+/**
+ * Hex equivalent of playerColorCss — used for inline CSS values
+ * on dynamically created elements (not just CSS variable names).
+ */
+function playerColorHex(c) {
+  return ({
+    red: "#e85a6a", blue: "#5fa8e8",
+    green: "#7ec97e", yellow: "#f0c75e",
+  })[c] || "#888";
+}
+
+/**
+ * If `player` belongs to a named team, return the most common color
+ * among team members as the "team color".  Returns null otherwise.
+ */
+function computeTeamColor(player, allPlayers) {
+  if (!player || !player.team || player.team.startsWith("player_")) return null;
+  const mates = allPlayers.filter(p => p.team === player.team);
+  if (mates.length < 2) return null;  // solo team → no split
+  const freq = {};
+  for (const m of mates) {
+    freq[m.color] = (freq[m.color] || 0) + 1;
+  }
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  return sorted[0]?.[0] || null;
 }
 
 function unitGlyph(type) {

@@ -49,6 +49,7 @@ from app.schemas import (
     PresetsResponse,
     RejoinGameRequest,
     RejoinGameResponse,
+    UpdateTeamRequest,
     TileOut,
     UnitOut,
     ActionLogOut,
@@ -424,6 +425,55 @@ async def join_game(
     )
 
 
+@router.patch("/{game_id}/players/{player_id}/team")
+async def update_player_team(
+    game_id: int,
+    player_id: int,
+    body: UpdateTeamRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update a player's team in the lobby.
+
+    - The host (seat 0) may change **any** player's team (including AI).
+    - Other players may only change their **own** team.
+    - Game must be in 'waiting' status.
+    - Set team to empty / null to enter 自由模式 (no team).
+    """
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+    if game.status != "waiting":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始，无法修改队伍")
+
+    target = await session.get(Player, player_id)
+    if target is None or target.game_id != game_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不存在")
+
+    # Load all players to determine host (seat 0).
+    all_players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    host = next((p for p in all_players if p.seat == 0), None)
+
+    # The caller identifies themselves in the request body.
+    # (In a LAN game without real auth, the frontend gates the UI;
+    #  this check is a safety net, not a fortress.)
+    caller = next((p for p in all_players if p.id == body.caller_player_id), None)
+    if caller is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法识别请求者")
+
+    # Permission check
+    is_host = caller.seat == 0
+    is_self = caller.id == target.id
+    if not (is_host or is_self):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "只有房主可以修改其他玩家的队伍")
+
+    target.team_id = body.team if body.team else None
+    await session.flush()
+
+    return {"ok": True, "player_id": player_id, "team": target.team_id}
+
+
 @router.post("/{game_id}/rejoin", response_model=RejoinGameResponse)
 async def rejoin_game(
     game_id: int,
@@ -452,6 +502,8 @@ async def rejoin_game(
             has_ended_turn=player.has_ended_turn,
             seat=player.seat,
             is_ai=player.is_ai,
+            team=player.team_id,
+            gold=player.gold or 0,
             units=[],
         ),
     )
@@ -496,6 +548,8 @@ async def rejoin_by_name(
             has_ended_turn=player.has_ended_turn,
             seat=player.seat,
             is_ai=player.is_ai,
+            team=player.team_id,
+            gold=player.gold or 0,
             units=[],
         ),
     )
@@ -761,6 +815,8 @@ async def add_ai_player(
         is_alive=ai.is_alive, has_ended_turn=ai.has_ended_turn,
         seat=ai.seat, is_ai=ai.is_ai,
         agent_kind=ai.agent_kind, agent_personality=ai.agent_personality,
+        team=None,
+        gold=0,
         units=[],
     )
 
@@ -889,6 +945,8 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 is_ai=p.is_ai,
                 agent_kind=p.agent_kind,
                 agent_personality=p.agent_personality,
+                team=p.team_id,
+                gold=p.gold or 0,
                 units=[
                     UnitOut.model_validate(
                         _with_combat_stats(u)
