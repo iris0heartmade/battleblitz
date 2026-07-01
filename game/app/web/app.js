@@ -1132,19 +1132,26 @@ function renderBoard(st) {
         const u = occupant.unit;
         const uEl = document.createElement("div");
         const pColor = occupant.player.color;
-        uEl.className = `unit u-${pColor}` + (u.has_acted ? " acted" : "");
-        // Team-colour dot: if the player belongs to a multi-player team,
-        // a small filled circle appears at the top-left corner of the unit.
+        uEl.className = `unit u-${pColor} unit-sprite` + (u.has_acted ? " acted" : "");
+        uEl.dataset.unitId = u.id;
+        // Classic sprite as background
+        uEl.style.backgroundImage = `url(/ui/assets/classic/${u.unit_type}.png)`;
+        uEl.title = `${u.name}（${UNIT_STAT_LABEL.level} ${u.level}） ${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} ${UNIT_STAT_LABEL.mov} ${u.mp ?? u.mov}/${u.mov} ${UNIT_STAT_LABEL.morale} ${u.morale ?? 0}/3`;
+        // Color indicator: small box in top-left corner.
+        // Top half = team color (if in a multi-player team), bottom half = player color.
+        const colorBar = document.createElement("div");
+        colorBar.className = "unit-color-bar";
         if (st && st.players) {
           const teamColor = computeTeamColor(occupant.player, st.players);
           if (teamColor && teamColor !== pColor) {
-            uEl.classList.add("has-team");
-            uEl.style.setProperty("--team-color", playerColorHex(teamColor));
+            colorBar.style.background = `linear-gradient(to bottom, ${playerColorHex(teamColor)} 50%, ${playerColorHex(pColor)} 50%)`;
+          } else {
+            colorBar.style.background = playerColorHex(pColor);
           }
+        } else {
+          colorBar.style.background = playerColorHex(pColor);
         }
-        uEl.dataset.unitId = u.id;
-        uEl.textContent = unitGlyph(u.unit_type);
-        uEl.title = `${u.name}（${UNIT_STAT_LABEL.level} ${u.level}） ${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} ${UNIT_STAT_LABEL.mov} ${u.mp ?? u.mov}/${u.mov} ${UNIT_STAT_LABEL.morale} ${u.morale ?? 0}/3`;
+        uEl.appendChild(colorBar);
         const hp = document.createElement("div");
         hp.className = "hpbar";
         const fill = document.createElement("div");
@@ -1153,11 +1160,6 @@ function renderBoard(st) {
         if (pct < 35) fill.classList.add("low");
         hp.appendChild(fill);
         uEl.appendChild(hp);
-        // MP badge: small "MP x/y" text at top-right corner
-        const mpBadge = document.createElement("div");
-        mpBadge.className = "mp-badge";
-        mpBadge.textContent = `⚡${u.mp ?? u.mov}`;
-        uEl.appendChild(mpBadge);
         // Morale stars (3 slots)
         const moraleEl = document.createElement("div");
         moraleEl.className = "morale-stars";
@@ -3998,8 +4000,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const u = unitMap.get(`${x},${y}`);
         if (u) {
           const uEl = document.createElement("div");
-          uEl.className = `unit u-${u.color}`;
-          uEl.textContent = unitGlyph(u.type);
+          uEl.className = `unit u-${u.color} unit-sprite`;
+          uEl.style.backgroundImage = `url(/ui/assets/classic/${u.type}.png)`;
           uEl.title = `${u.type} (Lv.${u.level})`;
           cell.appendChild(uEl);
           // Highlight selected unit
