@@ -7,7 +7,7 @@ const API = "";  // same origin
 // Bump this whenever game/app/web/assets/tiles/* pngs are regenerated —
 // the query string busts browser disk cache for tile images. Otherwise
 // Chrome serves the old PNG forever because the filename is unchanged.
-const TILE_ASSET_VERSION = "2026-06-30-p04-terrain-castle-sub";
+const TILE_ASSET_VERSION = "2026-07-03-p24-snow-peak";
 
 // Stat labels used everywhere the side panel renders a unit's numbers.
 // Centralised so adding a new stat (e.g. crit chance) only requires
@@ -927,6 +927,7 @@ const TERRAIN_COST_X2 = {
   plain: 2,
   forest: 4,
   mountain: 6,
+  snow_peak: 6,       // P2.4 — same as mountain, impassable
   river: 6,
   castle: 2,
   village: 2,
@@ -987,7 +988,8 @@ if (document.readyState === "loading") {
 // Tile image lookup: terrain + biome → asset URL (with deterministic variant)
 // variant count per terrain:
 const TILE_VARIANTS = {
-  plain: 2, forest: 2, mountain: 2, river: 4, castle: 2, desert: 2, snow: 2,
+  plain: 2, forest: 2, mountain: 2, snow_peak: 2,   // P2.4 — silver peaks
+  river: 4, castle: 2, desert: 2, snow: 2,
   // P0.4 new terrains
   village: 2, barracks: 2, road: 2, gate: 2,
   // Castle sub-features are biome-aware like the legacy 'castle' tile.
@@ -1048,7 +1050,8 @@ function subVariantOf(subtype) {
 // compact JSON. Convert to full terrain names for rendering and CSS
 // class lookup.
 const TERRAIN_CHAR_TO_NAME = {
-  P: "plain", F: "forest", M: "mountain", R: "river", C: "castle",
+  P: "plain", F: "forest", M: "mountain", S: "snow_peak",   // P2.4
+  R: "river", C: "castle",
   // P0.4 new terrains
   v: "village", b: "barracks", r: "road", g: "gate",
 };
@@ -1147,6 +1150,28 @@ function renderBoard(st) {
       cell.style.gridRow = String(y + 1);
       // Background tile image (pixel art) — respects subtype for castle_* tiles.
       cell.style.backgroundImage = `url(${tileImageUrlForTile(tile || {terrain}, biome, x, y)})`;
+
+      // P2.4 — owner-color marker for claimed/owned buildings.
+      // Small color square in top-right corner mirrors the unit color-bar
+      // pattern: top half = team color, bottom half = player color.
+      // Skipped for tiles with no owner (e.g. unclaimed villages).
+      if (tile && tile.owner_id != null && st && st.players) {
+        const ownerPlayer = st.players.find(p => p.id === tile.owner_id);
+        if (ownerPlayer) {
+          const ownerColor = playerColorHex(ownerPlayer.color);
+          const ownerTeam = computeTeamColor(ownerPlayer, st.players);
+          const teamColor = (ownerTeam && ownerTeam !== ownerPlayer.color)
+            ? playerColorHex(ownerTeam) : null;
+          const marker = document.createElement("div");
+          marker.className = "tile-owner-marker";
+          marker.style.background = teamColor
+            ? `linear-gradient(to bottom, ${teamColor} 50%, ${ownerColor} 50%)`
+            : ownerColor;
+          marker.title = `${ownerPlayer.user_name} 占有`;
+          cell.appendChild(marker);
+          cell.classList.add("tile-owned");
+        }
+      }
 
       const occupant = unitMap.get(`${x},${y}`);
       if (occupant) {

@@ -25,6 +25,7 @@ from app.config import (
     ABANDONED_FINISHED_HOURS,
     ABANDONED_LOBBY_MINUTES,
     AI_THINK_DELAY_SECONDS,
+    BUILDING_INCOME,
     INCOME_PER_TURN,
     INCOME_TERRAINS,
     LOBBY_CLEANUP_INTERVAL_SECONDS,
@@ -68,6 +69,14 @@ async def _collect_income_for_player(
     fires once per round per player, regardless of how many turn-end calls
     happen between rounds. Returns a {terrain_id: count} breakdown for the
     ActionLog entry and the front-end toast.
+
+    Income rules come from `BUILDING_INCOME` (config.py):
+      - `amount`: gold paid per matching tile
+      - `cap_per_player`: if not None, max tiles of this type that
+        pay the player per round (excess tiles are skipped).
+      - `requires_owner`: if True, only tiles with `owner_id == player.id`
+        count (today every income tile requires an owner; the field is
+        kept so future tiles like "toll road" can be unowned).
     """
     rows = (
         await session.execute(
@@ -78,13 +87,26 @@ async def _collect_income_for_player(
         )
     ).scalars().all()
 
-    breakdown: Dict[str, int] = {}
+    # Count per-terrain first, then apply per-player cap.
+    raw_counts: Dict[str, int] = {}
     for tile in rows:
-        if tile.terrain in INCOME_TERRAINS:
-            breakdown[tile.terrain] = breakdown.get(tile.terrain, 0) + 1
+        if tile.terrain in BUILDING_INCOME:
+            cfg = BUILDING_INCOME[tile.terrain]
+            if cfg.get("requires_owner", True) and tile.owner_id != player.id:
+                continue
+            raw_counts[tile.terrain] = raw_counts.get(tile.terrain, 0) + 1
+
+    breakdown: Dict[str, int] = {}
+    for terrain, count in raw_counts.items():
+        cfg = BUILDING_INCOME[terrain]
+        cap = cfg.get("cap_per_player")
+        if cap is None:
+            breakdown[terrain] = count
+        else:
+            breakdown[terrain] = min(count, int(cap))
 
     gold_gain = sum(
-        INCOME_PER_TURN[t] * count for t, count in breakdown.items()
+        BUILDING_INCOME[t]["amount"] * breakdown[t] for t in breakdown
     )
     if gold_gain > 0:
         player.gold = (player.gold or 0) + gold_gain

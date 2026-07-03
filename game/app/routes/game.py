@@ -28,6 +28,7 @@ from app.config import (
     TERRAIN_MOUNTAIN,
     TERRAIN_PLAIN,
     TERRAIN_RIVER,
+    TERRAIN_SNOW_PEAK,
 )
 from app.database import get_session
 from app.game_logic import (
@@ -76,6 +77,7 @@ _CHAR_TO_TERRAIN = {
     "P": TERRAIN_PLAIN,
     "F": TERRAIN_FOREST,
     "M": TERRAIN_MOUNTAIN,
+    "S": TERRAIN_SNOW_PEAK,   # P2.4 — snow-biome silver peaks
     "R": TERRAIN_RIVER,
     "C": TERRAIN_CASTLE,
 }
