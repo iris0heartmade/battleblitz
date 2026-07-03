@@ -79,6 +79,12 @@ class Game(Base):
     # "defend" | "draw"). Used by the front-end to pick the right
     # victory banner copy.
     win_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # P2.4 — per-room capacity (max players + AI). Server-derived at
+    # create-time from the chosen map's `recommended_players`; defaults
+    # to MAX_PLAYERS (4) when the preset doesn't declare one. The
+    # join / add-ai / lobby routes gate against this value instead of
+    # the global MAX_PLAYERS constant.
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )

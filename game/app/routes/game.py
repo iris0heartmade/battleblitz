@@ -70,6 +70,30 @@ def _next_color(used_colors: List[str]) -> str:
 
 
 # ============================================================
+# P2.4 — derive per-room capacity from the chosen map preset.
+# ============================================================
+def _effective_max_players(map_preset: Optional[str]) -> int:
+    """Compute the room capacity (= max players + AI) for a chosen map.
+
+    Order of precedence:
+      1. If the preset declares `recommended_players`, use it (clamped
+         to [MIN_PLAYERS, MAX_PLAYERS]).
+      2. Otherwise, fall back to the global MAX_PLAYERS (=4).
+
+    Maps are looked up against `MAP_PRESETS` from `game_logic.py`.
+    Custom-maps (`custom:<id>`) are not in that dict, so they get the
+    default — which is the same as today's behaviour for handcrafted
+    maps.
+    """
+    from app.game_logic import MAP_PRESETS  # local import to avoid cycles
+    if map_preset and map_preset in MAP_PRESETS:
+        rec = MAP_PRESETS[map_preset].get("recommended_players")
+        if rec is not None:
+            return max(MIN_PLAYERS, min(int(rec), MAX_PLAYERS))
+    return MAX_PLAYERS
+
+
+# ============================================================
 # Module-level helper used by /games/{id}/start AND by mainline routes
 # ============================================================
 
@@ -297,6 +321,10 @@ async def create_game(
     session: AsyncSession = Depends(get_session),
 ) -> GameSummaryOut:
     seed = body.map_seed if body.map_seed is not None else random.randint(0, 2**31 - 1)
+    # P2.4 — derive capacity from the chosen map's recommended_players.
+    # `_effective_max_players` clamps to [MIN_PLAYERS, MAX_PLAYERS] and
+    # falls back to the global cap when the preset doesn't declare one.
+    capacity = _effective_max_players(body.map_preset)
     game = Game(
         name=body.name,
         status="waiting",
@@ -309,6 +337,8 @@ async def create_game(
         # P2.3 — victory condition.
         win_condition=body.win_condition,
         defend_turns=body.defend_turns,
+        # P2.4 — per-room capacity derived from the map.
+        capacity=capacity,
     )
     # P2.3 — for "reach" mode, look up the target tile so we can
     # render the goal pulse on the client + drive the win check.
@@ -325,8 +355,8 @@ async def create_game(
     session.add(game)
     await session.flush()
     logger.info(
-        "Game created: id=%d name=%r seed=%d max_players=%d map_preset=%s biome=%s",
-        game.id, game.name, seed, body.max_players, body.map_preset, body.map_biome,
+        "Game created: id=%d name=%r seed=%d capacity=%d map_preset=%s biome=%s",
+        game.id, game.name, seed, capacity, body.map_preset, body.map_biome,
     )
     return GameSummaryOut.model_validate(game)
 
@@ -346,7 +376,7 @@ async def join_game(
     existing = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len(existing) >= MAX_PLAYERS:
+    if len(existing) >= game.capacity:
         raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
 
     if any(p.user_name == body.user_name for p in existing):
@@ -664,7 +694,9 @@ async def get_lobby_info(
     return LobbyInfoOut(
         game_id=game.id,
         status=game.status,
-        max_players=MAX_PLAYERS,
+        # P2.4 — `max_players` reflects the room's actual capacity
+        # (driven by the chosen map preset), not the global MAX_PLAYERS.
+        max_players=game.capacity,
         player_count=len(players),
         teams=teams_out,
         win_condition=game.win_condition,
@@ -717,6 +749,9 @@ async def list_presets() -> PresetsResponse:
             id=p["id"], name=p["name"], description=p["description"],
             biome=p.get("biome", "grass"),
             size=int(p.get("size", 15)),
+            # P2.4 — expose recommended_players so the create-game
+            # category selector on the frontend can filter by it.
+            recommended_players=p.get("recommended_players"),
         )
         for p in MAP_PRESETS.values()
     ]
@@ -727,6 +762,9 @@ async def list_presets() -> PresetsResponse:
             name=f"📐 {m['name']}",
             description=f"自定义地图 · {m['width']}×{m['height']} · {m['biome']}",
             biome=m["biome"],
+            # Custom maps have no recommended_players declared; server
+            # falls back to MAX_PLAYERS=4 (the global cap).
+            recommended_players=None,
         ))
     return PresetsResponse(
         maps=maps,
@@ -796,7 +834,7 @@ async def add_ai_player(
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len(players) >= MAX_PLAYERS:
+    if len(players) >= game.capacity:
         raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
     used_colors = [p.color for p in players]
     color = _next_color(used_colors)

@@ -163,6 +163,15 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE games ADD COLUMN win_reason VARCHAR(32)"
         ))
         logger.info("Migration: added games.win_reason")
+    if "capacity" not in game_cols:
+        # P2.4 — per-room capacity (max players + AI). Existing rows
+        # default to MAX_PLAYERS=4 so behaviour is identical to today
+        # for legacy games; new rooms pick up capacity from the chosen
+        # map's `recommended_players` at create-time.
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN capacity INTEGER NOT NULL DEFAULT 4"
+        ))
+        logger.info("Migration: added games.capacity")
     player_rows = sync_conn.execute(text("PRAGMA table_info(players)")).fetchall()
     player_cols = {r[1] for r in player_rows}
     if "team_id" not in player_cols:
