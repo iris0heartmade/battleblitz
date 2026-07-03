@@ -401,6 +401,13 @@
           <span id="game-map-name" class="muted small" style="margin-left:8px"></span>
         </div>
         <div class="game-header-center">
+          <!-- P0.1 — top-bar status pills: turn / phase / current player.
+               These are duplicated into the slide-out drawer for legacy
+               data, but the in-header copy is the primary always-visible
+               readout (per the UI audit). -->
+          <span class="badge header-status-pill" id="game-turn-badge" title="当前回合数">回合 1</span>
+          <span class="badge header-status-pill" id="game-phase-badge" title="当前阶段">阶段：—</span>
+          <span class="badge header-status-pill" id="game-current-player-badge" title="当前行动玩家">…</span>
           <span class="badge" id="game-thinking" hidden>🤖 电脑思考中…</span>
           <!-- P2.4 polish — per-faction gold HUD. Real-time gold for
                every player in the game. Populated by renderFactionGoldBar(). -->
@@ -417,29 +424,49 @@
       <!-- Overlay -->
       <div id="menu-overlay" class="menu-overlay" hidden data-action="toggle-game-menu"></div>
 
-      <!-- Slide-out left panel -->
+      <!-- P0.1 — 3-column game content: log | board | info. The action
+           log is now always visible (no more digging into a drawer);
+           unit info + players list moved to the right column. -->
+      <div class="game-content">
+        <aside class="left-column" aria-label="战报">
+          <div class="column-header">
+            <h3>📜 战报</h3>
+            <button class="btn btn-ghost btn-sm" data-action="clear-action-log" title="清空战报显示">🧹</button>
+          </div>
+          <div id="action-log" class="action-log"></div>
+        </aside>
+
+        <main class="game-main">
+          <div id="phase-banner" class="phase-banner phase-player">
+            <span class="phase-dot"></span>
+            <span id="phase-text" class="phase-text">你的阶段</span>
+          </div>
+          <div id="board" class="board"></div>
+        </main>
+
+        <aside class="right-column" aria-label="信息面板">
+          <div class="column-header">
+            <h3>🎯 选中单位</h3>
+          </div>
+          <div id="unit-info"><p class="muted">点击单位查看详情</p></div>
+
+          <div class="column-header">
+            <h3>👥 参战玩家</h3>
+          </div>
+          <div id="players-list"></div>
+        </aside>
+      </div>
+
+      <!-- Legacy slide-out drawer (kept for the "leave game" button
+           and as a back-compat shell for any data-action="toggle-game-menu"
+           references). The drawer's own copy of turn/current-player/seed
+           stays in place so the legacy DOM IDs keep working. -->
       <aside id="game-menu" class="game-menu" hidden>
         <div class="menu-header">
           <span class="menu-turn">回合 <b id="game-turn">1</b></span>
           <span id="game-current-player">…</span>
           <span class="menu-seed">种子 <span id="game-map-seed">…</span></span>
         </div>
-
-        <div class="panel-card menu-card">
-          <h3>选中单位 <span id="action-counter" class="action-counter"></span></h3>
-          <div id="unit-info"><p class="muted">点击单位查看详情</p></div>
-        </div>
-
-        <div class="panel-card menu-card">
-          <h3>参战玩家</h3>
-          <div id="players-list"></div>
-        </div>
-
-        <div class="panel-card menu-card">
-          <h3>战报</h3>
-          <div id="action-log" class="action-log"></div>
-        </div>
-
         <div class="menu-footer">
           <button class="btn btn-ghost btn-sm" data-action="goto-menu">🏠 返回主菜单</button>
         </div>
@@ -447,14 +474,6 @@
 
       <!-- Floating AI chat -->
       <div id="chat-float" class="chat-box"></div>
-
-      <main class="game-main">
-        <div id="phase-banner" class="phase-banner phase-player">
-          <span class="phase-dot"></span>
-          <span id="phase-text" class="phase-text">你的阶段</span>
-        </div>
-        <div id="board" class="board"></div>
-      </main>
 
       <!-- 气泡式操作菜单（在棋盘上方浮层） -->
       <div id="action-bubble" class="action-bubble" hidden></div>

@@ -835,7 +835,7 @@ async function refreshGame() {
 }
 
 function renderGame(st) {
-  // Header
+  // Header (drawer — legacy copy)
   document.getElementById("game-turn").textContent = st.game.turn_number;
   const cur = st.players.find(p => p.id === st.current_player_id);
   const curIsAI = cur?.is_ai;
@@ -843,6 +843,30 @@ function renderGame(st) {
   document.getElementById("game-map-seed").textContent = st.game.map_seed;
   const mapNameEl = document.getElementById("game-map-name");
   if (mapNameEl) mapNameEl.textContent = st.game.map_preset || "经典随机";
+
+  // P0.1 — top header status pills (turn / phase / current player)
+  // These mirror the drawer copy but live in the always-visible
+  // top header so the player can see them without opening the drawer.
+  const phaseLabels = {
+    player: "玩家阶段",
+    ai: "电脑阶段",
+    animating: "动画中",
+  };
+  const phaseText = phaseLabels[st.game.phase] || (st.game.phase || "—");
+  const turnBadge = document.getElementById("game-turn-badge");
+  const phaseBadge = document.getElementById("game-phase-badge");
+  const playerBadge = document.getElementById("game-current-player-badge");
+  if (turnBadge) turnBadge.textContent = `回合 ${st.game.turn_number}`;
+  if (phaseBadge) {
+    phaseBadge.textContent = `阶段：${phaseText}`;
+    // Color-code the phase pill: green when player's turn, red when AI's
+    phaseBadge.className = "badge header-status-pill";
+    if (st.game.phase === "player") phaseBadge.classList.add("phase-player");
+    if (st.game.phase === "ai") phaseBadge.classList.add("phase-ai");
+  }
+  if (playerBadge) {
+    playerBadge.textContent = cur ? `${cur.user_name}${curIsAI ? " 🤖" : ""}` : "—";
+  }
 
   // Show "AI thinking" badge when current player is AI and game is playing
   const thinkingEl = document.getElementById("game-thinking");
@@ -2232,6 +2256,29 @@ function clearVisualState() {
   state.pendingAttack = null;
 }
 
+// P0.3 — floating battle text. Spawns a DOM element at the given
+// grid tile (x, y) and animates it upward + fades. Color/class is
+// chosen by caller (damage / crit / heal / levelup / gold / kill / miss).
+function showFloatingText(x, y, text, kind) {
+  // Find the board cell that corresponds to (x, y) and position the
+  // floating text above it. We use #board as the positioning context
+  // so the offset math stays correct even if the page is scrolled.
+  const board = document.getElementById("board");
+  const cell = board?.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+  if (!board || !cell) return;
+  const cellRect = cell.getBoundingClientRect();
+  const boardRect = board.getBoundingClientRect();
+  const el = document.createElement("div");
+  el.className = `floating-text ${kind || "damage"}`;
+  el.textContent = text;
+  el.style.left = (cellRect.left - boardRect.left + cellRect.width / 2) + "px";
+  el.style.top  = (cellRect.top  - boardRect.top  + cellRect.height * 0.3) + "px";
+  // Append to board so the absolute positioning is relative to it.
+  board.appendChild(el);
+  // Auto-remove after the animation finishes.
+  setTimeout(() => el.remove(), 1500);
+}
+
 async function doMove(unit, toX, toY) {
   state.actionMode = null;
   clearVisualState();
@@ -2280,6 +2327,24 @@ async function doAttack(attacker, targetId) {
       ? ` · 反击 ${r.counter_damage}（你剩 ${r.attacker_hp_after}HP）`
       : "";
     toast(`造成 ${totalDmg} 伤害${crit ? "（暴击！）" : ""}${moraleGain}${counterMsg}`);
+    // P0.3 — floating damage text at the target's tile.
+    // state.game still has the OLD layout here (refreshGame hasn't
+    // been called yet), so we can look up the target's (x, y) by id.
+    const targetUnit = (state.game?.players || [])
+      .flatMap(p => p.units).find(u => u.id === targetId);
+    if (targetUnit) {
+      const kind = kill ? "kill" : (crit ? "crit" : "damage");
+      const text = kill ? "☠️" : `-${totalDmg}`;
+      showFloatingText(targetUnit.x, targetUnit.y, text, kind);
+    }
+    if (r.counter_damage > 0) {
+      // Counter floats at the attacker's tile.
+      const attackerUnit = (state.game?.players || [])
+        .flatMap(p => p.units).find(u => u.id === attacker.id);
+      if (attackerUnit) {
+        showFloatingText(attackerUnit.x, attackerUnit.y, `反击 -${r.counter_damage}`, "damage");
+      }
+    }
     await refreshGame();
     // After attack: unit has acted. If class can move after AND MP > 0,
     // offer to keep moving; otherwise close.
@@ -2305,13 +2370,21 @@ async function doSkill(skill, targetId, unit) {
   state.actionMode = null;
   clearVisualState();
   try {
-    await api("POST", `/games/${state.me.game_id}/skill`, {
+    const r = await api("POST", `/games/${state.me.game_id}/skill`, {
       player_id: state.me.player_id,
       unit_id: unit?.id || state.selectedUnit?.id,
       skill,
       target_id: targetId,
     });
     toast(skill === "heal" ? "治疗成功" : "技能释放成功");
+    // P0.3 — floating heal text at the target.
+    if (skill === "heal" && r?.restored_hp > 0) {
+      const targetUnit = (state.game?.players || [])
+        .flatMap(p => p.units).find(u => u.id === targetId);
+      if (targetUnit) {
+        showFloatingText(targetUnit.x, targetUnit.y, `+${r.restored_hp}`, "heal");
+      }
+    }
     await refreshGame();
     hideBubble();
     state.selectedUnit = null;
@@ -2434,6 +2507,9 @@ async function doRecruit(recruiterUnit, unitType) {
     });
     const cn = RECRUIT_UNIT_TYPES.find(t => t.id === unitType)?.display_cn || unitType;
     toast(`💰 招募成功：${cn}（-${r.cost} 金币 · 剩余 ${r.gold_remaining}）`);
+    // P0.3 — float the new unit at the recruiter's tile so the player
+    // sees where it appeared.
+    showFloatingText(recruiterUnit.x, recruiterUnit.y, cn, "gold");
     await refreshGame();
     hideBubble();
     state.selectedUnit = null;
@@ -2450,6 +2526,14 @@ async function endTurn() {
     const r = await api("POST", `/games/${state.me.game_id}/end-turn`, {
       player_id: state.me.player_id,
     });
+    // P0.3 — float a "Lv↑" tag on each unit that leveled up this turn.
+    if (Array.isArray(r.leveled_units) && r.leveled_units.length > 0) {
+      for (const uid of r.leveled_units) {
+        const u = (state.game?.players || [])
+          .flatMap(p => p.units).find(x => x.id === uid);
+        if (u) showFloatingText(u.x, u.y, "Lv↑", "levelup");
+      }
+    }
     toast(r.description);
     state.selectedUnit = null;
     state.actionMode = null;
@@ -3870,6 +3954,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const visible = menu.hidden;
         menu.hidden = !visible;
         overlay.hidden = !visible;
+        break;
+      case "clear-action-log":
+        // P0.1 — wipe the visible action-log column. Useful when the
+        // log gets long and the player wants a clean view. The actual
+        // history stays in state.game.logs; next renderActionLog will
+        // repopulate. We just clear the DOM between renders.
+        document.getElementById("action-log").innerHTML = "";
         break;
       case "show-status":
         // Scroll the side panel's player-list into view
