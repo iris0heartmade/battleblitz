@@ -49,6 +49,14 @@ class JoinGameRequest(BaseModel):
     # behaviour preserved). Multiple players with the same team_id are
     # treated as one logical side for win-condition checks.
     team: Optional[str] = None
+    # P2.4 — role of joiner:
+    #   "player"    (default) — joins as a regular player with a colour
+    #                          and units, counted against capacity.
+    #   "spectator" — joins as an audience member. No units are spawned,
+    #                 no team. Counts against the spectator cap (NOT
+    #                 capacity). Must call end_turn to advance the
+    #                 turn cycle but can never execute game actions.
+    role: Optional[str] = Field(default=None, pattern="^(player|spectator)$")
 
 
 class UpdateTeamRequest(BaseModel):
@@ -165,6 +173,9 @@ class PlayerOut(APIModel):
     # P2.3 — team grouping. May equal `color` for 1V1 free-for-all
     # (the front-end treats them identically in that case).
     team: Optional[str] = None
+    # P2.4 — spectator flag. True if this Player is a read-only audience
+    # member (no units, must confirm turn but can't act).
+    is_spectator: bool = False
     units: List[UnitOut] = []
 
 
@@ -186,7 +197,7 @@ class GameSummaryOut(APIModel):
     map_seed: int
     map_preset: Optional[str]
     map_biome: str
-    phase: str = "player"   # "player" | "ai" | "animating"
+    phase: str = "player"   # "player" | "ai" | "spectator" | "animating"
     # P2.3 — victory-condition metadata. The front-end reads these
     # to render the right victory banner copy.
     win_condition: str = "rout"

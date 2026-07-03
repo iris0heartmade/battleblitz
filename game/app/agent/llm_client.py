@@ -305,19 +305,3 @@ class LLMClient:
             usage=usage,
             raw=msg,
         )
-
-    async def health_check(self) -> bool:
-        """Cheap liveness probe. Returns True if the API responds."""
-        try:
-            await self._client.messages.create(
-                model=self.model,
-                max_tokens=8,
-                messages=[{"role": "user", "content": "ping"}],
-            )
-            return True
-        except (APIError, APITimeoutError) as exc:
-            logger.warning("LLM health check failed: %s", exc)
-            return False
-
-    async def aclose(self) -> None:
-        await self._client.close()

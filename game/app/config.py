@@ -315,6 +315,10 @@ MAP_STYLES: Final[Dict[str, Dict]] = {
 
 MAX_PLAYERS: Final[int] = 4
 MIN_PLAYERS: Final[int] = 2
+# P2.4 — spectator cap is independent of capacity so a fully-booked
+# room can still attract an audience. Used by Game.max_spectators
+# default and by the join route as the upper bound.
+DEFAULT_MAX_SPECTATORS: Final[int] = 8
 DEFAULT_PLAYER_COLORS: Final[Tuple[str, ...]] = ("red", "blue", "green", "yellow")
 
 

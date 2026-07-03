@@ -100,11 +100,27 @@ async def _load_unit(session: AsyncSession, unit_id: int) -> Unit:
     return unit
 
 
+async def _ensure_spectator_blocked(player: Player, action_label: str) -> None:
+    """P2.4 — spectators cannot perform in-game actions (move / attack /
+    skill / heal / claim / recruit / wait). Each action route calls this
+    before the per-endpoint guard so the 403 message is specific.
+    """
+    if player.is_spectator:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"观战者不能{action_label}",
+        )
+
+
 async def _ensure_current_player(session: AsyncSession, game: Game, player_id: int) -> Player:
     players = (
         await session.execute(select(Player).where(Player.game_id == game.id))
     ).scalars().all()
-    alive_seats = sorted(p.seat for p in players if p.is_alive)
+    # P2.4 — spectators occupy a turn slot but cannot perform actions;
+    # every action endpoint eventually routes through this helper, so
+    # the block lives here (rather than at each route) to guarantee
+    # parity across move / attack / skill / wait / claim / recruit.
+    alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
     if not alive_seats:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
     expected_seat = next(
@@ -114,6 +130,8 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     player = next((p for p in players if p.id == player_id), None)
     if player is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
+    # P2.4 — spectators don't get units and can't act; reject at the gate.
+    await _ensure_spectator_blocked(player, "执行操作")
     if player.id != next(p.id for p in players if p.seat == expected_seat):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "现在不是你的回合")
     return player

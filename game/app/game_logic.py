@@ -720,6 +720,12 @@ async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
         if u.hp > 0 and u.player_id in alive_counts:
             alive_counts[u.player_id] += 1
     for p in players:
+        # P2.4 — spectators are audibly "alive" forever: they have
+        # no units by design and never engage in combat. Skip the
+        # 0-units elimination check so they aren't struck down at
+        # the end of the first round.
+        if p.is_spectator:
+            continue
         if p.is_alive and alive_counts.get(p.id, 0) == 0:
             p.is_alive = False
             logs.append(f"{p.user_name} 已被淘汰！")
