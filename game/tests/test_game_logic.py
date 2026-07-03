@@ -320,11 +320,14 @@ class TestAttackRange:
         assert unit_attack_range(_stub_unit("swordsman")) == 1
 
     def test_archer_default(self):
-        assert unit_attack_range(_stub_unit("archer")) == 2
+        # P2.4 polish — was 2, bumped to 4 (1-4 with min 0) so the
+        # archer is actually useful on 15x15+ maps.
+        assert unit_attack_range(_stub_unit("archer")) == 4
 
     def test_archer_with_snipe(self):
+        # snipe extends range by 1, so 4 + 1 = 5.
         u = _stub_unit("archer", skills=["snipe"])
-        assert unit_attack_range(u) == 3
+        assert unit_attack_range(u) == 5
 
 
 # ============================================================

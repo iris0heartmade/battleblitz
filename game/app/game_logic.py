@@ -290,15 +290,37 @@ def unit_min_attack_range(unit: Unit) -> int:
     return _get_unit(unit.unit_type).min_attack_range
 
 
-def can_attack_from_position(unit: Unit, fromX: int, fromY: int, toX: int, toY: int) -> bool:
+def can_attack_from_position(
+    unit: Unit,
+    fromX: int, fromY: int,
+    toX: int, toY: int,
+    blockers: Optional[set] = None,
+    board_size: int = MAP_SIZE,
+) -> bool:
     """True if `unit` could attack (toX, toY) when standing on (fromX, fromY).
 
-    Distance is measured in Manhattan metric (|dx|+|dy|).
+    Distance is measured in Manhattan metric (|dx|+|dy|). For
+    attacks at distance > 1 we also require a clear line of sight
+    (mountains / forests / rivers block). Melee (d == 1) is always
+    allowed — the unit can close distance and swing.
+
+    `blockers` is a set of (x, y) coords; pass the set of mountain
+    / forest / river tiles from the AI snapshot or pass None to skip
+    the LoS check (e.g. for melee-only or for callers that don't
+    have the map handy — the legacy single-player tests do this).
     """
     d = manhattan((fromX, fromY), (toX, toY))
     if d == 0:
         return False
-    return unit_min_attack_range(unit) < d <= unit_attack_range(unit)
+    if not (unit_min_attack_range(unit) < d <= unit_attack_range(unit)):
+        return False
+    if d <= 1:
+        return True  # melee, no LoS needed
+    if blockers is not None and not has_line_of_sight(
+        (fromX, fromY), (toX, toY), blockers, size=board_size,
+    ):
+        return False
+    return True
 
 
 def _type_multiplier(attacker: Unit, defender: Unit) -> float:
@@ -1189,16 +1211,30 @@ async def _load_ai_snapshot(session: AsyncSession, game: Game, ai_player: Player
     units_by_player: Dict[int, List[Unit]] = {}
     for u in units_rows:
         units_by_player.setdefault(u.player_id, []).append(u)
+    # Resolve the AI's team_id. In 1V1 free-for-all every player is
+    # their own team (team_id == None) and attacks anyone else. In
+    # team mode players sharing a team_id are allies.
+    my_team = _team_of(ai_player) if ai_player is not None else None
+    ally_player_ids: set[int] = set()
+    enemy_player_ids: set[int] = set()
+    for p in players:
+        if p.id == ai_player.id:
+            continue
+        p_team = _team_of(p)
+        if my_team is not None and p_team is not None and p_team == my_team:
+            ally_player_ids.add(p.id)  # teammate — must not be attacked
+        else:
+            enemy_player_ids.add(p.id)
     ally_units = [u for u in units_by_player.get(ai_player.id, []) if u.hp > 0]
     enemy_units = [
-        u for pid, ulist in units_by_player.items()
-        if pid != ai_player.id
-        for u in ulist if u.hp > 0
+        u for pid in enemy_player_ids
+        for u in units_by_player.get(pid, []) if u.hp > 0
     ]
     enemy_castles = [
         (t.x, t.y) for t in tiles
         if t.terrain == TERRAIN_CASTLE and t.owner_id is not None
         and t.owner_id != ai_player.id
+        and t.owner_id not in ally_player_ids
     ]
     unowned_castles = [
         (t.x, t.y) for t in tiles

@@ -20,8 +20,11 @@ class Archer(BaseUnitClass):
     attack_kind = "physical"
 
     default_skills = ["snipe"]
-    attack_range = 2
-    min_attack_range = 1   # Fire-Emblem style: must keep distance, no melee
+    # P2.4 polish — was 2, with min 1 (archer could only hit at
+    # exactly distance 2). Way too short for 15x15+ maps. Now
+    # 1–4 with min 0 so the archer can both kite and melee.
+    attack_range = 4
+    min_attack_range = 0
     can_move_after_action = True
 
     strong_against = []   # reserved for future matchup against Warlock

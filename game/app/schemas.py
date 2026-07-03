@@ -199,6 +199,23 @@ class GameSummaryOut(APIModel):
     created_at: datetime
 
 
+class PendingClaimOut(APIModel):
+    """P2.4 polish — one in-flight claim on a claimable tile.
+
+    The client renders a "X turns remaining" progress indicator on
+    the tile using `turns_remaining` + `total_turns` (so a 2/2
+    bar fills up as the claim nears completion).
+    """
+    tile_id: int
+    tile_x: int
+    tile_y: int
+    started_turn: int
+    completes_turn: int
+    turns_remaining: int
+    total_turns: int
+    target_player_id: int
+
+
 class GameStateOut(APIModel):
     """Full game state for a player's dashboard."""
     game: GameSummaryOut
@@ -206,6 +223,8 @@ class GameStateOut(APIModel):
     players: List[PlayerOut]
     current_player_id: Optional[int]
     logs: List[ActionLogOut] = []
+    # P2.4 polish — list of in-flight claim sessions.
+    pending_claims: List[PendingClaimOut] = []
 
 
 class LobbyTeamOut(APIModel):
@@ -269,22 +288,31 @@ class ClaimResult(BaseModel):
 
 
 class RecruitRequest(BaseModel):
-    """P0.4 — body of POST /games/{id}/recruit.
+    """P0.4 / P2.4 polish — body of POST /games/{id}/recruit.
 
-    Spend gold to spawn a new unit on the barracks tile where the
-    `unit_id` (the recruiter) is currently standing. The recruiter
-    must belong to the player who owns the barracks, and the new
-    unit is created with has_acted=True, has_moved=True, mp=0 (it
-    cannot act this turn — same as Fire-Emblem's "summon" timing).
+    Spend gold to spawn a new unit on a barracks tile owned by the
+    player. Two modes are supported:
+
+    1. **Unit-anchor** (legacy): provide `unit_id` of a unit standing
+       on the barracks. The unit is consumed (has_acted=True,
+       mp=0) and the new unit spawns on the same tile.
+    2. **Empty-barracks** (P2.4 polish): omit `unit_id` and provide
+       `tile_x` + `tile_y` of an empty barracks. The new unit
+       spawns there with has_acted=True, has_moved=True, mp=0 — the
+       barracks itself acts as the anchor (no MP/turn cost since
+       no unit had to spend actions to recruit).
     """
     player_id: int
-    unit_id: int          # recruiter standing on the barracks
-    unit_type: str        # type_id of the new unit (e.g. "swordsman")
+    unit_id: Optional[int] = None    # recruiter standing on the barracks (legacy)
+    tile_x: Optional[int] = None     # empty-barracks anchor X
+    tile_y: Optional[int] = None     # empty-barracks anchor Y
+    unit_type: str                   # type_id of the new unit (e.g. "swordsman")
 
 
 class RecruitResult(BaseModel):
     ok: bool = True
-    recruiter_unit_id: int
+    # None when the recruit was performed on an empty barracks (P2.4 polish).
+    recruiter_unit_id: Optional[int] = None
     new_unit_id: int
     new_unit_type: str
     cost: int

@@ -963,6 +963,34 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
         )
     ).scalars().all()
 
+    # P2.4 polish — surface active claim sessions so the client can
+    # render a "X turns remaining" progress indicator on the tile.
+    # (Without this, players only see a toast and forget their
+    # claim is mid-flight.)
+    from app.models import ClaimSession as _ClaimSession
+    pending_claims_rows = (
+        await session.execute(
+            select(_ClaimSession).where(_ClaimSession.game_id == game.id)
+        )
+    ).scalars().all()
+    # Map each session's tile_id → (x, y) via the already-loaded tiles.
+    tile_by_id = {t.id: t for t in tiles}
+    pending_claims = []
+    for cs in pending_claims_rows:
+        tile = tile_by_id.get(cs.tile_id)
+        if tile is None:
+            continue  # session pointing at a deleted tile — skip
+        pending_claims.append({
+            "tile_id":        cs.tile_id,
+            "tile_x":         tile.x,
+            "tile_y":         tile.y,
+            "started_turn":   cs.started_turn,
+            "completes_turn": cs.completes_turn,
+            "turns_remaining": max(0, cs.completes_turn - game.turn_number),
+            "total_turns":    max(1, cs.completes_turn - cs.started_turn),
+            "target_player_id": cs.target_player_id,
+        })
+
     # Current player = first alive player whose seat >= current_player_index, else wrap.
     current_player_id = None
     if players:
@@ -1001,4 +1029,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
         ],
         current_player_id=current_player_id,
         logs=[ActionLogOut.model_validate(l) for l in logs],
+        # P2.4 polish — client uses this to draw a "X turns remaining"
+        # progress indicator on the tile.
+        pending_claims=pending_claims,
     )
