@@ -516,6 +516,7 @@ html, body {
 
 .cell.t-forest    { background-color: var(--t-forest); }
 .cell.t-mountain  { background-color: var(--t-mountain); }
+.cell.t-snow_peak { background-color: var(--t-mountain); }   /* P2.4 — same fall-back hue, asset differentiates */
 .cell.t-river     { background-color: var(--t-river); }
 .cell.t-castle    { background-color: var(--t-castle); }
 /* P0.4 new terrains */
@@ -603,6 +604,29 @@ html, body {
   z-index: 3;
   border-radius: 1px;
   pointer-events: none;
+}
+
+/* P2.4 — owner-color marker for claimed/owned building tiles.
+   Mirrors the unit color-bar shape (top-left) but placed in the
+   top-right corner to avoid collision with the unit's marker when
+   a unit stands on a claimed tile. */
+.tile-owner-marker {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: calc(var(--cell-size) * 0.22);
+  height: calc(var(--cell-size) * 0.22);
+  min-width: 5px;
+  min-height: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  z-index: 2;
+  border-radius: 1px;
+  pointer-events: none;
+}
+/* Slight tinted border on owned tiles so the eye can pick them out
+   at a glance, even on small cells. */
+.cell.tile-owned {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .unit.acted { opacity: 0.5; }
@@ -2117,6 +2141,7 @@ html, body {
 .editor-cell.t-plain    { background-color: var(--t-plain); }
 .editor-cell.t-forest   { background-color: var(--t-forest); }
 .editor-cell.t-mountain { background-color: var(--t-mountain); }
+.editor-cell.t-snow_peak { background-color: var(--t-mountain); }   /* P2.4 */
 .editor-cell.t-river    { background-color: var(--t-river); }
 .editor-cell.t-castle   { background-color: var(--t-castle); }
 .editor-cell.t-village   { background-color: var(--t-village); }

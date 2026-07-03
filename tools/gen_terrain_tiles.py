@@ -645,6 +645,45 @@ def make_desert(variant: int) -> Image.Image:
 
 
 # ============================================================
+# Snow peak (雪山) — P2.4
+# ============================================================
+def make_snow_peak(variant: int) -> Image.Image:
+    """P2.4 — distinct snow-peak terrain.
+
+    Visual goal: silver-tipped sharp peaks with a darker snow-foundation
+    so the silhouette reads as "cold mountainous" but different from
+    the existing `mountain` v1 (which is just a smooth snowy hump).
+    Two variants:
+      v0 — twin gentle peaks (lowland feel)
+      v1 — single dominant sharp peak (highland feel)
+    """
+    if variant == 0:
+        img = Image.new("RGB", (SIZE, SIZE), P.snow_l)
+        _draw_rocky_peak(img, peak_x=14, peak_y=14, half_width=14,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=36, peak_y=8, half_width=14,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        # Soft blue crevices
+        for y in range(20, SIZE):
+            px(img, 22, y, P.snow_d)
+            px(img, 23, y, P.snow_d)
+    else:
+        img = Image.new("RGB", (SIZE, SIZE), P.snow_l)
+        _draw_rocky_peak(img, peak_x=8, peak_y=20, half_width=10,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=24, peak_y=2, half_width=11,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        _draw_rocky_peak(img, peak_x=40, peak_y=18, half_width=10,
+                         base_y=SIZE, rock_color=P.snow_shadow, snow_color=P.snow_cap)
+        # Sharper blue crevices
+        for y in range(14, SIZE):
+            px(img, 17, y, P.snow_d)
+        for y in range(14, SIZE):
+            px(img, 32, y, P.snow_d)
+    return img
+
+
+# ============================================================
 # Snow plain (雪原)
 # ============================================================
 def make_snow(variant: int) -> Image.Image:
@@ -878,7 +917,8 @@ def main() -> None:
     # Tiles that depend on environment (forest, castle get 3 envs each)
     ENV_AWARE = ("forest", "castle")
     ENVS = ("grass", "snow", "desert")
-    VARIANTS_2 = ("plain", "mountain", "desert", "snow", "village", "barracks", "road", "gate")
+    VARIANTS_2 = ("plain", "mountain", "desert", "snow", "snow_peak",
+                   "village", "barracks", "road", "gate")
     VARIANTS_4 = ("river",)
 
     # Env-aware tiles (forest_grass_v0/v1, forest_snow_v0/v1, etc.)
@@ -895,6 +935,7 @@ def main() -> None:
     PLAIN_GEN = {
         "plain": make_plain, "mountain": make_mountain,
         "desert": make_desert, "snow": make_snow,
+        "snow_peak": make_snow_peak,   # P2.4 — distinct snow-peak terrain
         "village": make_village, "barracks": make_barracks,
         "road": make_road, "gate": make_gate,
     }

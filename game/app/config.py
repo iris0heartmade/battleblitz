@@ -18,6 +18,7 @@ MAP_SIZE: Final[int] = 15  # 15x15 grid
 TERRAIN_PLAIN: Final[str] = "plain"
 TERRAIN_FOREST: Final[str] = "forest"
 TERRAIN_MOUNTAIN: Final[str] = "mountain"
+TERRAIN_SNOW_PEAK: Final[str] = "snow_peak"   # 雪山（P2.4：与普通山分开的银顶）
 TERRAIN_RIVER: Final[str] = "river"
 TERRAIN_CASTLE: Final[str] = "castle"
 # New terrains (2026-06-30 P0.4)
@@ -38,6 +39,7 @@ TERRAIN_TYPES: Final[Tuple[str, ...]] = (
     TERRAIN_PLAIN,
     TERRAIN_FOREST,
     TERRAIN_MOUNTAIN,
+    TERRAIN_SNOW_PEAK,
     TERRAIN_RIVER,
     TERRAIN_CASTLE,
     TERRAIN_VILLAGE,
@@ -65,6 +67,7 @@ TERRAIN_MOVE_COST: Final[Dict[str, int]] = {
     TERRAIN_PLAIN: 2,
     TERRAIN_FOREST: 4,
     TERRAIN_MOUNTAIN: 6,
+    TERRAIN_SNOW_PEAK: 6,   # impassable, same movement cost as mountain
     TERRAIN_RIVER: 6,
     TERRAIN_CASTLE: 2,
     TERRAIN_VILLAGE: 2,
@@ -85,6 +88,7 @@ TERRAIN_DEF_BONUS: Final[Dict[str, int]] = {
     TERRAIN_PLAIN: 0,
     TERRAIN_FOREST: 2,
     TERRAIN_MOUNTAIN: 3,
+    TERRAIN_SNOW_PEAK: 3,   # same defensive bonus as mountain
     TERRAIN_RIVER: 0,
     TERRAIN_CASTLE: 5,  # legacy; new code uses CASTLE_SUBTYPE_DEF_BONUS
     TERRAIN_VILLAGE: 0,
@@ -100,19 +104,52 @@ TERRAIN_DEF_BONUS: Final[Dict[str, int]] = {
     CASTLE_DOOR: 4,
 }
 
-# Subset of terrains that produce gold income for their owner.
-INCOME_TERRAINS: Final[Tuple[str, ...]] = (
-    TERRAIN_VILLAGE,
-    TERRAIN_BARRACKS,
-    CASTLE_VAULT,
-)
+# ----------------------------------------------------------------
+# Building income (P0.4 → P2.4 refactor: data-driven, not hard-coded)
+# ----------------------------------------------------------------
+# Each entry pairs a terrain id with the rules for paying its owner.
+# P2.4 design goals:
+#   - One table to look at, not two parallel ones (INCOME_TERRAINS +
+#     INCOME_PER_TURN) that have to stay in sync.
+#   - Per-building cap is the second design lever: a player can
+#     capture many villages, but no single tile can pay more than
+#     its `cap_per_player` (or 0 = no cap). The default `cap=None`
+#     means no per-player cap.
+#   - `requires_owner=True` means the tile only pays once the owner_id
+#     is set. (Right now every income tile requires an owner. We
+#     keep the field so future tiles like "toll road" can be unowned
+#     and pay a flat per-crossing fee instead.)
+#
+# To add a new yield tile, append one entry; no other config changes
+# needed. `_collect_income_for_player` iterates this table.
+BUILDING_INCOME: Final[Dict[str, Dict]] = {
+    TERRAIN_VILLAGE: {
+        "amount": 50,
+        "cap_per_player": None,
+        "requires_owner": True,
+    },
+    TERRAIN_BARRACKS: {
+        "amount": 100,
+        "cap_per_player": None,
+        "requires_owner": True,
+    },
+    CASTLE_VAULT: {
+        "amount": 150,
+        "cap_per_player": None,
+        "requires_owner": True,
+    },
+}
 
-# Per-turn gold income by terrain (occupying player gains this much at
-# the start of their turn). Placeholder values — owner will tune later.
+
+# ----------------------------------------------------------------
+# Backwards-compat aliases
+# ----------------------------------------------------------------
+# Code that pre-dates the BUILDING_INCOME refactor still references
+# these by name. They are derived from BUILDING_INCOME on import so
+# there's a single source of truth.
+INCOME_TERRAINS: Final[Tuple[str, ...]] = tuple(BUILDING_INCOME.keys())
 INCOME_PER_TURN: Final[Dict[str, int]] = {
-    TERRAIN_VILLAGE: 50,
-    TERRAIN_BARRACKS: 100,
-    CASTLE_VAULT: 150,
+    t: cfg["amount"] for t, cfg in BUILDING_INCOME.items()
 }
 
 # Recruit cost (gold) for spawning a new unit at an owned barracks.
@@ -127,6 +164,13 @@ RECRUIT_COST: Final[Dict[str, int]] = {
 
 # Relative spawn weight for procedural map generation (excluding castle).
 # More weights = more of that terrain. Tuned for ~30% passable forest/mountain mix.
+# Default spawn weight table. Used by the legacy "classic" random map
+# generator when no style is specified. New procedural code consumes
+# per-style weights from MAP_STYLES.
+#
+# Note: snow_peak is intentionally absent here. It's a snow-biome-only
+# terrain, so non-snow styles never spawn it. The snow_outer style's
+# own weight table does include it.
 TERRAIN_SPAWN_WEIGHTS: Final[Dict[str, int]] = {
     TERRAIN_PLAIN: 55,
     TERRAIN_FOREST: 14,
@@ -202,10 +246,14 @@ MAP_STYLES: Final[Dict[str, Dict]] = {
         "biome": "snow",
         "mode": "single_hq",
         "safe_zone_radius": 2,
+        # P2.4 — split the old "mountain" bucket into mountain + snow_peak
+        # (silver-topped, snow-biome-only). Total mountain-like weight
+        # stays at 18 (12 + 6).
         "weights": {
             TERRAIN_PLAIN:    40,
             TERRAIN_FOREST:   12,
-            TERRAIN_MOUNTAIN: 18,
+            TERRAIN_MOUNTAIN:  6,
+            TERRAIN_SNOW_PEAK: 12,   # snow-biome silver peaks
             TERRAIN_RIVER:    15,
             TERRAIN_VILLAGE:   5,
             TERRAIN_BARRACKS:  2,
