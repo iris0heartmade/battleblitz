@@ -7,6 +7,10 @@ Covers:
 - `notes` field round-trips through the preset schema
 - Universal rout fires regardless of game.win_condition
 - Defend-mode at the target turn still reports "defend" reason
+- reach_*/defend_* maps carry a warning note about the lack of
+  well-designed mission maps (NOT "deprecated" — engine still
+  supports the modes, the UI selector just doesn't expose them
+  because no balanced mission map exists yet)
 """
 from __future__ import annotations
 
@@ -142,16 +146,26 @@ def test_preset_info_notes_optional():
 
 
 def test_reach_and_defend_maps_carry_warning_note():
-    """Legacy reach_*/defend_* maps should carry a "⚠️" warning in
-    their `notes` field so players know the mode is no longer
-    actively supported in the engine."""
+    """reach_*/defend_* maps carry a "⚠️" warning in their `notes`
+    field — the warning says the map was DESIGNED for that mode but
+    no well-designed mission map is exposed in the UI yet. The
+    engine still fully supports both modes; they're just not in the
+    create-game selector. (P2.4 polish — refactored away from the
+    earlier "deprecated" wording after user clarification.)"""
     for p in MAPS_DIR.glob("*.json"):
         if not (p.name.startswith("reach_") or p.name.startswith("defend_")):
             continue
         data = json.loads(p.read_text(encoding="utf-8"))
         notes = data.get("notes", "")
         assert "⚠" in notes, (
-            f"{p.name} missing warning note (mode-deprecation)"
+            f"{p.name} missing warning note (no-mission-map-yet)"
+        )
+        # Sanity: the warning should NOT say "已弃用" (deprecated)
+        # — the engine still works, the maps just don't have a
+        # well-designed mission flavour yet.
+        assert "已弃用" not in notes, (
+            f"{p.name} still uses '已弃用' wording — should be "
+            "'暂无理想的任务关卡' (P2.4 polish fix)"
         )
 
 
