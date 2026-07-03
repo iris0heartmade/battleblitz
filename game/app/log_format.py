@@ -1,14 +1,13 @@
 """Chinese action-log formatters.
 
 All in-game action log descriptions are written in Chinese so the player
-sees natural-language narratives. Now with compact formatting for better
-information density:
+sees natural-language narratives like:
 
-  剑士 → (5,7) -3MP
-  弓兵 🗡 剑士 -18 (12HP)
-  治疗师 ⚕ 骑士 +15
-  骑士 ⭐连击
-  弓手 ⏸
+  剑士 从 (3,5) 移动到 (5,7)，消耗 3 MP
+  弓兵 对 剑士 发动攻击，造成 18 点伤害 [击杀]
+  治疗师 治疗 骑士，恢复 15 点 HP
+  骑士 发动「连击」
+  弓手 原地待命
 
 Each formatter returns the description string. The caller is responsible
 for writing it into an ActionLog row via `_log(...)` in routes/actions.py
@@ -22,11 +21,12 @@ from typing import List, Sequence, Tuple
 
 
 def fmt_move(unit, path: Sequence[Tuple[int, int]], cost: int) -> str:
-    """"剑士 → (5,7) -3MP" """
+    """"剑士 从 (3,5) 移动到 (5,7)，消耗 3 MP" """
     if not path:
-        return f"{unit.name} ⏸"
+        return f"{unit.name} 原地待命"
+    x0, y0 = path[0]
     x1, y1 = path[-1]
-    return f"{unit.name} → ({x1},{y1}) -{cost}MP"
+    return f"{unit.name} 从 ({x0},{y0}) 移动到 ({x1},{y1})，消耗 {cost} MP"
 
 
 def fmt_attack(
@@ -38,32 +38,31 @@ def fmt_attack(
     counter_dmg: int = 0,
     assist: int = 0,
 ) -> str:
-    """"弓兵 🗡 剑士 -18 💀击杀 ↩5" """
-    parts = [f"{attacker.name} 🗡 {target.name} -{total_dmg}"]
+    """"弓兵 对 剑士 发动攻击，造成 18 点伤害 [击杀] → 反击 5" """
+    parts = [f"{attacker.name} 对 {target.name} 发动攻击"]
+    parts.append(f"，造成 {total_dmg} 点伤害")
     if is_kill:
-        parts.append(" 💀击杀")
+        parts.append(" [击杀]")
     else:
-        parts.append(f" ({target_hp_after}HP)")
+        parts.append(f"（{target.name} 剩余 {target_hp_after} HP）")
     if counter_dmg > 0:
-        parts.append(f" ↩{counter_dmg}")
+        parts.append(f" → {target.name} 反击 {counter_dmg} 点伤害")
     if assist > 0:
-        parts.append(f" +{assist}协力")
+        parts.append(f"（{assist} 名友军协力）")
     return "".join(parts)
 
 
 def fmt_wait(unit) -> str:
-    return f"{unit.name} ⏸"
+    return f"{unit.name} 原地待命"
 
 
 def fmt_end_turn(player, acted_count: int) -> str:
-    return f"{player.user_name} 结束 ({acted_count}动)"
+    return f"{player.user_name} 结束回合（使用了 {acted_count} 次行动）"
 
 
 def fmt_level_up(unit, new_level: int) -> str:
-    return f"{unit.name} ⬆ Lv.{new_level}"
+    return f"{unit.name} 升到了 Lv.{new_level}！"
 
 
 def fmt_eliminated(player) -> str:
-    return f"{player.user_name} 💀淘汰"
-
-
+    return f"{player.user_name} 已被淘汰！"
