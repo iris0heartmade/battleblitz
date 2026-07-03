@@ -26,5 +26,8 @@
     "PPCPPPPPPPPPCPP",
     "PPPPPPPPPPPPPPP",
     "PPPPPPPPPPPPPPP"
-  ]
+  ],
+  "recommended_players": 2,
+  "biome": "grass",
+  "notes": "经典 2 人新手图，地形开阔适合练手"
 }

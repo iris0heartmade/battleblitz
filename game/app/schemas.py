@@ -92,6 +92,10 @@ class PresetInfo(BaseModel):
     # per-room capacity (Game.capacity). Defaults to MAX_PLAYERS=4
     # server-side when absent from the preset JSON.
     recommended_players: Optional[int] = None
+    # P2.4 polish — designer-facing free-form notes. Surfaced in the
+    # create-game form below the description. May include playstyle
+    # hints or "⚠️ 模式已弃用" warnings for legacy reach/defend maps.
+    notes: Optional[str] = None
 
 
 class PresetsResponse(BaseModel):

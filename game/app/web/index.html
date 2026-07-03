@@ -114,6 +114,8 @@
           <option value="classic">经典随机（按种子生成）</option>
         </select>
         <p class="muted small" id="new-map-desc"></p>
+        <!-- P2.4 polish — designer notes (e.g. "⚠️ 模式已弃用") -->
+        <p class="small" id="new-map-notes" style="display:none"></p>
       </div>
       <div class="form-row">
         <label>兵种配置</label>
@@ -126,15 +128,13 @@
         <label>地图种子（仅经典随机生效）</label>
         <input id="new-seed" type="number" placeholder="留空使用随机种子" />
       </div>
-      <!-- P2.3 — 胜利条件 -->
+      <!-- P2.4 polish — victory condition is now universal; the
+           dropdown offered 4 modes but rout+seize are the only ones
+           the engine fully supports, so we just inform the player. -->
       <div class="form-row">
         <label>胜利条件</label>
-        <select id="new-win-condition">
-          <option value="rout">全灭 — 消灭所有敌方单位</option>
-          <option value="seize">占领 — 占领敌方王座/据点</option>
-          <option value="reach">到达 — 指定单位到达目标格</option>
-          <option value="defend">坚守 — 坚持 N 回合存活</option>
-        </select>
+        <span class="badge">消灭所有敌方单位，或占领对方 HQ（所有地图通用）</span>
+        <input type="hidden" id="new-win-condition" value="rout">
       </div>
       <div id="new-reach-tile-row" class="form-row" hidden>
         <label>目标格坐标（reach 模式）</label>
@@ -402,6 +402,11 @@
         </div>
         <div class="game-header-center">
           <span class="badge" id="game-thinking" hidden>🤖 电脑思考中…</span>
+          <!-- P2.4 polish — per-faction gold HUD. Real-time gold for
+               every player in the game. Populated by renderFactionGoldBar(). -->
+          <div id="faction-gold-bar" class="faction-gold-bar">
+            <span class="muted small">金币将在对局开始后显示</span>
+          </div>
         </div>
         <div class="game-header-right">
           <button class="btn btn-danger" data-action="end-turn">结束回合 →</button>

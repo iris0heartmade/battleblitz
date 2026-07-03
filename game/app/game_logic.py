@@ -598,15 +598,24 @@ def _finish_game(
 
 
 async def check_win_condition(session: AsyncSession, game: Game) -> bool:
-    """Evaluate the current win condition for `game`. If a winner
-    emerges, set status='finished' + win_reason and return True.
-    Otherwise return False (game continues).
+    """Evaluate the win condition for `game`. Returns True if a winner
+    has been decided (status now 'finished').
+
+    P2.4 polish — rout + seize are now UNIVERSAL. The function fires
+    rout (last team alive wins) regardless of `game.win_condition`,
+    because rout + seize are the only modes the engine fully supports.
+    Seize itself is decided in `claim_tile` (when HQ ownership flips);
+    this function does not need a second pass for it.
+
+    Legacy `defend` and `reach` modes stay supported for old game rows
+    in the DB. New games always use the default ("rout"), which now
+    means "rout+seize" because both fire for every game.
 
     Called from:
-      - cleanup_dead_units (rout + post-attack recheck)
-      - apply_end_of_turn (defend + final rout recheck)
-      - move_unit (reach, when a unit lands on the target)
-      - claim_tile (seize, when ownership flips)
+      - cleanup_dead_units (universal rout)
+      - apply_end_of_turn (legacy defend + final universal rout)
+      - move_unit (legacy reach, when a unit lands on the target)
+      - claim_tile (seize, when HQ ownership flips)
     """
     if game.status != "playing":
         return game.status == "finished"
@@ -614,67 +623,47 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
     # Always recompute alive-teams so a 0-team left means 'draw'.
     alive = await _alive_teams(session, game)
 
-    if game.win_condition == "rout":
-        if len(alive) == 1:
-            _finish_game(game, alive[0], "rout")
-            return True
-        if len(alive) == 0:
-            _finish_game(game, None, "draw")
-            return True
-        return False
+    # --- Legacy: defend (survive N rounds) — keep the "defend" label
+    #     as a win_reason when the game was actually in defend mode
+    #     AND we're at/past the target turn. Otherwise fall through
+    #     to the universal rout check (which always fires). ---
+    defend_winner_team = None
+    if (
+        game.win_condition == "defend"
+        and game.turn_number >= game.defend_turns
+        and len(alive) == 1
+    ):
+        defend_winner_team = alive[0]
 
-    if game.win_condition == "defend":
-        # Owner rule: "survive to round N" — interpreted as the
-        # attacker has failed to wipe all defenders in N rounds.
-        # Outcomes at the target turn:
-        #   * exactly 1 team alive → that team wins ("defend")
-        #   * 0 teams alive → draw
-        #   * 2+ teams alive → the game continues (no one was wiped
-        #     yet, but the scoreboard shows "Round N/N: hold on")
-        if game.turn_number >= game.defend_turns and len(alive) == 1:
-            _finish_game(game, alive[0], "defend")
-            return True
-        if len(alive) == 0:
-            _finish_game(game, None, "draw")
-            return True
-        return False
+    # --- UNIVERSAL rout — fires regardless of game.win_condition ---
+    if len(alive) == 0:
+        _finish_game(game, None, "draw")
+        return True
+    if len(alive) == 1:
+        # In defend mode at the target turn, use "defend" as the
+        # reason to preserve the original semantics; otherwise "rout".
+        reason = "defend" if defend_winner_team is not None else "rout"
+        _finish_game(game, alive[0], reason)
+        return True
 
-    if game.win_condition == "reach":
-        # A unit is currently on the target tile.
-        if game.reach_tile_id is not None:
-            from sqlalchemy import select as _sel
-            tile = await session.get(Tile, game.reach_tile_id)
-            if tile is not None and tile.occupied_unit_id is not None:
-                winner_unit = (await session.execute(
-                    _sel(Unit).where(Unit.id == tile.occupied_unit_id)
+    # --- UNIVERSAL seize — handled in claim_tile when ownership flips;
+    #     this function does NOT need a seize-specific branch because
+    #     claim_tile calls _finish_game directly. ---
+
+    # --- Legacy: reach (touch a target tile) ---
+    if game.win_condition == "reach" and game.reach_tile_id is not None:
+        from sqlalchemy import select as _sel
+        tile = await session.get(Tile, game.reach_tile_id)
+        if tile is not None and tile.occupied_unit_id is not None:
+            winner_unit = (await session.execute(
+                _sel(Unit).where(Unit.id == tile.occupied_unit_id)
+            )).scalars().first()
+            if winner_unit is not None and winner_unit.hp > 0:
+                winner_player = (await session.execute(
+                    _sel(Player).where(Player.id == winner_unit.player_id)
                 )).scalars().first()
-                if winner_unit is not None and winner_unit.hp > 0:
-                    winner_player = (await session.execute(
-                        _sel(Player).where(Player.id == winner_unit.player_id)
-                    )).scalars().first()
-                    _finish_game(game, _team_of(winner_player), "reach")
-                    return True
-        # Rout still applies as a backup: only 1 team left = they win
-        # even in reach mode (the opponent got wiped before the unit
-        # reached the goal).
-        if len(alive) == 1:
-            _finish_game(game, alive[0], "rout")
-            return True
-        if len(alive) == 0:
-            _finish_game(game, None, "draw")
-            return True
-        return False
-
-    if game.win_condition == "seize":
-        # Seize wins at the moment ownership flips (handled in
-        # claim_tile). Here we only handle the rout fallback.
-        if len(alive) == 1:
-            _finish_game(game, alive[0], "rout")
-            return True
-        if len(alive) == 0:
-            _finish_game(game, None, "draw")
-            return True
-        return False
+                _finish_game(game, _team_of(winner_player), "reach")
+                return True
 
     return False
 

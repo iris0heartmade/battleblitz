@@ -51,5 +51,7 @@
     "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCP",
     "vCCCCCCCCCCCCCCCCCCCCCCCCvCCCP",
     "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCP"
-  ]
+  ],
+  "recommended_players": 4,
+  "notes": "⚠️ 原 reach 模式已弃用，仅作为普通 4 人图游玩"
 }

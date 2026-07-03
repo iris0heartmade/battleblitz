@@ -313,15 +313,14 @@ async function renderJoinList() {
   }
 }
 
-// P2.3 — win condition sub-controls visibility
+// P2.4 polish — win condition UI is now a static badge (rout + seize
+// are universal). Keep this function as a no-op so old call sites
+// (e.g. on-view-enter) don't break.
 function setupWinConditionUI() {
-  const sel = document.getElementById("new-win-condition");
-  const reachRow = document.getElementById("new-reach-tile-row");
-  const defendRow = document.getElementById("new-defend-turns-row");
-  sel.addEventListener("change", () => {
-    reachRow.hidden = sel.value !== "reach";
-    defendRow.hidden = sel.value !== "defend";
-  });
+  // The #new-reach-tile-row and #new-defend-turns-row blocks remain in
+  // the DOM (hidden by the [hidden] attribute) for back-compat with
+  // any code that might still reference them. createGame() no longer
+  // reads these inputs because winCondition is always "rout" now.
 }
 
 async function createGame() {
@@ -329,6 +328,9 @@ async function createGame() {
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
   const unitComp = document.getElementById("new-unit-composition").value;
+  // P2.4 polish — win condition is now universal (rout+seize). The
+  // hidden #new-win-condition input still emits "rout" so the API
+  // contract is preserved; reach/defend blocks are ignored.
   const winCondition = document.getElementById("new-win-condition").value;
   const errEl = document.getElementById("new-error");
   errEl.hidden = true;
@@ -340,15 +342,9 @@ async function createGame() {
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
     if (unitComp) body.unit_composition = unitComp;
-    if (winCondition === "reach") {
-      body.reach_tile = {
-        x: parseInt(document.getElementById("new-reach-x").value) || 14,
-        y: parseInt(document.getElementById("new-reach-y").value) || 14,
-      };
-    }
-    if (winCondition === "defend") {
-      body.defend_turns = parseInt(document.getElementById("new-defend-turns").value) || 10;
-    }
+    // reach / defend blocks are kept in the DOM for legacy data but
+    // are no longer wired into new game creation. The engine still
+    // honors the values on legacy rows.
     const g = await api("POST", "/games", body);
     // Save team choice for rejoin
     if (myTeam) state.me.team = myTeam;
@@ -417,6 +413,9 @@ async function populatePresetSelects() {
   // Maps without `recommended_players` (legacy / handcrafted / custom)
   // fall under the "4 人" bucket since that's the global cap.
   const targetCount = parseInt(countSel?.value || "4");
+  // Stash the full presets list on `state.presets` so map-desc handler
+  // can look up notes for the currently-selected preset (P2.4 polish).
+  state.presets = presets;
   for (const m of presets.maps) {
     const recCount = m.recommended_players ?? 4;
     if (recCount !== targetCount) continue;
@@ -427,6 +426,7 @@ async function populatePresetSelects() {
     const sizeLabel = m.size ? ` [${m.size}×${m.size}]` : "";
     opt.textContent = `${m.name}${sizeLabel} — ${m.description}`;
     opt.dataset.desc = m.description;
+    opt.dataset.notes = m.notes || "";
     mapSel.appendChild(opt);
   }
   for (const u of presets.unit_compositions) {
@@ -438,11 +438,31 @@ async function populatePresetSelects() {
   }
   updatePresetDescription(mapSel, document.getElementById("new-map-desc"));
   updatePresetDescription(unitsSel, document.getElementById("new-units-desc"));
+  updatePresetNotes(mapSel);
 }
 
 function updatePresetDescription(sel, target) {
   const opt = sel.options[sel.selectedIndex];
   target.textContent = opt?.dataset?.desc || "";
+}
+
+// P2.4 polish — surface designer notes (e.g. "⚠️ 模式已弃用") below
+// the map description in the create-game form. Notes starting with
+// the warning emoji get a yellow alert style.
+function updatePresetNotes(sel) {
+  const target = document.getElementById("new-map-notes");
+  if (!target) return;
+  const opt = sel.options[sel.selectedIndex];
+  const notes = opt?.dataset?.notes || "";
+  if (notes) {
+    target.textContent = notes;
+    target.style.display = "block";
+    target.classList.toggle("warn", notes.startsWith("⚠"));
+  } else {
+    target.textContent = "";
+    target.style.display = "none";
+    target.classList.remove("warn");
+  }
 }
 
 // P2.3 — show team selector before joining, then call joinGame
@@ -626,10 +646,10 @@ function renderLobby(st, lobby) {
     teamsEl.hidden = true;
   }
 
-  // P2.3 — Victory condition banner
-  const wc = lobby?.win_condition || st.game?.win_condition || "rout";
-  const wcLabel = WIN_CONDITION_LABEL[wc] || wc;
-  winBanner.textContent = `🏁 ${wcLabel}`;
+  // P2.4 polish — victory condition is now universal. Show a single
+  // static banner instead of the per-mode label. (Old per-mode labels
+  // still work for legacy data — we just don't dispatch by win_condition.)
+  winBanner.textContent = "🏁 胜利条件：消灭所有敌方单位，或占领对方 HQ（通用）";
 
   // Collect all unique named teams for the dropdown options.
   const existingTeams = [...new Set(st.players
@@ -895,6 +915,7 @@ function renderGame(st) {
   renderBoard(st);
   renderUnitInfo(st);
   renderPlayersList(st);
+  renderFactionGoldBar(st);   // P2.4 polish — top-bar gold HUD
   renderActionLog(st);
 }
 
@@ -2464,6 +2485,31 @@ function renderPlayersList(st) {
   }
 }
 
+// P2.4 polish — per-faction gold HUD. Renders one chip per alive
+// player in the game's top-center header. The current viewer's
+// chip is highlighted with the accent ring.
+function renderFactionGoldBar(st) {
+  const bar = document.getElementById("faction-gold-bar");
+  if (!bar) return;
+  const players = st?.players || [];
+  if (players.length === 0) {
+    bar.innerHTML = '<span class="muted small">金币将在对局开始后显示</span>';
+    return;
+  }
+  const myId = state.me?.player_id;
+  bar.innerHTML = players.map(p => {
+    const isDead = p.is_alive === false;
+    const gold = p.gold ?? 0;
+    const cls = `faction-gold-chip${p.id === myId ? " is-you" : ""}${isDead ? " dead" : ""}`;
+    // playerColorCss returns a hex/rgba string we control, so it's
+    // safe to inline. user_name flows through escapeHtml.
+    return `<span class="${cls}" title="${escapeHtml(p.user_name)} · ${gold} G">
+      <span class="swatch" style="background:${playerColorCss(p.color)}"></span>
+      ${escapeHtml(p.user_name)} · 💰 <strong>${gold}</strong>
+    </span>`;
+  }).join("");
+}
+
 function renderActionLog(st) {
   const el = document.getElementById("action-log");
   const chatEl = document.getElementById("chat-float");
@@ -3730,9 +3776,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("new-player-count")?.addEventListener("change", () => {
     populatePresetSelects().catch(() => {});
   });
-  // Preset select change -> update description
+  // Preset select change -> update description + notes
   document.getElementById("new-map-preset").addEventListener("change", (e) => {
     updatePresetDescription(e.target, document.getElementById("new-map-desc"));
+    updatePresetNotes(e.target);
   });
   document.getElementById("new-unit-composition").addEventListener("change", (e) => {
     updatePresetDescription(e.target, document.getElementById("new-units-desc"));

@@ -58,15 +58,16 @@ async def test_create_game_4p_map_capacity_4(game_client):
 
 
 @pytest.mark.asyncio
-async def test_create_game_legacy_map_defaults_to_4(game_client):
-    """open_plains.json has no `recommended_players` field — it should
-    default to MAX_PLAYERS=4 via _effective_max_players."""
+async def test_create_game_open_plains_capacity_2(game_client):
+    """P2.4 polish — open_plains is a 2-castle 15×15 classic. The
+    recent metadata pass added `recommended_players: 2`, so a room
+    using it should be locked to 2 players (not the old 4p default)."""
     r = await game_client.post("/games", json={
-        "name": "legacy",
+        "name": "open",
         "map_preset": "open_plains",
     })
-    assert r.status_code == 201
-    assert r.json()["capacity"] == 4
+    assert r.status_code == 201, r.text
+    assert r.json()["capacity"] == 2
 
 
 @pytest.mark.asyncio
@@ -187,12 +188,14 @@ async def test_lobby_endpoint_returns_capacity(game_client):
 
 
 @pytest.mark.asyncio
-async def test_lobby_legacy_map_reports_4(game_client):
+async def test_lobby_open_plains_reports_2(game_client):
+    """P2.4 polish — open_plains lobby now reports max_players=2
+    (its recommended_players), not the legacy 4p default."""
     r = await game_client.post("/games", json={
-        "name": "legacy",
+        "name": "open-lobby",
         "map_preset": "open_plains",
     })
     gid = r.json()["id"]
 
     r = await game_client.get(f"/games/{gid}/lobby")
-    assert r.json()["max_players"] == 4
+    assert r.json()["max_players"] == 2
