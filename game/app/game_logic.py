@@ -1270,8 +1270,8 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
-        if d > 1:
-            # Ranged: check line of sight
+        if d > 1 and not _get_unit(unit.unit_type).ignores_line_of_sight:
+            # Ranged: check line of sight (archer's "snipe" ignores obstacles)
             blockers.discard((e.x, e.y))
             if not has_line_of_sight((unit.x, unit.y), (e.x, e.y), blockers):
                 continue

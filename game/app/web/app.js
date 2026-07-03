@@ -1872,7 +1872,7 @@ function showPostMoveBubble(unit) {
   }
   enemyList.sort((a, b) => a.hp - b.hp);
 
-  const canContinue = unit.mp > 0 && unitCanMoveAfter(unit.unit_type);
+  const canContinue = unit.mp > 0;
   const hasContent = enemyList.length > 0 || canContinue;
   if (!hasContent) {
     toast("移动完成，当前范围内无目标");
@@ -2367,9 +2367,14 @@ async function doMove(unit, toX, toY) {
     const st = state.game;
     const moved = st.players.find(p => p.id === state.me.player_id)?.units?.find(u2 => u2.id === unit.id);
     if (moved && !moved.has_acted) {
-      // Highlight current attack range
+      // Pure move (no action yet) → show full post-move bubble (attack / move-more / wait)
       renderBoard(st);
       showPostMoveBubble(moved);
+    } else if (moved && moved.has_acted && (moved.mp ?? 0) > 0 && CAN_MOVE_AFTER[moved.unit_type]) {
+      // Post-action move (acted first, then moved because can_move_after_action).
+      // Show the post-attack-style bubble (move-more / wait, no attack buttons).
+      renderBoard(st);
+      showPostAttackBubble(moved);
     } else {
       hideBubble();
       state.selectedUnit = null;
