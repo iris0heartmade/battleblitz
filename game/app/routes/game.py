@@ -752,6 +752,9 @@ async def list_presets() -> PresetsResponse:
             # P2.4 — expose recommended_players so the create-game
             # category selector on the frontend can filter by it.
             recommended_players=p.get("recommended_players"),
+            # P2.4 polish — pass designer notes through (legacy
+            # reach/defend maps carry a ⚠️ deprecation warning).
+            notes=p.get("notes"),
         )
         for p in MAP_PRESETS.values()
     ]

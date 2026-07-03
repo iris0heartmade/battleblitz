@@ -26,5 +26,8 @@
     "PPCPPPPPPPPPCPP",
     "PPPPPPPFPPPPPPP",
     "PPPPPPPPPPPPPPP"
-  ]
+  ],
+  "recommended_players": 2,
+  "biome": "mountain",
+  "notes": "2 人山脉关卡，险要地形决定胜负"
 }

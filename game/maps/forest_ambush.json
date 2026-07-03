@@ -26,5 +26,8 @@
     "PPPPPPPPPPPPPPP",
     "PCPPPPPPPPPPPCP",
     "PPPPPPPPPPPPPPP"
-  ]
+  ],
+  "recommended_players": 2,
+  "biome": "forest",
+  "notes": "2 人森林伏击战，远程单位受限"
 }

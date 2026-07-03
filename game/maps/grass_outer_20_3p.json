@@ -1,0 +1,33 @@
+{
+  "id": "grass_outer_20_3p",
+  "name": "草地 外圈 · 20×20 · 3人",
+  "description": "P2.4 自动生成：草地 外圈 风格，3 人对战，20×20 棋盘 (种子 #1361)",
+  "biome": "grass",
+  "size": 20,
+  "style": "grass_outer",
+  "mode": "single_hq",
+  "recommended_players": 3,
+  "seed": 1361,
+  "layout": [
+    "PPPPPPPPRvFPvPPPPPPP",
+    "PPPPPRPPbPFMrPrPPPPP",
+    "PPCPPRPPPbRPPvRPPCPP",
+    "PPPPPPPvPFPPvMRPPPPP",
+    "PPPPPPPbFPFrMMPPPPPP",
+    "PbPMrPPPvPFPPrFvPPRF",
+    "PvPPRrvRPFPPRPPPPFPr",
+    "vPFRrFMFFPFPPRPrPPPP",
+    "PPPFRPvPPPPFFvFPPPMP",
+    "PPPvPFrPPFFRPFRPPPPF",
+    "PPRPRvPPPPPPbPPPPFPP",
+    "RPPRPPRPPPPPPrPFPPPR",
+    "RPPvFbPPRMFvPPRFPPPP",
+    "PPFPvPPPPPPbMPvPPrPP",
+    "PFPPFPrMPbPMRPFPvPRv",
+    "PPPPPrPPPPPPPPFRFPPP",
+    "FPPFvMPPPPPPPPrPPPMF",
+    "PPPPFFPPPPCPPPFRPPPF",
+    "PPPPFPPPPPPPPPvPPPRP",
+    "RPbPPPRPPPPPPPPvbPPF"
+  ]
+}

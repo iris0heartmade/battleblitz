@@ -46,10 +46,9 @@ STYLE_SIZES: Dict[str, List[int]] = {
 }
 
 # Player counts we generate for each cell. The procedural generator
-# only handles 2/3/4 players; we generate 2 and 4 to cover the most
-# common modes (3 is identical 2p plus an extra slot — skipped for
-# brevity, easy to add later).
-PLAYER_COUNTS = [2, 4]
+# supports 2/3/4 players; we emit all three so the lobby's 3p
+# category has real options (P2.4 polish).
+PLAYER_COUNTS = [2, 3, 4]
 
 
 def _tile_to_char(terrain: str, subtype: str | None) -> str:

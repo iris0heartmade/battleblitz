@@ -246,14 +246,14 @@ MAP_STYLES: Final[Dict[str, Dict]] = {
         "biome": "snow",
         "mode": "single_hq",
         "safe_zone_radius": 2,
-        # P2.4 — split the old "mountain" bucket into mountain + snow_peak
-        # (silver-topped, snow-biome-only). Total mountain-like weight
-        # stays at 18 (12 + 6).
+        # P2.4 polish — snow biome is now PURE-snow. Drop the grey
+        # TERRAIN_MOUNTAIN weight (was 6) and bump TERRAIN_SNOW_PEAK
+        # 12 → 18 so the silver-peak count stays visually rich.
         "weights": {
             TERRAIN_PLAIN:    40,
             TERRAIN_FOREST:   12,
-            TERRAIN_MOUNTAIN:  6,
-            TERRAIN_SNOW_PEAK: 12,   # snow-biome silver peaks
+            TERRAIN_SNOW_PEAK: 18,   # snow-biome silver peaks
+            # TERRAIN_MOUNTAIN intentionally absent — snow maps are pure-snow
             TERRAIN_RIVER:    15,
             TERRAIN_VILLAGE:   5,
             TERRAIN_BARRACKS:  2,

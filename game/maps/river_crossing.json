@@ -26,5 +26,8 @@
     "PPPPPPPPPPPPRRP",
     "PCPPPPPPPPPPPCP",
     "PPPPPPPPPPPPPPP"
-  ]
+  ],
+  "recommended_players": 2,
+  "biome": "grass",
+  "notes": "2 人渡河会战，需绕行或强渡"
 }

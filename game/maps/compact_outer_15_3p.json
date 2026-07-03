@@ -1,0 +1,28 @@
+{
+  "id": "compact_outer_15_3p",
+  "name": "小城外圈 · 15×15 · 3人",
+  "description": "P2.4 自动生成：小城外圈 风格，3 人对战，15×15 棋盘 (种子 #1276)",
+  "biome": "grass",
+  "size": 15,
+  "style": "compact_outer",
+  "mode": "single_hq",
+  "recommended_players": 3,
+  "seed": 1276,
+  "layout": [
+    "PFPPPPPPPvPFPPP",
+    "PPPPPPMPPRMPPPP",
+    "PPCPFPPPPPPPCPF",
+    "PPPPPPPPPPPPPPR",
+    "PPPPPPMPPFFPPMP",
+    "vPPMPPPFFFrPPPP",
+    "PPrRPPPPPFPPPvP",
+    "bPPPPPMvFPPPPPP",
+    "PPPFPPPFMPPPMPP",
+    "PvFPMPMPPPPPPPP",
+    "bPPPPPPFPvPPRPb",
+    "PPPPPPPPPMPPPPP",
+    "PFPPPFPCPPFPFPP",
+    "FPPPPPPPPMPPPPP",
+    "PPPPPPPFPPMPMvP"
+  ]
+}

@@ -1353,6 +1353,48 @@ html, body {
   border-radius: 50%;
 }
 
+/* P2.4 polish — per-faction gold HUD chips (game header center) */
+.faction-gold-bar {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin-left: 12px;
+  vertical-align: middle;
+}
+.faction-gold-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(240, 199, 94, 0.18);
+  color: #f0c75e;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: 1px solid rgba(240, 199, 94, 0.4);
+}
+.faction-gold-chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.faction-gold-chip.is-you {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* P2.4 polish — preset notes (shown below map description) */
+#new-map-notes.warn {
+  color: #b35900;
+  background: #fff5e0;
+  border-left: 3px solid #d4a017;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
 /* P2.3 — Victory condition banner in lobby */
 .lobby-win-banner {
   padding: 6px 12px;

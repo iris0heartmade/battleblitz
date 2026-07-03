@@ -48,5 +48,7 @@
     "CCbCCCCCCCCCCCCCCCCCCCCCCCPPPP",
     "CCCCCCCCCCCCCCCCCCCCCCCCCCCPPP",
     "CCvCCCCCCCCCCCCCCCCCCvCCCCCPPP"
-  ]
+  ],
+  "recommended_players": 4,
+  "notes": "⚠️ 原 defend 模式（25 回合）已弃用，仅作为普通 4 人图游玩"
 }
