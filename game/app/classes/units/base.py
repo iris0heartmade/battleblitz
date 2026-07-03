@@ -39,6 +39,7 @@ class UnitClassProfile:
     default_skills: Tuple[str, ...]
     attack_range: int          # 1 = melee, 2+ = ranged (max Manhattan distance)
     can_move_after_action: bool
+    ignores_line_of_sight: bool = False  # archer/sniper — obstacles don't block attack
     min_attack_range: int = 0 # 0 = can melee at d=1; 1 = must keep distance (ranged-only)
     strong_against: FrozenSet[str] = frozenset()  # e.g. {"knight"}
     attack_kind: str = "physical"  # "physical" | "magic" — drives damage formula
@@ -85,6 +86,7 @@ class BaseUnitClass(ABC):
 
     # ── Mobility ───────────────────────────────────────────────
     can_move_after_action: ClassVar[bool] = False
+    ignores_line_of_sight: ClassVar[bool] = False  # archer: obstacles don't block attack
 
     # ── Type advantage ─────────────────────────────────────────
     strong_against: ClassVar[List[str]] = []  # e.g. ["knight"]  (used by compile() default)
@@ -106,6 +108,7 @@ class BaseUnitClass(ABC):
             attack_range=cls.attack_range,
             min_attack_range=cls.min_attack_range,
             can_move_after_action=cls.can_move_after_action,
+            ignores_line_of_sight=cls.ignores_line_of_sight,
             strong_against=frozenset(cls.strong_against),
             attack_kind=cls.attack_kind,
             base_matk=cls.base_matk,

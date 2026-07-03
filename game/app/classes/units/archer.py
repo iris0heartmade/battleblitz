@@ -26,5 +26,6 @@ class Archer(BaseUnitClass):
     attack_range = 4
     min_attack_range = 0
     can_move_after_action = True
+    ignores_line_of_sight = True   # 狙击：无视障碍
 
     strong_against = []   # reserved for future matchup against Warlock

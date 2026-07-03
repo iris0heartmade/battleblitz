@@ -166,8 +166,11 @@ async def move_unit(
     unit = await _load_unit(session, body.unit_id)
     if unit.player_id != player.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
-    if unit.has_moved:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已移动过")
+    # Allow continued movement as long as the unit hasn't acted (or its class
+    # permits move-after-action).  has_moved by itself no longer blocks —
+    # the unit can keep walking while MP lasts.
+    if unit.has_acted and not _get_unit(unit.unit_type).can_move_after_action:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动且无法继续移动")
     if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
 
@@ -319,8 +322,8 @@ async def attack(
             f"target out of range (need {atk_min} < d={distance} <= {atk_range})",
         )
 
-    # Ranged attacks need LOS
-    if atk_range > 1:
+    # Ranged attacks need LOS (archer's "snipe" skill ignores obstacles)
+    if atk_range > 1 and not _get_unit(attacker.unit_type).ignores_line_of_sight:
         terrain, _owners, _occ = await _load_tile_grid(session, game_id)
         blockers = _blocker_set(terrain)
         # The target's own tile should not block LOS to itself

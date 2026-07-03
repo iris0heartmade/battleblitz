@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.schemas import LegalAction
+from app.classes.units import get as _get_unit
 from app.config import (
     AI_AGGRO_RANGE,
     SKILL_DOUBLE_STRIKE,
@@ -160,8 +161,8 @@ def _legal_actions_for_unit(
         d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
-        if d > 1:
-            # Ranged: check LOS
+        if d > 1 and not _get_unit(unit.unit_type).ignores_line_of_sight:
+            # Ranged: check LOS (archer's "snipe" ignores obstacles)
             los_blockers.discard((e.x, e.y))
             if not has_line_of_sight((unit.x, unit.y), (e.x, e.y), los_blockers):
                 continue
