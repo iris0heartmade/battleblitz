@@ -1,0 +1,33 @@
+{
+  "id": "desert_outer_20_2p",
+  "name": "沙漠 外圈 · 20×20 · 2人",
+  "description": "P2.4 自动生成：沙漠 外圈 风格，2 人对战，20×20 棋盘 (种子 #1354)",
+  "biome": "desert",
+  "size": 20,
+  "style": "desert_outer",
+  "mode": "single_hq",
+  "recommended_players": 2,
+  "seed": 1354,
+  "layout": [
+    "PPPPPPPrPPPPPPPMPFPP",
+    "PPPPPPRPPPrPPMPPPFMr",
+    "PPCPPPPrPrMPPPrMPvPr",
+    "PPPPPPvMMPMRMPRMPPPP",
+    "PPPPPMPrPFMPPPPRPPMP",
+    "PMRRPPPMPPPPMrPMPRMR",
+    "PMMPRRMPPPFPPvPvPFMM",
+    "PPFPPPrMMPrPFPPPPRPP",
+    "PPPPFPPPMMFPPFPvPvMP",
+    "PRPMPPPPPPRPPPPPvPPP",
+    "PPMrPPRPrrPMPPPPrPMP",
+    "PrbPPbPPRPbMPrPPPPPP",
+    "PrMMPMPPMPrPPPPPPPPP",
+    "PMvPFvMPPPPPFPPPRrPF",
+    "MPPMPPPFPPPrPPPPRMPP",
+    "PFPPrFPRFPPMrPPPPPPP",
+    "MrPPPFFPPFPMFPPPPPPP",
+    "RrrPPPPPPPPPPvPPPCPP",
+    "vPPPPPPPrPPPPPPPPPPP",
+    "MPPPFPPPPPPPPPvPPPPP"
+  ]
+}

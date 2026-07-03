@@ -1,0 +1,33 @@
+{
+  "id": "castle_internal_20_4p",
+  "name": "城堡内部 · 20×20 · 4人",
+  "description": "P2.4 自动生成：城堡内部 风格，4 人对战，20×20 棋盘 (种子 #1368)",
+  "biome": "grass",
+  "size": 20,
+  "style": "castle_internal",
+  "mode": "castle_internal",
+  "recommended_players": 4,
+  "seed": 1368,
+  "layout": [
+    "ffwfffffffffffffffff",
+    "fwdffwfffwwfffwwfsff",
+    "fstdfwfffwffffffftdv",
+    "fffffffffwffwfwfffff",
+    "wwfffffffffffffwfwff",
+    "wfffffffffffvwffffwf",
+    "ffffffwffvfwffffffff",
+    "ffffffwffffffffwfffw",
+    "fffffffffwfffffffffw",
+    "ffwffffffffffffffwff",
+    "fffwwwffffffffffffff",
+    "fffwffffffffwffwffff",
+    "ffwffwffffffvfffffff",
+    "ffffwffwffwffffwfwff",
+    "ffffffffffffwwfffffw",
+    "ffwffffwffffffwfffff",
+    "wffwfwwfffffffffwsff",
+    "fdtswffwwffwfffwwtdf",
+    "wfffffffffffffffwdff",
+    "ffffffffwwfffwwfffff"
+  ]
+}

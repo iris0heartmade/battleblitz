@@ -1,0 +1,33 @@
+{
+  "id": "snow_outer_20_4p",
+  "name": "雪地 外圈 · 20×20 · 4人",
+  "description": "P2.4 自动生成：雪地 外圈 风格，4 人对战，20×20 棋盘 (种子 #1368)",
+  "biome": "snow",
+  "size": 20,
+  "style": "snow_outer",
+  "mode": "single_hq",
+  "recommended_players": 4,
+  "seed": 1368,
+  "layout": [
+    "PPPPPPMbMMMFPPPPPPPP",
+    "PPPPPPRPFPPMFMPPPPPP",
+    "PPCPPRRRPPrPPRRPPCPP",
+    "PPPPPrFPPbvPFFMPPPPP",
+    "PPPPPPrPbMRPPPrPPPPP",
+    "PPMMRPPPrFMMRPPPPPPR",
+    "RPrMrPMPPMvRRFRPPMPP",
+    "MFPPMvPvPMRPRMMRPMRP",
+    "PMFRRFPMRMPFPPPMRRMM",
+    "MRRPMPMRPMPPFMPPRMMP",
+    "FFPPMRRMMRPMMPFFPMMr",
+    "FPPFPPMMPrPMbFRMMPMF",
+    "FMPRPMMbMFMMRrvvFPFP",
+    "PPFMMMMPFPPMPvFPRPPP",
+    "MPrPPRPPPPPPRMFrRMMF",
+    "PPPPPPPRMPMMFMPPPPPP",
+    "PPPPPMPFRvPMvPPPPPPP",
+    "PPCPPRPFFPvPrRPPPCPP",
+    "PPPPPRFPFFPPMFFPPPPP",
+    "PPPPPFFvbPPPPMrPPPPP"
+  ]
+}
