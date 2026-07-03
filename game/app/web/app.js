@@ -326,7 +326,6 @@ function setupWinConditionUI() {
 
 async function createGame() {
   const name = document.getElementById("new-name").value.trim() || `房间-${Date.now()}`;
-  const max = parseInt(document.getElementById("new-max-players").value);
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
   const unitComp = document.getElementById("new-unit-composition").value;
@@ -335,7 +334,9 @@ async function createGame() {
   errEl.hidden = true;
   try {
     const myTeam = (document.getElementById("new-team").value || "").trim() || undefined;
-    const body = { name, max_players: max, win_condition: winCondition };
+    // P2.4 — max_players is server-derived from the chosen map's
+    // recommended_players; the frontend no longer sends it.
+    const body = { name, win_condition: winCondition };
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
     if (unitComp) body.unit_composition = unitComp;
@@ -405,13 +406,20 @@ async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
   const unitsSel = document.getElementById("new-unit-composition");
+  const countSel = document.getElementById("new-player-count");
   // Bug fix: the create-game view is shown repeatedly as the user
   // enters and leaves the lobby. Each time we'd appendChild new
   // <option>s without clearing the previous ones, so the dropdown
   // grew by 7 maps × N visits. Reset both selects before refilling.
   mapSel.innerHTML = "";
   unitsSel.innerHTML = "";
+  // P2.4 — cascade filter by the selected player-count category.
+  // Maps without `recommended_players` (legacy / handcrafted / custom)
+  // fall under the "4 人" bucket since that's the global cap.
+  const targetCount = parseInt(countSel?.value || "4");
   for (const m of presets.maps) {
+    const recCount = m.recommended_players ?? 4;
+    if (recCount !== targetCount) continue;
     const opt = document.createElement("option");
     opt.value = m.id;
     // P0.4: surface the grid size in the option text so the user
@@ -703,7 +711,11 @@ function renderLobby(st, lobby) {
   }
 
   // Only creator can add AI, and only while game is waiting and slots available
-  addAiBtn.hidden = state.me.seat !== 0 || st.players.length >= 4;
+  // P2.4 — use the room's actual capacity (from game.capacity, which
+  // is the chosen map's recommended_players) instead of the global
+  // hard-coded constants.
+  const capacity = st.game.capacity ?? 4;
+  addAiBtn.hidden = state.me.seat !== 0 || st.players.length >= capacity;
   const canStart = st.players.length >= 2 && state.me.seat === 0;
   startBtn.disabled = !canStart;
 }
@@ -3713,6 +3725,11 @@ window.mainlineView = MainlineView;
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  // P2.4 — cascading selectors. Switching the player-count category
+  // refilters the map dropdown in place (no need to reopen the view).
+  document.getElementById("new-player-count")?.addEventListener("change", () => {
+    populatePresetSelects().catch(() => {});
+  });
   // Preset select change -> update description
   document.getElementById("new-map-preset").addEventListener("change", (e) => {
     updatePresetDescription(e.target, document.getElementById("new-map-desc"));

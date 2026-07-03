@@ -54,9 +54,12 @@ class TestGameLifecycle:
         names = [g["name"] for g in r.json()]
         assert "Game A" in names and "Game B" in names
 
-    async def test_create_with_invalid_max_players_rejected(self, client):
-        r = await client.post("/games", json={"name": "X", "max_players": 99})
-        assert r.status_code == 422  # pydantic validation
+    async def test_create_with_empty_name_rejected(self, client):
+        """P2.4 — `max_players` is no longer a request field (server
+        derives from the chosen map's recommended_players). Empty name
+        is still rejected by Pydantic validation."""
+        r = await client.post("/games", json={"name": ""})
+        assert r.status_code == 422  # pydantic min_length=1
 
     async def test_presets_endpoint(self, client):
         r = await client.get("/games/presets")

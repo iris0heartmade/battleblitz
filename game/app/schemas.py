@@ -27,7 +27,8 @@ class APIModel(BaseModel):
 class CreateGameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     map_seed: Optional[int] = None  # None = random
-    max_players: int = Field(default=2, ge=2, le=4)
+    # P2.4 — max_players is server-derived from the chosen map's
+    # `recommended_players`. The frontend no longer sends it.
     map_preset: Optional[str] = None  # e.g. "classic" / "open_plains" / "mountain_pass"
     map_biome: str = Field(default="grass")  # "grass" | "snow" | "desert"
     unit_composition: Optional[str] = None  # e.g. "classic" / "aggressive" / "defensive"
@@ -86,6 +87,11 @@ class PresetInfo(BaseModel):
     description: str
     biome: Optional[str] = None  # "grass" | "snow" | "desert" (preset's visual theme)
     size: int = 15  # Edge length of the square grid (P0.4+ supports 15–45)
+    # P2.4 — recommended player count for this map. Drives the
+    # create-game category selector on the frontend and the server's
+    # per-room capacity (Game.capacity). Defaults to MAX_PLAYERS=4
+    # server-side when absent from the preset JSON.
+    recommended_players: Optional[int] = None
 
 
 class PresetsResponse(BaseModel):
@@ -181,6 +187,11 @@ class GameSummaryOut(APIModel):
     # to render the right victory banner copy.
     win_condition: str = "rout"
     win_reason: Optional[str] = None
+    # P2.4 — per-room capacity (max players + AI). Derived from the
+    # chosen map's `recommended_players` at create-time and stored on
+    # Game.capacity. Drives the lobby's add-AI button gate and the
+    # "room full" check on join.
+    capacity: int = 4
     created_at: datetime
 
 
