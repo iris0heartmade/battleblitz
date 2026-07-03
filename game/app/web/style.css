@@ -456,6 +456,42 @@ html, body {
 /* Unit info lives in the right column too. */
 .right-column #unit-info { font-size: 12px; }
 
+/* P2.4 polish — claim-progress badge on tiles with an in-flight
+   claim. Sits at the bottom of the cell and shows a small bar with
+   "X/Y" text. */
+.tile-claim-progress {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+  z-index: 4;
+}
+.claim-bar {
+  width: 28px;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.claim-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd24a, #f0c75e);
+  transition: width 200ms ease;
+}
+.claim-text {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffd24a;
+  text-shadow: 0 0 2px #000;
+  line-height: 1;
+}
+.cell.claim-pending { /* the cell itself stays clickable; just a hint */ }
+
 /* P0.1 — narrow viewport: collapse the side columns so the board fits. */
 @media (max-width: 1100px) {
   .game-content {

@@ -1208,11 +1208,39 @@ function renderBoard(st) {
       // Background tile image (pixel art) — respects subtype for castle_* tiles.
       cell.style.backgroundImage = `url(${tileImageUrlForTile(tile || {terrain}, biome, x, y)})`;
 
+      // P2.4 polish — claim progress badge. When a claim is in flight
+      // for this tile, show "X/Y" rounds remaining so the player
+      // doesn't forget their pending claim after the toast fades.
+      if (st && st.pending_claims && tile) {
+        const claim = st.pending_claims.find(
+          c => c.tile_x === x && c.tile_y === y
+        );
+        if (claim) {
+          const progress = document.createElement("div");
+          const elapsed = claim.total_turns - claim.turns_remaining;
+          const pct = Math.round((elapsed / claim.total_turns) * 100);
+          progress.className = "tile-claim-progress";
+          progress.title = `占领中：${claim.turns_remaining} 回合后完成`;
+          progress.innerHTML = `
+            <div class="claim-bar"><div class="claim-bar-fill" style="width:${pct}%"></div></div>
+            <div class="claim-text">${claim.turns_remaining}/${claim.total_turns}</div>
+          `;
+          cell.appendChild(progress);
+          cell.classList.add("claim-pending");
+        }
+      }
+
       // P2.4 — owner-color marker for claimed/owned buildings.
       // Small color square in top-right corner mirrors the unit color-bar
       // pattern: top half = team color, bottom half = player color.
-      // Skipped for tiles with no owner (e.g. unclaimed villages).
-      if (tile && tile.owner_id != null && st && st.players) {
+      // Skipped for tiles with no owner (e.g. unclaimed villages) and
+      // for CASTLE tiles (castles already show ownership via the
+      // throne sprite + the auto-claim on every move would otherwise
+      // "leave a marker" on every castle the unit walks over).
+      if (
+        tile && tile.owner_id != null && st && st.players &&
+        tile.terrain !== "castle" && tile.terrain !== "castle_vault"
+      ) {
         const ownerPlayer = st.players.find(p => p.id === tile.owner_id);
         if (ownerPlayer) {
           const ownerColor = playerColorHex(ownerPlayer.color);
@@ -1437,7 +1465,37 @@ function canUnitAttack(unit, fromX, fromY, toX, toY) {
   const d = manhattan(fromX, fromY, toX, toY);
   if (d === 0) return false;
   const prof = getUnitAttackProfile(unit);
-  return d > prof.minRange && d <= prof.maxRange;
+  if (!(d > prof.minRange && d <= prof.maxRange)) return false;
+  // P2.4 polish — ranged attacks (>1 cell) need a clear LoS. The
+  // server enforces this; we mirror it client-side so the
+  // attack-target highlights match what the engine will actually
+  // accept.
+  if (d > 1 && !clientHasLineOfSight(fromX, fromY, toX, toY)) {
+    return false;
+  }
+  return true;
+}
+
+// P2.4 polish — mirror of app/utils.py:has_line_of_sight for the
+// client. Mountains, forests, and rivers block ranged shots. Castles
+// do NOT block (a unit on a castle is still targetable).
+function clientHasLineOfSight(ax, ay, bx, by) {
+  if (ax === bx && ay === by) return true;
+  if (ax !== bx && ay !== by) return false;  // no diagonal shots
+  const stepX = ax === bx ? 0 : (bx > ax ? 1 : -1);
+  const stepY = ay === by ? 0 : (by > ay ? 1 : -1);
+  let cx = ax + stepX, cy = ay + stepY;
+  const tileMap = new Map();
+  for (const t of state.game?.tiles || []) tileMap.set(`${t.x},${t.y}`, t);
+  while ((cx !== bx) || (cy !== by)) {
+    if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return false;
+    const t = tileMap.get(`${cx},${cy}`);
+    if (t && (t.terrain === "mountain" || t.terrain === "forest" || t.terrain === "river")) {
+      return false;
+    }
+    cx += stepX; cy += stepY;
+  }
+  return true;
 }
 
 // ============================================================
@@ -2220,6 +2278,21 @@ function onCellClick(x, y, st) {
     return;
   }
 
+  // P2.4 polish — clicking an empty barracks owned by me opens the
+  // recruit modal directly. No more "I claimed the barracks but can't
+  // recruit because there's no unit on it to anchor the action".
+  if (!occupant && isMyTurn) {
+    const clickedTile = st.tiles.find(t => t.x === x && t.y === y);
+    const myPlayer = st.players.find(p => p.id === state.me.player_id);
+    if (
+      clickedTile && clickedTile.terrain === "barracks" &&
+      clickedTile.owner_id === myPlayer?.id
+    ) {
+      showRecruitModal({ x, y });
+      return;
+    }
+  }
+
   // Click on empty tile with no mode: just deselect / hide bubble
   hideBubble();
   state.selectedUnit = null;
@@ -2454,10 +2527,18 @@ const RECRUIT_UNIT_TYPES = [
   { id: "knight",    display_cn: "骑士", cost: 400 },
 ];
 
-async function showRecruitModal(recruiterUnit) {
+// P2.4 polish — showRecruitModal supports two modes:
+//   - Unit-anchor (legacy): pass a recruiter unit standing on the barracks
+//   - Empty-barracks: pass { x, y } of the barracks itself, no unit
+async function showRecruitModal(anchor) {
   const myPlayer = state.lastState?.players?.find(p => p.id === state.me.player_id);
   const gold = myPlayer?.gold ?? 0;
-  const tile = getTileAt(state.lastState, recruiterUnit.x, recruiterUnit.y);
+  // Resolve tile either from the unit's position (unit-anchor) or
+  // directly from {x, y} (empty-barracks).
+  const isUnitAnchor = anchor && "id" in anchor;
+  const tx = isUnitAnchor ? anchor.x : anchor.x;
+  const ty = isUnitAnchor ? anchor.y : anchor.y;
+  const tile = getTileAt(state.lastState, tx, ty);
   // Foreign-barracks guard for paranoid double-check (server also
   // validates). We should never get here if the bubble was correctly
   // hidden, but defence-in-depth.
@@ -2468,7 +2549,7 @@ async function showRecruitModal(recruiterUnit) {
   }
   const body = `
     <div class="recruit-modal">
-      <p class="muted small">佣兵站 (${recruiterUnit.x},${recruiterUnit.y}) · 当前金币 💰 ${gold}</p>
+      <p class="muted small">佣兵站 (${tx},${ty}) · 当前金币 💰 ${gold}</p>
       <div class="recruit-list">
         ${RECRUIT_UNIT_TYPES.map(t => {
           const canAfford = gold >= t.cost;
@@ -2493,23 +2574,32 @@ async function showRecruitModal(recruiterUnit) {
     row.addEventListener("click", async () => {
       const unitType = row.dataset.type;
       hideModal();
-      await doRecruit(recruiterUnit, unitType);
+      await doRecruit(anchor, unitType);
     });
   });
 }
 
-async function doRecruit(recruiterUnit, unitType) {
+async function doRecruit(anchor, unitType) {
   try {
-    const r = await api("POST", `/games/${state.me.game_id}/recruit`, {
+    // P2.4 polish — send either unit_id (legacy) or tile_x/tile_y
+    // (empty-barracks), exactly one of which the API will accept.
+    const isUnitAnchor = anchor && "id" in anchor;
+    const body = {
       player_id: state.me.player_id,
-      unit_id: recruiterUnit.id,
       unit_type: unitType,
-    });
+    };
+    if (isUnitAnchor) {
+      body.unit_id = anchor.id;
+    } else {
+      body.tile_x = anchor.x;
+      body.tile_y = anchor.y;
+    }
+    const r = await api("POST", `/games/${state.me.game_id}/recruit`, body);
     const cn = RECRUIT_UNIT_TYPES.find(t => t.id === unitType)?.display_cn || unitType;
     toast(`💰 招募成功：${cn}（-${r.cost} 金币 · 剩余 ${r.gold_remaining}）`);
-    // P0.3 — float the new unit at the recruiter's tile so the player
+    // P0.3 — float the new unit at the anchor's tile so the player
     // sees where it appeared.
-    showFloatingText(recruiterUnit.x, recruiterUnit.y, cn, "gold");
+    showFloatingText(anchor.x, anchor.y, cn, "gold");
     await refreshGame();
     hideBubble();
     state.selectedUnit = null;
