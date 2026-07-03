@@ -1181,6 +1181,11 @@ function renderBoard(st) {
         if (pct < 35) fill.classList.add("low");
         hp.appendChild(fill);
         uEl.appendChild(hp);
+        // MP badge (movement points remaining) — corner overlay on sprite.
+        const mpBadge = document.createElement("div");
+        mpBadge.className = "mp-badge";
+        mpBadge.textContent = `⚡${u.mp ?? u.mov}`;
+        uEl.appendChild(mpBadge);
         // Morale stars (3 slots)
         const moraleEl = document.createElement("div");
         moraleEl.className = "morale-stars";

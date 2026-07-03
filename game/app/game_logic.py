@@ -1350,8 +1350,13 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
             if t.terrain == TERRAIN_CASTLE:
                 claim_castle_if_present(t, unit)
     unit.x, unit.y = dest
-    # AI: move ends this unit's move (can't move again this round),
-    # but the unit may still attack this turn (matches the human player rules).
+    # AI: a unit that has moved may still attack this turn (matches the
+    # human player rules), but it must NOT be picked up for another move
+    # by `_ai_take_one_action`. Setting `has_acted=False` here is
+    # intentional — it lets the AI one-shot a unit's attack+move pair
+    # without triggering a second move when attack is out of range.
+    # The duplicate-move guard lives in `_ai_take_one_action` which now
+    # filters `not has_moved` out of the `pending` pool.
     unit.has_moved = True
     return True
 
@@ -1426,7 +1431,7 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
     )).scalars().all()
     # Process units in priority order: healers first, then attackers
     priority = sorted(
-        [u for u in units_rows if u.hp > 0 and not u.has_acted],
+        [u for u in units_rows if u.hp > 0 and not u.has_acted and not u.has_moved],
         key=lambda u: (
             0 if u.unit_type == UNIT_HEALER else 1,  # healers first
             -u.atk,
@@ -1478,7 +1483,7 @@ async def ai_take_one_action(
     units_rows = (await session.execute(
         select(Unit).where(Unit.player_id == ai_player.id)
     )).scalars().all()
-    pending = [u for u in units_rows if u.hp > 0 and not u.has_acted]
+    pending = [u for u in units_rows if u.hp > 0 and not u.has_acted and not u.has_moved]
     if not pending:
         return False
     # Priority: healers first, then highest ATK first
