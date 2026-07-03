@@ -196,6 +196,8 @@ def generate_map(
     num_castles: int = CASTLES_PER_GAME,
     style: str = STYLE_GRASS_OUTER,
     size: int = MAP_SIZE,
+    *,
+    use_rich_generator: bool = False,
 ) -> List[List[Tile]]:
     """Generate a 2D list of `Tile` rows for a fresh game.
 
@@ -204,6 +206,11 @@ def generate_map(
     terrain weight table.
 
     `size` lets the generator cover maps > 15 (P0.4 / random-map work).
+
+    `use_rich_generator` (P1.4): when True, route through the new
+    layered ``MapGenerator`` (forest / mountain clusters, rivers,
+    buildings, roads).  Default False keeps the legacy byte-identical
+    behaviour so existing tests / replays stay stable.
     """
     if num_castles not in _CASTLE_LAYOUTS:
         num_castles = CASTLES_PER_GAME
@@ -222,6 +229,28 @@ def generate_map(
             (inset, far_inset), (far_inset, far_inset)],
     }
     castles = base_layouts[num_castles]
+
+    if use_rich_generator:
+        # P1.4 — delegate to the new modular generator.  Castle
+        # positions and safe zones are computed by the generator
+        # itself so the call below stays in sync with the legacy
+        # castle_layout math.
+        from app.map_generation import MapGenerator
+
+        gen = MapGenerator(
+            size=size,
+            player_count=num_castles,
+            style=style,
+            seed=seed,
+            # Outer mode defaults — the rich features are wired in but
+            # default-on so the "rich" path is genuinely richer.
+            use_clusters=True,
+            use_rivers=True,
+            use_roads=True,
+            use_buildings=True,
+            use_hq_structure=(mode == "hq_with_struct"),
+        )
+        return gen.generate()
 
     rng = random.Random(seed)
     if mode == "castle_internal":
