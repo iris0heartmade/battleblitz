@@ -456,6 +456,20 @@ html, body {
 /* Unit info lives in the right column too. */
 .right-column #unit-info { font-size: 12px; }
 
+/* P0.1 — narrow viewport: collapse the side columns so the board fits. */
+@media (max-width: 1100px) {
+  .game-content {
+    grid-template-columns: 220px 1fr 240px;
+  }
+}
+@media (max-width: 860px) {
+  .game-content {
+    grid-template-columns: 200px 1fr 220px;
+  }
+  .game-header-center { font-size: 11px; }
+  .header-status-pill { padding: 2px 6px; font-size: 11px; }
+}
+
 .badge {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -533,6 +547,10 @@ html, body {
   padding: var(--board-pad);
   background: var(--bg);
   user-select: none;
+  /* P0.3 — establish a positioning context for .floating-text children
+     (otherwise their absolute offsets are measured from the page
+     top-left, putting the popups way off the board). */
+  position: relative;
   /* Width/height derived from cells + padding; transform scales if board ever overflows */
   width: max-content;
   max-width: 100%;
