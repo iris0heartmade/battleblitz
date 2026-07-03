@@ -1,0 +1,33 @@
+{
+  "id": "castle_internal_20_2p",
+  "name": "城堡内部 · 20×20 · 2人",
+  "description": "P2.4 自动生成：城堡内部 风格，2 人对战，20×20 棋盘 (种子 #1354)",
+  "biome": "grass",
+  "size": 20,
+  "style": "castle_internal",
+  "mode": "castle_internal",
+  "recommended_players": 2,
+  "seed": 1354,
+  "layout": [
+    "ffwfffffffffffffwfff",
+    "wfsfffffwwffwfwffffw",
+    "wdtfwfwffffwffwfffff",
+    "ffdffwffffwfffffwwwf",
+    "fffffffwwfffwfwfwffw",
+    "wwffffffwfwfffffffff",
+    "fwfffwffffvfwfffffff",
+    "fffwffffffwfwwffwfff",
+    "fffffwfffffwfffffwwf",
+    "fwfwwffffffwffffwwff",
+    "wffwfwwfwfffffffwfwf",
+    "fffffwffffffffffwwff",
+    "wffffffffffwwfffffff",
+    "ffffffwffffwfffffffw",
+    "ffwffffwffwwffffffff",
+    "fwfffwwwffffffffffwf",
+    "wfffffffwffffffwfdff",
+    "fffffffffwwfffffftsf",
+    "fffffwwvwfffffwwwdwf",
+    "ffffffffffwwfffwffff"
+  ]
+}

@@ -1023,6 +1023,27 @@ function tileImageUrl(terrain, biome, x, y) {
   return `/ui/assets/tiles/${base}_v${variant}.png?v=${TILE_ASSET_VERSION}`;
 }
 
+// P2.4 — when a tile has a `subtype` (one of the castle_* sub-features),
+// pick the matching asset (e.g. `castle_throne_grass` instead of generic
+// `castle`). Falls back to the legacy `terrain` asset if the variant
+// is missing.
+function tileImageUrlForTile(tile, biome, x, y) {
+  if (tile && tile.subtype) {
+    const sub = String(tile.subtype);
+    const candidate = `castle_${subVariantOf(sub)}_${biome}`;
+    // Variant count lookup: assume 1 if not in TILE_VARIANTS table
+    // (sub-types have at most 1 PNG per biome right now).
+    return `/ui/assets/tiles/${candidate}_v0.png?v=${TILE_ASSET_VERSION}`;
+  }
+  return tileImageUrl(tile.terrain, biome, x, y);
+}
+function subVariantOf(subtype) {
+  // subtype is one of: castle_floor, castle_wall, castle_door,
+  // castle_throne, castle_stairs, castle_vault. Asset filenames use
+  // just the suffix: floor_grass, wall_grass, etc.
+  return subtype.replace(/^castle_/, "");
+}
+
 // Editor stores terrain as single chars (P/F/M/R/C + v/b/r/g) for
 // compact JSON. Convert to full terrain names for rendering and CSS
 // class lookup.
@@ -1124,8 +1145,8 @@ function renderBoard(st) {
       cell.dataset.y = y;
       cell.style.gridColumn = String(x + 1);
       cell.style.gridRow = String(y + 1);
-      // Background tile image (pixel art)
-      cell.style.backgroundImage = `url(${tileImageUrl(terrain, biome, x, y)})`;
+      // Background tile image (pixel art) — respects subtype for castle_* tiles.
+      cell.style.backgroundImage = `url(${tileImageUrlForTile(tile || {terrain}, biome, x, y)})`;
 
       const occupant = unitMap.get(`${x},${y}`);
       if (occupant) {

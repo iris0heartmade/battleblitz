@@ -149,6 +149,119 @@ CASTLE_NEIGHBOR_RADIUS: Final[int] = 2  # how many tiles around castle are kept 
 
 
 # ============================================================
+# Map styles (P2.4 — multi-style procedural generation)
+# ============================================================
+# A map "style" is a (biome, hq_mode, terrain_weight table) combination.
+# Styles drive both procedural generation (generate_map) and the create-
+# game dropdown's filter/sort.
+#
+# Three HQ modes are supported:
+#   - "single_hq"      : 1 whole-tile `castle` per player + 2-tile safe
+#                        zone of plain tiles (current default).
+#   - "hq_with_struct" : like "single_hq", but each HQ is wrapped in a
+#                        3×3 castle sub-feature template (1 throne +
+#                        2 wall + 1 door + 5 floor).
+#   - "castle_internal": the *entire* map is composed of `castle_*`
+#                        sub-features (no outer tiles).
+
+# Style ID constants (also reused in preset JSON files / API)
+STYLE_GRASS_OUTER:     Final[str] = "grass_outer"      # default + open plains
+STYLE_SNOW_OUTER:      Final[str] = "snow_outer"       # cold biomes
+STYLE_DESERT_OUTER:    Final[str] = "desert_outer"     # arid biomes
+STYLE_COMPACT_OUTER:   Final[str] = "compact_outer"    # small fast maps
+STYLE_CASTLE_INTERNAL: Final[str] = "castle_internal"  # 100% castle-internal
+
+# Each style carries:
+#   - display_cn: short Chinese label for UI dropdown ("草地 外圈")
+#   - biome: passed straight through to Game.map_biome
+#   - mode: HQ mode (see constants above)
+#   - weights: terrain-weight table for outer tiles (ignored in
+#              "castle_internal")
+#   - safe_zone_radius: how many tiles around each HQ stay plain
+#               (mode == "single_hq"/"hq_with_struct" only)
+#   - wall_density / door_count / vault_count / stairs_count: only used
+#               by mode == "castle_internal"
+MAP_STYLES: Final[Dict[str, Dict]] = {
+    STYLE_GRASS_OUTER: {
+        "display_cn": "草地 外圈",
+        "biome": "grass",
+        "mode": "single_hq",
+        "safe_zone_radius": 2,
+        "weights": {
+            TERRAIN_PLAIN:    55,
+            TERRAIN_FOREST:   14,
+            TERRAIN_MOUNTAIN:  8,
+            TERRAIN_RIVER:    10,
+            TERRAIN_VILLAGE:   5,
+            TERRAIN_BARRACKS:  2,
+            TERRAIN_ROAD:      5,
+        },
+    },
+    STYLE_SNOW_OUTER: {
+        "display_cn": "雪地 外圈",
+        "biome": "snow",
+        "mode": "single_hq",
+        "safe_zone_radius": 2,
+        "weights": {
+            TERRAIN_PLAIN:    40,
+            TERRAIN_FOREST:   12,
+            TERRAIN_MOUNTAIN: 18,
+            TERRAIN_RIVER:    15,
+            TERRAIN_VILLAGE:   5,
+            TERRAIN_BARRACKS:  2,
+            TERRAIN_ROAD:      5,
+        },
+    },
+    STYLE_DESERT_OUTER: {
+        "display_cn": "沙漠 外圈",
+        "biome": "desert",
+        "mode": "single_hq",
+        "safe_zone_radius": 2,
+        "weights": {
+            TERRAIN_PLAIN:    65,
+            TERRAIN_FOREST:    8,
+            TERRAIN_MOUNTAIN: 10,
+            TERRAIN_RIVER:     5,
+            TERRAIN_VILLAGE:   3,
+            TERRAIN_BARRACKS:  2,
+            TERRAIN_ROAD:      5,
+        },
+    },
+    STYLE_COMPACT_OUTER: {
+        "display_cn": "小城外圈",
+        "biome": "grass",
+        "mode": "single_hq",
+        "safe_zone_radius": 1,
+        "weights": {
+            TERRAIN_PLAIN:    70,
+            TERRAIN_FOREST:   12,
+            TERRAIN_MOUNTAIN:  5,
+            TERRAIN_RIVER:     4,
+            TERRAIN_VILLAGE:   5,
+            TERRAIN_BARRACKS:  2,
+            TERRAIN_ROAD:      2,
+        },
+    },
+    STYLE_CASTLE_INTERNAL: {
+        "display_cn": "城堡内部",
+        "biome": "grass",
+        "mode": "castle_internal",
+        # Tile palette: pre-computed probabilities per sub-feature.
+        # The generator picks one per tile, then overrides the HQ cells
+        # to be `castle_throne` and adds door/stairs/vault around them.
+        "tile_palette": {
+            CASTLE_FLOOR: 80,
+            CASTLE_WALL:  20,
+        },
+        # HQ decorations (placed on top of the palette result)
+        "door_count_per_hq": 2,
+        "stairs_count_per_hq": 1,
+        "vault_count_per_hq": 1,
+    },
+}
+
+
+# ============================================================
 # Player configuration
 # ============================================================
 

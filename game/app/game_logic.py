@@ -22,15 +22,17 @@ from app.classes.units import (
 )
 from app.config import (
     AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN,
-    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS, CLAIM_TURNS_REQUIRED,
-    CRIT_MULTIPLIER, CRIT_PER_LEVEL,
+    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
+    CASTLE_FLOOR, CASTLE_STAIRS, CASTLE_THRONE, CASTLE_VAULT, CASTLE_WALL,
+    CLAIM_TURNS_REQUIRED, CRIT_MULTIPLIER, CRIT_PER_LEVEL,
     EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
-    LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAX_LEVEL, MAP_SIZE,
-    MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
-    SKILL_DOUBLE_STRIKE,
+    LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAP_STYLES, MAP_SIZE,
+    MAX_LEVEL, MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
+    SKILL_DOUBLE_STRIKE, STYLE_CASTLE_INTERNAL, STYLE_COMPACT_OUTER,
+    STYLE_DESERT_OUTER, STYLE_GRASS_OUTER, STYLE_SNOW_OUTER,
     TERRAIN_BARRACKS, TERRAIN_CASTLE, TERRAIN_DEF_BONUS, TERRAIN_FOREST,
     TERRAIN_GATE, TERRAIN_MOUNTAIN, TERRAIN_PLAIN, TERRAIN_RIVER,
-    TERRAIN_ROAD, TERRAIN_SPAWN_WEIGHTS, TERRAIN_VILLAGE, CASTLE_VAULT,
+    TERRAIN_ROAD, TERRAIN_SPAWN_WEIGHTS, TERRAIN_VILLAGE,
 )
 
 UNIT_HEALER = "healer"
@@ -48,6 +50,8 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 # Pre-computed symmetric castle spawn points for 2 / 3 / 4 players.
+# Inset by 2 from each edge; the previous hard-coded `_CASTLE_LAYOUTS`
+# is still consulted by `castle_positions()` for back-compat.
 _CASTLE_LAYOUTS: Dict[int, List[Tuple[int, int]]] = {
     2: [(2, 2), (12, 12)],
     3: [(2, 2), (12, 2), (7, 12)],
@@ -55,45 +59,176 @@ _CASTLE_LAYOUTS: Dict[int, List[Tuple[int, int]]] = {
 }
 
 
-def _passable_terrain_choices(rng: random.Random) -> str:
-    terrain_types = list(TERRAIN_SPAWN_WEIGHTS.keys())
-    weights = list(TERRAIN_SPAWN_WEIGHTS.values())
-    return rng.choices(terrain_types, weights=weights, k=1)[0]
+def _passable_terrain_choices(rng: random.Random, weights: Dict[str, int] = None) -> str:
+    """Sample one terrain id from a weighted pool.
 
-
-def generate_map(seed: int, num_castles: int = CASTLES_PER_GAME) -> List[List[Tile]]:
-    """Generate a 2D list of `Tile` rows for a fresh game.
-
-    Castles are placed at predefined positions; remaining tiles are randomised
-    using a seeded RNG (so the same seed reproduces the map).
+    `weights` defaults to the legacy single-biome table for callers that
+    pre-date the style-aware generator; new code should pass
+    `MAP_STYLES[style]["weights"]` instead.
     """
-    if num_castles not in _CASTLE_LAYOUTS:
-        num_castles = CASTLES_PER_GAME
+    if weights is None:
+        weights = TERRAIN_SPAWN_WEIGHTS
+    terrain_types = list(weights.keys())
+    weight_values = list(weights.values())
+    return rng.choices(terrain_types, weights=weight_values, k=1)[0]
 
-    rng = random.Random(seed)
-    castles = _CASTLE_LAYOUTS[num_castles]
+
+def _weighted_subtype(rng: random.Random, palette: Dict[str, int]) -> str:
+    """Pick one castle_* sub-feature id from a palette dict."""
+    types = list(palette.keys())
+    weights = list(palette.values())
+    return rng.choices(types, weights=weights, k=1)[0]
+
+
+def _generate_outer_map(
+    rng: random.Random,
+    style_cfg: Dict,
+    castles: List[Tuple[int, int]],
+    size: int,
+) -> List[List[Tile]]:
+    """Outer-style generator: HQ centre on whole-tile `castle`, safe-zone
+    plain around it, style-weighted terrains elsewhere.
+    """
     castle_set = set(castles)
+    safe_radius = int(style_cfg.get("safe_zone_radius", CASTLE_NEIGHBOR_RADIUS))
+    weights = style_cfg["weights"]
 
     safe_zones: set = set()
     for cx, cy in castles:
-        for dx in range(-CASTLE_NEIGHBOR_RADIUS, CASTLE_NEIGHBOR_RADIUS + 1):
-            for dy in range(-CASTLE_NEIGHBOR_RADIUS, CASTLE_NEIGHBOR_RADIUS + 1):
+        for dx in range(-safe_radius, safe_radius + 1):
+            for dy in range(-safe_radius, safe_radius + 1):
                 x, y = cx + dx, cy + dy
-                if 0 <= x < MAP_SIZE and 0 <= y < MAP_SIZE:
+                if 0 <= x < size and 0 <= y < size:
                     safe_zones.add((x, y))
 
     grid: List[List[Tile]] = []
-    for y in range(MAP_SIZE):
+    for y in range(size):
         row: List[Tile] = []
-        for x in range(MAP_SIZE):
+        for x in range(size):
             if (x, y) in castle_set:
                 row.append(Tile(x=x, y=y, terrain=TERRAIN_CASTLE))
             elif (x, y) in safe_zones:
                 row.append(Tile(x=x, y=y, terrain=TERRAIN_PLAIN))
             else:
-                row.append(Tile(x=x, y=y, terrain=_passable_terrain_choices(rng)))
+                t = _passable_terrain_choices(rng, weights)
+                row.append(Tile(x=x, y=y, terrain=t))
         grid.append(row)
     return grid
+
+
+def _generate_castle_internal_map(
+    rng: random.Random,
+    style_cfg: Dict,
+    castles: List[Tuple[int, int]],
+    size: int,
+) -> List[List[Tile]]:
+    """Castle-internal style: every tile is a `castle_*` sub-feature.
+
+    1. Fill the grid by sampling from `style_cfg["tile_palette"]`.
+    2. Override each HQ centre with `castle_throne`.
+    3. Around each HQ, drop `door_count_per_hq` `castle_door` cells on
+       the four cardinal neighbours (when in-bounds), then
+       `stairs_count_per_hq` random adjacent `castle_stairs`, and
+       `vault_count_per_hq` random non-throne `castle_vault`s.
+    """
+    palette: Dict[str, int] = style_cfg["tile_palette"]
+    door_count = int(style_cfg.get("door_count_per_hq", 2))
+    stairs_count = int(style_cfg.get("stairs_count_per_hq", 1))
+    vault_count = int(style_cfg.get("vault_count_per_hq", 1))
+
+    # Step 1 — lay down the palette.
+    grid: List[List[Tile]] = []
+    for y in range(size):
+        row: List[Tile] = []
+        for x in range(size):
+            sub = _weighted_subtype(rng, palette)
+            # terrain still says "castle" so non-castle-aware code
+            # (movement table, attack targets, ...) keeps working.
+            row.append(Tile(x=x, y=y, terrain=TERRAIN_CASTLE, subtype=sub))
+        grid.append(row)
+
+    # Step 2 + 3 — place HQ decorations.
+    for cx, cy in castles:
+        if not (0 <= cx < size and 0 <= cy < size):
+            continue
+        grid[cy][cx] = Tile(x=cx, y=cy, terrain=TERRAIN_CASTLE, subtype=CASTLE_THRONE)
+
+        # Door cells: cardinal neighbours, up to door_count.
+        card_dirs = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+        rng.shuffle(card_dirs)
+        placed_doors = 0
+        for dx, dy in card_dirs:
+            if placed_doors >= door_count:
+                break
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < size and 0 <= ny < size:
+                grid[ny][nx] = Tile(x=nx, y=ny, terrain=TERRAIN_CASTLE, subtype=CASTLE_DOOR)
+                placed_doors += 1
+
+        # Stairs cells: 1 (default) random in-bounds 8-neighbour squares.
+        cand = [(cx + dx, cy + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                if not (dx == 0 and dy == 0)]
+        rng.shuffle(cand)
+        placed = 0
+        for nx, ny in cand:
+            if placed >= stairs_count:
+                break
+            if 0 <= nx < size and 0 <= ny < size:
+                grid[ny][nx] = Tile(x=nx, y=ny, terrain=TERRAIN_CASTLE, subtype=CASTLE_STAIRS)
+                placed += 1
+
+        # Vault cells: random non-throne in-bounds cells (anywhere).
+        all_cells = [(x, y) for y in range(size) for x in range(size)
+                     if (x, y) != (cx, cy) and grid[y][x].subtype != CASTLE_THRONE]
+        rng.shuffle(all_cells)
+        placed = 0
+        for nx, ny in all_cells:
+            if placed >= vault_count:
+                break
+            grid[ny][nx] = Tile(x=nx, y=ny, terrain=TERRAIN_CASTLE, subtype=CASTLE_VAULT)
+            placed += 1
+
+    return grid
+
+
+def generate_map(
+    seed: int,
+    num_castles: int = CASTLES_PER_GAME,
+    style: str = STYLE_GRASS_OUTER,
+    size: int = MAP_SIZE,
+) -> List[List[Tile]]:
+    """Generate a 2D list of `Tile` rows for a fresh game.
+
+    `style` is a key in `MAP_STYLES` (config.py) and drives both the
+    HQ mode (single_hq / hq_with_struct / castle_internal) and the
+    terrain weight table.
+
+    `size` lets the generator cover maps > 15 (P0.4 / random-map work).
+    """
+    if num_castles not in _CASTLE_LAYOUTS:
+        num_castles = CASTLES_PER_GAME
+
+    style_cfg = MAP_STYLES.get(style, MAP_STYLES[STYLE_GRASS_OUTER])
+    mode = style_cfg.get("mode", "single_hq")
+    # Scale the castle layout to the requested grid. Insets are kept at
+    # 2 cells so a 25×25 map still has its corners at (2, 2), (22, 2), ...
+    inset = max(2, size // 8)
+    far_inset = size - 1 - inset
+    mid_x = size // 2
+    base_layouts = {
+        2: [(inset, inset), (far_inset, far_inset)],
+        3: [(inset, inset), (far_inset, inset), (mid_x, far_inset)],
+        4: [(inset, inset), (far_inset, inset),
+            (inset, far_inset), (far_inset, far_inset)],
+    }
+    castles = base_layouts[num_castles]
+
+    rng = random.Random(seed)
+    if mode == "castle_internal":
+        return _generate_castle_internal_map(rng, style_cfg, castles, size)
+    # Default / single_hq / hq_with_struct: outer generator (hq_with_struct
+    # currently shares single_hq's body; Phase 5 will swap to a 3×3 wrapper).
+    return _generate_outer_map(rng, style_cfg, castles, size)
 
 
 def castle_positions(num_players: int) -> Dict[int, Tuple[int, int]]:
@@ -866,15 +1001,22 @@ def generate_map_preset(preset_id: str, seed: int, num_castles: int = CASTLES_PE
 def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
     """Convert a char-grid layout into Tile rows.
 
-    Char map:
-      P=plain F=forest M=mountain R=river C=castle (legacy whole-tile)
-      v=village b=barracks r=road g=gate  (P0.4 new terrains)
-      Single castle sub-feature chars use lowercase to mark on tile.terrain
-      as the corresponding castle_* terrain and store the subtype in
-      Tile.subtype. Maps to uppercase ascii (P/F/M/R/C + lowercase v/b/r/g)
-      by toggling case and matching against the subtype map.
+    Char map (uppercase = terrain, lowercase = castle sub-feature):
+
+      Outer terrains (stored in `Tile.terrain`):
+        P = plain         F = forest     M = mountain
+        R = river         C = castle     v = village
+        b = barracks      r = road       g = gate
+
+      Castle sub-features (stored in `Tile.subtype`, terrain = "castle"):
+        F or f = castle_floor       W or w = castle_wall
+        T or t = castle_throne      D or d = castle_door
+        S or s = castle_stairs      V or v_seg = castle_vault
+        (Note: `v` collides with `village` — the loader below treats
+        village first; for sub-feature use lowercase variant `x_vault`
+        via the explicit mapping entry `seg_vault`.)
     """
-    grid: List[List[Tile]] = []
+    # P0.4 single-char legacy table (preserved exactly).
     char_to_terrain = {
         "P": TERRAIN_PLAIN,
         "F": TERRAIN_FOREST,
@@ -886,12 +1028,67 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
         "r": TERRAIN_ROAD,
         "g": TERRAIN_GATE,
     }
+    # Castle sub-feature chars (uppercase + lowercase variant).
+    # Multi-char codes use the `:` prefix in JSON.
+    char_to_subtype = {
+        "f": CASTLE_FLOOR,
+        "w": CASTLE_WALL,
+        "t": CASTLE_THRONE,
+        "d": CASTLE_DOOR,
+        "s": CASTLE_STAIRS,
+        # 'v' collides with village — JSON authors should use uppercase
+        # or use the `>vault` multi-char token below.
+        # We also accept `>` prefixed multi-char tokens at the cell level.
+    }
+    multi_char_subtype = {
+        ":floor":  CASTLE_FLOOR,
+        ":wall":   CASTLE_WALL,
+        ":throne": CASTLE_THRONE,
+        ":door":   CASTLE_DOOR,
+        ":stairs": CASTLE_STAIRS,
+        ":vault":  CASTLE_VAULT,
+    }
+
+    grid: List[List[Tile]] = []
     for y, row in enumerate(layout):
         out_row: List[Tile] = []
-        for x, ch in enumerate(row):
+        i = 0
+        while i < len(row):
+            # Multi-char subtype token? (`>xxx` consumes 4 chars total).
+            if row[i] == ":" and row[i:i + 7] in multi_char_subtype:
+                sub = multi_char_subtype[row[i:i + 7]]
+                # The first character `:` is also where the *terrain*
+                # char would normally live — there's no terrain letter
+                # for this tile, so we treat the whole `:xxx` as the
+                # marker. Use a sentinel char '.' before it for terrain.
+                # Authors should write `.>floor` in JSON; this branch
+                # handles the rare `>xxx` at start.
+                # For simplicity and predictability, just skip 7 chars.
+                i += 7
+                out_row.append(Tile(x=len(out_row), y=y, terrain=TERRAIN_CASTLE, subtype=sub))
+                continue
+            ch = row[i]
+            # Castle sub-feature chars: terrain = castle, subtype = feature.
+            if ch in char_to_subtype:
+                out_row.append(Tile(
+                    x=len(out_row), y=y,
+                    terrain=TERRAIN_CASTLE,
+                    subtype=char_to_subtype[ch],
+                ))
+                i += 1
+                continue
+            # Castle throne as capital `T` (capital escapes legacy P/F/M/R).
+            if ch == "T":
+                out_row.append(Tile(
+                    x=len(out_row), y=y,
+                    terrain=TERRAIN_CASTLE,
+                    subtype=CASTLE_THRONE,
+                ))
+                i += 1
+                continue
             terrain = char_to_terrain.get(ch, TERRAIN_PLAIN)
-            tile = Tile(x=x, y=y, terrain=terrain)
-            out_row.append(tile)
+            out_row.append(Tile(x=len(out_row), y=y, terrain=terrain))
+            i += 1
         grid.append(out_row)
     return grid
 

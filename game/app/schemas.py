@@ -105,6 +105,11 @@ class TileOut(APIModel):
     x: int
     y: int
     terrain: str
+    # P2.4 — when terrain == "castle", `subtype` may be one of
+    # castle_floor / castle_wall / castle_door / castle_throne /
+    # castle_stairs / castle_vault. Used by the frontend renderer
+    # to pick the correct tile asset.
+    subtype: Optional[str] = None
     owner_id: Optional[int]
     occupied_unit_id: Optional[int]
 
