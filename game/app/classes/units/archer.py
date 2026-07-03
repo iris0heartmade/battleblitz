@@ -24,7 +24,7 @@ class Archer(BaseUnitClass):
     # exactly distance 2). Way too short for 15x15+ maps. Now
     # 1–4 with min 0 so the archer can both kite and melee.
     attack_range = 4
-    min_attack_range = 0
+    min_attack_range = 2
     can_move_after_action = True
     ignores_line_of_sight = True   # 狙击：无视障碍
 
