@@ -89,14 +89,6 @@ class GameEventBus:
             if not subs:
                 self._subscribers.pop(game_id, None)
 
-    def subscriber_count(self, game_id: int) -> int:
-        """How many subscribers are currently listening to this game."""
-        return len(self._subscribers.get(game_id, []))
-
-    def total_subscribers(self) -> int:
-        """Sum of all subscribers across all games (for metrics)."""
-        return sum(len(qs) for qs in self._subscribers.values())
-
 
 # ============================================================
 # Module-level singleton

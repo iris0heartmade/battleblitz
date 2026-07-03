@@ -179,6 +179,23 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE players ADD COLUMN team_id VARCHAR(16)"
         ))
         logger.info("Migration: added players.team_id")
+    # P2.4 — spectator slot support. Independent column for the flag
+    # so it can co-exist with team_id / gold etc. on existing rows.
+    if "is_spectator" not in player_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE players ADD COLUMN is_spectator BOOLEAN NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added players.is_spectator")
+    # P2.4 — spectator cap on games. Default matches the
+    # DEFAULT_MAX_SPECTATORS constant in config.py so legacy rooms
+    # get 8 spectator slots without any code change.
+    game_rows = sync_conn.execute(text("PRAGMA table_info(games)")).fetchall()
+    game_cols = {r[1] for r in game_rows}
+    if "max_spectators" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN max_spectators INTEGER NOT NULL DEFAULT 8"
+        ))
+        logger.info("Migration: added games.max_spectators")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

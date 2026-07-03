@@ -85,6 +85,9 @@ class Game(Base):
     # join / add-ai / lobby routes gate against this value instead of
     # the global MAX_PLAYERS constant.
     capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    # P2.4 — spectator slots are NOT counted against `capacity` so a full
+    # room can still attract an audience. Defaults to MAX_SPECTATORS.
+    max_spectators: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )
@@ -148,6 +151,13 @@ class Player(Base):
     # Per-game gold (P0.4 economy). Reset to 0 at game start; grows via
     # income from owned income-yielding terrains; spent on recruit.
     gold: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # P2.4 — spectator flag. Spectators do NOT get units at game start,
+    # do NOT count for win-condition checks, and can NOT execute moves /
+    # attacks / heals. They DO occupy a turn slot so the human spectators
+    # must "confirm turn" between AI / player turns — this keeps them
+    # engaged and prevents the game from running away from the audience.
+    # is_spectator is mutually exclusive with is_ai.
+    is_spectator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     game: Mapped["Game"] = relationship("Game", back_populates="players")
     units: Mapped[List["Unit"]] = relationship(

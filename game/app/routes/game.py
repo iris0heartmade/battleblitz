@@ -8,6 +8,7 @@ mainline routes) can spawn battles without going through the public
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 from typing import Dict, List, Optional
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import (
     CASTLES_PER_GAME,
+    DEFAULT_MAX_SPECTATORS,
     DEFAULT_PLAYER_COLORS,
     MAX_PLAYERS,
     MIN_PLAYERS,
@@ -187,12 +189,17 @@ async def _start_battle_internal(
         t.game_id = game_id
     session.add_all(tiles)
 
-    castle_xy = castle_positions(len(players))
+    # P2.4 — spectators don't occupy a castle and don't get units.
+    # Their seats are above MAX_PLAYERS so castle_positions(seat) is
+    # never even asked for them; skip the loop entirely so the
+    # spectator's `seat` doesn't accidentally fall into castle_xy.
+    real_players = [p for p in players if not p.is_spectator]
+    castle_xy = castle_positions(len(real_players))
     default_roster = get_roster_for_composition(
         getattr(game, "unit_composition", None)
     )
     units: List[Unit] = []
-    for player in players:
+    for player in real_players:
         per_player_roster: Dict[str, int]
         if rosters_by_seat is not None and player.seat in rosters_by_seat:
             per_player_roster = rosters_by_seat[player.seat]
@@ -307,7 +314,12 @@ async def _start_battle_internal(
             del game._pending_reach_xy
 
     game.status = "playing"
-    game.current_player_index = 0
+    # P2.4 — pick the LOWEST non-spectator seat as the first player
+    # so a host who converted to spectator doesn't leave
+    # current_player_index stuck at their former real-player seat
+    # (where there's now an AI or nothing).
+    real_seats = sorted(p.seat for p in players if not p.is_spectator)
+    game.current_player_index = real_seats[0] if real_seats else 0
     for p in players:
         p.has_ended_turn = False
 
@@ -339,6 +351,11 @@ async def create_game(
         defend_turns=body.defend_turns,
         # P2.4 — per-room capacity derived from the map.
         capacity=capacity,
+        # P2.4 — spectator slots are independent of capacity (a full
+        # room can still attract an audience). Falls back to
+        # DEFAULT_MAX_SPECTATORS; future versions may let the host
+        # override at create-time.
+        max_spectators=DEFAULT_MAX_SPECTATORS,
     )
     # P2.3 — for "reach" mode, look up the target tile so we can
     # render the goal pulse on the client + drive the win check.
@@ -376,35 +393,51 @@ async def join_game(
     existing = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len(existing) >= game.capacity:
-        raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
+
+    # P2.4 — spectator vs player gate. Spectators have their own
+    # counter (`existing_spectators`) and capacity (`game.max_spectators`).
+    # Players share `(game_id, seat)` UNIQUE so spectator seats must be
+    # offset to avoid colliding with seat=0..N-1 of the real players.
+    is_spectator = (body.role == "spectator")
+    if is_spectator:
+        existing_spectators = [p for p in existing if p.is_spectator]
+        if len(existing_spectators) >= game.max_spectators:
+            raise HTTPException(status.HTTP_409_CONFLICT, "观战席已满")
+        # Spectators don't get a real color; reserve a neutral grey
+        # sentinel that can't clash with DEFAULT_PLAYER_COLORS. We
+        # still satisfy the (game_id, color) UNIQUE constraint.
+        used_colors_incl_spectators = [p.color for p in existing]
+        color = "spectator" if "spectator" not in used_colors_incl_spectators else \
+                f"spectator_{len(existing_spectators)}"
+    else:
+        used_colors = [p.color for p in existing if not p.is_spectator]
+        if len([p for p in existing if not p.is_spectator]) >= game.capacity:
+            raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
+        color = _next_color(used_colors) if not body.color or body.color in used_colors \
+                else body.color
 
     if any(p.user_name == body.user_name for p in existing):
         raise HTTPException(status.HTTP_409_CONFLICT, "此游戏中用户名已被占用")
 
-    used_colors = [p.color for p in existing]
-    # P2.3 — team-mode join. team_id is an INDEPENDENT identifier
-    # from color. Two players on the same team just share team_id;
-    # they still each get their own color (the (game_id, color)
-    # UNIQUE constraint is preserved — that's what prevents two
-    # players from rendering the same tile).
-    #   * If the joiner specifies a color, use it (must be free).
-    #   * Otherwise, allocate the next free color.
-    # team_id defaults to "color" when unset, which keeps 1V1
-    # free-for-all working unchanged.
-    if body.color and body.color not in used_colors:
-        color = body.color
+    # P2.4 — spectator seats live above real players' seats. Real
+    # player seats are dense (0..N-1) to keep alive_seats math simple
+    # in turns.py; spectator seats start at MAX_PLAYERS (4) so they
+    # never collide with a real seat even on a 2-player map.
+    if is_spectator:
+        existing_real_seats = [p.seat for p in existing if not p.is_spectator]
+        spectator_offset = len([p for p in existing if p.is_spectator])
+        # Place spectators starting from MAX_PLAYERS so they never
+        # shadow a real seat (even after player removals renumber
+        # real seats back down).
+        seat = MAX_PLAYERS + spectator_offset
     else:
-        color = _next_color(used_colors)
-    seat = len(existing)
-    # P2.3 — team_id resolution. We store the EXPLICIT team if the
-    # joiner picks one. If the joiner doesn't pick a team, we
-    # leave team_id NULL and let `_team_of` fall back to player_<id>
-    # for 1V1 free-for-all (so check_win_condition treats each
-    # player as their own team and Rout/Seize/Reach/Defend all work
-    # without forcing the joiner to set a team). The lobby
-    # endpoint also uses _team_of, so its view stays consistent.
-    team_id = body.team if body.team else None
+        seat = len([p for p in existing if not p.is_spectator])
+
+    # P2.3 — team_id resolution. Spectators don't pick a team.
+    if is_spectator:
+        team_id = None
+    else:
+        team_id = body.team if body.team else None
 
     player = Player(
         game_id=game_id,
@@ -412,6 +445,7 @@ async def join_game(
         color=color,
         seat=seat,
         team_id=team_id,
+        is_spectator=is_spectator,
     )
     session.add(player)
     try:
@@ -453,6 +487,7 @@ async def join_game(
         is_ai=player.is_ai,
         team=player.team_id,
         gold=player.gold or 0,
+        is_spectator=player.is_spectator,
         units=[],
     )
 
@@ -536,6 +571,7 @@ async def rejoin_game(
             is_ai=player.is_ai,
             team=player.team_id,
             gold=player.gold or 0,
+            is_spectator=player.is_spectator,
             units=[],
         ),
     )
@@ -582,6 +618,7 @@ async def rejoin_by_name(
             is_ai=player.is_ai,
             team=player.team_id,
             gold=player.gold or 0,
+            is_spectator=player.is_spectator,
             units=[],
         ),
     )
@@ -604,13 +641,35 @@ async def start_game(
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len(players) < MIN_PLAYERS:
+    # P2.4 — only real players (no spectators) count toward MIN_PLAYERS.
+    real_player_count = sum(1 for p in players if not p.is_spectator)
+    if real_player_count < MIN_PLAYERS:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"need at least {MIN_PLAYERS} players (currently {len(players)})",
+            f"need at least {MIN_PLAYERS} players (currently {real_player_count})",
         )
 
     await _start_battle_internal(session, game, players)
+
+    # P2.4 — schedule the very first turn. In a real-player-first
+    # setup, the human gets to act and AI will be chained from
+    # end_turn. But when the FIRST seat belongs to an AI (e.g. the
+    # only "real" player converts to spectator and all that's left
+    # are AI), nothing kicks off the AI's loop, so the game stalls
+    # in phase="player" forever. Detect that case and spawn the
+    # background chain so AI can take its first turn.
+    real_players_seats = sorted(p.seat for p in players if not p.is_spectator)
+    if real_players_seats:
+        first_seat = real_players_seats[0]
+        first_player = next(p for p in players if p.seat == first_seat and not p.is_spectator)
+        if first_player.is_ai:
+            game.phase = "ai"
+            from app.routes.turns import _run_ai_turn_chain
+            asyncio.create_task(_run_ai_turn_chain(game.id))
+        else:
+            # Even when first is human, set phase='player' explicitly
+            # (in case DB default drifted or was wrong).
+            game.phase = "player"
 
     # Re-query tiles/units via _build_state (avoids lazy loads on
     # detached players after the session commits). Capture the unit
@@ -837,11 +896,14 @@ async def add_ai_player(
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len(players) >= game.capacity:
+    if len([p for p in players if not p.is_spectator]) >= game.capacity:
         raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
     used_colors = [p.color for p in players]
     color = _next_color(used_colors)
-    seat = max((p.seat for p in players), default=-1) + 1
+    # P2.4 — AI seats must ONLY consider real players; spectator
+    # seats live in [MAX_PLAYERS..], separate from the castable
+    # range, so an add_ai call must not "jump past" them.
+    seat = max((p.seat for p in players if not p.is_spectator), default=-1) + 1
     # Generate a unique AI name
     ai_count = sum(1 for p in players if p.is_ai)
     backend_tag = body.agent_kind  # "rules" or "llm"
@@ -858,7 +920,7 @@ async def add_ai_player(
         is_alive=ai.is_alive, has_ended_turn=ai.has_ended_turn,
         seat=ai.seat, is_ai=ai.is_ai,
         agent_kind=ai.agent_kind, agent_personality=ai.agent_personality,
-        team=None,
+        team=None, is_spectator=False,
         gold=0,
         units=[],
     )
@@ -882,15 +944,34 @@ async def remove_player(
     # Free the player's seat (cascade will remove their units)
     await session.delete(player)
     await session.flush()
-    # Re-number remaining seats so they're contiguous
-    remaining = (
+    # P2.4 — re-number remaining REAL player seats so they're
+    # contiguous. Spectators live in a separate range (above
+    # MAX_PLAYERS) so they MUST be excluded from this loop;
+    # otherwise a remove would yank a spectator down to seat 0
+    # and break turn-cycle math.
+    remaining_real = (
         await session.execute(
-            select(Player).where(Player.game_id == game_id).order_by(Player.seat)
+            select(Player)
+            .where(Player.game_id == game_id, Player.is_spectator.is_(False))
+            .order_by(Player.seat)
         )
     ).scalars().all()
-    for new_seat, p in enumerate(remaining):
+    for new_seat, p in enumerate(remaining_real):
         if p.seat != new_seat:
             p.seat = new_seat
+    # Also pack spectator seats contiguously above MAX_PLAYERS so the
+    # spectator offset lookup in join_game remains predictable.
+    remaining_spec = (
+        await session.execute(
+            select(Player)
+            .where(Player.game_id == game_id, Player.is_spectator.is_(True))
+            .order_by(Player.seat)
+        )
+    ).scalars().all()
+    for offset, p in enumerate(remaining_spec):
+        target = MAX_PLAYERS + offset
+        if p.seat != target:
+            p.seat = target
     return await _build_state(session, game)
 
 
@@ -994,7 +1075,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
     # Current player = first alive player whose seat >= current_player_index, else wrap.
     current_player_id = None
     if players:
-        alive_seats = sorted(p.seat for p in players if p.is_alive)
+        alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
         if alive_seats:
             seat = next(
                 (s for s in alive_seats if s >= game.current_player_index),
@@ -1018,6 +1099,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 agent_personality=p.agent_personality,
                 team=p.team_id,
                 gold=p.gold or 0,
+                is_spectator=p.is_spectator,
                 units=[
                     UnitOut.model_validate(
                         _with_combat_stats(u)

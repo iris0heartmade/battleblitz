@@ -305,7 +305,19 @@ async function renderJoinList() {
         </div>
         <div class="arrow">→</div>
       `;
+      // P2.4 — primary click joins as player, secondary button joins
+      // as spectator (skipping team picker). Keeps the existing
+      // primary path identical so old lobbies still work.
       item.addEventListener("click", () => promptJoinGame(g.id, g.name, g.map_seed));
+      const specBtn = document.createElement("button");
+      specBtn.className = "btn btn-secondary btn-sm";
+      specBtn.textContent = "👀 观战";
+      specBtn.style.marginLeft = "8px";
+      specBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        joinGame(g.id, undefined, { role: "spectator" });
+      });
+      item.appendChild(specBtn);
       list.appendChild(item);
     }
   } catch (e) {
@@ -348,7 +360,8 @@ async function createGame() {
     const g = await api("POST", "/games", body);
     // Save team choice for rejoin
     if (myTeam) state.me.team = myTeam;
-    // Immediately join as creator
+    // Immediately join as creator (always as a real player; spectator
+    // selection happens inside the lobby, not at create-time).
     await joinGame(g.id, myTeam);
   } catch (e) {
     errEl.textContent = "创建失败：" + e.message;
@@ -476,7 +489,9 @@ async function promptJoinGame(gid) {
     return joinGame(gid);
   }
   if (!lobby || !lobby.teams || lobby.teams.length <= 1) {
-    // Free-for-all: no team selection needed
+    // Free-for-all / no team signal: skip the team picker entirely.
+    // Spectators can still opt-in via their own team-dropdown row in
+    // the lobby once they're connected. Returns to a regular join.
     return joinGame(gid);
   }
   // Show team picker modal
@@ -507,6 +522,11 @@ async function promptJoinGame(gid) {
       list.appendChild(item);
     });
     bodyEl.appendChild(list);
+    // P2.4 — leave the team picker modal as it was before the
+    // spectator experiment: a single "自由加入" button at the
+    // bottom. Spectator selection is now exclusively routed through
+    // the team's per-player dropdown (👀 切换为观战) to avoid
+    // scattering the same control across three views.
     btnRow.innerHTML = `<button class="btn btn-secondary" id="team-picker-free">自由加入 (无队伍)</button>`;
     btnRow.querySelector("#team-picker-free").addEventListener("click", () => {
       modal.hidden = true;
@@ -520,17 +540,24 @@ async function promptJoinGame(gid) {
   return joinGame(gid, chosenTeam);
 }
 
-async function joinGame(gid, teamOverride) {
+async function joinGame(gid, teamOverride, options = {}) {
   const userName = (state.settings.playerName || "").trim() || `玩家-${Math.floor(Math.random() * 999)}`;
   try {
-    const p = await api("POST", `/games/${gid}/join`, {
+    const body = {
       user_name: userName,
       color: state.settings.preferredColor || undefined,
       team: teamOverride || undefined,
-    });
+    };
+    // P2.4 — spectator opt-in. The button "以观战者身份加入" sends
+    // role="spectator" which makes the backend skip unit spawn and
+    // colour allocation. Spectators still get has_ended_turn to ack
+    // the turn cycle.
+    if (options && options.role) body.role = options.role;
+    const p = await api("POST", `/games/${gid}/join`, body);
     state.me = {
       player_id: p.id, user_name: p.user_name, color: p.color,
       game_id: gid, seat: p.seat,
+      is_spectator: !!p.is_spectator,
     };
     state.settings.playerName = p.user_name; // remember name
     saveSettings(state.settings);
@@ -660,16 +687,26 @@ function renderLobby(st, lobby) {
   list.innerHTML = "";
   for (const p of st.players) {
     const div = document.createElement("div");
-    div.className = "lobby-player" + (p.id === state.me.player_id ? " is-self" : "") + (p.is_ai ? " ai" : "");
+    div.className = "lobby-player" + (p.id === state.me.player_id ? " is-self" : "")
+      + (p.is_ai ? " ai" : "") + (p.is_spectator ? " spectator" : "");
+    // P2.4 — spectators render with a distinct grey swatch and a
+    // 👀 tag; they don't get a team dropdown (they have no team).
+    const swatchColor = p.is_spectator ? "#666" : playerColorCss(p.color);
     let html = `
-      <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
-      <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}</div>
+      <div class="swatch" style="background: ${swatchColor}"></div>
+      <div>${escapeHtml(p.user_name)}${p.id === state.me.player_id ? " (你)" : ""}${p.is_spectator ? " 👀 观战" : ""}</div>
     `;
 
     // P3.0 — Team selector:
     //   Host (seat 0) sees a dropdown for EVERY player (including AI).
     //   Non-host sees a dropdown only for themselves.
-    const canEditTeam = state.me.seat === 0 || p.id === state.me.player_id;
+    // P2.4 — spectators never pick a team; skip the dropdown.
+    // P2.4 — for the SELF row only, append a "👀 观战" entry so the
+    // user can demote themselves from player to spectator at any
+    // time while the game is waiting. The host (seat 0) cannot
+    // demote others — that's intentionally limited to the viewer
+    // themselves so a hostile host can't silently strip a player.
+    const canEditTeam = !p.is_spectator && (state.me.seat === 0 || p.id === state.me.player_id);
     if (canEditTeam) {
       const curTeam = p.team && !p.team.startsWith("player_") ? p.team : "";
       html += `<select class="team-select" data-player-id="${p.id}" data-cur="${escapeHtml(curTeam)}">`;
@@ -679,12 +716,16 @@ function renderLobby(st, lobby) {
         html += `<option value="${escapeHtml(t)}"${sel}>${escapeHtml(t)}</option>`;
       }
       html += `<option value="__new__">➕ 新建队伍…</option>`;
-      html += `</select>`;
-    } else {
-      // Non-host, other players: show static team badge if any.
-      if (p.team && p.team.startsWith && !p.team.startsWith("player_")) {
-        html += `<span class="team-badge">${escapeHtml(p.team)}</span>`;
+      // P2.4 — only show the spectator option on the user's own row.
+      // The data-action attribute + dataset.playerId routes this to
+      // a custom handler instead of the team-update path.
+      if (p.id === state.me.player_id) {
+        html += `<option value="__spectator__">👀 切换为观战</option>`;
       }
+      html += `</select>`;
+    } else if (!p.is_spectator && p.team && p.team.startsWith && !p.team.startsWith("player_")) {
+      // Non-host, other players: show static team badge if any.
+      html += `<span class="team-badge">${escapeHtml(p.team)}</span>`;
     }
 
     if (p.is_ai) {
@@ -707,6 +748,35 @@ function renderLobby(st, lobby) {
   for (const sel of list.querySelectorAll(".team-select")) {
     sel.addEventListener("change", async () => {
       let val = sel.value;
+      // P2.4 — sentinel for the new "切换为观战" option. We bypass
+      // the team-update endpoint and instead DELETE the player then
+      // re-JOIN with role="spectator". This keeps the
+      // (game_id, user_name) UNIQUE constraint happy while preserving
+      // the user's chosen display name.
+      if (val === "__spectator__") {
+        const pid = parseInt(sel.dataset.playerId, 10);
+        if (pid !== state.me.player_id) {
+          sel.value = sel.dataset.cur || "";
+          toast("只有本人能切换为观战");
+          return;
+        }
+        if (!confirm("确定把自己的席位切换为观战吗？此操作在开局前可逆。")) {
+          sel.value = sel.dataset.cur || "";
+          return;
+        }
+        try {
+          await api("DELETE", `/games/${state.me.game_id}/players/${pid}`);
+          await api("POST", `/games/${state.me.game_id}/join`, {
+            user_name: state.me.user_name,
+            role: "spectator",
+          });
+          await refreshLobby(state.me.game_id);
+        } catch (e) {
+          toast("切换失败：" + e.message, 3000);
+          sel.value = sel.dataset.cur || "";
+        }
+        return;
+      }
       if (val === "__new__") {
         val = prompt("输入新队伍名称：");
         if (!val || !val.trim()) {
@@ -738,6 +808,102 @@ function renderLobby(st, lobby) {
   addAiBtn.hidden = state.me.seat !== 0 || st.players.length >= capacity;
   const canStart = st.players.length >= 2 && state.me.seat === 0;
   startBtn.disabled = !canStart;
+
+  // P2.4 — spectator hint: when this viewer is a spectator in a
+  // room that's still waiting, surface a clear copy explaining that
+  // only the host can start the game. Without this the Start
+  // button is just silently disabled, which previously read as
+  // "I clicked but nothing happened".
+  const meRow = st.players.find(p => p.id === state.me.player_id);
+  const isSpec = !!meRow?.is_spectator;
+  const tip = document.getElementById("lobby-spectator-tip");
+  if (tip) {
+    tip.hidden = !isSpec;
+    if (isSpec) {
+      tip.textContent = st.game.status === "waiting"
+        ? "你是观战者 — 等待房主（座位 0）点击开始；游戏开始后会自动进入。"
+        : "游戏即将开始…";
+    }
+  }
+
+  // P2.4 — spectator row gating. The "add spectator" button shows
+  // for any current player (and not for spectators themselves). It
+  // is always available regardless of capacity because spectator
+  // slots are independent.
+  const addSpecBtn = document.getElementById("lobby-add-spectator-btn");
+  const joinModeSel = document.getElementById("lobby-join-mode");
+  const specInfo = document.getElementById("lobby-spectator-info");
+  if (addSpecBtn) addSpecBtn.hidden = !!state.me?.is_spectator || state.game?.status !== "waiting";
+  if (specInfo) {
+    const maxSpec = st.game.max_spectators ?? 8;
+    const currentSpec = st.players.filter(p => p.is_spectator).length;
+    specInfo.textContent = `观战席 ${currentSpec} / ${maxSpec} · 不占用座位`;
+  }
+  // Hide the join-mode dropdown — it's only for external visitors,
+  // not for players already in the room. Actual spectator switching
+  // is done via the "Add spectator" button modal.
+  if (joinModeSel) joinModeSel.hidden = true;
+}
+
+async function addSpectator() {
+  // P2.4 — "Add spectator" lets anyone (host, AI players, or a
+  // separate tab) join the room as a spectator. If the current user
+  // is already a real player, we ASK first whether they want to
+  // convert their own seat or just add a new spectator slot. For a
+  // plain audience browser tab, they always join as a fresh
+  // spectator.
+  const gid = state.me.game_id;
+  if (!gid) return toast("不在房间中", 2000);
+  const me = (state.game?.players || []).find(p => p.id === state.me.player_id);
+  if (me?.is_spectator) return toast("你已经就是观战者啦", 2000);
+  const choice = await new Promise((resolve) => {
+    // P2.4 — simple modal with two choices via the existing
+    // generic-modal mechanism: convert own seat vs fresh spectator.
+    const modal = document.getElementById("generic-modal");
+    const titleEl = document.getElementById("generic-modal-title");
+    const bodyEl = document.getElementById("generic-modal-body");
+    const btnRow = document.getElementById("generic-modal-buttons");
+    titleEl.textContent = "加入观战";
+    bodyEl.innerHTML = `<p class="muted small">你想怎么观战？</p>`;
+    const list = document.createElement("div");
+    list.className = "choice-list";
+    const opt1 = document.createElement("div");
+    opt1.className = "choice-item spectator-pick";
+    opt1.innerHTML = `👀 <strong>作为观战者加入</strong> <span class="muted small">你当前的玩家位置保持，新加一个观众席</span>`;
+    opt1.addEventListener("click", () => { modal.hidden = true; resolve("add"); });
+    const opt2 = document.createElement("div");
+    opt2.className = "choice-item spectator-pick";
+    opt2.innerHTML = `👀 <strong>切换为观战</strong> <span class="muted small">你的玩家席位变成观众（开局后无效）</span>`;
+    opt2.addEventListener("click", () => { modal.hidden = true; resolve("convert"); });
+    list.appendChild(opt1);
+    list.appendChild(opt2);
+    bodyEl.appendChild(list);
+    btnRow.innerHTML = `<button class="btn btn-secondary" id="spectator-pick-cancel">取消</button>`;
+    btnRow.querySelector("#spectator-pick-cancel").addEventListener("click", () => {
+      modal.hidden = true;
+      resolve(null);
+    });
+    modal.hidden = false;
+  });
+  if (choice === "add") {
+    // Spawn a separate spectator slot — used e.g. by host for the
+    // audience to click on, or a separate tab joining to watch.
+    try {
+      await api("POST", `/games/${gid}/join`, {
+        user_name: (state.settings.playerName || "").trim() + "_观众",
+        role: "spectator",
+      });
+      toast("已加入观战");
+    } catch (e) {
+      toast("加入观战失败：" + e.message, 3000);
+    }
+  } else if (choice === "convert") {
+    // Switch existing player slot to spectator. Re-using the join
+    // endpoint would collide on (game_id, user_name); we just leave
+    // the choice as "future-work" and rely on the lobby's
+    // "Join as spectator" button on the join-list as a separate path.
+    toast("切换为观战暂未上线 — 请加入一个新观战者席位", 3000);
+  }
 }
 
 async function addAIPlayer() {
@@ -793,14 +959,27 @@ async function enterGame() {
   const baseInterval = Math.max(1000, state.settings.refreshSeconds * 1000);
   state.refreshTimer = setInterval(refreshGame, baseInterval);
   state.baseRefreshMs = baseInterval;
+  // P2.4 — if we landed in the game view directly during AI or
+  // spectator phase (e.g. lobby polling caught status='playing'),
+  // accelerate polling immediately rather than waiting for the next
+  // render to bump it. Without this, the first ~5s of AI moves are
+  // invisible to a fast-joining spectator.
+  const curPhase = state.game?.game?.phase;
+  if (curPhase === "ai" || curPhase === "animating" || curPhase === "spectator") {
+    adjustPollInterval(curPhase);
+  }
 }
 
 // Re-arm the poll interval based on the current phase. While AI is acting
-// we poll fast (400ms) so the user sees each action in near real-time; in
-// other phases we fall back to the user's configured refresh rate.
+// (or a spectator is asked to confirm) we poll fast (400ms) so the user
+// sees each action appear in near real-time; in other phases we fall back
+// to the user's configured refresh rate.
 function adjustPollInterval(phase) {
   if (!state.refreshTimer) return;
-  const target = (phase === "ai" || phase === "animating")
+  // P2.4 — also fast-poll the spectator's "confirm slot" so the
+  // audience doesn't miss the brief window between "AI ended"
+  // and "spectator's turn starts".
+  const target = (phase === "ai" || phase === "animating" || phase === "spectator")
     ? 400
     : state.baseRefreshMs;
   // setInterval has a minimum granularity; calling it again resets cleanly.
@@ -963,11 +1142,25 @@ function updateActionCounter() {
   // No-op: per-player action counter was removed. Each unit acts
   // independently and the player may end their turn at any time.
   // The end-turn button is enabled whenever it's the player's turn.
+  // P2.4 — spectators also need the button enabled when their
+  // confirm slot arrives, so the audience can advance the turn.
   const endBtn = document.querySelector('[data-action="end-turn"]');
   if (endBtn) {
     const isMyTurn = state.game?.current_player_id === state.me.player_id;
     endBtn.disabled = !isMyTurn;
     endBtn.title = isMyTurn ? "" : "还没轮到你";
+    // P2.4 — rebrand the button copy in spectator mode so the user
+    // knows they don't have to do anything strategic. We do this on
+    // every render because the role can flip if the user rejoins
+    // after page reload.
+    const me = (state.game?.players || []).find(p => p.id === state.me.player_id);
+    if (me?.is_spectator) {
+      endBtn.textContent = "✅ 确认（继续）";
+    } else if (endBtn.dataset.originalLabel === undefined) {
+      endBtn.dataset.originalLabel = endBtn.textContent;
+    } else if (!me?.is_spectator) {
+      endBtn.textContent = endBtn.dataset.originalLabel;
+    }
   }
 }
 
@@ -1137,6 +1330,12 @@ function renderBoard(st) {
     label = `敌方阶段（${currentPlayer.user_name} 行动中…）`;
   } else if (phase === "animating") {
     label = "动画播放中…";
+  } else if (phase === "spectator" && currentPlayer && meId === currentPlayer.id) {
+    // P2.4 — spectator's confirm slot: invite them to click the end
+    // button to keep the show moving. Distinguishable copy so the
+    // viewer knows they don't actually have to do anything strategic.
+    label = `观战确认（点击"确认/结束回合"继续）`;
+    bannerClass = "phase-spectator";
   } else if (currentPlayer && meId !== currentPlayer.id) {
     label = `等待 ${currentPlayer.user_name} 操作`;
     bannerClass = "phase-waiting";
@@ -2643,21 +2842,31 @@ function renderPlayersList(st) {
   el.innerHTML = "";
   for (const p of st.players) {
     const div = document.createElement("div");
-    div.className = "player-card" + (p.id === st.current_player_id ? " active" : "") + (p.is_alive ? "" : " dead") + (p.is_ai ? " ai" : "");
+    div.className = "player-card"
+      + (p.id === st.current_player_id ? " active" : "")
+      + (p.is_alive || p.is_spectator ? "" : " dead")
+      + (p.is_ai ? " ai" : "")
+      + (p.is_spectator ? " spectator" : "");
     const aliveUnits = p.units.filter(u => u.hp > 0).length;
     let badge = "";
     if (p.is_ai) badge = `<span class="ai-badge">AI</span>`;
+    if (p.is_spectator) badge = `<span class="ai-badge spectator">👀 观战</span>`;
     // P2.3 — team label
     let teamLabel = "";
     if (p.team && !p.team.startsWith("player_")) {
       teamLabel = `<span class="team-pill" title="队伍">${escapeHtml(p.team)}</span>`;
     }
     const gold = p.gold ?? 0;
+    // P2.4 — spectators get a neutral swatch and skip gold/units subline
+    const swatchColor = p.is_spectator ? "#666" : playerColorCss(p.color);
+    const subLine = p.is_spectator
+      ? `<div class="player-sub">观战中 — 无单位</div>`
+      : `<div class="player-sub">单位 ${aliveUnits}/${p.units.length} · <span class="gold-pill" title="金币">💰 ${gold}</span></div>`;
     div.innerHTML = `
-      <div class="swatch" style="background: ${playerColorCss(p.color)}"></div>
+      <div class="swatch" style="background: ${swatchColor}"></div>
       <div class="player-meta">
-        <div class="player-name">${escapeHtml(p.user_name)}${p.is_alive ? "" : " (淘汰)"}${badge}${teamLabel}</div>
-        <div class="player-sub">单位 ${aliveUnits}/${p.units.length} · <span class="gold-pill" title="金币">💰 ${gold}</span></div>
+        <div class="player-name">${escapeHtml(p.user_name)}${p.is_alive || p.is_spectator ? "" : " (淘汰)"}${badge}${teamLabel}</div>
+        ${subLine}
       </div>
     `;
     el.appendChild(div);
@@ -2689,21 +2898,115 @@ function renderFactionGoldBar(st) {
   }).join("");
 }
 
+function compactLogDescription(desc, actionType) {
+  // Compact log format — most logs now come pre-formatted from backend,
+  // but we still need to handle legacy formats and add HTML styling
+
+  // Already compact move: "剑士 → (5,7) -3MP"
+  let m = desc.match(/^(.+?)\s+→\s+\((\d+),(\d+)\)\s+-(\d+)MP/);
+  if (m) {
+    return `${escapeHtml(m[1])} → (${m[2]},${m[3]}) <span class="log-cost">-${m[4]}MP</span>`;
+  }
+
+  // Already compact attack: "弓兵 🗡 剑士 -18 (12HP)" or "... 💀击杀"
+  m = desc.match(/^(.+?)\s+🗡\s+(.+?)\s+-(\d+)(?:\s+(💀击杀|\(\d+HP\)))?(?:\s+↩(\d+))?/);
+  if (m) {
+    const statusPart = m[4] ? (m[4].includes('💀')
+      ? `<span class="log-kill">${escapeHtml(m[4])}</span>`
+      : `<span class="log-hp">${escapeHtml(m[4])}</span>`)
+      : '';
+    const counterPart = m[5] ? ` <span class="log-counter">↩${m[5]}</span>` : '';
+    return `${escapeHtml(m[1])} <span class="log-atk">🗡</span> ${escapeHtml(m[2])} <span class="log-dmg">-${m[3]}</span> ${statusPart}${counterPart}`;
+  }
+
+  // Already compact heal: "治疗师 ⚕ 骑士 +15"
+  m = desc.match(/^(.+?)\s+⚕\s+(.+?)\s+\+(\d+)/);
+  if (m) {
+    return `${escapeHtml(m[1])} <span class="log-heal">⚕</span> ${escapeHtml(m[2])} <span class="log-heal-amt">+${m[3]}</span>`;
+  }
+
+  // Already compact wait: "剑士 ⏸"
+  if (desc.includes('⏸')) {
+    return escapeHtml(desc);
+  }
+
+  // Already compact level up: "剑士 ⬆ Lv.3"
+  m = desc.match(/^(.+?)\s+⬆\s+(Lv\.\d+)/);
+  if (m) {
+    return `${escapeHtml(m[1])} <span class="log-levelup">⬆ ${m[2]}</span>`;
+  }
+
+  // Already compact end turn: "玩家A 结束 (3动)"
+  m = desc.match(/^(.+?)\s+结束(?:\s+\((\d+)动\))?/);
+  if (m) {
+    const acts = m[2] ? ` <span class="log-acts">${m[2]}动</span>` : "";
+    return `${escapeHtml(m[1])} 结束${acts}`;
+  }
+
+  // Already compact eliminated: "玩家A 💀淘汰"
+  if (desc.includes("💀淘汰")) {
+    const player = desc.split(" ")[0];
+    return `${escapeHtml(player)} <span class="log-eliminated">💀淘汰</span>`;
+  }
+
+  // Legacy format fallback — convert old verbose formats
+
+  // Old move: "剑士 从 (3,5) 移动到 (5,7)，消耗 3 MP"
+  m = desc.match(/^(.+?)\s+从\s+\(.+?\)\s+移动到\s+\((\d+),(\d+)\)，消耗\s+(\d+)\s+MP/);
+  if (m) {
+    return `${escapeHtml(m[1])} → (${m[2]},${m[3]}) <span class="log-cost">-${m[4]}MP</span>`;
+  }
+
+  // Old attack: "弓兵 对 剑士 发动攻击，造成 18 点伤害（剑士 剩余 12 HP）"
+  m = desc.match(/^(.+?)\s+对\s+(.+?)\s+发动攻击，造成\s+(\d+)\s+点伤害(?:\s+\[击杀\]|（(.+?)\s+剩余\s+(\d+)\s+HP）)/);
+  if (m) {
+    const kill = desc.includes("[击杀]");
+    const result = kill
+      ? `<span class="log-kill">💀击杀</span>`
+      : `<span class="log-hp">(${m[5]}HP)</span>`;
+    return `${escapeHtml(m[1])} <span class="log-atk">🗡</span> ${escapeHtml(m[2])} <span class="log-dmg">-${m[3]}</span> ${result}`;
+  }
+
+  // Old heal: "治疗师 治愈 骑士 +15HP"
+  m = desc.match(/^(.+?)\s+治愈\s+(.+?)\s+\+(\d+)HP/);
+  if (m) {
+    return `${escapeHtml(m[1])} <span class="log-heal">⚕</span> ${escapeHtml(m[2])} <span class="log-heal-amt">+${m[3]}</span>`;
+  }
+
+  // Old wait: "剑士 原地待命"
+  if (desc.includes("原地待命")) {
+    const unit = desc.split(" ")[0];
+    return `${escapeHtml(unit)} <span class="log-wait">⏸</span>`;
+  }
+
+  // Skill: "骑士 发动「连击」" → "骑士 ⭐连击"
+  m = desc.match(/^(.+?)\s+发动「(.+?)」/);
+  if (m) {
+    return `${escapeHtml(m[1])} <span class="log-skill">⭐${m[2]}</span>`;
+  }
+
+  // Default: escape and return
+  return escapeHtml(desc);
+}
+
 function renderActionLog(st) {
   const el = document.getElementById("action-log");
-  const chatEl = document.getElementById("chat-float");
+  const panelEl = document.getElementById("chat-panel");
   el.innerHTML = "";
-  if (chatEl) chatEl.innerHTML = "";
+  if (panelEl) panelEl.innerHTML = "";
   const playerMap = new Map();
   for (const p of st.players) playerMap.set(p.id, p);
   const moodEmoji = { joy: "😄", anger: "😠", frustrated: "😤", smug: "😏",
                       disappointed: "😞", relieved: "😅", neutral: "💬" };
   const colorMap = { red: "#e74c3c", blue: "#3498db", green: "#27ae60", yellow: "#f1c40f" };
 
+  // Group logs by turn for compact display
+  let lastTurn = -1;
+
   for (const log of st.logs.slice(0, 50)) {
     if (log.action_type === "ai_commentary" || log.action_type === "ai_turn") {
-      // Route AI speech to the chat box
-      if (!chatEl) continue;
+      // Route AI speech to the chat panel in the left-column bottom pane
+      if (!panelEl) continue;
       const m = log.description.match(/^\[(\w+)\/(\w+)\]\s*(.*)/);
       if (!m) continue;
       const emoji = moodEmoji[m[2]] || "💬";
@@ -2716,14 +3019,24 @@ function renderActionLog(st) {
       div.innerHTML = `<span class="chat-avatar" style="background:${avatarBg}">${emoji}</span>`
         + `<span class="chat-name">${escapeHtml(name)}</span>`
         + `<span class="chat-text">${escapeHtml(text)}</span>`;
-      chatEl.appendChild(div);
+      panelEl.appendChild(div);
     } else {
       const div = document.createElement("div");
       div.className = "entry " + log.action_type;
-      div.textContent = `T${log.turn_number} · ${log.description}`;
+
+      // Show turn number only when it changes
+      const turnPrefix = log.turn_number !== lastTurn
+        ? `<span class="log-turn">T${log.turn_number}</span> `
+        : '<span class="log-indent"></span>';
+      lastTurn = log.turn_number;
+
+      const compactDesc = compactLogDescription(log.description, log.action_type);
+      div.innerHTML = turnPrefix + compactDesc;
       el.appendChild(div);
     }
   }
+  // Scroll chat to bottom
+  if (panelEl) panelEl.scrollTop = panelEl.scrollHeight;
 }
 
 // ----- Reference panel -----
@@ -3945,6 +4258,62 @@ const MainlineView = {
 // 暴露给浏览器控制台
 window.mainlineView = MainlineView;
 
+// ── Vertical split divider for left-column panes ──
+function initSplitDivider() {
+  const divider = document.querySelector("[data-split='left-col']");
+  if (!divider) return;
+  const container = divider.parentElement;
+  const top = divider.previousElementSibling;
+  const bottom = divider.nextElementSibling;
+  if (!top || !bottom) return;
+
+  // Restore saved position
+  const saved = localStorage.getItem("battleblitz_split_left");
+  if (saved) {
+    const pct = parseFloat(saved);
+    if (pct > 10 && pct < 90) applySplit(pct);
+  }
+
+  let dragging = false;
+  divider.addEventListener("mousedown", (e) => {
+    dragging = true;
+    divider.classList.add("active");
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = container.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const pct = (relY / rect.height) * 100;
+    applySplit(Math.max(15, Math.min(85, pct)));
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove("active");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    // Persist
+    const topRect = top.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const pct = (topRect.height / containerRect.height) * 100;
+    localStorage.setItem("battleblitz_split_left", pct.toFixed(1));
+  });
+
+  function applySplit(pct) {
+    const h = container.clientHeight;
+    const dividerH = divider.offsetHeight || 6;
+    const topH = Math.round(h * pct / 100);
+    const bottomH = h - topH - dividerH;
+    top.style.flex = "0 0 " + Math.max(40, topH) + "px";
+    bottom.style.flex = "0 0 " + Math.max(40, bottomH) + "px";
+  }
+}
+
 // ============================================================
 // Wiring
 // ============================================================
@@ -3973,6 +4342,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderRefContent();
     });
   });
+  // Initialize vertical split divider for left-column panes
+  initSplitDivider();
+
   // Settings first + fetch unit metadata
   renderSettings();
   fetchUnitClasses();
@@ -4063,6 +4435,9 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "add-ai":
         await addAIPlayer();
+        break;
+      case "add-spectator":
+        await addSpectator();
         break;
       case "remove-ai": {
         const pid = parseInt(target.dataset.playerId);

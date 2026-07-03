@@ -33,7 +33,7 @@ class HealSkill(BaseSkill):
         ctx.user.mp = 0
         return SkillResult(
             ok=True,
-            description=f"{ctx.user.name} 治愈 {target.name} +{restored}HP",
+            description=f"{ctx.user.name} ⚕ {target.name} +{restored}",
             restored_hp=restored,
             affected_units=[target.id],
         )

@@ -254,22 +254,3 @@ class OpenAIClient:
             text=text, tool_name=None, tool_input={},
             stop_reason=stop, usage=usage, raw=resp,
         )
-
-    async def health_check(self) -> bool:
-        """Cheap liveness probe."""
-        try:
-            await asyncio.wait_for(
-                self._client.chat.completions.create(
-                    model=self.model,
-                    max_tokens=4,
-                    messages=[{"role": "user", "content": "ping"}],
-                ),
-                timeout=5.0,
-            )
-            return True
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("OpenAI health check failed: %s", exc)
-            return False
-
-    async def aclose(self) -> None:
-        await self._client.close()
