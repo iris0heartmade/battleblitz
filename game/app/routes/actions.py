@@ -211,7 +211,7 @@ async def move_unit(
         goal=target,
         terrain=terrain,
         owners=owners,
-        mov=unit.mov,
+        mov=unit.mp,
         viewer_owner_id=player.id,
         blocked_units=blocked,
     )
