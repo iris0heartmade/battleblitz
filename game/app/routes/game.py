@@ -283,6 +283,7 @@ async def _start_battle_internal(
         for t in tiles:
             if t.x == cx and t.y == cy:
                 t.owner_id = seat_to_player[seat].id
+                logger.info(f"Game {game.id}: castle at ({cx},{cy}) assigned to player {seat_to_player[seat].id}(seat={seat})")
                 break
 
     # P0.4 — assign initial ownership of income buildings near each castle
@@ -303,6 +304,7 @@ async def _start_battle_internal(
                 # Assign to the closest castle's owner
                 if closest_seat == seat:
                     t.owner_id = pid
+                    logger.debug(f"Game {game.id}: income building ({t.terrain}) at ({t.x},{t.y}) -> player {pid}(seat={seat}), dist={min_dist}")
 
     for u in units:
         for t in tiles:
