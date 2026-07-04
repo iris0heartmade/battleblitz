@@ -397,7 +397,9 @@ def calculate_damage(
     """
     rng = rng or random.Random()
     if crit is None:
-        crit = rng.random() < _crit_chance(attacker)
+        crit_chance = _crit_chance(attacker)
+        crit = rng.random() < crit_chance
+        logger.debug(f"Crit roll: {attacker.name}(id={attacker.id}) -> {defender.name}(id={defender.id}): {'CRIT' if crit else 'no crit'} (chance={crit_chance:.2f})")
 
     if _attack_kind_of(attacker) == "magic":
         eff_atk = attacker.matk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
@@ -805,7 +807,9 @@ def claim_castle_if_present(tile: Tile, unit: Unit) -> bool:
     if tile.owner_id == unit.player_id:
         return False
     # Only claim if it's an enemy castle, not neutral or already owned
+    old_owner = tile.owner_id
     tile.owner_id = unit.player_id
+    logger.info(f"Castle claimed at ({tile.x},{tile.y}): unit {unit.name}(id={unit.id},player={unit.player_id}) takes from prev_owner={old_owner}")
     return True
 
 
@@ -1324,6 +1328,7 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
         score += max(0, AI_AGGRO_RANGE - d) * 5
         candidates.append((score, e))
     if not candidates:
+        logger.info(f"AI unit {unit.name}(id={unit.id},type={unit.unit_type}) at ({unit.x},{unit.y}): no valid attack target")
         return None
     candidates.sort(key=lambda t: -t[0])
     return candidates[0][1]
@@ -1380,7 +1385,9 @@ def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, i
 
     best_tile = max(reachable.keys(), key=score)
     if score(best_tile) <= score((unit.x, unit.y)) - 1:
+        logger.info(f"AI unit {unit.name}(id={unit.id}) at ({unit.x},{unit.y}): stays (best={best_tile},score={score(best_tile):.1f} vs current={score((unit.x,unit.y)):.1f})")
         return None  # standing still is better
+    logger.info(f"AI unit {unit.name}(id={unit.id}) at ({unit.x},{unit.y}): move -> {best_tile} (score={score(best_tile):.1f})")
     return best_tile
 
 
@@ -1433,6 +1440,7 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
 
 async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> bool:
     """Perform an AI attack. Returns True if successful."""
+    logger.info(f"AI attack: {attacker.name}(id={attacker.id},type={attacker.unit_type}) at ({attacker.x},{attacker.y}) -> {target.name}(id={target.id},type={target.unit_type},hp={target.hp}) at ({target.x},{target.y})")
     target_tile = (
         await session.execute(
             select(Tile).where(Tile.occupied_unit_id == target.id)
@@ -1494,6 +1502,7 @@ async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AI
 
 async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> int:
     """Execute one AI player's full turn. Returns the number of actions taken."""
+    logger.info(f"AI turn: player {ai_player.id}(seat={ai_player.seat}) starts (game={game.id}, turn={game.turn_number})")
     actions = 0
     # Refresh this AI's units fresh each pass
     units_rows = (await session.execute(
