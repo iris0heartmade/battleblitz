@@ -180,6 +180,7 @@ async def end_turn(
     )
     expected_player = next(p for p in players if p.seat == expected_seat)
     if player.id != expected_player.id:
+        logger.warning(f"end_turn REJECTED: player {player.id}(seat={player.seat}) tried but expected seat={expected_seat} (game {game.id}, turn {game.turn_number})")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "现在不是你的回合")
 
     # Count units that have acted (for the action log message)
@@ -227,6 +228,7 @@ async def end_turn(
 
     # If the next player has already ended, we've wrapped around -> resolve round.
     if next_player.has_ended_turn:
+        logger.info(f"Round wrap: game {game.id} turn {game.turn_number} -- all alive players ended, resolving round end")
         eot = await apply_end_of_turn(session, game)
         leveled_ids = [uid for uid, _ in eot.leveled_units]
         eliminated = [p.id for p in players if not p.is_alive]
@@ -265,6 +267,7 @@ async def end_turn(
             else:
                 game.status = "finished"
                 game.phase = "player"
+                logger.info(f"Game {game.id} finished at turn {game.turn_number}: all alive players eliminated")
 
         next_id = (
             next((p.id for p in players if p.seat == game.current_player_index), None)
