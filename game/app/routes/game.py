@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import (
-    CASTLES_PER_GAME,
+    MAX_CASTLES,
     DEFAULT_MAX_SPECTATORS,
     DEFAULT_PLAYER_COLORS,
     MAX_PLAYERS,
@@ -177,7 +177,7 @@ async def _start_battle_internal(
         grid = generate_map_preset(
             preset_id=preset_id,
             seed=seed,
-            num_castles=max(2, min(CASTLES_PER_GAME, len(players))),
+            num_castles=max(2, min(MAX_CASTLES, len(players))),
         )
 
     # If game.map_biome wasn't set but custom map has one, sync it
@@ -194,7 +194,8 @@ async def _start_battle_internal(
     # never even asked for them; skip the loop entirely so the
     # spectator's `seat` doesn't accidentally fall into castle_xy.
     real_players = [p for p in players if not p.is_spectator]
-    castle_xy = castle_positions(len(real_players))
+    map_size = len(grid)
+    castle_xy = castle_positions(len(real_players), map_size)
     default_roster = get_roster_for_composition(
         getattr(game, "unit_composition", None)
     )
@@ -226,7 +227,7 @@ async def _start_battle_internal(
             if uc is None:
                 continue
             for _ in range(int(count)):
-                x, y = _spawn_xy_for_castle(seat_xy, unit_index)
+                x, y = _spawn_xy_for_castle(seat_xy, unit_index, map_size)
                 units.append(Unit(
                     player_id=player.id,
                     unit_type=unit_type,
@@ -283,6 +284,25 @@ async def _start_battle_internal(
             if t.x == cx and t.y == cy:
                 t.owner_id = seat_to_player[seat].id
                 break
+
+    # P0.4 — assign initial ownership of income buildings near each castle
+    # so players can collect income from turn 1.
+    from app.config import TERRAIN_VILLAGE, TERRAIN_BARRACKS
+    for seat, (cx, cy) in castle_xy.items():
+        pid = seat_to_player[seat].id
+        for t in tiles:
+            if t.terrain in (TERRAIN_VILLAGE, TERRAIN_BARRACKS):
+                # Find closest castle by Manhattan distance
+                min_dist = float('inf')
+                closest_seat = None
+                for s, (sx, sy) in castle_xy.items():
+                    dist = abs(t.x - sx) + abs(t.y - sy)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_seat = s
+                # Assign to the closest castle's owner
+                if closest_seat == seat:
+                    t.owner_id = pid
 
     for u in units:
         for t in tiles:
@@ -650,6 +670,12 @@ async def start_game(
         )
 
     await _start_battle_internal(session, game, players)
+
+    # P0.4 — collect income for the first player at game start so turn 1
+    # income is granted based on initial building ownership.
+    from app.routes.turns import _collect_income_for_player
+    first_player = next(p for p in players if p.seat == 0)
+    await _collect_income_for_player(session, game, first_player)
 
     # P2.4 — schedule the very first turn. In a real-player-first
     # setup, the human gets to act and AI will be chained from

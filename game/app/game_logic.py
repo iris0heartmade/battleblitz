@@ -22,7 +22,7 @@ from app.classes.units import (
 )
 from app.config import (
     AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN,
-    BASE_CRIT_RATE, CASTLES_PER_GAME, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
+    BASE_CRIT_RATE, MAX_CASTLES, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
     CASTLE_FLOOR, CASTLE_STAIRS, CASTLE_THRONE, CASTLE_VAULT, CASTLE_WALL,
     CLAIM_TURNS_REQUIRED, CRIT_MULTIPLIER, CRIT_PER_LEVEL,
     EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
@@ -193,7 +193,7 @@ def _generate_castle_internal_map(
 
 def generate_map(
     seed: int,
-    num_castles: int = CASTLES_PER_GAME,
+    num_castles: int = MAX_CASTLES,
     style: str = STYLE_GRASS_OUTER,
     size: int = MAP_SIZE,
     *,
@@ -213,7 +213,7 @@ def generate_map(
     behaviour so existing tests / replays stay stable.
     """
     if num_castles not in _CASTLE_LAYOUTS:
-        num_castles = CASTLES_PER_GAME
+        num_castles = MAX_CASTLES
 
     style_cfg = MAP_STYLES.get(style, MAP_STYLES[STYLE_GRASS_OUTER])
     mode = style_cfg.get("mode", "single_hq")
@@ -260,10 +260,11 @@ def generate_map(
     return _generate_outer_map(rng, style_cfg, castles, size)
 
 
-def castle_positions(num_players: int) -> Dict[int, Tuple[int, int]]:
-    """Return {seat_index: (x, y)} for the requested player count."""
-    n = max(2, min(4, num_players))
-    return {i: pos for i, pos in enumerate(_CASTLE_LAYOUTS[n])}
+def castle_positions(num_players: int, size: int = MAP_SIZE) -> Dict[int, Tuple[int, int]]:
+    """Return {seat_index: (x, y)} for the requested player count and map size."""
+    from app.map_generation.symmetry import calculate_castle_positions
+    positions = calculate_castle_positions(size, num_players)
+    return {i: pos for i, pos in enumerate(positions)}
 
 
 # ============================================================
@@ -279,12 +280,12 @@ def _unit_name(unit_type: str, index: int) -> str:
     return f"{base.display_en}-{suffix}"
 
 
-def _spawn_xy_for_castle(castle_xy: Tuple[int, int], unit_index: int) -> Tuple[int, int]:
+def _spawn_xy_for_castle(castle_xy: Tuple[int, int], unit_index: int, size: int = MAP_SIZE) -> Tuple[int, int]:
     cx, cy = castle_xy
     offsets = [(0, 1), (1, 0), (1, 1), (2, 0), (0, 2)]
     dx, dy = offsets[unit_index % len(offsets)]
-    x = max(0, min(MAP_SIZE - 1, cx + dx))
-    y = max(0, min(MAP_SIZE - 1, cy + dy))
+    x = max(0, min(size - 1, cx + dx))
+    y = max(0, min(size - 1, cy + dy))
     return x, y
 
 
@@ -798,11 +799,12 @@ async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
 # ============================================================
 
 def claim_castle_if_present(tile: Tile, unit: Unit) -> bool:
-    """If `unit` is standing on a castle tile, transfer ownership to its player."""
+    """If `unit` is standing on an enemy castle tile, transfer ownership to its player."""
     if tile.terrain != TERRAIN_CASTLE:
         return False
     if tile.owner_id == unit.player_id:
         return False
+    # Only claim if it's an enemy castle, not neutral or already owned
     tile.owner_id = unit.player_id
     return True
 
@@ -1035,13 +1037,15 @@ def _load_map_presets() -> Dict[str, Dict]:
 MAP_PRESETS: Dict[str, Dict] = _load_map_presets()
 
 
-def generate_map_preset(preset_id: str, seed: int, num_castles: int = CASTLES_PER_GAME) -> List[List[Tile]]:
+def generate_map_preset(preset_id: str, seed: int, num_castles: int = MAX_CASTLES) -> List[List[Tile]]:
     """Build a Tile grid from a named preset (or fall back to procedural)."""
     if preset_id and preset_id in MAP_PRESETS and MAP_PRESETS[preset_id].get("layout"):
         layout = MAP_PRESETS[preset_id]["layout"]
         return _layout_to_tiles(layout)
-    # Fall back to the original seeded random generator
-    return generate_map(seed=seed, num_castles=num_castles)
+    # P1.4 — route through the rich layered generator (clusters, rivers,
+    # roads, buildings).  Flip to False to restore the legacy simple
+    # random-fill behaviour for debugging.
+    return generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True)
 
 
 def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
@@ -1411,6 +1415,11 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
             if t.terrain == TERRAIN_CASTLE:
                 claim_castle_if_present(t, unit)
     unit.x, unit.y = dest
+    # Deduct movement cost — same logic as the human route (actions.py).
+    from app.config import TERRAIN_MOVE_COST
+    cost_x2 = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
+    spent_mp = cost_x2 // 2
+    unit.mp = max(0, unit.mp - spent_mp)
     # AI: a unit that has moved may still attack this turn (matches the
     # human player rules), but it must NOT be picked up for another move
     # by `_ai_take_one_action`. Setting `has_acted=False` here is
