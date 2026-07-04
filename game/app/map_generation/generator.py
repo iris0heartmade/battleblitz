@@ -245,6 +245,7 @@ class MapGenerator:
             if verify_connectivity(grid, self.castle_positions):
                 last_grid = grid
                 break
+            logger.debug(f"MapGenerator: attempt {attempt + 1}/{self.max_retries} connectivity FAILED (player_count={self.player_count})")
             last_grid = grid
 
         # If retries failed, just return the last attempt (the
