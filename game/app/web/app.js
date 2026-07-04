@@ -155,7 +155,7 @@ function showModal({ title = "", body = "", buttons = [] } = {}) {
   // body can be a string or a DOM node
   bodyEl.innerHTML = "";
   if (typeof body === "string") {
-    bodyEl.textContent = body;
+    bodyEl.innerHTML = body;
   } else if (body instanceof Node) {
     bodyEl.appendChild(body);
   }
