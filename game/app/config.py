@@ -188,7 +188,7 @@ TERRAIN_SPAWN_WEIGHTS: Final[Dict[str, int]] = {
 CLAIM_TURNS_REQUIRED: Final[int] = 2
 
 # Castle spawn config: one castle per player, on the map's symmetric edges.
-CASTLES_PER_GAME: Final[int] = 4  # max players; we generate up to 4 castles
+MAX_CASTLES: Final[int] = 4  # max players; we generate up to 4 castles
 CASTLE_NEIGHBOR_RADIUS: Final[int] = 2  # how many tiles around castle are kept passable
 
 

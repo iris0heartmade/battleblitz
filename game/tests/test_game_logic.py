@@ -420,7 +420,7 @@ class TestGenerateMap:
         castles = sum(
             1 for row in grid for t in row if t.terrain == TERRAIN_CASTLE
         )
-        # Falls back to CASTLES_PER_GAME (= 4)
+        # Falls back to MAX_CASTLES (= 4)
         assert castles == 4
 
     def test_castle_positions_helper(self):
