@@ -185,6 +185,7 @@ class LLMAgent:
         hits = self.state.get("passive_hits", [])
         if hits:
             user += "\n\n【上回合你挨打了】" + "；".join(hits) + "\n请在 reaction 中表达你的情绪。"
+            logger.debug(f"Injected {len(hits)} passive hits into prompt: {hits}")
 
         plans = await self._ask_llm_with_retry(system=system, user=user, legal=legal)
 
@@ -386,6 +387,9 @@ class LLMAgent:
             self.max_retries + 1,
         )
         legal_action = _rules_ai_pick(legal)
+        logger.warning(
+            f"Fallback rules-AI action: {legal_action.action_id} ({legal_action.kind}) -- {last_error}"
+        )
         return [ActionPlan(
             legal_action=legal_action,
             reason=f"[兜底] LLM 调用失败 ({last_error})",

@@ -14,10 +14,13 @@ Plus one global `end_turn` action that the AI may pick at any point.
 """
 from __future__ import annotations
 
+import logging
 from typing import List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.agent.schemas import LegalAction
 from app.classes.units import get as _get_unit
@@ -90,6 +93,10 @@ async def enumerate_legal_actions(
         description="结束",
     ))
 
+    logger.debug(
+        f"Legal actions enumerated: {len(my_units)} active units, "
+        f"{len(enemy_units)} enemies, {len(actions)} total actions"
+    )
     return actions
 
 

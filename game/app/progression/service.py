@@ -177,6 +177,11 @@ class ProgressionService:
         result = _award_exp(unit, amount)
         capped = was_at_cap or not can_level_up(unit) and result.levels_gained == 0
 
+        if was_at_cap:
+            logger.warning(
+                f"EXP discarded: unit={unit_id} at tier cap (tier={unit.tier} level={unit.level}), {amount} XP lost"
+            )
+
         await self.session.flush()
         logger.info(
             "XP awarded: unit=%d amount=%d reason=%s levels=%d new_lv=%d",

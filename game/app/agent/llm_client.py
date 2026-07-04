@@ -131,6 +131,11 @@ class LLMClient:
             else os.environ.get("ANTHROPIC_USE_TOOL_API", "1") != "0"
         )
 
+        logger.info(
+            f"LLMClient initialized: model={self.model} base_url={self.base_url} "
+            f"timeout={self.timeout}s tool_api={self.use_tool_api}"
+        )
+
         import httpx
 
         # The Anthropic SDK parses system proxy env vars (ALL_PROXY etc.)
