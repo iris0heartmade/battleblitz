@@ -124,6 +124,13 @@ class MapGenerator:
 
     def generate(self) -> List[List[Tile]]:
         """Build and return a Tile grid for the configured parameters."""
+        logger.info(
+            f"MapGenerator: generating {self.size}×{self.size} map, "
+            f"style={self.style}, mode={self.mode}, seed={self.seed}, "
+            f"players={self.player_count}, "
+            f"features=(clusters={self.use_clusters}, rivers={self.use_rivers}, "
+            f"roads={self.use_roads}, buildings={self.use_buildings})"
+        )
         rng = random.Random(self.seed)
         if self.mode == "castle_internal":
             return self._generate_castle_internal(rng)
