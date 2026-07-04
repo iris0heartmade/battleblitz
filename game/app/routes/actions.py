@@ -216,6 +216,7 @@ async def move_unit(
         blocked_units=blocked,
     )
     if path is None or path[-1] != target:
+        logger.info(f"move_unit: pathfinding FAILED (game {game_id}, unit {unit.id} at ({unit.x},{unit.y}) -> {target}, mp={unit.mp})")
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目的地不可达")
 
     # Compute actual cost along the chosen path.
@@ -335,6 +336,7 @@ async def attack(
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
     if distance == 0 or distance <= atk_min or distance > atk_range:
+        logger.info(f"attack: range FAILED (game {game_id}, att={attacker.id} at ({attacker.x},{attacker.y}), tgt={target.id} at ({target.x},{target.y}), d={distance}, range=({atk_min},{atk_range}])")
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"target out of range (need {atk_min} < d={distance} <= {atk_range})",
