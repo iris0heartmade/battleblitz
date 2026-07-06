@@ -1788,6 +1788,24 @@ html, body {
   font-weight: 700;
 }
 
+/* P2.5 — AI personality colours. Aggressive=red, balanced=accent,
+   conservative=blue. Helps the host see at a glance who's who. */
+.lobby-player .ai-badge.ai-personality-aggressive {
+  background: #e85a6a;
+  color: #1a1a1a;
+  box-shadow: 0 0 0 1px #b9484f;
+}
+.lobby-player .ai-badge.ai-personality-balanced {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+.lobby-player .ai-badge.ai-personality-conservative {
+  background: #5a9fe8;
+  color: #1a1a1a;
+  box-shadow: 0 0 0 1px #487fb8;
+}
+}
+
 .lobby-player .remove-btn {
   margin-left: 4px;
   background: transparent;

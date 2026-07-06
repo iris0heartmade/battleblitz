@@ -378,11 +378,13 @@
             <option value="llm">LLM Agent</option>
           </select>
           <select id="lobby-ai-personality" class="btn btn-secondary" style="width:auto;padding:8px 12px;border-radius:8px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);cursor:pointer;">
-            <option value="balanced">均衡</option>
-            <option value="aggressive">激进</option>
-            <option value="defensive">谨慎</option>
-            <option value="trickster">狡猾</option>
+            <option value="balanced" data-icon="⚖️" selected>⚖️ 均衡</option>
+            <option value="aggressive" data-icon="⚔️">⚔️ 激进</option>
+            <option value="conservative" data-icon="🛡️">🛡️ 保守</option>
           </select>
+          <span id="lobby-ai-personality-desc" class="muted small" style="margin-left:8px;align-self:center;">
+            默认均衡（视野中等 / 风险偏好中）
+          </span>
         </div>
         <!-- P2.4 — spectator row: lets the host (or any player who
              joined as a real player) opt into spectator mode, and
