@@ -142,7 +142,7 @@ async def test_ai_does_not_target_same_team_units(db_session, tmp_db_path):
             db_session.add(Tile(game_id=game.id, x=x, y=y, terrain="plain"))
     await db_session.flush()
     # Ask the rules AI (player 1, red) to pick an attack target.
-    from app.game_logic import _ai_pick_attack_target, _load_ai_snapshot
+    from app.game_logic import _ai_pick_attack_target, _load_ai_snapshot, _ai_profile
     ai_player = players[1]  # ai-red
     snap = await _load_ai_snapshot(db_session, game, ai_player)
     # Get the AI's unit explicitly.
@@ -151,7 +151,7 @@ async def test_ai_does_not_target_same_team_units(db_session, tmp_db_path):
     )).scalars().all()
     assert ai_unit_rows, "AI player has no unit"
     attacker_unit = ai_unit_rows[0]
-    target = _ai_pick_attack_target(attacker_unit, snap)
+    target = _ai_pick_attack_target(attacker_unit, snap, _ai_profile(ai_player))
     # Whatever the AI picked (or didn't pick), the snapshot's
     # enemy_units list MUST NOT include the same-team human player.
     snap_target_ids = {u.id for u in snap.enemy_units}

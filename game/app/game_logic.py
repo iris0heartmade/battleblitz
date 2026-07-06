@@ -21,7 +21,7 @@ from app.classes.units import (
     type_advantage as _type_adv,
 )
 from app.config import (
-    AI_AGGRO_RANGE, AI_MAX_ACTIONS_PER_TURN,
+    AI_MAX_ACTIONS_PER_TURN,
     BASE_CRIT_RATE, MAX_CASTLES, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
     CASTLE_FLOOR, CASTLE_STAIRS, CASTLE_THRONE, CASTLE_VAULT, CASTLE_WALL,
     CLAIM_TURNS_REQUIRED, CRIT_MULTIPLIER, CRIT_PER_LEVEL,
@@ -1302,6 +1302,88 @@ async def _load_ai_snapshot(session: AsyncSession, game: Game, ai_player: Player
     )
 
 
+# ============================================================
+# AI personality profiles (P2.5)
+# ============================================================
+# Each personality is a frozen dataclass of weights/biases that the AI
+# decision helpers read. The three profiles share the same code path —
+# only the numbers differ — so behaviour stays predictable across maps.
+# `agent_personality` on Player picks the profile; default is "balanced".
+#
+# Design (graduated): every numeric field goes  aggressive > balanced >
+# conservative. Two of the most game-defining numbers (`castle_pull`,
+# `claim_emergency_bonus`) are intentionally high across all three —
+# seizing enemy HQ and reclaiming an enemy claim both equal "win or
+# avoid loss", so even the conservative AI cares about them deeply.
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class AIProfile:
+    # --- Claim (occupation) ---
+    claim_distance: int         # max tiles willing to walk to claim
+    distance_weight: float      # score penalty per tile distance to tile
+    risk_penalty: float         # score penalty per enemy within 2 tiles
+    claim_emergency_bonus: int  # bonus if enemy is actively claiming this tile
+
+    # --- Castle / HQ ---
+    castle_pull: int            # bonus for moving toward enemy HQ
+    HQ_defense_range: int       # how close enemy can be before we react
+
+    # --- Combat ---
+    aggro_range: int            # how far we look for enemies
+    aggression: float           # multiplier on attack/move score (0..1)
+    in_range_penalty: float     # penalty per enemy that can hit this tile
+    kill_bonus_move: int        # bonus if move tile enables a kill next turn
+    flee_hp_pct: float          # HP % below which we retreat
+
+    # --- Economy ---
+    recruit_threshold: int      # min gold before considering recruit
+    recruit_max_roster: int     # cap on units in the field
+
+    # --- Healer behaviour ---
+    healer_offense: bool        # if True, healer may also attack
+
+
+_AI_PROFILES: Dict[str, AIProfile] = {
+    "aggressive": AIProfile(
+        claim_distance=8, distance_weight=8,  risk_penalty=5,
+        claim_emergency_bonus=200,
+        castle_pull=400, HQ_defense_range=5,
+        aggro_range=7, aggression=1.0, in_range_penalty=-3, kill_bonus_move=80,
+        flee_hp_pct=0.10,
+        recruit_threshold=200, recruit_max_roster=10,
+        healer_offense=True,
+    ),
+    "balanced": AIProfile(
+        claim_distance=6, distance_weight=18, risk_penalty=12,
+        claim_emergency_bonus=175,
+        castle_pull=300, HQ_defense_range=4,
+        aggro_range=5, aggression=0.7, in_range_penalty=-5, kill_bonus_move=50,
+        flee_hp_pct=0.20,
+        recruit_threshold=300, recruit_max_roster=8,
+        healer_offense=False,
+    ),
+    "conservative": AIProfile(
+        claim_distance=4, distance_weight=28, risk_penalty=20,
+        claim_emergency_bonus=150,
+        castle_pull=250, HQ_defense_range=3,
+        aggro_range=4, aggression=0.4, in_range_penalty=-8, kill_bonus_move=25,
+        flee_hp_pct=0.30,
+        recruit_threshold=350, recruit_max_roster=7,
+        healer_offense=False,
+    ),
+}
+
+
+def _ai_profile(player: Player) -> AIProfile:
+    """Look up the AIProfile for a player; default to balanced."""
+    if player is None:
+        return _AI_PROFILES["balanced"]
+    return _AI_PROFILES.get(player.agent_personality or "balanced",
+                            _AI_PROFILES["balanced"])
+
+
 def _unit_value(u: Unit) -> float:
     """Higher = more valuable target. Used for attack priority."""
     base = u.atk + u.def_ + u.hp / 10
@@ -1313,8 +1395,15 @@ def _unit_value(u: Unit) -> float:
     return base
 
 
-def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
-    """Choose best enemy to attack within range. None if nothing valid."""
+def _ai_pick_attack_target(
+    unit: Unit, snap: _AISnapshot, profile: AIProfile,
+) -> Optional[Unit]:
+    """Choose best enemy to attack within range. None if nothing valid.
+
+    P2.5 — scaled by `profile.aggression` (0..1) so the conservative AI
+    rarely attacks (low base score) while the aggressive AI always takes
+    the shot. Kill-shots (1-hit kill) bypass the scaling — guaranteed.
+    """
     atk_range = unit_attack_range(unit)
     blockers = {
         c for c, t in snap.terrain.items()
@@ -1333,11 +1422,17 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
         # Score: lower hp = better kill chance; type-advantage = bonus
         score = _unit_value(e) * 1.0
         score -= e.hp * 0.5   # lower HP = higher score
-        score += 100 if e.hp <= unit.atk else 0  # can kill this turn
+        killable = e.hp <= unit.atk
+        score += 100 if killable else 0  # can kill this turn
         type_mult = _type_adv(unit.unit_type, e.unit_type)
         score *= type_mult
         # Prefer targets within aggro range (closer = more relevant)
-        score += max(0, AI_AGGRO_RANGE - d) * 5
+        # aggro_range now comes from the profile (P2.5).
+        score += max(0, profile.aggro_range - d) * 5
+        # Apply personality aggression. A kill shot is always taken;
+        # anything else is scaled down for the conservative AI.
+        if not killable:
+            score *= profile.aggression
         candidates.append((score, e))
     if not candidates:
         logger.info(f"AI unit {unit.name}(id={unit.id},type={unit.unit_type}) at ({unit.x},{unit.y}): no valid attack target")
@@ -1346,8 +1441,22 @@ def _ai_pick_attack_target(unit: Unit, snap: _AISnapshot) -> Optional[Unit]:
     return candidates[0][1]
 
 
-def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, int]]:
-    """Pick a destination tile to move toward (high score wins)."""
+def _ai_pick_move_target(
+    unit: Unit, snap: _AISnapshot, profile: AIProfile,
+    my_castle_xy: Optional[Tuple[int, int]] = None,
+    enemy_castle_xy: Optional[Tuple[int, int]] = None,
+) -> Optional[Tuple[int, int]]:
+    """Pick a destination tile to move toward (high score wins).
+
+    P2.5 — the score function is now profile-aware:
+      * `profile.in_range_penalty` (more negative = more scared of
+        being surrounded)
+      * `profile.aggro_range` (how far we look for enemies)
+      * `profile.castle_pull` (big bonus for moving toward enemy HQ —
+        seize = win)
+      * `profile.HQ_defense_range` triggers a return-to-Home boost
+        when an enemy is within that radius of our castle.
+    """
     # Don't move healers/archers into melee of multiple enemies
     blocked = {
         c for c, uid in snap.occ.items()
@@ -1370,16 +1479,42 @@ def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, i
         # Reward unowned castles
         if tile in snap.unowned_castles:
             s += 200
-        # Reward getting close to the nearest enemy (but not on top)
+        # HQ defense: if an enemy is within HQ_defense_range of our
+        # castle, bias toward tiles between us and the threat (or
+        # back toward the castle).
+        if my_castle_xy and snap.enemy_units:
+            closest_threat = min(
+                manhattan(my_castle_xy, (e.x, e.y)) for e in snap.enemy_units
+            )
+            if closest_threat <= profile.HQ_defense_range:
+                # Bigger bonus the closer the threat is.
+                s += (profile.HQ_defense_range - closest_threat + 1) * 40
+                # Tiles that move us toward the castle / between castle
+                # and threat get an extra nudge.
+                d_to_castle = manhattan(tile, my_castle_xy)
+                if d_to_castle <= profile.HQ_defense_range:
+                    s += (profile.HQ_defense_range - d_to_castle) * 10
+        # Castle pull — moving toward the enemy HQ is worth it because
+        # standing on it is an instant win. 3 档都重视，但激进最强。
+        if enemy_castle_xy:
+            d_to_enemy_hq = manhattan(tile, enemy_castle_xy)
+            # Closer is better. Add the score proportional to how much
+            # closer this tile is than the unit's current position.
+            cur_d = manhattan((unit.x, unit.y), enemy_castle_xy)
+            if d_to_enemy_hq < cur_d:
+                s += (cur_d - d_to_enemy_hq) * (profile.castle_pull / 8.0)
+        # Reward getting close to the nearest enemy (but not on top).
+        # Uses profile.aggro_range so the conservative AI looks less
+        # far than the aggressive one.
         if snap.enemy_units:
             nearest = min(manhattan(tile, (e.x, e.y)) for e in snap.enemy_units)
-            s += max(0, AI_AGGRO_RANGE - nearest) * 6
-            # Slight penalty if surrounded by many enemies at this tile
+            s += max(0, profile.aggro_range - nearest) * 6
+            # Slight penalty if surrounded by many enemies at this tile.
             in_range = sum(
                 1 for e in snap.enemy_units
                 if manhattan(tile, (e.x, e.y)) <= unit_attack_range(e)
             )
-            s -= in_range * 8
+            s -= in_range * abs(profile.in_range_penalty)
         # Reward defensive terrain
         terr = snap.terrain.get(tile)
         if terr == TERRAIN_FOREST:
@@ -1388,6 +1523,16 @@ def _ai_pick_move_target(unit: Unit, snap: _AISnapshot) -> Optional[Tuple[int, i
             s += TERRAIN_DEF_BONUS.get(TERRAIN_MOUNTAIN, 0) * 2
         if terr == TERRAIN_CASTLE:
             s += 30
+        # Kill-shot bonus: if moving here lets us attack-kill an enemy
+        # next turn, that's worth pursuing. Aggressive gets the biggest
+        # bonus, conservative the smallest.
+        if snap.enemy_units:
+            atk_range = unit_attack_range(unit)
+            for e in snap.enemy_units:
+                d = manhattan(tile, (e.x, e.y))
+                if 1 <= d <= atk_range and e.hp <= unit.atk:
+                    s += profile.kill_bonus_move
+                    break
         # Small bonus for keeping close to allies (concentration)
         if snap.ally_units:
             min_ally = min(manhattan(tile, (a.x, a.y)) for a in snap.ally_units if a.id != unit.id) \
@@ -1512,9 +1657,272 @@ async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AI
     return False
 
 
+# ============================================================
+# P2.5 — flee / claim / recruit helpers (profile-aware)
+# ============================================================
+
+def _ai_should_flee(unit: Unit, profile: AIProfile) -> bool:
+    """True when the unit's HP is below the profile's flee threshold.
+
+    Conservative AI flees at 30% HP, aggressive keeps fighting until
+    10%. Used as the very first gate in the AI action loop.
+    """
+    if unit.max_hp <= 0:
+        return False
+    return (unit.hp / unit.max_hp) <= profile.flee_hp_pct
+
+
+def _ai_pick_claim_target(
+    unit: Unit, snap: _AISnapshot, profile: AIProfile,
+    active_claims: set,
+    my_castle_xy: Optional[Tuple[int, int]],
+) -> Optional[Tuple[int, int]]:
+    """Pick a claimable tile to walk toward, or None.
+
+    Scoring (3 档共享，越激越愿占远处 / 越保越怕敌人旁):
+      base = 50 village / 100 barracks / 150 castle_vault
+      − d * distance_weight
+      − (enemies within 2 tiles) * risk_penalty
+      + claim_emergency_bonus  if tile in active_claims
+      + 50                       if within 3 tiles of my castle (protect economy)
+      + 80                       if unowned castle (seize bait)
+
+    Tiles beyond `claim_distance` are immediately rejected.
+    """
+    from app.config import TERRAIN_VILLAGE, TERRAIN_BARRACKS, CASTLE_VAULT
+    building_value = {
+        TERRAIN_VILLAGE: 50,
+        TERRAIN_BARRACKS: 100,
+        CASTLE_VAULT: 150,
+    }
+    best: Optional[Tuple[int, int]] = None
+    best_score = float("-inf")
+    for (x, y), t in snap.terrain.items():
+        if t not in building_value:
+            continue
+        d = manhattan((unit.x, unit.y), (x, y))
+        # Distance filter — but emergency claim (enemy is currently
+        # claiming this tile) overrides the cap. Losing a tile to the
+        # enemy is more costly than walking a bit further.
+        is_emergency = (x, y) in active_claims
+        if d == 0 or (d > profile.claim_distance and not is_emergency):
+            continue
+        s = building_value[t]
+        s -= d * profile.distance_weight
+        nearby_enemies = sum(
+            1 for e in snap.enemy_units
+            if manhattan((e.x, e.y), (x, y)) <= 2
+        )
+        s -= nearby_enemies * profile.risk_penalty
+        if is_emergency:
+            s += profile.claim_emergency_bonus
+        if my_castle_xy and manhattan((x, y), my_castle_xy) <= 3:
+            s += 50
+        if (x, y) in snap.unowned_castles:
+            s += 80  # seize bait
+        # Negative score means "more cost than value" — don't bother.
+        if s <= 0:
+            continue
+        if s > best_score:
+            best_score = s
+            best = (x, y)
+    return best
+
+
+async def _ai_try_claim(
+    session: AsyncSession, game: Game, ai_player: Player,
+    unit: Unit, profile: AIProfile, active_claims: set,
+    my_castle_xy: Optional[Tuple[int, int]],
+) -> bool:
+    """If the unit is on a claimable tile, start a claim. Returns True
+    if the action consumed a turn.
+    """
+    from app.game_logic import is_claimable
+    from app.models import ClaimSession
+    # Need a current target tile. We pick the best reachable one; the
+    # actual claim-start only fires when the unit is already ON it.
+    target = _ai_pick_claim_target(unit, await _load_ai_snapshot(session, game, ai_player),
+                                    profile, active_claims, my_castle_xy)
+    if target is None:
+        return False
+    if (unit.x, unit.y) != target:
+        return False  # not standing on the target yet — move there next
+    tile = (await session.execute(
+        select(Tile).where(
+            Tile.game_id == game.id, Tile.x == target[0], Tile.y == target[1],
+        )
+    )).scalars().first()
+    if tile is None or not is_claimable(tile.terrain):
+        return False
+    if tile.owner_id == ai_player.id:
+        return False
+    # Start the claim via the same logic the HTTP route uses.
+    from app.config import CLAIM_TURNS_REQUIRED
+    cs = ClaimSession(
+        game_id=game.id,
+        tile_id=tile.id,
+        unit_id=unit.id,
+        target_player_id=ai_player.id,
+        started_turn=game.turn_number,
+        completes_turn=game.turn_number + CLAIM_TURNS_REQUIRED - 1,
+    )
+    session.add(cs)
+    unit.has_acted = True
+    unit.mp = 0
+    logger.info(
+        f"AI CLAIM: player {ai_player.id} unit {unit.name} starts claim on "
+        f"({target[0]},{target[1]}) (completes turn {cs.completes_turn})"
+    )
+    return True
+
+
+async def _ai_try_recruit(
+    session: AsyncSession, game: Game, ai_player: Player, profile: AIProfile,
+) -> bool:
+    """Recruit at one of the AI's empty barracks. Returns True on success.
+
+    Called once at the END of `ai_take_turn` / `ai_take_one_action` so
+    the recruit doesn't block combat for that turn.
+    """
+    from app.config import RECRUIT_COST, TERRAIN_BARRACKS
+    from app.models import Unit as _U
+    from sqlalchemy import func as _func
+
+    unit_count = (await session.execute(
+        select(_func.count(_U.id)).where(_U.player_id == ai_player.id, _U.hp > 0)
+    )).scalar() or 0
+    if unit_count >= profile.recruit_max_roster:
+        return False
+    if (ai_player.gold or 0) < profile.recruit_threshold:
+        return False
+    # Find empty owned barracks.
+    tiles_rows = (await session.execute(
+        select(Tile).where(
+            Tile.game_id == game.id,
+            Tile.terrain == TERRAIN_BARRACKS,
+            Tile.owner_id == ai_player.id,
+            Tile.occupied_unit_id.is_(None),
+        )
+    )).scalars().all()
+    if not tiles_rows:
+        return False
+    # Pick the unit type. Aggressive prefers knight/archer, others
+    # prefer cheap swordsman. Falls back to whatever the player can
+    # afford.
+    pref_order = {
+        "aggressive":   ["knight", "archer", "swordsman"],
+        "balanced":     ["swordsman", "archer", "knight"],
+        "conservative": ["swordsman", "archer", "knight"],
+    }.get(ai_player.agent_personality or "balanced",
+          ["swordsman", "archer", "knight"])
+    chosen_type = None
+    chosen_cost = None
+    for t in pref_order:
+        c = RECRUIT_COST.get(t, 0)
+        if (ai_player.gold or 0) >= c and c > 0:
+            chosen_type = t
+            chosen_cost = c
+            break
+    if chosen_type is None:
+        return False
+    tile = tiles_rows[0]
+    # Spawn the unit (mirror of routes/actions.py:recruit_unit).
+    profile_obj = _get_unit(chosen_type)
+    n_existing = (await session.execute(
+        select(_func.count(_U.id)).where(
+            _U.player_id == ai_player.id, _U.unit_type == chosen_type,
+        )
+    )).scalar() or 0
+    ai_player.gold = (ai_player.gold or 0) - chosen_cost
+    new_unit = _U(
+        player_id=ai_player.id,
+        unit_type=chosen_type,
+        name=_unit_name(chosen_type, int(n_existing)),
+        level=1, exp=0,
+        hp=profile_obj.base_hp, max_hp=profile_obj.base_hp,
+        atk=profile_obj.base_atk, def_=profile_obj.base_def,
+        matk=profile_obj.base_matk, mdef=profile_obj.base_mdef,
+        mov=profile_obj.mp_pool, mp=0, morale=0,
+        x=tile.x, y=tile.y,
+        has_acted=True, has_moved=True,
+        skills=list(profile_obj.default_skills),
+    )
+    session.add(new_unit)
+    await session.flush()
+    tile.occupied_unit_id = new_unit.id
+    logger.info(
+        f"AI RECRUIT: player {ai_player.id} spawned {chosen_type} "
+        f"({new_unit.name}) at ({tile.x},{tile.y}) for {chosen_cost}g "
+        f"(gold_left={ai_player.gold})"
+    )
+    return True
+
+
+async def _load_my_castle_xy(
+    session: AsyncSession, game: Game, ai_player: Player,
+) -> Optional[Tuple[int, int]]:
+    """The AI's HQ tile. Used by claim / move scoring."""
+    tile = (await session.execute(
+        select(Tile).where(
+            Tile.game_id == game.id,
+            Tile.terrain == TERRAIN_CASTLE,
+            Tile.owner_id == ai_player.id,
+        )
+    )).scalars().first()
+    if tile is None:
+        return None
+    return (tile.x, tile.y)
+
+
+async def _load_enemy_castles_xy(
+    session: AsyncSession, game: Game, ai_player: Player,
+) -> list:
+    """All enemy HQ positions — for the castle_pull move bonus."""
+    rows = (await session.execute(
+        select(Tile).where(
+            Tile.game_id == game.id,
+            Tile.terrain == TERRAIN_CASTLE,
+        )
+    )).scalars().all()
+    return [(t.x, t.y) for t in rows
+            if t.owner_id is not None and t.owner_id != ai_player.id]
+
+
+async def _load_active_claim_tile_set(
+    session: AsyncSession, game: Game,
+) -> set:
+    """Tiles with an active ClaimSession right now — used for the
+    `claim_emergency_bonus` so AI swarms to grab tiles the enemy is
+    about to flip."""
+    rows = (await session.execute(
+        select(ClaimSession.tile_id).where(ClaimSession.game_id == game.id)
+    )).scalars().all()
+    # Resolve tile coords for the bonuses.
+    if not rows:
+        return set()
+    tile_id_to_xy = dict((t.id, (t.x, t.y)) for t in (
+        await session.execute(
+            select(Tile).where(Tile.game_id == game.id, Tile.id.in_(rows))
+        )
+    ).scalars())
+    return {tile_id_to_xy[tid] for tid in rows if tid in tile_id_to_xy}
+
+
+# ============================================================
+# AI turn entry points
+# ============================================================
+
 async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> int:
-    """Execute one AI player's full turn. Returns the number of actions taken."""
-    logger.info(f"AI turn: player {ai_player.id}(seat={ai_player.seat}) starts (game={game.id}, turn={game.turn_number})")
+    """Execute one AI player's full turn. Returns the number of actions taken.
+
+    P2.5 — fully profile-aware: every decision consults the player's
+    `agent_personality` (aggressive / balanced / conservative).
+    """
+    profile = _ai_profile(ai_player)
+    logger.info(
+        f"AI turn: player {ai_player.id}(seat={ai_player.seat}) starts "
+        f"(game={game.id}, turn={game.turn_number}, personality={ai_player.agent_personality})"
+    )
     actions = 0
     # Refresh this AI's units fresh each pass
     units_rows = (await session.execute(
@@ -1528,31 +1936,79 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
             -u.atk,
         ),
     )
+    my_castle = await _load_my_castle_xy(session, game, ai_player)
+    enemy_castles = await _load_enemy_castles_xy(session, game, ai_player)
+    active_claims = await _load_active_claim_tile_set(session, game)
+    enemy_castle_xy = enemy_castles[0] if enemy_castles else None
     for unit in priority:
         if actions >= AI_MAX_ACTIONS_PER_TURN:
             break
         # Re-fetch the latest snapshot (state may have shifted)
         snap = await _load_ai_snapshot(session, game, ai_player)
-        # 1. Skill?
+        # 0. Flee?
+        if _ai_should_flee(unit, profile):
+            # Try to move toward our castle / away from enemies.
+            from app.utils import bfs_reachable
+            blocked = {
+                c for c, uid in snap.occ.items()
+                if uid is not None and uid != unit.id
+            }
+            reachable = bfs_reachable(
+                start=(unit.x, unit.y), terrain=snap.terrain,
+                owners=snap.owners, mov=unit.mov,
+                viewer_owner_id=None, blocked_units=blocked,
+            )
+            if reachable:
+                # Score each reachable tile by distance-to-castle
+                # (closer = better, more negative distance).
+                def flee_score(t):
+                    if my_castle is None:
+                        return 0
+                    return -manhattan(t, my_castle)
+                best = max(reachable.keys(), key=flee_score)
+                if best != (unit.x, unit.y):
+                    if await _ai_move(session, game, unit, best):
+                        actions += 1
+                        continue
+            unit.has_acted = True
+            actions += 1
+            continue
+        # 1. Skill? (healer_offense profile controls whether healer
+        #    treats offense > healing; in current code, healer always
+        #    tries heal first when there are injured allies nearby.)
         if unit.unit_type == UNIT_HEALER:
-            if await _ai_use_skill(session, game, unit, snap):
+            # Conservative AI's healer can still attack if no healing target
+            if not profile.healer_offense and await _ai_use_skill(session, game, unit, snap):
+                actions += 1
+                continue
+            if profile.healer_offense and await _ai_use_skill(session, game, unit, snap):
                 actions += 1
                 continue
         # 2. Attack?
-        target = _ai_pick_attack_target(unit, snap)
+        target = _ai_pick_attack_target(unit, snap, profile)
         if target is not None:
             if await _ai_attack(session, unit, target):
                 actions += 1
                 continue
-        # 3. Move?
-        dest = _ai_pick_move_target(unit, snap)
+        # 3. Claim (if standing on a claimable tile).
+        if await _ai_try_claim(session, game, ai_player, unit, profile,
+                               active_claims, my_castle):
+            actions += 1
+            continue
+        # 4. Move (profile-aware incl. castle_pull + HQ_defense).
+        dest = _ai_pick_move_target(
+            unit, snap, profile, my_castle, enemy_castle_xy,
+        )
         if dest is not None and dest != (unit.x, unit.y):
             if await _ai_move(session, game, unit, dest):
                 actions += 1
                 continue
-        # 4. Wait
+        # 5. Wait
         unit.has_acted = True
         actions += 1
+
+    # 6. One recruit at end of turn if affordable (post-combat).
+    await _ai_try_recruit(session, game, ai_player, profile)
     return actions
 
 
@@ -1563,10 +2019,10 @@ async def ai_take_one_action(
 ) -> bool:
     """Execute ONE action of an AI's turn and return True, or False if done.
 
-    Used by `_run_ai_turn_chain` to play actions one at a time with sleeps
-    in between so the human can see them progress. Mirrors the priority
-    order of `ai_take_turn` (healers first, then attackers).
+    P2.5 — same priority order as `ai_take_turn`, but only one action
+    per call (so the human can watch via the chain animation).
     """
+    profile = _ai_profile(ai_player)
     # Stop if this AI has ended their turn (set by `end_turn` earlier).
     if ai_player.has_ended_turn:
         return False
@@ -1576,6 +2032,9 @@ async def ai_take_one_action(
     )).scalars().all()
     pending = [u for u in units_rows if u.hp > 0 and not u.has_acted and not u.has_moved]
     if not pending:
+        # End of turn — try one recruit.
+        if await _ai_try_recruit(session, game, ai_player, profile):
+            return True
         return False
     # Priority: healers first, then highest ATK first
     pending.sort(key=lambda u: (
@@ -1584,20 +2043,54 @@ async def ai_take_one_action(
     ))
     unit = pending[0]
     snap = await _load_ai_snapshot(session, game, ai_player)
+    my_castle = await _load_my_castle_xy(session, game, ai_player)
+    enemy_castles = await _load_enemy_castles_xy(session, game, ai_player)
+    active_claims = await _load_active_claim_tile_set(session, game)
+    enemy_castle_xy = enemy_castles[0] if enemy_castles else None
+
+    # 0. Flee?
+    if _ai_should_flee(unit, profile):
+        from app.utils import bfs_reachable
+        blocked = {
+            c for c, uid in snap.occ.items()
+            if uid is not None and uid != unit.id
+        }
+        reachable = bfs_reachable(
+            start=(unit.x, unit.y), terrain=snap.terrain,
+            owners=snap.owners, mov=unit.mov,
+            viewer_owner_id=None, blocked_units=blocked,
+        )
+        if reachable:
+            def flee_score(t):
+                if my_castle is None:
+                    return 0
+                return -manhattan(t, my_castle)
+            best = max(reachable.keys(), key=flee_score)
+            if best != (unit.x, unit.y):
+                if await _ai_move(session, game, unit, best):
+                    return True
+        unit.has_acted = True
+        return True
     # 1. Skill?
     if unit.unit_type == UNIT_HEALER:
         if await _ai_use_skill(session, game, unit, snap):
             return True
     # 2. Attack?
-    target = _ai_pick_attack_target(unit, snap)
+    target = _ai_pick_attack_target(unit, snap, profile)
     if target is not None:
         if await _ai_attack(session, unit, target):
             return True
-    # 3. Move?
-    dest = _ai_pick_move_target(unit, snap)
+    # 3. Claim?
+    if await _ai_try_claim(session, game, ai_player, unit, profile,
+                           active_claims, my_castle):
+        return True
+    # 4. Move?
+    dest = _ai_pick_move_target(
+        unit, snap, profile, my_castle, enemy_castle_xy,
+    )
     if dest is not None and dest != (unit.x, unit.y):
         if await _ai_move(session, game, unit, dest):
             return True
-    # 4. Wait (still counts as an action so we can move on)
+    # 5. Wait (still counts as an action so we can move on)
     unit.has_acted = True
     return True
