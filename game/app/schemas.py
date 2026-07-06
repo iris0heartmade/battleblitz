@@ -299,31 +299,22 @@ class ClaimResult(BaseModel):
 
 
 class RecruitRequest(BaseModel):
-    """P0.4 / P2.4 polish — body of POST /games/{id}/recruit.
+    """P0.4 — body of POST /games/{id}/recruit.
 
     Spend gold to spawn a new unit on a barracks tile owned by the
-    player. Two modes are supported:
-
-    1. **Unit-anchor** (legacy): provide `unit_id` of a unit standing
-       on the barracks. The unit is consumed (has_acted=True,
-       mp=0) and the new unit spawns on the same tile.
-    2. **Empty-barracks** (P2.4 polish): omit `unit_id` and provide
-       `tile_x` + `tile_y` of an empty barracks. The new unit
-       spawns there with has_acted=True, has_moved=True, mp=0 — the
-       barracks itself acts as the anchor (no MP/turn cost since
-       no unit had to spend actions to recruit).
+    player. The barracks MUST be empty (no unit standing on it) —
+    units can't squat on a barracks and recruit, they have to move
+    off first. This keeps barracks as "shared production facilities"
+    rather than a unit's personal anchor.
     """
     player_id: int
-    unit_id: Optional[int] = None    # recruiter standing on the barracks (legacy)
-    tile_x: Optional[int] = None     # empty-barracks anchor X
-    tile_y: Optional[int] = None     # empty-barracks anchor Y
+    tile_x: int                      # X coord of the empty barracks
+    tile_y: int                      # Y coord of the empty barracks
     unit_type: str                   # type_id of the new unit (e.g. "swordsman")
 
 
 class RecruitResult(BaseModel):
     ok: bool = True
-    # None when the recruit was performed on an empty barracks (P2.4 polish).
-    recruiter_unit_id: Optional[int] = None
     new_unit_id: int
     new_unit_type: str
     cost: int
