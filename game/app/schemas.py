@@ -82,10 +82,13 @@ class AddAIRequest(BaseModel):
     # "rules" (built-in) or "llm" (LLMAgent). Defaults to "rules" to keep
     # existing behaviour; set to "llm" to opt in to LLM-driven opponent.
     agent_kind: str = Field(default="rules", pattern="^(rules|llm)$")
-    # Personality for LLM agents (ignored when agent_kind == "rules").
+    # P2.5 — personality also drives the rules AI. Three graduated
+    # tiers: aggressive (most eager) → balanced → conservative
+    # (most defensive but still grabs nearby buildings).
+    # `trickster` removed until implemented.
     personality: str = Field(
         default="balanced",
-        pattern="^(aggressive|defensive|balanced|trickster)$",
+        pattern="^(aggressive|balanced|conservative)$",
     )
 
 

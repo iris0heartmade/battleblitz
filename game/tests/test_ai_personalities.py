@@ -10,11 +10,14 @@ Covers:
     graduated behaviour between 3 档.
   * _ai_pick_attack_target: kill-shots bypass aggression scaling;
     non-kill shots are scaled by profile.aggression.
+  * add-ai HTTP endpoint stores `personality` on Player.
 """
 from __future__ import annotations
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.main import app
 from app.game_logic import (
     AIProfile, _AI_PROFILES, _ai_profile, _ai_should_flee,
     _ai_pick_claim_target, _ai_pick_attack_target, _AISnapshot,
@@ -83,22 +86,19 @@ def _stub(max_hp=100, hp=100):
 
 
 def test_should_flee_thresholds():
-    u_full = _stub(hp=100)        # 100% HP
-    u_30 = _stub(hp=30)           # 30% HP
-    u_21 = _stub(hp=21)           # 21% HP — above balanced threshold
-    u_20 = _stub(hp=20)           # 20% HP — at balanced threshold
-    u_11 = _stub(hp=11)           # 11% HP — above aggressive threshold
-    u_10 = _stub(hp=10)           # 10% HP — at aggressive threshold
-    u_5 = _stub(hp=5)             # 5% HP
-    # Aggressive: flee at-or-below 10% HP.
+    u_full = _stub(hp=100)
+    u_30 = _stub(hp=30)
+    u_21 = _stub(hp=21)
+    u_20 = _stub(hp=20)
+    u_11 = _stub(hp=11)
+    u_10 = _stub(hp=10)
+    u_5 = _stub(hp=5)
     assert _ai_should_flee(u_5, _AI_PROFILES["aggressive"]) is True
     assert _ai_should_flee(u_10, _AI_PROFILES["aggressive"]) is True
     assert _ai_should_flee(u_11, _AI_PROFILES["aggressive"]) is False
-    # Balanced: flee at-or-below 20% HP.
     assert _ai_should_flee(u_20, _AI_PROFILES["balanced"]) is True
     assert _ai_should_flee(u_21, _AI_PROFILES["balanced"]) is False
     assert _ai_should_flee(u_30, _AI_PROFILES["balanced"]) is False
-    # Conservative: flee at-or-below 30% HP.
     assert _ai_should_flee(u_30, _AI_PROFILES["conservative"]) is True
     assert _ai_should_flee(u_full, _AI_PROFILES["conservative"]) is False
 
@@ -108,7 +108,6 @@ def test_should_flee_thresholds():
 # ============================================================
 
 def _build_snap(tiles, enemy_units=None):
-    """Build a minimal _AISnapshot for _ai_pick_claim_target."""
     terrain = {(x, y): t for (x, y, t) in tiles}
     return _AISnapshot(
         terrain=terrain,
@@ -132,7 +131,6 @@ def _stub_enemy(x, y):
 
 
 def test_claim_target_filters_beyond_distance():
-    """claim_distance=4 (conservative) refuses a village 5 tiles away."""
     tiles = [(0, 0, "plain"), (5, 0, "village")]
     snap = _build_snap(tiles)
     unit = _stub()
@@ -140,13 +138,10 @@ def test_claim_target_filters_beyond_distance():
     assert prof.claim_distance == 4
     result = _ai_pick_claim_target(unit, snap, prof, active_claims=set(),
                                     my_castle_xy=None)
-    assert result is None  # 5 tiles > 4 → rejected
+    assert result is None
 
 
 def test_claim_target_aggressive_reaches_far_village():
-    """claim_distance=8 (aggressive) accepts a village 5 tiles away
-    (barracks would have a bigger base value to cover more distance,
-    but villages are still reachable for the eager aggressor)."""
     tiles = [(0, 0, "plain"), (5, 0, "barracks")]
     snap = _build_snap(tiles)
     unit = _stub()
@@ -154,54 +149,37 @@ def test_claim_target_aggressive_reaches_far_village():
     assert prof.claim_distance == 8
     result = _ai_pick_claim_target(unit, snap, prof, active_claims=set(),
                                     my_castle_xy=None)
-    # barracks base 100 - 5 * 8 distance_weight = 60 > 0 → takes it
     assert result == (5, 0)
 
 
 def test_claim_target_picks_closer_when_score_says_so():
-    """Of two claimable villages, the one closer wins (distance_weight
-    penalty makes farther ones worse)."""
     tiles = [(0, 0, "plain"), (2, 0, "village"), (4, 0, "village")]
     snap = _build_snap(tiles)
     unit = _stub()
-    prof = _AI_PROFILES["balanced"]  # distance_weight=18
+    prof = _AI_PROFILES["balanced"]
     result = _ai_pick_claim_target(unit, snap, prof, active_claims=set(),
                                     my_castle_xy=None)
-    # (2,0): 50 - 36 = 14. (4,0): 50 - 72 = -22. Closer wins.
     assert result == (2, 0)
 
 
 def test_claim_target_risk_penalty_deters_conservative():
-    """Conservative AI refuses a village next to an enemy; aggressive
-    AI still takes it."""
     tiles = [(0, 0, "plain"), (2, 0, "village")]
-    enemy = _stub_enemy(2, 1)  # 1 tile from the village
+    enemy = _stub_enemy(2, 1)
     snap = _build_snap(tiles, [enemy])
     unit = _stub()
     a = _ai_pick_claim_target(unit, snap, _AI_PROFILES["aggressive"],
                               active_claims=set(), my_castle_xy=None)
     c = _ai_pick_claim_target(unit, snap, _AI_PROFILES["conservative"],
                               active_claims=set(), my_castle_xy=None)
-    # Aggressive: 50 - 2*8 - 1*5 = 29 → still picks
     assert a == (2, 0)
-    # Conservative: 50 - 2*28 - 1*20 = -26 → rejects
     assert c is None
 
 
 def test_claim_emergency_bonus_overrides_distance_skepticism():
-    """All 3 档 grab a tile the enemy is actively claiming, even if
-    the conservative AI's distance_weight would otherwise reject it.
-
-    Distance 5 exceeds conservative.claim_distance=4, but the
-    emergency bonus (150) bypasses the distance cap.
-    """
     tiles = [(0, 0, "plain"), (5, 0, "village")]
     enemy = _stub_enemy(5, 0)
     snap = _build_snap(tiles, [enemy])
     unit = _stub()
-    # Conservative: distance 5 > 4 normally, but the active-claim
-    # bonus should pull it in (and we don't want to add a 4th
-    # nearby enemy that would push the score to <=0).
     c = _ai_pick_claim_target(
         unit, snap, _AI_PROFILES["conservative"],
         active_claims={(5, 0)}, my_castle_xy=None,
@@ -210,8 +188,6 @@ def test_claim_emergency_bonus_overrides_distance_skepticism():
 
 
 def test_claim_emergency_bonus_graduates_across_profiles():
-    """claim_emergency_bonus is 200/175/150. Verify the
-    'aggressive > balanced > conservative' graduation."""
     a = _AI_PROFILES["aggressive"]
     b = _AI_PROFILES["balanced"]
     c = _AI_PROFILES["conservative"]
@@ -220,11 +196,9 @@ def test_claim_emergency_bonus_graduates_across_profiles():
 
 
 def test_castle_pull_graduates_high_across_all_profiles():
-    """castle_pull is intentionally high for ALL 3 档 (seize = win)."""
     assert _AI_PROFILES["aggressive"].castle_pull == 400
     assert _AI_PROFILES["balanced"].castle_pull == 300
     assert _AI_PROFILES["conservative"].castle_pull == 250
-    # All are way above any other single bonus in the system.
     for prof in _AI_PROFILES.values():
         assert prof.castle_pull >= 250
 
@@ -234,7 +208,6 @@ def test_castle_pull_graduates_high_across_all_profiles():
 # ============================================================
 
 def _build_snap_with_enemy_at(unit_xy, enemy_xy, *, enemy_hp=30, enemy_atk=10):
-    """A snap with the unit's position, one enemy, plain terrain."""
     return _AISnapshot(
         terrain={unit_xy: "plain", enemy_xy: "plain"},
         owners={unit_xy: 1, enemy_xy: None},
@@ -254,9 +227,6 @@ def _build_snap_with_enemy_at(unit_xy, enemy_xy, *, enemy_hp=30, enemy_atk=10):
 
 
 def test_attack_target_kill_shot_always_picked():
-    """A killable enemy (hp <= attacker.atk) is taken by ALL 3 档 —
-    kill-shots bypass the aggression scaling."""
-    # attacker at (0,0), enemy at (0,1), enemy hp=10, attacker atk=18 → killable
     unit = Unit(player_id=1, unit_type="swordsman", name="A", level=1, exp=0,
                 hp=45, max_hp=45, atk=18, def_=12, matk=4, mdef=4,
                 mov=5, mp=5, morale=0, x=0, y=0,
@@ -267,3 +237,59 @@ def test_attack_target_kill_shot_always_picked():
         target = _ai_pick_attack_target(unit, snap, prof)
         assert target is not None, f"{prof_name} refused a kill shot"
         assert target.hp == 10
+
+
+# ============================================================
+# E2E: add-ai stores personality on Player
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_add_ai_stores_personality_on_player(db_session):
+    """POST /games/{id}/add-ai with personality=aggressive should
+    store agent_personality on the new Player row. The lobby GET
+    should return it back."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        # Create a game + host.
+        r = await c.post("/games", json={
+            "name": "personality-test", "map_preset": "classic",
+        })
+        gid = r.json()["id"]
+        await c.post(f"/games/{gid}/join", json={"user_name": "host"})
+
+        # Add an AI with each personality; verify it sticks.
+        for pers in ("aggressive", "balanced", "conservative"):
+            r = await c.post(f"/games/{gid}/add-ai", json={
+                "difficulty": "normal",
+                "agent_kind": "rules",
+                "personality": pers,
+            })
+            assert r.status_code == 201, r.text
+            assert r.json()["agent_personality"] == pers
+
+        # 3 AI players all stored with their chosen personality.
+        # Use /state since /lobby returns a team-aggregated view.
+        state = (await c.get(f"/games/{gid}/state")).json()
+        ai_personalities = [
+            p["agent_personality"] for p in state["players"] if p["is_ai"]
+        ]
+        assert ai_personalities == ["aggressive", "balanced", "conservative"]
+
+
+@pytest.mark.asyncio
+async def test_add_ai_defaults_to_balanced_when_omitted(db_session):
+    """If the request doesn't include `personality`, the AI gets balanced."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        r = await c.post("/games", json={
+            "name": "personality-default", "map_preset": "classic",
+        })
+        gid = r.json()["id"]
+        await c.post(f"/games/{gid}/join", json={"user_name": "host"})
+        # No personality field.
+        r = await c.post(f"/games/{gid}/add-ai", json={
+            "difficulty": "normal",
+            "agent_kind": "rules",
+        })
+        assert r.status_code == 201
+        assert r.json()["agent_personality"] == "balanced"

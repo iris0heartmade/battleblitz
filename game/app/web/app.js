@@ -731,10 +731,12 @@ function renderLobby(st, lobby) {
     if (p.is_ai) {
       const kind = p.agent_kind || "rules";
       const pers = p.agent_personality || "balanced";
-      const badgeText = kind === "llm"
-        ? `LLM (${pers})`
-        : "规则 AI";
-      html += `<span class="ai-badge">${badgeText}</span>`;
+      // P2.5 — rules AI also has personality now; show a coloured
+      // chip so the host can see at a glance who's who.
+      const persIcon = {aggressive: "⚔️", balanced: "⚖️", conservative: "🛡️"}[pers] || "🤖";
+      const persLabel = {aggressive: "激进", balanced: "均衡", conservative: "保守"}[pers] || pers;
+      const kindLabel = kind === "llm" ? "LLM" : "规则";
+      html += `<span class="ai-badge ai-personality-${pers}">${persIcon} ${kindLabel}·${persLabel}</span>`;
     }
     // Only the room creator (seat 0) can remove AI players
     if (p.is_ai && state.me.seat === 0) {
@@ -4535,14 +4537,31 @@ document.addEventListener("DOMContentLoaded", () => {
   // Show resume button if a session is saved (regardless of whether rejoin works)
   updateResumeButton(loadSession());
 
-  // AI type selector: show personality only for LLM
+  // AI type selector: rules AI also supports personality now (P2.5),
+  // so the dropdown is always visible. We still show a one-line
+  // description of the currently-selected personality beside it.
+  const AI_PERSONALITY_DESC = {
+    aggressive: "激进：愿走 8 格去占领 / castle_pull 400 / 主动打",
+    balanced:   "均衡：愿走 6 格 / castle_pull 300 / 风险偏好中",
+    conservative: "保守：只走 4 格 / castle_pull 250 / 不主动打但积极占建筑",
+  };
   const aiKindSel = document.getElementById("lobby-ai-kind");
   const aiPersSel = document.getElementById("lobby-ai-personality");
+  const aiPersDesc = document.getElementById("lobby-ai-personality-desc");
+  const updatePersDesc = () => {
+    if (aiPersSel && aiPersDesc) {
+      const v = aiPersSel.value;
+      aiPersDesc.textContent = AI_PERSONALITY_DESC[v] || "";
+    }
+  };
   if (aiKindSel && aiPersSel) {
     aiKindSel.addEventListener("change", () => {
-      aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+      // Personality is always visible now (rules + LLM both use it).
+      aiPersSel.style.visibility = "visible";
+      if (aiPersDesc) aiPersDesc.style.visibility = "visible";
     });
-    aiPersSel.style.visibility = aiKindSel.value === "llm" ? "visible" : "hidden";
+    aiPersSel.addEventListener("change", updatePersDesc);
+    updatePersDesc();  // initial
   }
 
   // ============================================================
