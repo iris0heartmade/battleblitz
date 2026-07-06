@@ -316,6 +316,13 @@ async def end_turn(
     )
 
 
+_active_chains: set[int] = set()
+
+
+_active_chains: set[int] = set()
+_want_respawn: set[int] = set()
+
+
 async def _run_ai_turn_chain(game_id: int) -> None:
     """Run AI turns one action at a time, sleeping between each.
 
@@ -323,7 +330,36 @@ async def _run_ai_turn_chain(game_id: int) -> None:
     finishes, advances to the next player. If the next player is also AI,
     recursively runs them. Stops when the current player is human or the
     game ends.
+
+    P2.5 — guarded by `_active_chains` set. asyncio is single-threaded
+    so sync `set` ops are atomic between awaits. The check + add is
+    done before any await, so a concurrent spawn (chain self-spawn or
+    demo pre-kick) sees the entry and bails out immediately.
+
+    The chain body requests a self-respawn via `_request_respawn()`
+    (which adds to `_want_respawn`). The respawn itself is performed
+    AFTER the lock is released — so the new task sees the game_id
+    absent from `_active_chains` and actually runs the next action.
     """
+    if game_id in _active_chains:
+        return  # another chain is already driving this game
+    _active_chains.add(game_id)
+    try:
+        await _run_ai_turn_chain_locked(game_id)
+    finally:
+        _active_chains.discard(game_id)
+        if game_id in _want_respawn:
+            _want_respawn.discard(game_id)
+            asyncio.create_task(_run_ai_turn_chain(game_id))
+
+
+def _request_respawn(game_id: int) -> None:
+    """Mark the chain to re-invoke itself after releasing the lock."""
+    _want_respawn.add(game_id)
+
+
+async def _run_ai_turn_chain_locked(game_id: int) -> None:
+    """Body of the AI chain (caller must hold the per-game slot)."""
     try:
         # Step 1: wait for the "AI thinking" pause before the first action.
         await asyncio.sleep(AI_THINK_DELAY_SECONDS)
@@ -428,12 +464,12 @@ async def _run_ai_turn_chain(game_id: int) -> None:
                         False,
                     )
                     if is_next_ai:
-                        asyncio.create_task(_run_ai_turn_chain(game_id))
+                        _request_respawn(game_id)
                 return
 
             # AI still has more actions — commit and recurse to take the next.
             await session.commit()
-            asyncio.create_task(_run_ai_turn_chain(game_id))
+            _request_respawn(game_id)
     except Exception:  # noqa: BLE001
         logger.exception("AI turn chain error in game %d", game_id)
 

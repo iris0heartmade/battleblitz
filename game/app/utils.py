@@ -188,17 +188,20 @@ def pathfind(
 
     while pq:
         cost, _, node = heapq.heappop(pq)
-        if node == goal:
+        if cost > best.get(node, float("inf")):
+            continue
+        # P2.5 — must check budget BEFORE accepting the goal, otherwise
+        # `_ai_move` lets a unit teleport across the map (pathfind
+        # returned a path even when the cost was > mov).
+        if node == goal and cost <= budget:
             # Reconstruct path
             path = [node]
             while path[-1] in came_from:
                 path.append(came_from[path[-1]])
             path.reverse()
             return path
-        if cost > best.get(node, float("inf")):
-            continue
         if cost >= budget:
-            continue
+            continue  # no MP left to expand this node's neighbors
         for nx, ny in neighbors(*node):
             if not in_bounds(nx, ny, size):
                 continue

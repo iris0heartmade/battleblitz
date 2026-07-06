@@ -1540,8 +1540,14 @@ def _ai_pick_move_target(
             s += max(0, 3 - min_ally) * 1
         return s
 
-    best_tile = max(reachable.keys(), key=score)
-    if score(best_tile) <= score((unit.x, unit.y)) - 1:
+    # P2.5 — exclude the unit's current tile from candidates. bfs_reachable
+    # includes the start position with cost 0; selecting it makes the
+    # AI "move to itself" (self-move bug).
+    candidates = {t for t in reachable.keys() if t != (unit.x, unit.y)}
+    if not candidates:
+        return None
+    best_tile = max(candidates, key=score)
+    if score(best_tile) <= score((unit.x, unit.y)):
         logger.info(f"AI unit {unit.name}(id={unit.id}) at ({unit.x},{unit.y}): stays (best={best_tile},score={score(best_tile):.1f} vs current={score((unit.x,unit.y)):.1f})")
         return None  # standing still is better
     logger.info(f"AI unit {unit.name}(id={unit.id}) at ({unit.x},{unit.y}): move -> {best_tile} (score={score(best_tile):.1f})")
