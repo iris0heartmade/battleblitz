@@ -104,9 +104,13 @@ class TestCollectIncome:
 
 @pytest.mark.unit
 class TestRecruitEndpoint:
-    async def test_recruit_swordsman_at_owned_barracks(self, db_session, tmp_db_path):
-        """A player with 200+ gold and a unit on an owned barracks
-        successfully recruits a swordsman and loses 200 gold."""
+    async def test_recruit_swordsman_at_empty_barracks(self, db_session, tmp_db_path):
+        """A player with 200+ gold and an empty owned barracks
+        successfully recruits a swordsman and loses 200 gold.
+
+        The barracks MUST be empty — units can't squat on a barracks
+        to recruit. P0.4 design intent, made strict in P2.5.
+        """
         from app.config import RECRUIT_COST, TERRAIN_BARRACKS
         from app.models import Game, Player, Tile, Unit
 
@@ -125,25 +129,20 @@ class TestRecruitEndpoint:
         )
         db_session.add(player)
         await db_session.flush()
+        # Empty barracks — no unit on it.
         tile = Tile(
             game_id=game.id, x=5, y=5, terrain=TERRAIN_BARRACKS,
-            owner_id=player.id,
+            owner_id=player.id, occupied_unit_id=None,
         )
         db_session.add(tile)
-        await db_session.flush()
-        unit = Unit(
-            player_id=player.id, unit_type="swordsman", name="RecruiterUnit",
-            level=1, exp=0, hp=45, max_hp=45, atk=18, def_=12,
-            matk=4, mdef=4, mov=5, mp=5, morale=0,
-            x=5, y=5, has_acted=False, has_moved=False, skills=[],
-        )
-        db_session.add(unit)
-        await db_session.commit()  # commit so the HTTP endpoint can see it
+        await db_session.commit()
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             r = await c.post(f"/games/{game.id}/recruit", json={
-                "player_id": player.id, "unit_id": unit.id, "unit_type": "swordsman",
+                "player_id": player.id,
+                "tile_x": 5, "tile_y": 5,
+                "unit_type": "swordsman",
             })
         assert r.status_code == 200, r.text
         body = r.json()
@@ -151,7 +150,54 @@ class TestRecruitEndpoint:
         assert body["cost"] == RECRUIT_COST["swordsman"]
         assert body["gold_remaining"] == 300 - RECRUIT_COST["swordsman"]
         assert body["new_unit_type"] == "swordsman"
-        assert body["recruiter_unit_id"] == unit.id
+        # Recruiter field removed — the barracks IS the anchor.
+        assert "recruiter_unit_id" not in body
+
+    async def test_recruit_rejected_when_barracks_occupied(self, db_session, tmp_db_path):
+        """A unit standing on a barracks blocks recruitment. The
+        player must move the unit off first."""
+        from app.config import TERRAIN_BARRACKS
+        from app.models import Game, Player, Tile, Unit
+
+        game = Game(
+            name="recruit-blocked", status="playing", map_seed=0,
+            map_preset="classic", turn_number=1, current_player_index=0,
+            phase="player",
+        )
+        db_session.add(game)
+        await db_session.flush()
+        player = Player(
+            game_id=game.id, user_name="Recruiter", color="red",
+            seat=0, is_alive=True, has_ended_turn=False,
+            is_ai=False, agent_kind="rules", agent_personality="balanced",
+            gold=500,
+        )
+        db_session.add(player)
+        await db_session.flush()
+        unit = Unit(
+            player_id=player.id, unit_type="swordsman", name="Squat",
+            level=1, exp=0, hp=45, max_hp=45, atk=18, def_=12,
+            matk=4, mdef=4, mov=5, mp=5, morale=0,
+            x=5, y=5, has_acted=False, has_moved=False, skills=[],
+        )
+        db_session.add(unit)
+        await db_session.flush()
+        tile = Tile(
+            game_id=game.id, x=5, y=5, terrain=TERRAIN_BARRACKS,
+            owner_id=player.id, occupied_unit_id=unit.id,
+        )
+        db_session.add(tile)
+        await db_session.commit()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.post(f"/games/{game.id}/recruit", json={
+                "player_id": player.id,
+                "tile_x": 5, "tile_y": 5,
+                "unit_type": "swordsman",
+            })
+        assert r.status_code == 400, r.text
+        assert "驻守" in r.json()["detail"] or "occup" in r.json()["detail"]
 
     async def test_recruit_insufficient_gold(self, db_session, tmp_db_path):
         from app.config import RECRUIT_COST, TERRAIN_BARRACKS
@@ -174,23 +220,17 @@ class TestRecruitEndpoint:
         await db_session.flush()
         tile = Tile(
             game_id=game.id, x=5, y=5, terrain=TERRAIN_BARRACKS,
-            owner_id=player.id,
+            owner_id=player.id, occupied_unit_id=None,
         )
         db_session.add(tile)
-        await db_session.flush()
-        unit = Unit(
-            player_id=player.id, unit_type="swordsman", name="U",
-            level=1, exp=0, hp=45, max_hp=45, atk=18, def_=12,
-            matk=4, mdef=4, mov=5, mp=5, morale=0,
-            x=5, y=5, has_acted=False, has_moved=False, skills=[],
-        )
-        db_session.add(unit)
         await db_session.commit()
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             r = await c.post(f"/games/{game.id}/recruit", json={
-                "player_id": player.id, "unit_id": unit.id, "unit_type": "swordsman",
+                "player_id": player.id,
+                "tile_x": 5, "tile_y": 5,
+                "unit_type": "swordsman",
             })
         assert r.status_code == 400
         # Money and units are unchanged.
@@ -199,7 +239,7 @@ class TestRecruitEndpoint:
         swordsmen = (await db_session.execute(
             select(Unit).where(Unit.player_id == player.id, Unit.unit_type == "swordsman")
         )).scalars().all()
-        assert len(swordsmen) == 1  # only the recruiter
+        assert len(swordsmen) == 0  # no recruiter, no recruits
 
     async def test_recruit_on_foreign_barracks_rejected(self, db_session, tmp_db_path):
         from app.config import TERRAIN_BARRACKS
@@ -228,40 +268,38 @@ class TestRecruitEndpoint:
         await db_session.flush()
         tile = Tile(
             game_id=game.id, x=5, y=5, terrain=TERRAIN_BARRACKS,
-            owner_id=owner.id,
+            owner_id=owner.id, occupied_unit_id=None,
         )
         db_session.add(tile)
-        await db_session.flush()
-        intruder = Unit(
-            player_id=attacker.id, unit_type="swordsman", name="Intruder",
-            level=1, exp=0, hp=45, max_hp=45, atk=18, def_=12,
-            matk=4, mdef=4, mov=5, mp=5, morale=0,
-            x=5, y=5, has_acted=False, has_moved=False, skills=[],
-        )
-        db_session.add(intruder)
         await db_session.commit()
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             r = await c.post(f"/games/{game.id}/recruit", json={
-                "player_id": attacker.id, "unit_id": intruder.id, "unit_type": "swordsman",
+                "player_id": attacker.id,
+                "tile_x": 5, "tile_y": 5,
+                "unit_type": "swordsman",
             })
         assert r.status_code == 400
         body = r.json()
-        assert "Owner" in body["detail"] or "其他玩家" in body["detail"]
+        assert "Owner" in body["detail"] or "不属于" in body["detail"]
         await db_session.refresh(attacker)
         assert attacker.gold == 500
         swordsmen = (await db_session.execute(
             select(Unit).where(Unit.player_id == attacker.id, Unit.unit_type == "swordsman")
         )).scalars().all()
-        assert len(swordsmen) == 1  # only the intruder
+        assert len(swordsmen) == 0
 
-    async def test_recruit_marks_recruiter_as_acted(self, db_session, tmp_db_path):
+    async def test_recruit_new_unit_cannot_act_this_turn(self, db_session, tmp_db_path):
+        """Fire-Emblem summon timing: the new unit spawns with
+        has_acted=True, has_moved=True, mp=0 (can't act this turn).
+        Empty-barracks mode: NO other unit is on the tile, so no
+        recruiter has_acted to assert against."""
         from app.config import RECRUIT_COST, TERRAIN_BARRACKS
         from app.models import Game, Player, Tile, Unit
 
         game = Game(
-            name="recruit-acted", status="playing", map_seed=0,
+            name="recruit-newunit", status="playing", map_seed=0,
             map_preset="classic", turn_number=1, current_player_index=0,
             phase="player",
         )
@@ -277,35 +315,28 @@ class TestRecruitEndpoint:
         await db_session.flush()
         tile = Tile(
             game_id=game.id, x=5, y=5, terrain=TERRAIN_BARRACKS,
-            owner_id=player.id,
+            owner_id=player.id, occupied_unit_id=None,
         )
         db_session.add(tile)
-        await db_session.flush()
-        unit = Unit(
-            player_id=player.id, unit_type="swordsman", name="R-unit",
-            level=1, exp=0, hp=45, max_hp=45, atk=18, def_=12,
-            matk=4, mdef=4, mov=5, mp=5, morale=0,
-            x=5, y=5, has_acted=False, has_moved=False, skills=[],
-        )
-        db_session.add(unit)
         await db_session.commit()
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             r = await c.post(f"/games/{game.id}/recruit", json={
-                "player_id": player.id, "unit_id": unit.id, "unit_type": "archer",
+                "player_id": player.id,
+                "tile_x": 5, "tile_y": 5,
+                "unit_type": "archer",
             })
-        assert r.status_code == 200
+        assert r.status_code == 200, r.text
         new_id = r.json()["new_unit_id"]
-
-        await db_session.refresh(unit)
-        assert unit.has_acted is True
-        assert unit.mp == 0
         new_unit = await db_session.get(Unit, new_id)
+        # New unit parked on the barracks, FE-summon timing.
         assert (new_unit.x, new_unit.y) == (5, 5)
         assert new_unit.has_acted is True
         assert new_unit.has_moved is True
         assert new_unit.mp == 0
+        # mov pool is full so it can move next turn.
+        assert new_unit.mov == 5  # archer mp_pool
         assert new_unit.unit_type == "archer"
 
 

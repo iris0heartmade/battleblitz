@@ -53,39 +53,37 @@ def _stub_unit(type_id, x=5, y=5, skills=None):
 
 @pytest.mark.asyncio
 async def test_recruit_empty_barracks(client):
-    """Bug #5: the recruit API now accepts {tile_x, tile_y} (no
-    unit_id required) for the empty-barracks case. We can't easily
-    drive the full E2E flow (would need to claim the barracks via
-    a unit first, then move the unit off — and turn phases keep
-    shuffling), so we just verify the API accepts the new format
-    and that the schema field is Optional.
+    """Bug #5: the recruit API only accepts {tile_x, tile_y} for an
+    empty barracks — unit_id mode was removed because units shouldn't
+    squat on a barracks to recruit. The barracks must be empty.
     """
     from app.schemas import RecruitRequest
-    # Schema-level: both unit_id and tile_x/tile_y are now Optional.
-    r1 = RecruitRequest(player_id=1, unit_type="swordsman",
-                        tile_x=5, tile_y=5)
-    assert r1.unit_id is None
-    r2 = RecruitRequest(player_id=1, unit_type="swordsman",
-                        unit_id=42)
-    assert r2.tile_x is None and r2.tile_y is None
-    # End-to-end smoke: start a game and try to recruit on a tile
-    # (without claiming first — should 400 on "not owned by you"
-    # OR succeed if a barracks exists unclaimed for some other
-    # reason; either way the call should NOT 422 on schema).
-    r = await client.post("/games", json={
+    # Schema-level: tile_x/tile_y are now REQUIRED (not Optional).
+    r = RecruitRequest(player_id=1, unit_type="swordsman",
+                       tile_x=5, tile_y=5)
+    # unit_id field no longer exists.
+    assert not hasattr(r, "unit_id") or r.model_dump().get("unit_id") is None
+    # End-to-end smoke: start a game and try to recruit on a tile.
+    # Contract: the API should NOT 422 (it'll 400 on a missing
+    # barracks or wrong owner, that's fine).
+    rsp = await client.post("/games", json={
         "name": "empty-barracks-test", "map_preset": "grass_outer_15_4p",
     })
-    gid = r.json()["id"]
+    gid = rsp.json()["id"]
     await client.post(f"/games/{gid}/join", json={"user_name": "host"})
     await client.post(f"/games/{gid}/add-ai", json={})
     await client.post(f"/games/{gid}/start")
-    # Try the empty-barracks shape (should NOT 422).
+    # The new shape (tile_x/tile_y only) should be accepted by the
+    # schema. Sending the legacy unit_id shape should 422.
     r = await client.post(f"/games/{gid}/recruit", json={
         "player_id": 1, "tile_x": 7, "tile_y": 7, "unit_type": "swordsman",
     })
-    # 400/403/200 are all fine — the contract is that the API
-    # accepts the new shape. 422 would mean schema rejected it.
     assert r.status_code != 422, f"schema rejected empty-barracks shape: {r.text}"
+    # And the legacy unit_id mode should now 422 (field removed).
+    r2 = await client.post(f"/games/{gid}/recruit", json={
+        "player_id": 1, "unit_id": 1, "unit_type": "swordsman",
+    })
+    assert r2.status_code == 422, f"legacy unit_id mode should be rejected: {r2.text}"
 
 
 # ============================================================

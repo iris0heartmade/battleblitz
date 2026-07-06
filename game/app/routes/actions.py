@@ -726,7 +726,7 @@ async def claim_tile(
 
 
 # ============================================================
-# Recruit (P0.4) — spend gold to spawn a unit on an owned barracks
+# Recruit (P0.4) — spend gold to spawn a unit on an EMPTY owned barracks
 # ============================================================
 
 @router.post("/{game_id}/recruit", response_model=RecruitResult)
@@ -735,100 +735,56 @@ async def recruit_unit(
     body: RecruitRequest,
     session: AsyncSession = Depends(get_session),
 ) -> RecruitResult:
-    """Recruit a new unit by spending gold at an owned barracks.
+    """Recruit a new unit by spending gold at an empty owned barracks.
+
+    The barracks MUST be empty (no unit standing on it). Units can't
+    squat on a barracks and recruit; they have to move off first.
+    This keeps barracks as "shared production facilities" rather than
+    a unit's personal anchor.
 
     Mechanics (see docs/superpowers/specs/2026-06-30-terrain-economy-
     claim-spec.md §5.4):
-      - The `unit_id` in the request is the *recruiter* (a unit
-        already on the field) — its role is just to be on the
-        barracks tile. It spends MP/has_acted like any other
-        action.
-      - The new unit spawns on the same (x, y) tile, with
-        has_acted=True, has_moved=True, mp=0 (cannot act this
-        turn — matches Fire-Emblem summon timing).
+      - The new unit spawns on the empty barracks tile with
+        has_acted=True, has_moved=True, mp=0 (cannot act this turn —
+        matches Fire-Emblem summon timing).
       - Cost: RECRUIT_COST[unit_type]. If the player can't afford
-        the unit, the request 400s and the recruiter is NOT
-        consumed.
+        the unit, the request 400s.
     """
     from app.config import RECRUIT_COST, TERRAIN_BARRACKS
 
     game = await _load_active_game(session, game_id)
     player = await _ensure_current_player(session, game, body.player_id)
 
-    # P2.4 polish — two recruitment modes:
-    #   1) unit_id provided → legacy "unit anchors the recruit" path
-    #   2) tile_x + tile_y provided → "empty barracks" path
-    # Exactly one mode must be specified.
-    has_unit = body.unit_id is not None
-    has_tile = body.tile_x is not None and body.tile_y is not None
-    if has_unit and has_tile:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "请只指定 unit_id 或 tile_x/tile_y 其一",
+    # Resolve the target tile directly from (tile_x, tile_y).
+    tile = (
+        await session.execute(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.x == body.tile_x,
+                Tile.y == body.tile_y,
+            )
         )
-    if not has_unit and not has_tile:
+    ).scalars().first()
+    if tile is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "必须提供 unit_id 或 tile_x+tile_y",
+            f"({body.tile_x},{body.tile_y}) 不存在",
         )
-
-    recruiter = None
-    if has_unit:
-        recruiter = await _load_unit(session, body.unit_id)
-        if recruiter.player_id != player.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
-        if recruiter.has_acted:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动过")
-        # Recruiter must be standing on a barracks owned by this player.
-        tile = (
-            await session.execute(
-                select(Tile).where(
-                    Tile.game_id == game_id,
-                    Tile.x == recruiter.x,
-                    Tile.y == recruiter.y,
-                )
-            )
-        ).scalars().first()
-    else:
-        # Empty-barracks mode: target tile is (body.tile_x, body.tile_y).
-        tile = (
-            await session.execute(
-                select(Tile).where(
-                    Tile.game_id == game_id,
-                    Tile.x == body.tile_x,
-                    Tile.y == body.tile_y,
-                )
-            )
-        ).scalars().first()
-        if tile is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                f"({body.tile_x},{body.tile_y}) 不存在",
-            )
-
-    if tile is None or tile.terrain != TERRAIN_BARRACKS:
+    if tile.terrain != TERRAIN_BARRACKS:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"该位置不是佣兵站（{tile.terrain if tile else 'no tile'}）",
+            f"该位置不是佣兵站（{tile.terrain}）",
         )
     if tile.owner_id != player.id:
-        owner_name = next(
-            (p.user_name for p in (
-                await session.execute(select(Player).where(Player.id == tile.owner_id))
-            ).scalars() if p.id == tile.owner_id),
-            "其他玩家",
-        ) if tile.owner_id is not None else "无主"
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"该佣兵站属于 {owner_name}，无法招募",
+            f"该佣兵站不属于你，无法招募",
         )
-    # The barracks must be empty. (For unit-mode the recruiter IS the
-    # occupant, so we allow tile.occupied_unit_id == recruiter.id.)
-    allowed_occupants = {recruiter.id} if recruiter else set()
-    if tile.occupied_unit_id is not None and tile.occupied_unit_id not in allowed_occupants:
+    # Empty-barracks rule: the tile MUST be unoccupied.
+    if tile.occupied_unit_id is not None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "该佣兵站已有其他单位驻守",
+            "该佣兵站已有单位驻守，请先让该单位移开",
         )
 
     cost = RECRUIT_COST.get(body.unit_type)
@@ -877,11 +833,6 @@ async def recruit_unit(
     await session.flush()  # populate new_unit.id
     # Park the new unit on the barracks tile.
     tile.occupied_unit_id = new_unit.id
-    if recruiter is not None:
-        # Legacy unit-anchor mode: the recruiter also "consumed" its
-        # action — the player used their turn to do this recruit.
-        recruiter.has_acted = True
-        recruiter.mp = 0
 
     description = (
         f"{player.user_name} 在 ({tile.x},{tile.y}) 花费 {cost} 金币招募了"
@@ -890,12 +841,11 @@ async def recruit_unit(
     _log(session, game, player, "recruit", description)
     audit.info(
         "USER_ACTION | user=player_%d | game=%d | action=RECRUIT | result=SUCCESS | "
-        "recruiter=%d | new_unit=%d | type=%s | cost=%d | gold_left=%d",
-        player.id, game_id, recruiter.id, new_unit.id, body.unit_type,
+        "new_unit=%d | type=%s | cost=%d | gold_left=%d",
+        player.id, game_id, new_unit.id, body.unit_type,
         cost, player.gold,
     )
     return RecruitResult(
-        recruiter_unit_id=recruiter.id if recruiter is not None else None,
         new_unit_id=new_unit.id,
         new_unit_type=body.unit_type,
         cost=cost,

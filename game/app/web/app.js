@@ -1964,7 +1964,6 @@ function showUnitActionBubble(unit) {
   html += `</div><div class="ab-row">`;
   if (canHeal) html += `<button class="ab-btn heal" data-ab="heal">💚 治疗</button>`;
   if (onOwnUnclaimed) html += `<button class="ab-btn claim" data-ab="claim" title="开始占领该地块（2 回合）">🚩 占领</button>`;
-  if (onOwnBarracks) html += `<button class="ab-btn recruit" data-ab="recruit" title="在此佣兵站花费金币招募新单位">💰 招募</button>`;
   html += `<button class="ab-btn" data-ab="info">👁 状态</button>`;
   html += `<button class="ab-btn cancel" data-ab="wait" ${canWait ? "" : "disabled"}>⏭ 待机</button>`;
   html += `</div>`;
@@ -2191,9 +2190,6 @@ async function onBubbleClick(action, unit, targetId) {
       return;
     case "claim":
       await doClaim(unit);
-      return;
-    case "recruit":
-      showRecruitModal(unit);
       return;
     case "confirm-move": {
       const m = state.pendingMove;
@@ -2731,17 +2727,14 @@ const RECRUIT_UNIT_TYPES = [
   { id: "knight",    display_cn: "骑士", cost: 400 },
 ];
 
-// P2.4 polish — showRecruitModal supports two modes:
-//   - Unit-anchor (legacy): pass a recruiter unit standing on the barracks
-//   - Empty-barracks: pass { x, y } of the barracks itself, no unit
+// P0.4 — showRecruitModal opens the recruit picker for an EMPTY
+// barracks. The barracks must be unoccupied (server enforces this
+// too) — units can't squat on a barracks and recruit.
 async function showRecruitModal(anchor) {
   const myPlayer = state.lastState?.players?.find(p => p.id === state.me.player_id);
   const gold = myPlayer?.gold ?? 0;
-  // Resolve tile either from the unit's position (unit-anchor) or
-  // directly from {x, y} (empty-barracks).
-  const isUnitAnchor = anchor && "id" in anchor;
-  const tx = isUnitAnchor ? anchor.x : anchor.x;
-  const ty = isUnitAnchor ? anchor.y : anchor.y;
+  const tx = anchor.x;
+  const ty = anchor.y;
   const tile = getTileAt(state.lastState, tx, ty);
   // Foreign-barracks guard for paranoid double-check (server also
   // validates). We should never get here if the bubble was correctly
@@ -2749,6 +2742,11 @@ async function showRecruitModal(anchor) {
   if (tile?.owner_id !== state.me.player_id) {
     const ownerName = state.lastState.players.find(p => p.id === tile.owner_id)?.user_name || "其他玩家";
     toast(`该佣兵站属于 ${ownerName}，无法招募`);
+    return;
+  }
+  // Occupied-barracks guard — server is the source of truth.
+  if (tile?.occupied_unit_id != null) {
+    toast(`该佣兵站已有单位驻守，请先让该单位移开`);
     return;
   }
   const body = `
@@ -2785,19 +2783,15 @@ async function showRecruitModal(anchor) {
 
 async function doRecruit(anchor, unitType) {
   try {
-    // P2.4 polish — send either unit_id (legacy) or tile_x/tile_y
-    // (empty-barracks), exactly one of which the API will accept.
-    const isUnitAnchor = anchor && "id" in anchor;
+    // P0.4 — empty-barracks recruit. Server requires the barracks to
+    // be unoccupied; the modal already guards against occupied tiles
+    // but the server is the source of truth.
     const body = {
       player_id: state.me.player_id,
+      tile_x: anchor.x,
+      tile_y: anchor.y,
       unit_type: unitType,
     };
-    if (isUnitAnchor) {
-      body.unit_id = anchor.id;
-    } else {
-      body.tile_x = anchor.x;
-      body.tile_y = anchor.y;
-    }
     const r = await api("POST", `/games/${state.me.game_id}/recruit`, body);
     const cn = RECRUIT_UNIT_TYPES.find(t => t.id === unitType)?.display_cn || unitType;
     toast(`💰 招募成功：${cn}（-${r.cost} 金币 · 剩余 ${r.gold_remaining}）`);
