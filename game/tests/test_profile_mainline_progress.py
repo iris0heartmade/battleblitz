@@ -56,8 +56,10 @@ def tmp_mainlines(tmp_path, monkeypatch):
 
     monkeypatch.setattr(loader_mod, "_MAINLINES_DIR", tmp_path)
     # Reload the same content from the real repo mainline so the
-    # validator has something to load.
-    real = Path("/home/youko/PycharmProjects/battleblitz/game/mainlines") \
+    # validator has something to load. Resolve the repo mainlines
+    # dir dynamically so the test works on any platform (the original
+    # hard-coded Linux path was `/home/youko/PycharmProjects/...`).
+    real = Path(loader_mod.__file__).resolve().parents[2] / "mainlines" \
         / f"{SAMPLE_ID}.json"
     (tmp_path / f"{SAMPLE_ID}.json").write_text(
         real.read_text(encoding="utf-8"), encoding="utf-8"
