@@ -38,6 +38,10 @@ from app.routes.turns import _run_ai_turn_chain
 # Helpers
 # ============================================================
 
+# Set by main() to control the personality cycle across seats.
+personality_cycle: list[str] = []
+
+
 async def _create_ai_game(num_players: int, seed: int) -> int:
     """Create a game with N AI players and return the game_id.
 
@@ -63,18 +67,20 @@ async def _create_ai_game(num_players: int, seed: int) -> int:
         game = await create_game(body=body, session=session)
         game_id = game.id
 
-        # Host is the first "real" player — but they're never going to
-        # act (no UI), so they're effectively AI-shaped too. We don't
-        # need to mark them is_ai=True for the chain to drive them:
-        # the AI turn-chain skips humans and waits for them. To make
-        # every seat an AI, use add_ai for ALL players.
-        for _ in range(num_players):
+        # Add num_players AI players, each cycling through the chosen
+        # personality list (or all-balanced if none specified).
+        from app.game_logic import _AI_PROFILES  # noqa: F401  (sanity)
+        for i in range(num_players):
+            if personality_cycle:
+                pers = personality_cycle[i % len(personality_cycle)]
+            else:
+                pers = "balanced"
             await add_ai_player(
                 game_id=game_id,
                 body=AddAIRequest(
                     difficulty="normal",
                     agent_kind="rules",
-                    personality="balanced",
+                    personality=pers,
                 ),
                 session=session,
             )
@@ -89,8 +95,10 @@ async def _create_ai_game(num_players: int, seed: int) -> int:
 async def _wait_until_finished(game_id: int, max_turns: int, poll_interval: float = 1.0) -> dict:
     """Poll game state until status=='finished' or turn exceeds max_turns.
 
-    Also kicks off `_run_ai_turn_chain` after the game starts so AI begins
-    playing right away.
+    The chain is self-sustaining: it spawns the next call when it has
+    more actions to do. So this loop ONLY watches state — never spawns
+    a new chain. (Previously we spawned here, which caused multiple
+    chains to run in parallel and act on the same unit repeatedly.)
     """
     deadline = time.time() + 600  # 10-minute hard cap
     last_log = -1
@@ -118,13 +126,6 @@ async def _wait_until_finished(game_id: int, max_turns: int, poll_interval: floa
             return st
         if st["turn"] >= max_turns:
             return {**st, "status": "timeout"}
-
-        # Still playing → if it's an AI's turn and phase='ai' but no chain
-        # is running, kick one off. The chain self-recurse keeps it going.
-        if st["phase"] == "ai" and not st.get("_chain_running"):
-            st["_chain_running"] = True
-            asyncio.create_task(_run_ai_turn_chain(game_id))
-            print(f"  [spawn] AI chain (T={st['turn']})", flush=True)
 
         if time.time() > deadline:
             return {**st, "status": "wallclock_timeout"}
@@ -171,7 +172,15 @@ def main() -> int:
                    help="Map seed for reproducibility")
     p.add_argument("--max-turns", type=int, default=80,
                    help="Hard cap on turns before giving up")
+    p.add_argument("--personalities", type=str, default="balanced,aggressive,balanced,conservative",
+                   help="Comma-separated list of personalities to cycle through "
+                        "(e.g. 'aggressive,conservative' for a 2p grudge match)")
     args = p.parse_args()
+    # Stash on a global so _create_ai_game can read it.
+    global personality_cycle
+    personality_cycle = [
+        p.strip() for p in args.personalities.split(",") if p.strip()
+    ]
     return asyncio.run(main_async(args))
 
 
