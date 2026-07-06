@@ -590,7 +590,14 @@ async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> Li
     # units is the rout condition. Other modes (seize / reach /
     # defend) re-check here too so they always have a chance to
     # finish even if no other trigger fires.
-    game = await _resolve_game(session, dead[0].game_id)
+    # NOTE: Unit has no game_id column (only Player does), so we
+    # resolve the game via the unit's owning player.
+    if dead:
+        owning_player = await session.get(Player, dead[0].player_id)
+        game_id = owning_player.game_id if owning_player else None
+    else:
+        game_id = None
+    game = await _resolve_game(session, game_id) if game_id is not None else None
     if game is not None and game.status == "playing":
         await check_win_condition(session, game)
     return dead_ids
