@@ -74,9 +74,12 @@ class TestGameEventBus:
         bus = GameEventBus()
         q = bus.subscribe(game_id=1)
         assert isinstance(q, asyncio.Queue)
-        assert bus.subscriber_count(1) == 1
+        # The bus no longer exposes subscriber_count() — verify
+        # subscription state via the internal queue list (the only
+        # observable side-effect of subscribe).
+        assert len(bus._subscribers[1]) == 1
         bus.unsubscribe(1, q)
-        assert bus.subscriber_count(1) == 0
+        assert len(bus._subscribers[1]) == 0
 
     async def test_publish_fans_out_to_all_subscribers(self):
         bus = GameEventBus()
@@ -120,7 +123,10 @@ class TestGameEventBus:
         bus.subscribe(game_id=1)
         bus.subscribe(game_id=1)
         bus.subscribe(game_id=2)
-        assert bus.total_subscribers() == 3
+        # The bus no longer exposes total_subscribers() — verify by
+        # summing queue counts across all games.
+        total = sum(len(qs) for qs in bus._subscribers.values())
+        assert total == 3
 
     async def test_overflow_drops_for_slow_subscriber(self):
         """A subscriber that doesn't drain its queue gets the latest events

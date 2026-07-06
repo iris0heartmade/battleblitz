@@ -331,8 +331,10 @@ def can_attack_from_position(
 
     Distance is measured in Manhattan metric (|dx|+|dy|). For
     attacks at distance > 1 we also require a clear line of sight
-    (mountains / forests / rivers block). Melee (d == 1) is always
-    allowed — the unit can close distance and swing.
+    (mountains / forests / rivers block) — unless the unit has
+    `ignores_line_of_sight=True` (e.g. archer sniper), which shoots
+    through obstacles. Melee (d == 1) is always allowed — the unit
+    can close distance and swing.
 
     `blockers` is a set of (x, y) coords; pass the set of mountain
     / forest / river tiles from the AI snapshot or pass None to skip
@@ -346,10 +348,13 @@ def can_attack_from_position(
         return False
     if d <= 1:
         return True  # melee, no LoS needed
-    if blockers is not None and not has_line_of_sight(
-        (fromX, fromY), (toX, toY), blockers, size=board_size,
-    ):
-        return False
+    # Ranged attack — apply LoS check unless the unit's class ignores it.
+    # Matches the policy in routes/actions.py and agent/legal_actions.py.
+    if blockers is not None and not _get_unit(unit.unit_type).ignores_line_of_sight:
+        if not has_line_of_sight(
+            (fromX, fromY), (toX, toY), blockers, size=board_size,
+        ):
+            return False
     return True
 
 
