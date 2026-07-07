@@ -23,7 +23,7 @@ from app.config import (
     TERRAIN_RIVER,
 )
 from app.game_logic import (
-    can_attack_from_position, generate_map, get_roster_for_composition,
+    can_attack_from_position, generate_map,
 )
 from app.models import Game, Player, Tile, Unit
 from app.utils import has_line_of_sight

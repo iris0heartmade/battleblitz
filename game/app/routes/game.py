@@ -319,7 +319,6 @@ async def create_game(
         map_seed=seed,
         map_preset=body.map_preset,
         map_biome=body.map_biome,
-        unit_composition=body.unit_composition,
         # P2.3 — victory condition.
         win_condition=body.win_condition,
         defend_turns=body.defend_turns,
@@ -778,7 +777,6 @@ async def list_presets() -> PresetsResponse:
     saved via the map editor (game/maps/custom/*.json). Custom maps are
     prefixed with "custom:" so the frontend can distinguish them.
     """
-    from app.classes.units import list_compositions
     from app.game_logic import MAP_PRESETS, _resolve_size
     from app.routes.editor import _CUSTOM_DIR, _list_custom_maps
     maps: List[PresetInfo] = [
@@ -809,13 +807,7 @@ async def list_presets() -> PresetsResponse:
             # falls back to MAX_PLAYERS=4 (the global cap).
             recommended_players=None,
         ))
-    return PresetsResponse(
-        maps=maps,
-        unit_compositions=[
-            PresetInfo(id=c["id"], name=c["name"], description=c["description"])
-            for c in list_compositions()
-        ],
-    )
+    return PresetsResponse(maps=maps)
 
 
 @router.get("/skills")

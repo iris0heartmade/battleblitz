@@ -111,14 +111,12 @@ async def playing_game(db_session):
 
     from app.game_logic import (
         castle_positions,
-        create_initial_units_with_roster,
         generate_map_preset,
-        get_roster_for_composition,
     )
 
     game = Game(
         name="Test Match", status="playing",
-        map_seed=123, map_preset="classic", unit_composition="classic",
+        map_seed=123, map_preset="classic",
     )
     db_session.add(game)
     await db_session.flush()
@@ -131,17 +129,46 @@ async def playing_game(db_session):
     await db_session.flush()
 
     # Map + tiles
-    grid = generate_map_preset(preset_id="classic", seed=123, num_castles=2).tiles
+    result = generate_map_preset(preset_id="classic", seed=123, num_castles=2)
+    grid = result.tiles
     for row in grid:
         for t in row:
             t.game_id = game.id
             db_session.add(t)
     await db_session.flush()
 
-    # Units
+    # P2.6 — data-driven spawn: units come from the map's initial_units,
+    # NOT from a roster. Match by color → player.
+    from app.game_logic import get as _get_unit
     castle_xy = castle_positions(len(players))
-    roster = get_roster_for_composition("classic")
-    units = create_initial_units_with_roster(game, players, castle_xy, roster)
+    color_to_player = {p.color: p for p in players}
+    units: list = []
+    existing_count_by_player: dict = {}
+    for u in result.initial_units:
+        uc = _get_unit(u["type"])
+        target_player = color_to_player.get(u["color"])
+        if target_player is None:
+            continue
+        pid = target_player.id
+        name_idx = existing_count_by_player.get(pid, 0)
+        existing_count_by_player[pid] = name_idx + 1
+        from app.models import Unit
+        from app.game_logic import _unit_name
+        units.append(Unit(
+            player_id=pid,
+            unit_type=u["type"],
+            name=_unit_name(u["type"], name_idx),
+            level=int(u.get("level", 1)),
+            exp=0,
+            hp=uc.base_hp, max_hp=uc.base_hp,
+            atk=uc.base_atk, def_=uc.base_def,
+            matk=uc.base_matk, mdef=uc.base_mdef,
+            mov=uc.mp_pool, mp=uc.mp_pool,
+            morale=0,
+            x=int(u["x"]), y=int(u["y"]),
+            has_acted=False, has_moved=False,
+            skills=list(uc.default_skills),
+        ))
     db_session.add_all(units)
 
     # Castle ownership
