@@ -72,3 +72,6 @@ claude --resume *.txt
 # ===== Todolist ==========
 *todo*.md
 todolist
+# ===== Node.js dependencies for tools/ (jsdom, playwright) =====
+tools/node_modules/
+tools/package-lock.json
