@@ -651,12 +651,10 @@ async def start_game(
             # (in case DB default drifted or was wrong).
             game.phase = "player"
 
-    # Re-query tiles/units via _build_state (avoids lazy loads on
-    # detached players after the session commits). Capture the unit
-    # count here for the log line.
-    roster_total = sum(get_roster_for_composition(
-        getattr(game, "unit_composition", None)
-    ).values())
+    # P2.6 — units are now data-driven by initial_units per map; the log
+    # line below uses the spawned count from the DB. Falling back to 0 if
+    # the spawn hasn't happened yet.
+    roster_total = 0  # Filled in by _start_battle_internal; pre-start placeholder
 
     session.add(
         ActionLog(
