@@ -53,41 +53,46 @@ class UnitSpec(APIModel):
 class BattleSpec(APIModel):
     """One battle inside a mainline.
 
-    `ally_composition` / `enemy_composition` map `class_id -> count`.
-    The engine spawns units at the team-colored castles of the
-    appropriate preset.
+    P2.6 — data-driven: the map's own ``initial_units`` array defines
+    what units each color starts with. ``teams`` only says which
+    colors belong to which side (``ally`` vs ``enemy``). The spawn
+    loop in ``_start_battle_internal`` matches each map-side unit to
+    a player by ``color`` and assigns it to the right seat.
 
-    `pre_battle_dialogue` / `post_battle_dialogue` are keys into the
-    parent `Mainline.dialogues` map (not paths). They let the same
-    battle be re-used across mainlines with different framing.
+    ``pre_battle_dialogue`` / ``post_battle_dialogue`` are keys into
+    the parent ``Mainline.dialogues`` map (not paths). They let the
+    same battle be re-used across mainlines with different framing.
     """
     id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=128)
-    map_preset: str = Field(min_length=1, max_length=64)
+    map_id: str = Field(min_length=1, max_length=64)
     map_seed: Optional[int] = Field(default=None, ge=0, le=2**31 - 1)
     win_condition: WinCondition = "rout"
-    ally_composition: dict[str, int] = Field(default_factory=dict)
-    enemy_composition: dict[str, int] = Field(default_factory=dict)
+    teams: dict[str, list[str]] = Field(default_factory=dict)
+    notes: Optional[str] = None
     pre_battle_dialogue: Optional[str] = None
     post_battle_dialogue: Optional[str] = None
 
     @model_validator(mode="after")
-    def _validate_compositions(self) -> "BattleSpec":
-        for cid in (*self.ally_composition, *self.enemy_composition):
-            if cid not in VALID_CLASS_IDS:
-                raise ValueError(
-                    f"unknown class_id {cid!r} in composition; "
-                    f"valid: {VALID_CLASS_IDS}"
-                )
-        for cid, n in {**self.ally_composition, **self.enemy_composition}.items():
-            if n < 1 or n > 16:
-                raise ValueError(
-                    f"unit count for {cid!r} must be 1..16, got {n}"
-                )
-        if not self.ally_composition:
-            raise ValueError("ally_composition cannot be empty")
-        if not self.enemy_composition:
-            raise ValueError("enemy_composition cannot be empty")
+    def _check_team_colors(self) -> "BattleSpec":
+        """Every color listed in ``teams`` must exist in the map's
+        ``initial_units`` (otherwise no unit will spawn for that
+        team)."""
+        # Lazy import to avoid circular import at module load time
+        # (game_logic imports from app.* in places).
+        from app.game_logic import MAP_PRESETS
+
+        map_data = MAP_PRESETS.get(self.map_id)
+        if map_data is None:
+            raise ValueError(f"map_id {self.map_id!r} not found in MAP_PRESETS")
+        all_colors = {c for team in self.teams.values() for c in team}
+        map_colors = {u["color"] for u in map_data.get("initial_units", [])}
+        missing = all_colors - map_colors
+        if missing:
+            raise ValueError(
+                f"team colors {sorted(missing)} have no units in map "
+                f"{self.map_id!r} (available: {sorted(map_colors)})"
+            )
         return self
 
 
@@ -196,7 +201,7 @@ class BattlePreview(_PydanticBaseModel):
     id: str
     title: str
     win_condition: str
-    map_preset: str
+    map_id: str
 
 
 class MainlineDetailOut(_PydanticBaseModel):
