@@ -1035,6 +1035,38 @@ _CLASSIC_OFFSETS: tuple[tuple[int, int], ...] = (
 )
 
 
+def _castle_positions_for_size(num_castles: int, width: int, height: int) -> List[Tuple[int, int]]:
+    """Compute symmetric castle positions for any map size.
+
+    `_CASTLE_LAYOUTS` is hardcoded for 15x15 maps; this helper scales
+    the same "inset corners" geometry to whatever the map actually is,
+    so the legacy-map fallback works for 10x10 / 20x20 / etc.
+    """
+    inset_x = max(2, width // 4)
+    inset_y = max(2, height // 4)
+    corners = [
+        (inset_x, inset_y),
+        (width - 1 - inset_x, inset_y),
+        (inset_x, height - 1 - inset_y),
+        (width - 1 - inset_x, height - 1 - inset_y),
+    ]
+    positions: List[Tuple[int, int]] = []
+    if num_castles <= 0:
+        return positions
+    if num_castles == 1:
+        positions.append((width // 2, height // 2))
+    elif num_castles == 2:
+        positions = [corners[0], corners[3]]
+    elif num_castles == 3:
+        positions = [corners[0], corners[1], corners[2]]
+    else:  # 4+
+        positions = corners[:4]
+        # 5+ players: clamp extra seats to the last corner
+        for _ in range(num_castles - 4):
+            positions.append(corners[3])
+    return positions
+
+
 def _classic_initial_units(num_castles: int = 2) -> List[Dict[str, Any]]:
     """Generate the static 'classic' roster as a flat initial_units list.
 
@@ -1042,9 +1074,25 @@ def _classic_initial_units(num_castles: int = 2) -> List[Dict[str, Any]]:
     validation sees a full set of colors) and as the runtime fallback
     inside ``generate_map_preset`` (so the actual spawn is identical).
     """
+    # Use the static 15x15 castle positions for the canonical entry —
+    # keeps MAP_PRESETS["classic"] stable. The size-aware variant is
+    # used by `_load_map_presets` for legacy maps of arbitrary size.
     castles = _CASTLE_LAYOUTS.get(num_castles, _CASTLE_LAYOUTS[2])
+    return _build_initial_units_from_castles(castles[:num_castles])
+
+
+def _build_initial_units_from_castles(
+    castles: List[Tuple[int, int]],
+) -> List[Dict[str, Any]]:
+    """Build the canonical 5-unit roster around each castle.
+
+    Pure helper — separates castle geometry from roster composition
+    so the legacy-map fallback can pass size-aware castle positions
+    while still producing the classic 2 swordsman / 1 archer /
+    1 knight / 1 healer layout per castle.
+    """
     units: List[Dict[str, Any]] = []
-    for seat, (cx, cy) in enumerate(castles[:num_castles]):
+    for seat, (cx, cy) in enumerate(castles):
         color = (_CLASSIC_COLORS[seat]
                  if seat < len(_CLASSIC_COLORS) else _CLASSIC_COLORS[-1])
         idx = 0
@@ -1087,15 +1135,26 @@ def _load_map_presets() -> Dict[str, Dict]:
     if _MAPS_DIR.is_dir():
         for path in sorted(_MAPS_DIR.glob("*.json")):
             data = _json.loads(path.read_text(encoding="utf-8"))
-            # P2.6 — validate initial_units is present and well-formed.
-            # The 41 built-in maps will be migrated by the Task 10
-            # migration script, so any map missing this field is
-            # treated as a hard startup error.
+            # P2.6 — initial_units is the canonical source of truth for spawns.
+            # For backward-compat, maps that pre-date P2.6 (or were authored
+            # without this field) get a default roster auto-generated from
+            # `_castle_positions_for_size(...)` + `_build_initial_units_from_castles(...)`,
+            # scoped to the map's actual dimensions and `recommended_players`.
+            # The runtime fallback in `generate_map_preset` uses the
+            # size-aware castle positions for legacy maps too, so legacy
+            # 10x10 / 20x20 / etc. maps behave identically to maps that
+            # declare `initial_units` explicitly.
             initial_units = data.get("initial_units")
             if not initial_units:
-                raise ValueError(
-                    f"Map preset {data.get('id')!r} missing required 'initial_units'"
+                size = _resolve_size(data["size"])
+                num_castles = max(
+                    1, int(data.get("recommended_players", 2))
                 )
+                castles = _castle_positions_for_size(
+                    num_castles, size["width"], size["height"]
+                )
+                initial_units = _build_initial_units_from_castles(castles)
+                data["initial_units"] = initial_units
             size = _resolve_size(data["size"])
             seen_positions = set()
             for u in initial_units:
