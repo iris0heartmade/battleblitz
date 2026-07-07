@@ -1081,11 +1081,12 @@ def _load_map_presets() -> Dict[str, Dict]:
                 seen_positions.add((x, y))
             layout = data.get("layout", [])
             if layout:
-                expected = int(data.get("size", MAP_SIZE))
-                if len(layout) != expected or any(len(r) != expected for r in layout):
+                expected_w = size["width"]
+                expected_h = size["height"]
+                if len(layout) != expected_h or any(len(r) != expected_w for r in layout):
                     raise AssertionError(
                         f"Preset {data.get('id', path.stem)}: layout must be "
-                        f"{expected}x{expected} (got {len(layout)} rows)"
+                        f"{expected_w}x{expected_h} (got {len(layout)} rows)"
                     )
             else:
                 data["size"] = data.get("size", MAP_SIZE)
