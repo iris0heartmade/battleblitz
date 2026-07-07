@@ -53,5 +53,147 @@
     "CCCCCCCCCCCCCCCFFFFFFFFCCCCCCCCCCCC"
   ],
   "recommended_players": 4,
-  "notes": "4 人大型城防战"
+  "notes": "4 人大型城防战 [initial_units auto-generated]",
+  "initial_units": [
+    {
+      "x": 2,
+      "y": 3,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 12,
+      "y": 3,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 13,
+      "y": 2,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 13,
+      "y": 3,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 14,
+      "y": 2,
+      "type": "knight",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 12,
+      "y": 4,
+      "type": "healer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 13,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 12,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 13,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 12,
+      "type": "knight",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 14,
+      "type": "healer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 12,
+      "y": 13,
+      "type": "swordsman",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 13,
+      "y": 12,
+      "type": "swordsman",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 13,
+      "y": 13,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 14,
+      "y": 12,
+      "type": "knight",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 12,
+      "y": 14,
+      "type": "healer",
+      "color": "yellow",
+      "level": 1
+    }
+  ]
 }
