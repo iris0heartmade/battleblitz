@@ -57,7 +57,6 @@ class Game(Base):
     # Turn phase: "player" (human's turn), "ai" (AI is acting), "animating"
     # (reserved for future use, e.g. "playing back an action animation").
     phase: Mapped[str] = mapped_column(String(16), nullable=False, default="player")
-    unit_composition: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Fairness: the first player (seat 0) is limited to 1 action on their first
     # turn; once they've ended it, everyone gets 2 actions per turn going forward.
     first_player_done_first_turn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

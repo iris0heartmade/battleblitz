@@ -196,6 +196,16 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE games ADD COLUMN max_spectators INTEGER NOT NULL DEFAULT 8"
         ))
         logger.info("Migration: added games.max_spectators")
+    # 2026-07-07: P2.6 — drop the now-unused games.unit_composition column.
+    # The create-game flow no longer accepts a `unit_composition` request
+    # field and unit spawns are now driven by the map's `initial_units`
+    # data, so the column would only ever be NULL. SQLite supports
+    # DROP COLUMN since 3.35.
+    if "unit_composition" in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games DROP COLUMN unit_composition"
+        ))
+        logger.info("Migration: dropped games.unit_composition")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
