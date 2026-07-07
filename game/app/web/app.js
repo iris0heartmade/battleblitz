@@ -416,9 +416,10 @@ async function populatePresetSelects() {
   // Bug fix: the create-game view is shown repeatedly as the user
   // enters and leaves the lobby. Each time we'd appendChild new
   // <option>s without clearing the previous ones, so the dropdown
-  // grew by 7 maps × N visits. Reset both selects before refilling.
+  // grew by 7 maps × N visits. Reset the map <select> before
+  // refilling. (P2.6 — the unit_composition dropdown was removed
+  // entirely, so no second <select> to clear here.)
   mapSel.innerHTML = "";
-  unitsSel.innerHTML = "";
   // P2.4 — cascade filter by the selected player-count category.
   // Maps without `recommended_players` (legacy / handcrafted / custom)
   // fall under the "4 人" bucket since that's the global cap.
