@@ -1,0 +1,12 @@
+{
+  "name": "battleblitz-tools",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Standalone diagnostic & verification scripts. Not deployed.",
+  "scripts": {
+    "test:web": "node test_web_dropdown.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
