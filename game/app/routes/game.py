@@ -627,8 +627,21 @@ async def start_game(
     # P0.4 — collect income for the first player at game start so turn 1
     # income is granted based on initial building ownership.
     from app.routes.turns import _collect_income_for_player
-    first_player = next(p for p in players if p.seat == 0)
-    await _collect_income_for_player(session, game, first_player)
+
+    # Force a flush so the tile.owner_id assignments from
+    # `_start_battle_internal` are visible to the SELECT inside
+    # `_collect_income_for_player`. Without this, the ownership
+    # changes are still pending in the session and the income
+    # query returns zero tiles.
+    await session.flush()
+
+    # P2.6 fix — grant initial income to EVERY non-spectator player,
+    # not just seat 0. Previously only the first player got it, so
+    # seats 1..N had to wait for their first turn cycle to receive
+    # gold for the buildings they already own at game start.
+    for p in players:
+        if not p.is_spectator:
+            await _collect_income_for_player(session, game, p)
 
     # P2.4 — schedule the very first turn. In a real-player-first
     # setup, the human gets to act and AI will be chained from
