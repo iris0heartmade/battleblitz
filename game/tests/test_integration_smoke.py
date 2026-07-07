@@ -65,9 +65,9 @@ class TestGameLifecycle:
         r = await client.get("/games/presets")
         assert r.status_code == 200
         body = r.json()
-        assert "maps" in body and "unit_compositions" in body
+        assert "maps" in body
+        assert "unit_compositions" not in body
         assert len(body["maps"]) > 0
-        assert len(body["unit_compositions"]) > 0
 
     async def test_state_for_missing_game_returns_404(self, client):
         r = await client.get("/games/9999/state")

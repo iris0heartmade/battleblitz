@@ -31,7 +31,6 @@ class CreateGameRequest(BaseModel):
     # `recommended_players`. The frontend no longer sends it.
     map_preset: Optional[str] = None  # e.g. "classic" / "open_plains" / "mountain_pass"
     map_biome: str = Field(default="grass")  # "grass" | "snow" | "desert"
-    unit_composition: Optional[str] = None  # e.g. "classic" / "aggressive" / "defensive"
     # P2.3 — victory condition. "rout" (default) / "seize" / "reach" /
     # "defend". The last two only make sense on mission maps.
     win_condition: str = "rout"
@@ -111,7 +110,6 @@ class PresetInfo(BaseModel):
 
 class PresetsResponse(BaseModel):
     maps: List[PresetInfo]
-    unit_compositions: List[PresetInfo]
 
 
 class StartGameRequest(BaseModel):

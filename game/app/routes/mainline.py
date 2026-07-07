@@ -244,7 +244,6 @@ async def _spawn_battle_for_index(
         current_player_index=0,
         map_seed=battle.map_seed if battle.map_seed is not None else 0,
         map_preset=battle.map_id,
-        unit_composition=None,
     )
     session.add(game)
     await session.flush()
