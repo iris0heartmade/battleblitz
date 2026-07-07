@@ -180,7 +180,7 @@ def test_generate_map_preset_round_trips_castle_internal_json():
     ]
     assert presets_with_internal, "expected at least one castle_internal preset"
     pid, preset = presets_with_internal[0]
-    grid = generate_map_preset(pid, seed=42)
+    grid = generate_map_preset(pid, seed=42).tiles
     # Re-load via _layout_to_tiles and compare subtype counts.
     reloaded = _layout_to_tiles(preset["layout"])
     sub_a = sum(1 for r in grid for t in r if getattr(t, "subtype", None))

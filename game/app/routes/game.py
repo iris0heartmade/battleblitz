@@ -178,7 +178,7 @@ async def _start_battle_internal(
             preset_id=preset_id,
             seed=seed,
             num_castles=max(2, min(MAX_CASTLES, len(players))),
-        )
+        ).tiles
 
     # If game.map_biome wasn't set but custom map has one, sync it
     if custom_map_biome and not getattr(game, "map_biome", None):
