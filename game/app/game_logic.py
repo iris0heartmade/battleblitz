@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1009,6 +1009,22 @@ __all__ = [
 
 import json as _json
 from pathlib import Path as _Path
+
+
+def _resolve_size(size: Union[int, Dict[str, int]]) -> Dict[str, int]:
+    """Normalize `size` from JSON to {width, height} dict.
+
+    Legacy preset: ``size=15`` -> ``{width: 15, height: 15}``
+    New preset: ``size={width:10, height:7}`` -> pass-through.
+    """
+    if isinstance(size, int):
+        return {"width": size, "height": size}
+    if isinstance(size, dict) and "width" in size and "height" in size:
+        return dict(size)
+    raise TypeError(
+        f"size must be int or dict with width/height, got {type(size).__name__}"
+    )
+
 
 _MAPS_DIR = _Path(__file__).resolve().parent.parent / "maps"
 
