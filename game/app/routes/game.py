@@ -779,13 +779,16 @@ async def list_presets() -> PresetsResponse:
     prefixed with "custom:" so the frontend can distinguish them.
     """
     from app.classes.units import list_compositions
-    from app.game_logic import MAP_PRESETS
+    from app.game_logic import MAP_PRESETS, _resolve_size
     from app.routes.editor import _CUSTOM_DIR, _list_custom_maps
     maps: List[PresetInfo] = [
         PresetInfo(
             id=p["id"], name=p["name"], description=p["description"],
             biome=p.get("biome", "grass"),
-            size=int(p.get("size", 15)),
+            # P2.6 — size may be {width, height} dict on new presets; the
+            # API still exposes a single int (we use width as the canonical
+            # edge length for the square-grid legacy UI).
+            size=_resolve_size(p.get("size", 15))["width"],
             # P2.4 — expose recommended_players so the create-game
             # category selector on the frontend can filter by it.
             recommended_players=p.get("recommended_players"),
