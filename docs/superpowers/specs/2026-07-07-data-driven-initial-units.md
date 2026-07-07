@@ -41,19 +41,22 @@ The Advance Wars series has done this for two decades: a map file declares `star
 
 ```json
 {
-  "id": "test_arena_6x7_2v2",
-  "name": "测试竞技场 6×7 2v2",
-  "description": "6×7 极限紧凑 2v2 测试图，覆盖移动/攻击/占领/招募/路径 cost/团队 全流程",
+  "id": "test_arena_10x10_2v2",
+  "name": "测试竞技场 10×10 2v2",
+  "description": "10×10 紧凑 2v2 测试图，覆盖移动/攻击/占领/招募/路径 cost/团队 全流程，含 4 vault",
   "biome": "grass",
-  "size": { "width": 6, "height": 7 },
+  "size": { "width": 10, "height": 10 },
   "layout": [
-    "H....H",
-    ".RRRR.",
-    "v.bF.v",
-    ".RRRR.",
-    "v.b$.v",
-    ".RRRR.",
-    "H....H"
+    "H..RRRR..H",
+    "...R..R...",
+    "vRR......Rv",
+    "$R.bFFb.R$",
+    ".RR....RR.",
+    "..R.bb.R..",
+    ".RR....RR.",
+    "$R.bFFb.R$",
+    "vRR......Rv",
+    "H..RRRR..H"
   ],
   "recommended_players": 4,
   "team_mode": "2v2",
@@ -61,36 +64,36 @@ The Advance Wars series has done this for two decades: a map file declares `star
   "initial_units": [
     // ===== P1 (red) — 左上 HQ at (0,0) =====
     {"x": 1, "y": 0, "type": "swordsman", "color": "red", "level": 1},
-    {"x": 0, "y": 1, "type": "swordsman", "color": "red", "level": 1},
-    {"x": 2, "y": 1, "type": "archer",    "color": "red", "level": 1},
-    {"x": 1, "y": 1, "type": "knight",    "color": "red", "level": 1},
-    {"x": 0, "y": 2, "type": "healer",    "color": "red", "level": 1},
+    {"x": 2, "y": 0, "type": "swordsman", "color": "red", "level": 1},
+    {"x": 1, "y": 1, "type": "archer",    "color": "red", "level": 1},
+    {"x": 3, "y": 1, "type": "knight",    "color": "red", "level": 1},
+    {"x": 0, "y": 1, "type": "healer",    "color": "red", "level": 1},
 
-    // ===== P2 (blue) — 左下 HQ at (0,6) =====
-    {"x": 1, "y": 6, "type": "swordsman", "color": "blue", "level": 1},
-    {"x": 0, "y": 5, "type": "swordsman", "color": "blue", "level": 1},
-    {"x": 2, "y": 5, "type": "archer",    "color": "blue", "level": 1},
-    {"x": 1, "y": 5, "type": "knight",    "color": "blue", "level": 1},
-    {"x": 0, "y": 4, "type": "healer",    "color": "blue", "level": 1},
+    // ===== P2 (blue) — 左下 HQ at (0,9) =====
+    {"x": 1, "y": 9, "type": "swordsman", "color": "blue", "level": 1},
+    {"x": 2, "y": 9, "type": "swordsman", "color": "blue", "level": 1},
+    {"x": 1, "y": 8, "type": "archer",    "color": "blue", "level": 1},
+    {"x": 3, "y": 8, "type": "knight",    "color": "blue", "level": 1},
+    {"x": 0, "y": 8, "type": "healer",    "color": "blue", "level": 1},
 
-    // ===== P3 (green) — 右上 HQ at (5,0) =====
-    {"x": 4, "y": 0, "type": "swordsman", "color": "green", "level": 1},
-    {"x": 5, "y": 1, "type": "swordsman", "color": "green", "level": 1},
-    {"x": 3, "y": 1, "type": "archer",    "color": "green", "level": 1},
-    {"x": 4, "y": 1, "type": "knight",    "color": "green", "level": 1},
-    {"x": 5, "y": 2, "type": "healer",    "color": "green", "level": 1},
+    // ===== P3 (green) — 右上 HQ at (9,0) =====
+    {"x": 8, "y": 0, "type": "swordsman", "color": "green", "level": 1},
+    {"x": 7, "y": 0, "type": "swordsman", "color": "green", "level": 1},
+    {"x": 8, "y": 1, "type": "archer",    "color": "green", "level": 1},
+    {"x": 6, "y": 1, "type": "knight",    "color": "green", "level": 1},
+    {"x": 9, "y": 1, "type": "healer",    "color": "green", "level": 1},
 
-    // ===== P4 (yellow) — 右下 HQ at (5,6) =====
-    {"x": 4, "y": 6, "type": "swordsman", "color": "yellow", "level": 1},
-    {"x": 5, "y": 5, "type": "swordsman", "color": "yellow", "level": 1},
-    {"x": 3, "y": 5, "type": "archer",    "color": "yellow", "level": 1},
-    {"x": 4, "y": 5, "type": "knight",    "color": "yellow", "level": 1},
-    {"x": 5, "y": 4, "type": "healer",    "color": "yellow", "level": 1}
+    // ===== P4 (yellow) — 右下 HQ at (9,9) =====
+    {"x": 8, "y": 9, "type": "swordsman", "color": "yellow", "level": 1},
+    {"x": 7, "y": 9, "type": "swordsman", "color": "yellow", "level": 1},
+    {"x": 8, "y": 8, "type": "archer",    "color": "yellow", "level": 1},
+    {"x": 6, "y": 8, "type": "knight",    "color": "yellow", "level": 1},
+    {"x": 9, "y": 8, "type": "healer",    "color": "yellow", "level": 1}
   ]
 }
 ```
 
-**`size` is now an object `{width, height}` for built-in maps too**, matching what custom maps already use. This allows non-square test maps like 6×7 without breaking the layout string parser.
+**`size` is now an object `{width, height}` for built-in maps too**, matching what custom maps already use. This allows non-square test maps like 10×10 without breaking the layout string parser.
 
 ### Mainline battle spec
 
@@ -274,46 +277,51 @@ def downgrade():
 - Remove the change handler at line 4328
 - Remove the description update at line 4329
 
-## The Test Map: `test_arena_6x7_2v2`
+## The Test Map: `test_arena_10x10_2v2`
 
-6 columns wide × 7 rows tall (42 tiles total), 2v2 team mode (red+blue vs green+yellow). Deliberately minimal — every tile earns its place.
+10 columns wide × 10 rows tall (100 tiles total), 2v2 team mode (red+blue vs green+yellow). Big enough to fit **all** the user's requested building types.
 
 ```
 . = plain    R = road (cost 0.5)    F = forest (cost 2)
 b = barracks    v = village        $ = vault (gold income)
 H = HQ (only the center tile, no walls/gates)
 
-        x:0   1   2   3   4   5
-y:0    [H]   .   .   .   .  [H]   ← red ───┐  ┌─── green
-y:1     .   R   R   R   R   .            team: red+blue | green+yellow
-y:2     v   b   F   b   v   .            blue──┘  └────yellow
-y:3     .   R   R   R   R   .
-y:4     v   b   $   b   v   .   ← 中间一横：village + barracks + vault + barracks + village
-y:5     .   R   R   R   R   .
-y:6    [H]   .   .   .   .  [H]
+            x:0   1   2   3   4   5   6   7   8   9
+y:0        [H]   .   R   R   R   R   R   R   .  [H]   ← red ───┐  ┌─── green
+y:1         .   .   R   .   .   .   .   R   .   .            team: red+blue | green+yellow
+y:2         v   R   R   .   .   .   .   R   R   v            blue──┘  └────yellow
+y:3         $   R   b   .   F   F   .   b   R   $
+y:4         .   R   R   .   .   .   .   R   R   .
+y:5         .   .   R   .   b   b   .   R   .   .
+y:6         .   R   R   .   .   .   .   R   R   .
+y:7         $   R   b   .   F   F   .   b   R   $
+y:8         v   R   R   .   .   .   .   R   R   v
+y:9        [H]   .   R   R   R   R   R   R   .  [H]
 ```
 
-(注意：上面 v / b / F / $ 是建筑位，本身不算 unit。实际 playable 区域是 . R H 三种 terrain)
+**Building inventory** (matches user's "建筑齐全" + 4-vault exception):
+- **4 HQ**: (0,0), (9,0), (0,9), (9,9) — corners
+- **4 village**: (0,2), (9,2), (0,8), (9,8) — edges
+- **4 vault**: (0,3), (9,3), (0,7), (9,7) — edges (gold income test)
+- **4 barracks**: (2,3), (7,3), (2,7), (7,7) — recruit
+- **4 forest**: (4,3), (5,3), (4,7), (5,7) — defense / 2-MP cost
+- **2 inner barracks**: (4,5), (5,5) — extra recruit in the dead center
 
 **Coverage matrix:**
 | System | How it's exercised |
 |---|---|
-| Movement | Road network R connecting every HQ to every central building |
-| Attack | HQs are 6 tiles apart diagonally — sword/archer/knight all reach |
-| Claim village | 4 v at (0,2), (5,2), (0,4), (5,4) — edges contested |
-| Claim vault | 4 $ at... wait, this layout only has 1 $. **Tradeoff accepted.** |
-| Recruit | 2 b at (1,2) and (3,2) (top row) + (1,4) and (3,4) (bottom row) — 4 total |
-| Forest defense | F at (2,2) — single tile 2-MP cost test |
+| Movement | Road network R forms a full loop connecting every HQ |
+| Attack | HQs are 9 tiles apart — sword/archer/knight/healer all reach |
+| Claim village | 4 v at (0,2), (9,2), (0,8), (9,8) |
+| Claim vault | 4 $ at (0,3), (9,3), (0,7), (9,7) — gold income test |
+| Recruit | 6 b total: (2,3), (7,3), (2,7), (7,7) + (4,5), (5,5) center |
+| Forest defense | 4 F tiles at (4,3), (5,3), (4,7), (5,7) — 2-MP cost test |
 | HQ seize | 4 HQs in corners — walking onto enemy HQ wins |
 | 2v2 team | Pair (red,blue) vs (green,yellow) — friendly fire off |
 | Full roster | Each player has 2 swordsman + 1 archer + 1 knight + 1 healer |
 | Path cost | R + plain + F all in one map → cost comparison visible |
 
 **20 initial units total**, `recommended_players=4`, `team_mode=2v2`.
-
-**Tradeoff note:** at 6×7 the **4 vault** requirement (user-requested exception) is reduced to **1 vault** at the map center. We added 2 extra barracks to make recruitment more interesting. If the user requires all 4 vaults, the map must grow to 8×8 minimum.
-
-**Healer-on-village quirk:** red's healer starts at (0,2) which is a `v` tile. The healer is not yet "claiming" the village — claim only happens when a unit moves onto an empty building tile as a deliberate `claim` action. Starting on top of a building does not auto-claim. The village is unowned at turn 1 and stays unowned until someone does a `claim` action on it.
 
 ## Migration Plan
 
@@ -328,7 +336,7 @@ y:6    [H]   .   .   .   .  [H]
 
 ### Step 2 — Test Map First
 
-7. Author `test_arena_6x7_2v2.json` with full `initial_units`
+7. Author `test_arena_10x10_2v2.json` with full `initial_units`
 8. Add 12 unit tests in `test_data_driven_initial_units.py`
 9. Run `pytest -q` against just this map — must pass clean
 
@@ -370,7 +378,7 @@ y:6    [H]   .   .   .   .  [H]
 - `game/app/migrations/versions/2026_07_07_drop_unit_composition.py` (new)
 
 ### Map data
-- `game/maps/test_arena_6x7_2v2.json` (new)
+- `game/maps/test_arena_10x10_2v2.json` (new)
 - `game/maps/grass_outer_15_2p.json` + 39 others (each gains `initial_units`)
 - `game/maps/custom/mytestbattle_c8d5aa.json` (no change — already has field)
 - `game/mainlines/chapter_01_steel_rebellion.json` (replace per-battle compositions)
@@ -421,22 +429,22 @@ uvicorn app.main:app --reload --port 8000
 
 # 1. Verify presets endpoint no longer mentions unit_compositions
 curl -s http://localhost:8000/games/presets | jq '.unit_compositions'   # → null
-curl -s http://localhost:8000/games/presets | jq '.maps[] | select(.id=="test_arena_6x7_2v2") | .initial_units | length'  # → 20
+curl -s http://localhost:8000/games/presets | jq '.maps[] | select(.id=="test_arena_10x10_2v2") | .initial_units | length'  # → 20
 
 # 2. Verify create-game with old field silently ignored
 curl -X POST http://localhost:8000/games -H 'Content-Type: application/json' \
-  -d '{"name":"smoke","map_preset":"test_arena_6x7_2v2","unit_composition":"classic","max_players":4}'
+  -d '{"name":"smoke","map_preset":"test_arena_10x10_2v2","unit_composition":"classic","max_players":4}'
 # → 201 Created, 4 players + 20 units in DB
 
 # 3. Run 4-AI battle demo
-python tools/ai_battle_demo.py --map test_arena_6x7_2v2 --players 4 --max-turns 30
+python tools/ai_battle_demo.py --map test_arena_10x10_2v2 --players 4 --max-turns 30
 # → exits cleanly, all 4 AIs make moves, game ends with a winner
 ```
 
 ### Playwright e2e
 
 1. Open `http://localhost:8000`
-2. Click **Create Game** → select `test_arena_6x7_2v2`
+2. Click **Create Game** → select `test_arena_10x10_2v2`
 3. Add 4 players (4 "Add AI" clicks) → all 4 AIs auto-pick personalities
 4. Start game → verify 20 units appear at the 20 specified positions
 5. Run 5 turns → verify all 4 systems (move/attack/claim/recruit) are exercised at least once
