@@ -1128,9 +1128,31 @@ def generate_map_preset(
     # P1.4 — route through the rich layered generator (clusters, rivers,
     # roads, buildings).  Flip to False to restore the legacy simple
     # random-fill behaviour for debugging.
+    # P2.6 — even for procedurally generated "classic" maps, drop a
+    # default roster of units at each castle so players aren't empty.
+    fallback_units: List[Dict[str, Any]] = []
+    if preset_id == "classic":
+        castles = _CASTLE_LAYOUTS.get(num_castles, _CASTLE_LAYOUTS[2])
+        colors = ["red", "blue", "green", "yellow"]
+        offsets = [(0, 1), (1, 0), (1, 1), (2, 0), (0, 2)]
+        # classic roster: 2 sword / 1 arch / 1 knight / 1 heal
+        roster = [("swordsman", 2), ("archer", 1), ("knight", 1), ("healer", 1)]
+        for seat, (cx, cy) in enumerate(castles[:num_castles]):
+            color = colors[seat] if seat < len(colors) else colors[-1]
+            idx = 0
+            for unit_type, count in roster:
+                for _ in range(count):
+                    dx, dy = offsets[idx % len(offsets)]
+                    fallback_units.append({
+                        "x": cx + dx, "y": cy + dy,
+                        "type": unit_type,
+                        "color": color,
+                        "level": 1,
+                    })
+                    idx += 1
     return MapPresetResult(
         tiles=generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True),
-        initial_units=[],
+        initial_units=fallback_units,
     )
 
 
