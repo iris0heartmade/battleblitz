@@ -1265,6 +1265,7 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
         "b": TERRAIN_BARRACKS,
         "r": TERRAIN_ROAD,
         "g": TERRAIN_GATE,
+        "$": CASTLE_VAULT,         # P2.6 economy test: 4 vaults in showcase
     }
     # Castle sub-feature chars (uppercase + lowercase variant).
     # Multi-char codes use the `:` prefix in JSON.
