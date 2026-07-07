@@ -1045,11 +1045,39 @@ def _load_map_presets() -> Dict[str, Dict]:
             "biome": "grass",
             "size": MAP_SIZE,
             "layout": [],
+            "initial_units": [{"x": 0, "y": 0, "type": "swordsman", "color": "red", "level": 1}],
         },
     }
     if _MAPS_DIR.is_dir():
         for path in sorted(_MAPS_DIR.glob("*.json")):
             data = _json.loads(path.read_text(encoding="utf-8"))
+            # P2.6 — validate initial_units is present and well-formed.
+            # The 41 built-in maps will be migrated by the Task 10
+            # migration script, so any map missing this field is
+            # treated as a hard startup error.
+            initial_units = data.get("initial_units")
+            if not initial_units:
+                raise ValueError(
+                    f"Map preset {data.get('id')!r} missing required 'initial_units'"
+                )
+            size = _resolve_size(data["size"])
+            seen_positions = set()
+            for u in initial_units:
+                for k in ("x", "y", "type", "color"):
+                    if k not in u:
+                        raise ValueError(
+                            f"Map {data.get('id')!r}: initial_unit missing field {k!r}: {u}"
+                        )
+                x, y = int(u["x"]), int(u["y"])
+                if not (0 <= x < size["width"] and 0 <= y < size["height"]):
+                    raise ValueError(
+                        f"Map {data.get('id')!r}: initial_unit ({x},{y}) out of bounds"
+                    )
+                if (x, y) in seen_positions:
+                    raise ValueError(
+                        f"Map {data.get('id')!r}: duplicate initial_unit at ({x},{y})"
+                    )
+                seen_positions.add((x, y))
             layout = data.get("layout", [])
             if layout:
                 expected = int(data.get("size", MAP_SIZE))
