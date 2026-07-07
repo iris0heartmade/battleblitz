@@ -339,7 +339,6 @@ async function createGame() {
   const name = document.getElementById("new-name").value.trim() || `房间-${Date.now()}`;
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
-  const unitComp = document.getElementById("new-unit-composition").value;
   // P2.4 polish — win condition is now universal (rout+seize). The
   // hidden #new-win-condition input still emits "rout" so the API
   // contract is preserved; reach/defend blocks are ignored.
@@ -353,7 +352,6 @@ async function createGame() {
     const body = { name, win_condition: winCondition };
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
-    if (unitComp) body.unit_composition = unitComp;
     // reach / defend blocks are kept in the DOM for legacy data but
     // are no longer wired into new game creation. The engine still
     // honors the values on legacy rows.
@@ -414,7 +412,6 @@ async function fetchUnitClasses() {
 async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
-  const unitsSel = document.getElementById("new-unit-composition");
   const countSel = document.getElementById("new-player-count");
   // Bug fix: the create-game view is shown repeatedly as the user
   // enters and leaves the lobby. Each time we'd appendChild new
@@ -442,15 +439,8 @@ async function populatePresetSelects() {
     opt.dataset.notes = m.notes || "";
     mapSel.appendChild(opt);
   }
-  for (const u of presets.unit_compositions) {
-    const opt = document.createElement("option");
-    opt.value = u.id;
-    opt.textContent = `${u.name} — ${u.description}`;
-    opt.dataset.desc = u.description;
-    unitsSel.appendChild(opt);
-  }
+  // P2.6 — unit_composition dropdown removed; units come from map's initial_units
   updatePresetDescription(mapSel, document.getElementById("new-map-desc"));
-  updatePresetDescription(unitsSel, document.getElementById("new-units-desc"));
   updatePresetNotes(mapSel);
 }
 
@@ -4324,9 +4314,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("new-map-preset").addEventListener("change", (e) => {
     updatePresetDescription(e.target, document.getElementById("new-map-desc"));
     updatePresetNotes(e.target);
-  });
-  document.getElementById("new-unit-composition").addEventListener("change", (e) => {
-    updatePresetDescription(e.target, document.getElementById("new-units-desc"));
   });
 
   // Ref-panel tab switching
