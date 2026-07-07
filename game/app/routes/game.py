@@ -34,11 +34,13 @@ from app.config import (
 )
 from app.database import get_session
 from app.game_logic import (
+    MapPresetResult,
+    build_ai_player,
     castle_positions,
     generate_map_preset,
-    get_roster_for_composition,
-    build_ai_player,
+    _unit_name,
 )
+from app.classes.units import get_or_none as _get_unit_or_none
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AddAIRequest,
@@ -120,8 +122,6 @@ async def _start_battle_internal(
     *,
     map_preset: Optional[str] = None,
     map_seed: Optional[int] = None,
-    roster: Optional[Dict[str, int]] = None,
-    rosters_by_seat: Optional[Dict[int, Dict[str, int]]] = None,
 ) -> None:
     """Generate tiles, spawn units, mark castles + tile occupancy.
 
@@ -135,34 +135,32 @@ async def _start_battle_internal(
         players: Already-persisted ``Player`` rows belonging to ``game``.
         map_preset: Override the game's preset (otherwise game.map_preset).
         map_seed: Override the game's seed (otherwise game.map_seed).
-        roster: Caller-supplied unit roster; if ``None``, derives from
-            ``game.unit_composition`` via ``get_roster_for_composition``.
-            Applied to EVERY player when ``rosters_by_seat`` is None.
-        rosters_by_seat: Optional per-seat roster override map, e.g.
-            ``{0: {"swordsman": 3, "archer": 1}, 1: {"knight": 4}}``.
-            When provided, takes precedence over ``roster``.
     """
     game_id = game.id
 
     preset_id = map_preset or getattr(game, "map_preset", None) or "classic"
     seed = map_seed if map_seed is not None else game.map_seed
 
-    # Custom maps (from /editor/maps) are referenced as "custom:<id>" in the
-    # preset field. Load their layout + initial_units directly instead of
-    # running the procedural generator.
-    custom_layout: Optional[List[str]] = None
-    custom_units: Optional[List[Dict[str, Any]]] = None
+    # P2.4 — spectators don't occupy a castle and don't get units.
+    # Their seats are above MAX_PLAYERS so castle_positions(seat) is
+    # never even asked for them; skip the loop entirely so the
+    # spectator's `seat` doesn't accidentally fall into castle_xy.
+    real_players = [p for p in players if not p.is_spectator]
+
+    # P2.6 — Data-driven map: tiles + initial_units come from the map
+    # definition itself. Custom maps (from /editor/maps) are referenced
+    # as "custom:<id>" and bypass the procedural generator but still
+    # follow the same `initial_units` schema.
     custom_map_biome: Optional[str] = None
+    result: MapPresetResult
     if preset_id.startswith("custom:"):
         from app.routes.editor import _read_map
         custom_id = preset_id[len("custom:"):]
         data = _read_map(custom_id)
         custom_layout = data["layout"]
-        custom_units = data.get("initial_units", [])
         # Use custom map's biome if game doesn't have one explicitly set
         custom_map_biome = data.get("biome", "grass")
         # Tile grid is sized by the custom map; bypass procedural generator
-        from app.config import TERRAIN_PLAIN as _T_PLAIN
         grid: List[List[Tile]] = []
         for y, row in enumerate(custom_layout):
             grid_row: List[Tile] = []
@@ -173,110 +171,64 @@ async def _start_battle_internal(
                     terrain=_char_to_terrain(ch),
                 ))
             grid.append(grid_row)
+        result = MapPresetResult(
+            tiles=grid,
+            initial_units=list(data.get("initial_units", [])),
+        )
     else:
-        grid = generate_map_preset(
+        result = generate_map_preset(
             preset_id=preset_id,
             seed=seed,
-            num_castles=max(2, min(MAX_CASTLES, len(players))),
-        ).tiles
+            num_castles=max(2, min(MAX_CASTLES, len(real_players))),
+        )
 
     # If game.map_biome wasn't set but custom map has one, sync it
     if custom_map_biome and not getattr(game, "map_biome", None):
         game.map_biome = custom_map_biome
 
-    tiles: List[Tile] = [t for row in grid for t in row]
+    map_size = len(result.tiles)
+    tiles: List[Tile] = [t for row in result.tiles for t in row]
     for t in tiles:
         t.game_id = game_id
     session.add_all(tiles)
 
-    # P2.4 — spectators don't occupy a castle and don't get units.
-    # Their seats are above MAX_PLAYERS so castle_positions(seat) is
-    # never even asked for them; skip the loop entirely so the
-    # spectator's `seat` doesn't accidentally fall into castle_xy.
-    real_players = [p for p in players if not p.is_spectator]
-    map_size = len(grid)
     castle_xy = castle_positions(len(real_players), map_size)
-    default_roster = get_roster_for_composition(
-        getattr(game, "unit_composition", None)
-    )
-    units: List[Unit] = []
-    for player in real_players:
-        per_player_roster: Dict[str, int]
-        if rosters_by_seat is not None and player.seat in rosters_by_seat:
-            per_player_roster = rosters_by_seat[player.seat]
-        elif roster is not None:
-            per_player_roster = roster
-        else:
-            per_player_roster = default_roster
-        # Compute castle position for this seat
-        seat_xy = castle_xy.get(player.seat)
-        if seat_xy is None:
-            continue
-        # Reuse the original helper but per-player; create_initial_units_with_roster
-        # applies the SAME roster to every player, so we call it once per
-        # player with the right roster by fabricating a tiny single-player
-        # pseudo-game (cheaper than duplicating the helper).
-        # IMPORTANT: unit_index must be GLOBAL per player, not per-unit-type,
-        # otherwise different unit types get the same spawn offset and overlap.
-        unit_index = 0
-        for unit_type, count in per_player_roster.items():
-            from app.game_logic import _spawn_xy_for_castle, _unit_name
-            from app.classes.units import get_or_none as _get_unit_or_none
 
-            uc = _get_unit_or_none(unit_type)
-            if uc is None:
-                continue
-            for _ in range(int(count)):
-                x, y = _spawn_xy_for_castle(seat_xy, unit_index, map_size)
-                units.append(Unit(
-                    player_id=player.id,
-                    unit_type=unit_type,
-                    name=_unit_name(unit_type, unit_index),
-                    level=1, exp=0,
-                    hp=uc.base_hp, max_hp=uc.base_hp,
-                    atk=uc.base_atk, def_=uc.base_def,
-                    matk=uc.base_matk, mdef=uc.base_mdef,
-                    mov=uc.mp_pool, mp=uc.mp_pool,
-                    morale=0, x=x, y=y,
-                    has_acted=False, has_moved=False,
-                    skills=list(uc.default_skills),
-                ))
-                unit_index += 1
+    # P2.6 — Data-driven spawn: units come from map's initial_units, NOT from a roster.
+    # Each entry has {x, y, type, color, level} and is matched to a player by color.
+    color_to_player = {p.color: p for p in real_players if p.color}
+    units: List[Unit] = []
+    existing_count_by_player: Dict[int, int] = {}
+    for u in result.initial_units:
+        unit_type = u["type"]
+        uc = _get_unit_or_none(unit_type)
+        if uc is None:
+            continue
+        target_player = color_to_player.get(u["color"])
+        if target_player is None:
+            # No matching player for this color — skip
+            continue
+        pid = target_player.id
+        name_idx = existing_count_by_player.get(pid, 0)
+        existing_count_by_player[pid] = name_idx + 1
+        units.append(Unit(
+            player_id=pid,
+            unit_type=unit_type,
+            name=_unit_name(unit_type, name_idx),
+            level=int(u.get("level", 1)),
+            exp=0,
+            hp=uc.base_hp, max_hp=uc.base_hp,
+            atk=uc.base_atk, def_=uc.base_def,
+            matk=uc.base_matk, mdef=uc.base_mdef,
+            mov=uc.mp_pool, mp=uc.mp_pool,
+            morale=0,
+            x=int(u["x"]), y=int(u["y"]),
+            has_acted=False, has_moved=False,
+            skills=list(uc.default_skills),
+        ))
     if units:
         session.add_all(units)
     await session.flush()
-
-    # Spawn units from custom map's initial_units (editor's design-time placement).
-    # Each unit is matched to a player by its `color` field.
-    if custom_units:
-        from app.classes.units import get_or_none as _get_unit_or_none
-        color_to_player = {p.color: p for p in players if p.color}
-        for cu in custom_units:
-            uc = _get_unit_or_none(cu["type"])
-            if uc is None:
-                continue
-            target_player = color_to_player.get(cu["color"])
-            if target_player is None:
-                continue
-            # Per-player unit index for naming
-            existing_count = sum(1 for u in units if u.player_id == target_player.id)
-            units.append(Unit(
-                player_id=target_player.id,
-                unit_type=cu["type"],
-                name=_unit_name(cu["type"], existing_count),
-                level=int(cu.get("level", 1)),
-                exp=0,
-                hp=uc.base_hp, max_hp=uc.base_hp,
-                atk=uc.base_atk, def_=uc.base_def,
-                matk=uc.base_matk, mdef=uc.base_mdef,
-                mov=uc.mp_pool, mp=uc.mp_pool,
-                morale=0, x=int(cu["x"]), y=int(cu["y"]),
-                has_acted=False, has_moved=False,
-                skills=list(uc.default_skills),
-            ))
-        if units:
-            session.add_all(units)
-        await session.flush()
 
     seat_to_player = {p.seat: p for p in players}
     for seat, (cx, cy) in castle_xy.items():
