@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 import random
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -974,6 +974,7 @@ __all__ = [
     "EndTurnResult",
     "LevelUpResult",
     "MAP_PRESETS",
+    "MapPresetResult",
     "apply_damage",
     "apply_end_of_turn",
     "attack_with_double_strike",
@@ -1097,15 +1098,39 @@ def _load_map_presets() -> Dict[str, Dict]:
 MAP_PRESETS: Dict[str, Dict] = _load_map_presets()
 
 
-def generate_map_preset(preset_id: str, seed: int, num_castles: int = MAX_CASTLES) -> List[List[Tile]]:
-    """Build a Tile grid from a named preset (or fall back to procedural)."""
+@dataclass
+class MapPresetResult:
+    """Result of building a map preset: terrain grid + initial unit placements.
+
+    Returned by ``generate_map_preset()`` so callers can both lay down the
+    tile grid AND seed the configured starting units without re-reading the
+    preset JSON.
+    """
+
+    tiles: List[List[Tile]]
+    initial_units: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def generate_map_preset(
+    preset_id: str,
+    seed: int,
+    num_castles: int = MAX_CASTLES,
+) -> MapPresetResult:
+    """Build a Tile grid + initial units from a named preset (or fall back
+    to procedural map generation with empty initial_units)."""
     if preset_id and preset_id in MAP_PRESETS and MAP_PRESETS[preset_id].get("layout"):
-        layout = MAP_PRESETS[preset_id]["layout"]
-        return _layout_to_tiles(layout)
+        data = MAP_PRESETS[preset_id]
+        return MapPresetResult(
+            tiles=_layout_to_tiles(data["layout"]),
+            initial_units=list(data.get("initial_units", [])),
+        )
     # P1.4 — route through the rich layered generator (clusters, rivers,
     # roads, buildings).  Flip to False to restore the legacy simple
     # random-fill behaviour for debugging.
-    return generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True)
+    return MapPresetResult(
+        tiles=generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True),
+        initial_units=[],
+    )
 
 
 def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:

@@ -131,7 +131,7 @@ async def playing_game(db_session):
     await db_session.flush()
 
     # Map + tiles
-    grid = generate_map_preset(preset_id="classic", seed=123, num_castles=2)
+    grid = generate_map_preset(preset_id="classic", seed=123, num_castles=2).tiles
     for row in grid:
         for t in row:
             t.game_id = game.id
