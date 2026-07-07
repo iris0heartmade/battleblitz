@@ -15,7 +15,6 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.classes.units import (
-    default_roster,
     get as _get_unit,
     get_or_none as _get_unit_or_none,
     type_advantage as _type_adv,
@@ -278,15 +277,6 @@ def _unit_name(unit_type: str, index: int) -> str:
     base = _get_unit(unit_type)
     suffix = _UNIT_NAME_SUFFIX[index] if index < len(_UNIT_NAME_SUFFIX) else f"#{index + 1}"
     return f"{base.display_en}-{suffix}"
-
-
-def _spawn_xy_for_castle(castle_xy: Tuple[int, int], unit_index: int, size: int = MAP_SIZE) -> Tuple[int, int]:
-    cx, cy = castle_xy
-    offsets = [(0, 1), (1, 0), (1, 1), (2, 0), (0, 2)]
-    dx, dy = offsets[unit_index % len(offsets)]
-    x = max(0, min(size - 1, cx + dx))
-    y = max(0, min(size - 1, cy + dy))
-    return x, y
 
 
 # ============================================================
@@ -1280,62 +1270,6 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
             i += 1
         grid.append(out_row)
     return grid
-
-
-# ============================================================
-# Unit-composition presets
-# ============================================================
-
-# ── Delegated to app.classes.units ──
-from app.classes.units import list_compositions as _list_compositions
-from app.classes.units import get_roster_for_composition as _unit_get_roster
-
-def get_roster_for_composition(composition_id: Optional[str]) -> Dict[str, int]:
-    return _unit_get_roster(composition_id)
-
-
-def create_initial_units_with_roster(
-    game: Game,
-    players: Sequence[Player],
-    castle_positions_map: Dict[int, Tuple[int, int]],
-    roster: Dict[str, int],
-) -> List[Unit]:
-    """Like create_initial_units but with a caller-supplied roster."""
-    units: List[Unit] = []
-    for player in players:
-        castle_xy = castle_positions_map[player.seat]
-        unit_index = 0
-        for unit_type, count in roster.items():
-            uc = _get_unit_or_none(unit_type)
-            if uc is None:
-                continue
-            for _ in range(count):
-                x, y = _spawn_xy_for_castle(castle_xy, unit_index)
-                units.append(
-                    Unit(
-                        player_id=player.id,
-                        unit_type=unit_type,
-                        name=_unit_name(unit_type, unit_index),
-                        level=1,
-                        exp=0,
-                        hp=uc.base_hp,
-                        max_hp=uc.base_hp,
-                        atk=uc.base_atk,
-                        def_=uc.base_def,
-                        matk=uc.base_matk,
-                        mdef=uc.base_mdef,
-                        mov=uc.mp_pool,
-                        mp=uc.mp_pool,
-                        morale=0,
-                        x=x,
-                        y=y,
-                        has_acted=False,
-                        has_moved=False,
-                        skills=list(uc.default_skills),
-                    )
-                )
-                unit_index += 1
-    return units
 
 
 # ============================================================

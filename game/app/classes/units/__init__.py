@@ -2,7 +2,7 @@
 Unit class registry — the SINGLE source of truth for all unit types.
 
 Usage:
-    from app.classes.units import get, list_all, default_roster, type_advantage
+    from app.classes.units import get, list_all, type_advantage
 
     knight = get("knight")
     knight.base_atk          # 22
@@ -96,53 +96,7 @@ def type_ids() -> List[str]:
     return list(_profiles.keys())
 
 
-def default_roster() -> Dict[str, int]:
-    """The classic balanced 5-unit roster (2 sword / 1 arch / 1 knight / 1 heal)."""
-    return {"swordsman": 2, "archer": 1, "knight": 1, "healer": 1}
-
-
 def type_advantage(attacker_type: str, defender_type: str) -> float:
     """Multiplier when `attacker_type` attacks `defender_type` (1.0 = neutral)."""
     _discover()
     return _advantage_table.get((attacker_type, defender_type), 1.0)
-
-
-# ----------------------------------------------------------------
-# Unit-composition presets (move from config.py)
-# ----------------------------------------------------------------
-
-_COMPOSITIONS: Dict[str, Dict] = {
-    "classic": {
-        "id": "classic", "name": "经典平衡",
-        "description": "2 剑士 / 1 弓 / 1 骑 / 1 治疗",
-        "roster": {"swordsman": 2, "archer": 1, "knight": 1, "healer": 1},
-    },
-    "aggressive": {
-        "id": "aggressive", "name": "进攻阵型",
-        "description": "1 剑士 / 1 弓 / 3 骑 / 0 治疗",
-        "roster": {"swordsman": 1, "archer": 1, "knight": 3, "healer": 0},
-    },
-    "defensive": {
-        "id": "defensive", "name": "防御阵型",
-        "description": "3 剑士 / 1 弓 / 0 骑 / 1 治疗",
-        "roster": {"swordsman": 3, "archer": 1, "knight": 0, "healer": 1},
-    },
-    "ranged": {
-        "id": "ranged", "name": "远程火力",
-        "description": "2 剑士 / 2 弓 / 1 骑 / 0 治疗",
-        "roster": {"swordsman": 2, "archer": 2, "knight": 1, "healer": 0},
-    },
-}
-
-
-def get_roster_for_composition(composition_id: Optional[str]) -> Dict[str, int]:
-    if composition_id and composition_id in _COMPOSITIONS:
-        return dict(_COMPOSITIONS[composition_id]["roster"])
-    return default_roster()
-
-
-def list_compositions() -> List[Dict]:
-    return [
-        {"id": p["id"], "name": p["name"], "description": p["description"]}
-        for p in _COMPOSITIONS.values()
-    ]
