@@ -1030,6 +1030,47 @@ def _resolve_size(size: Union[int, Dict[str, int]]) -> Dict[str, int]:
 _MAPS_DIR = _Path(__file__).resolve().parent.parent / "maps"
 
 
+# Classic-roster helper used both for the static "classic" entry in
+# MAP_PRESETS (so the BattleSpec model_validator sees all 4 colors
+# present in initial_units) and for the procedural fallback in
+# `generate_map_preset`. Keeping the two paths in sync means the
+# schema-level color check and the runtime spawn agree on what
+# `classic` actually means.
+_CLASSIC_ROSTER: list[tuple[str, int]] = [
+    ("swordsman", 2), ("archer", 1), ("knight", 1), ("healer", 1),
+]
+_CLASSIC_COLORS: tuple[str, ...] = ("red", "blue", "green", "yellow")
+_CLASSIC_OFFSETS: tuple[tuple[int, int], ...] = (
+    (0, 1), (1, 0), (1, 1), (2, 0), (0, 2),
+)
+
+
+def _classic_initial_units(num_castles: int = 2) -> List[Dict[str, Any]]:
+    """Generate the static 'classic' roster as a flat initial_units list.
+
+    Used both as the static entry in ``MAP_PRESETS`` (so schema
+    validation sees a full set of colors) and as the runtime fallback
+    inside ``generate_map_preset`` (so the actual spawn is identical).
+    """
+    castles = _CASTLE_LAYOUTS.get(num_castles, _CASTLE_LAYOUTS[2])
+    units: List[Dict[str, Any]] = []
+    for seat, (cx, cy) in enumerate(castles[:num_castles]):
+        color = (_CLASSIC_COLORS[seat]
+                 if seat < len(_CLASSIC_COLORS) else _CLASSIC_COLORS[-1])
+        idx = 0
+        for unit_type, count in _CLASSIC_ROSTER:
+            for _ in range(count):
+                dx, dy = _CLASSIC_OFFSETS[idx % len(_CLASSIC_OFFSETS)]
+                units.append({
+                    "x": cx + dx, "y": cy + dy,
+                    "type": unit_type,
+                    "color": color,
+                    "level": 1,
+                })
+                idx += 1
+    return units
+
+
 def _load_map_presets() -> Dict[str, Dict]:
     """Load all map preset JSON files from game/maps/ at import time.
 
@@ -1038,7 +1079,11 @@ def _load_map_presets() -> Dict[str, Dict]:
     so presets can be 15×15 / 20×20 / 30×30 / 45×45 etc.
     """
     presets: Dict[str, Dict] = {
-        # "classic" is special: empty layout → falls back to procedural generation
+        # "classic" is special: empty layout → falls back to procedural
+        # generation. The static initial_units list mirrors the
+        # procedural roster (4 colors, 5 units each) so schema-level
+        # color checks see every color that's actually available at
+        # runtime — see `_classic_initial_units()`.
         "classic": {
             "id": "classic",
             "name": "经典随机",
@@ -1046,7 +1091,7 @@ def _load_map_presets() -> Dict[str, Dict]:
             "biome": "grass",
             "size": MAP_SIZE,
             "layout": [],
-            "initial_units": [{"x": 0, "y": 0, "type": "swordsman", "color": "red", "level": 1}],
+            "initial_units": _classic_initial_units(num_castles=2),
         },
     }
     if _MAPS_DIR.is_dir():
@@ -1130,26 +1175,11 @@ def generate_map_preset(
     # random-fill behaviour for debugging.
     # P2.6 — even for procedurally generated "classic" maps, drop a
     # default roster of units at each castle so players aren't empty.
+    # The same roster is also baked into MAP_PRESETS so schema-level
+    # color checks see every color that's actually spawned.
     fallback_units: List[Dict[str, Any]] = []
     if preset_id == "classic":
-        castles = _CASTLE_LAYOUTS.get(num_castles, _CASTLE_LAYOUTS[2])
-        colors = ["red", "blue", "green", "yellow"]
-        offsets = [(0, 1), (1, 0), (1, 1), (2, 0), (0, 2)]
-        # classic roster: 2 sword / 1 arch / 1 knight / 1 heal
-        roster = [("swordsman", 2), ("archer", 1), ("knight", 1), ("healer", 1)]
-        for seat, (cx, cy) in enumerate(castles[:num_castles]):
-            color = colors[seat] if seat < len(colors) else colors[-1]
-            idx = 0
-            for unit_type, count in roster:
-                for _ in range(count):
-                    dx, dy = offsets[idx % len(offsets)]
-                    fallback_units.append({
-                        "x": cx + dx, "y": cy + dy,
-                        "type": unit_type,
-                        "color": color,
-                        "level": 1,
-                    })
-                    idx += 1
+        fallback_units = _classic_initial_units(num_castles=num_castles)
     return MapPresetResult(
         tiles=generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True),
         initial_units=fallback_units,

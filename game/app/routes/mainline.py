@@ -38,7 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.game_logic import build_ai_player, castle_positions
+from app.game_logic import build_ai_player
 from app.mainline import (
     MainlineNotFound,
     MainlineValidationError,
@@ -232,8 +232,8 @@ async def _spawn_battle_for_index(
         )
     battle = ml.battles[battle_index]
     logger.debug(
-        "_spawn_battle_for_index: battle=%s map_preset=%s seed=%s",
-        battle.id, battle.map_preset, battle.map_seed,
+        "_spawn_battle_for_index: battle=%s map_id=%s seed=%s",
+        battle.id, battle.map_id, battle.map_seed,
     )
 
     # 1. Create the Game row.
@@ -243,7 +243,7 @@ async def _spawn_battle_for_index(
         turn_number=1,
         current_player_index=0,
         map_seed=battle.map_seed if battle.map_seed is not None else 0,
-        map_preset=battle.map_preset,
+        map_preset=battle.map_id,
         unit_composition=None,
     )
     session.add(game)
@@ -265,11 +265,14 @@ async def _spawn_battle_for_index(
 
     # 4. Spawn tiles + units via the shared helper. P2.6 — units are
     # driven by the map's initial_units JSON, not caller-supplied rosters.
+    # The colors listed in `battle.teams` are matched to player.color
+    # inside `_start_battle_internal`, so the map's initial_units for
+    # each color are automatically assigned to the right seat.
     await _start_battle_internal(
         session,
         game,
         [human, ai],
-        map_preset=battle.map_preset,
+        map_preset=battle.map_id,
         map_seed=battle.map_seed,
     )
 
@@ -284,9 +287,9 @@ async def _spawn_battle_for_index(
         )
     )
 
-    # Count units + tiles for a quantified spawn summary.
-    ally_units = sum(int(v) for v in (battle.ally_composition or {}).values())
-    enemy_units = sum(int(v) for v in (battle.enemy_composition or {}).values())
+    # Count tiles for a quantified spawn summary. P2.6 — unit counts
+    # are determined by the map's initial_units (not the battle spec),
+    # so the spawn summary just reports the team-color list per side.
     from sqlalchemy import func as _sa_func
     from app.models import Tile as _Tile
     tile_total = await session.scalar(
@@ -294,9 +297,9 @@ async def _spawn_battle_for_index(
     )
     logger.info(
         "battle spawned: mainline=%s battle=%s game=%d human=%d "
-        "ally_units=%d enemy_units=%d tiles=%d",
+        "teams=%s tiles=%d",
         mainline_id, battle.id, game.id, human.id,
-        ally_units, enemy_units, int(tile_total or 0),
+        dict(battle.teams), int(tile_total or 0),
     )
     return game, human, len(ml.battles)
 
@@ -404,7 +407,7 @@ async def get_mainline_detail(mainline_id: str) -> MainlineDetailOut:
                 id=b.id,
                 title=b.title,
                 win_condition=b.win_condition,
-                map_preset=b.map_preset,
+                map_id=b.map_id,
             )
             for b in ml.battles
         ],

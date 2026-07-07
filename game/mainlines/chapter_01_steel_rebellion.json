@@ -18,22 +18,20 @@
     {
       "id": "battle_01",
       "title": "山口伏击",
-      "map_preset": "mountain_pass",
+      "map_id": "mountain_pass",
       "map_seed": 42,
       "win_condition": "rout",
-      "ally_composition":    {"swordsman": 3, "archer": 1},
-      "enemy_composition":   {"knight": 4},
+      "teams": {"ally": ["blue"], "enemy": ["red"]},
       "pre_battle_dialogue": "intro",
       "post_battle_dialogue": "battle_01_after"
     },
     {
       "id": "battle_02",
       "title": "围城战",
-      "map_preset": "four_lakes",
+      "map_id": "four_lakes",
       "map_seed": 7,
       "win_condition": "seize",
-      "ally_composition":    {"swordsman": 3, "archer": 2},
-      "enemy_composition":   {"knight": 5, "archer": 3},
+      "teams": {"ally": ["blue"], "enemy": ["red"]},
       "pre_battle_dialogue": null,
       "post_battle_dialogue": "battle_02_after"
     }

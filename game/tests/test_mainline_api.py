@@ -171,17 +171,23 @@ class TestStartMainline:
             assert human.is_ai is False
             assert enemy.is_ai is True
 
-            # ally composition says {"swordsman":3, "archer":1} = 4 units
+            # P2.6 — unit counts come from the map's `initial_units`
+            # (mountain_pass has 5 red + 5 blue) and colors are
+            # routed by `teams` to the matching player. The human is
+            # color=blue and the AI is color=red, so each player gets
+            # 5 units.
             ally_units = (await s.execute(
                 select(Unit).where(Unit.player_id == human.id)
             )).scalars().all()
-            assert len(ally_units) == 4
-            # enemy composition says {"knight":4} = 4 units
+            assert len(ally_units) == 5
             enemy_units = (await s.execute(
                 select(Unit).where(Unit.player_id == enemy.id)
             )).scalars().all()
-            assert len(enemy_units) == 4
-            assert all(u.unit_type == "knight" for u in enemy_units)
+            assert len(enemy_units) == 5
+            # mountain_pass initial_units (red) is: 2 swordsman + 1
+            # archer + 1 knight + 1 healer
+            enemy_types = sorted(u.unit_type for u in enemy_units)
+            assert enemy_types == ["archer", "healer", "knight", "swordsman", "swordsman"]
 
     async def test_start_with_intro_returns_dialogue_url(self, ml_client):
         client, _ = ml_client

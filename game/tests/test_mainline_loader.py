@@ -74,10 +74,11 @@ class TestLoadSample:
         assert len(m.battles) == 2
         b1, b2 = m.battles
         assert b1.id == "battle_01"
-        assert b1.map_preset == "mountain_pass"
+        # P2.6 — map_preset was renamed to map_id; the map's
+        # initial_units drive spawn (composition fields removed).
+        assert b1.map_id == "mountain_pass"
         assert b1.win_condition == "rout"
-        assert b1.ally_composition == {"swordsman": 3, "archer": 1}
-        assert b1.enemy_composition == {"knight": 4}
+        assert b1.teams == {"ally": ["blue"], "enemy": ["red"]}
         assert b1.pre_battle_dialogue == "intro"
         assert b1.post_battle_dialogue == "battle_01_after"
         assert b2.pre_battle_dialogue is None
@@ -122,9 +123,8 @@ class TestCache:
             "battles": [{
                 "id": "b1",
                 "title": "B1",
-                "map_preset": "classic",
-                "ally_composition": {"swordsman": 1},
-                "enemy_composition": {"knight": 1},
+                "map_id": "classic",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
             }],
         }), encoding="utf-8")
         m = load_mainline("tmp_mainline")
@@ -139,9 +139,8 @@ class TestCache:
             "battles": [{
                 "id": "b1",
                 "title": "B1",
-                "map_preset": "classic",
-                "ally_composition": {"swordsman": 1},
-                "enemy_composition": {"knight": 1},
+                "map_id": "classic",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
             }],
         }), encoding="utf-8")
         cached = load_mainline("tmp_mainline")
@@ -171,9 +170,8 @@ class TestErrors:
             "battles": [{
                 "id": "b1",
                 "title": "B1",
-                "map_preset": "classic",
-                "ally_composition": {"swordsman": 1},
-                "enemy_composition": {"knight": 1},
+                "map_id": "classic",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
             }],
         }), encoding="utf-8")
         with pytest.raises(MainlineValidationError) as ei:
@@ -190,9 +188,8 @@ class TestErrors:
             "battles": [{
                 "id": "b1",
                 "title": "B1",
-                "map_preset": "classic",
-                "ally_composition": {"swordsman": 1},
-                "enemy_composition": {"knight": 1},
+                "map_id": "classic",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
                 "pre_battle_dialogue": "missing_key",  # not in dialogues
             }],
         }), encoding="utf-8")
@@ -206,14 +203,31 @@ class TestErrors:
             "required_classes": ["swordsman"],
             "starting_units": [{"class_id": "swordsman"}],
             "battles": [
-                {"id": "b1", "title": "B1", "map_preset": "classic",
-                 "ally_composition": {"swordsman": 1}, "enemy_composition": {"knight": 1}},
-                {"id": "b1", "title": "B1 dup", "map_preset": "classic",
-                 "ally_composition": {"swordsman": 1}, "enemy_composition": {"knight": 1}},
+                {"id": "b1", "title": "B1", "map_id": "classic",
+                 "teams": {"ally": ["blue"], "enemy": ["red"]}},
+                {"id": "b1", "title": "B1 dup", "map_id": "classic",
+                 "teams": {"ally": ["blue"], "enemy": ["red"]}},
             ],
         }), encoding="utf-8")
         with pytest.raises(MainlineValidationError):
             load_mainline("dup")
+
+    def test_unknown_team_color_raises_validation(self, tmp_mainlines):
+        """P2.6 — teams colors must be present in the map's initial_units."""
+        (tmp_mainlines / "bad_color.json").write_text(json.dumps({
+            "id": "bad_color",
+            "title": "Bad Color",
+            "required_classes": ["swordsman"],
+            "starting_units": [{"class_id": "swordsman"}],
+            "battles": [{
+                "id": "b1",
+                "title": "B1",
+                "map_id": "classic",
+                "teams": {"ally": ["purple"]},  # not in classic initial_units
+            }],
+        }), encoding="utf-8")
+        with pytest.raises(MainlineValidationError):
+            load_mainline("bad_color")
 
     def test_invalid_json_raises_mainline_error(self, tmp_mainlines):
         (tmp_mainlines / "broken.json").write_text("{not json", encoding="utf-8")
