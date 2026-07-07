@@ -8,5 +8,8 @@
   },
   "devDependencies": {
     "jsdom": "^24.0.0"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
   }
 }
