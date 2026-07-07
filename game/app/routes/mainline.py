@@ -188,9 +188,9 @@ async def _build_enemy_player(
 ) -> Player:
     """Build + persist one AI Player (units spawned later by helper).
 
-    The unit spawning itself is delegated to ``_start_battle_internal``
-    via the ``rosters_by_seat`` parameter so both players get their
-    respective rosters in a single, transactional pass.
+    The unit spawning itself is delegated to ``_start_battle_internal``,
+    which reads each map's ``initial_units`` field to seed both players
+    in a single, transactional pass.
     """
     ai = build_ai_player(
         game, seat=seat, color=color, name=f"主线敌人-{seat}"
@@ -263,17 +263,14 @@ async def _spawn_battle_for_index(
     # 3. Create the AI enemy (seat 1, red) — units spawn in step 4.
     ai = await _build_enemy_player(session, game, seat=1, color="red")
 
-    # 4. Spawn tiles + per-seat unit rosters via the shared helper.
+    # 4. Spawn tiles + units via the shared helper. P2.6 — units are
+    # driven by the map's initial_units JSON, not caller-supplied rosters.
     await _start_battle_internal(
         session,
         game,
         [human, ai],
         map_preset=battle.map_preset,
         map_seed=battle.map_seed,
-        rosters_by_seat={
-            0: dict(battle.ally_composition),
-            1: dict(battle.enemy_composition),
-        },
     )
 
     # 5. Audit log.
