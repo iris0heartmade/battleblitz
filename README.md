@@ -305,9 +305,9 @@ BattleBlitz/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET  | `/healthz` | 健康检查 |
-| POST | `/games` | 创建游戏 `{name, max_players, map_preset, map_biome, unit_composition}` |
+| POST | `/games` | 创建游戏 `{name, max_players, map_preset, map_biome}`（初始单位由地图 JSON 的 `initial_units` 决定） |
 | GET  | `/games` | 列出所有游戏 |
-| GET  | `/games/presets` | 列出地图和兵种组合预设 |
+| GET  | `/games/presets` | 列出地图预设 |
 | GET  | `/games/units` | 列出所有兵种元数据（含 attack_kind / matk / mdef）|
 | GET  | `/games/skills` | 列出所有技能 |
 | POST | `/games/{id}/join` | 加入游戏 `{user_name, color?}` |

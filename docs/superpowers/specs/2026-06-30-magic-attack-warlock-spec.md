@@ -203,7 +203,11 @@ Warlock (natural counter via stats).
 
 ### 4.4 Default roster
 
-Keep `default_roster()` unchanged for now (剑士 2 + 弓 1 + 骑 1 + 疗 1).
+> **⚠️ 已被 P2.6 取代（2026-07-07）：** `default_roster()` 及整套 `_COMPOSITIONS`
+> 兵种配置机制已被移除。初始单位现在完全由地图 JSON 的 `initial_units` 数组驱动，
+> 详见 `docs/superpowers/specs/2026-07-07-data-driven-initial-units.md`。下述历史描述仅供参考。
+
+历史设计:保持 `default_roster()` 不变(剑士 2 + 弓 1 + 骑 1 + 疗 1)。
 Players can still pick Warlock via `custom roster`. This is a
 deliberate YAGNI decision: don't add Warlock to the default until
 playtesting confirms balance.

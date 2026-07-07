@@ -239,7 +239,6 @@ class CreateGameRequest(BaseModel):
     max_players: int
     map_preset: Optional[str]
     map_biome: str
-    unit_composition: Optional[str]
     # P2.3:
     win_condition: str = "rout"  # rout | seize | reach | defend
     reach_tile: Optional[Dict] = None  # {x, y}
