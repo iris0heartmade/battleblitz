@@ -184,10 +184,16 @@ class TestStartMainline:
                 select(Unit).where(Unit.player_id == enemy.id)
             )).scalars().all()
             assert len(enemy_units) == 5
-            # balanced_2p_15 initial_units (red) is: 2 swordsman + 1
-            # archer + 1 knight + 1 healer
+            # balanced_2p_15 initial_units (red) is: 1 swordsman + 1
+            # warlock + 1 archer + 1 knight + 1 healer (P2.6+:
+            # one of the original two swordsmen was swapped for a
+            # warlock to mirror the player's roster and let
+            # chapter_01's yun (warlock hero) bind without a
+            # type-mismatch WARNING).
             enemy_types = sorted(u.unit_type for u in enemy_units)
-            assert enemy_types == ["archer", "healer", "knight", "swordsman", "swordsman"]
+            assert enemy_types == [
+                "archer", "healer", "knight", "swordsman", "warlock",
+            ]
 
     async def test_start_with_intro_returns_dialogue_url(self, ml_client):
         client, _ = ml_client

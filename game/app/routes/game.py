@@ -114,6 +114,191 @@ def _char_to_terrain(ch: str) -> str:
     """Map a single ASCII char (P/F/M/R/C) to its terrain string id."""
     return _CHAR_TO_TERRAIN.get(ch, TERRAIN_PLAIN)
 
+
+def _apply_hero_overrides(
+    units: List["Unit"],
+    hero_overrides: List[Dict],
+    real_players: List["Player"],
+) -> None:
+    """Bind hero templates to freshly-spawned units.
+
+    For every override entry the helper picks ONE unit out of ``units``
+    (matching by ``(color, x, y)`` first, then by color) and mutates it
+    in place: sets ``name``, ``hero_id``, and any stat overrides
+    declared on the hero's profile.  ``skills`` are NOT touched — they
+    continue to come from the base class (heroes inherit skills).
+
+    Args:
+        units: Units just appended to the session, in spawn order.
+        hero_overrides: Caller-supplied list of
+            ``{color, x?, y?, hero_id, name?}`` dicts.
+        real_players: Players that own those units (used to map
+            ``color`` to ``player_id`` for matching).  The helper
+            tolerates overrides that reference a color with no
+            player — they're logged and skipped.
+
+    The helper is intentionally side-effect-only: it mutates ``units``
+    in place and never raises.  A mistyped hero_id is logged at
+    WARNING level so spawns always succeed even if the designer
+    shipped a broken mainline JSON.
+    """
+    # Lazy import — heroes is a content package; pulling it at module
+    # import time would slow every test fixture that just exercises
+    # base-class unit logic.
+    from app.classes.heroes import get_or_none as _get_hero
+
+    color_to_pid = {p.color: p.id for p in real_players if p.color}
+    # Track which units have been claimed so color-only matches don't
+    # double-claim a unit that's already been picked by an exact-match
+    # override.
+    claimed_ids: set[int] = set()
+
+    for override in hero_overrides:
+        hero_id = override.get("hero_id")
+        if not hero_id:
+            logger.warning("hero override missing hero_id; entry=%r", override)
+            continue
+        target_color = override.get("color")
+        target_x = override.get("x")
+        target_y = override.get("y")
+        override_name = override.get("name")
+
+        if target_color not in color_to_pid:
+            logger.warning(
+                "hero override skipped: no player with color=%r "
+                "(hero_id=%r)",
+                target_color, hero_id,
+            )
+            continue
+
+        target_pid = color_to_pid[target_color]
+        hero = _get_hero(hero_id)
+        if hero is None:
+            logger.warning(
+                "hero override skipped: hero_id=%r not in registry",
+                hero_id,
+            )
+            continue
+
+        # 1) Exact (color, x, y) match.
+        candidate: Optional["Unit"] = None
+        if target_x is not None and target_y is not None:
+            for u in units:
+                if u.id in claimed_ids:
+                    continue
+                if u.player_id != target_pid:
+                    continue
+                if u.x == int(target_x) and u.y == int(target_y):
+                    candidate = u
+                    break
+
+        # 2) Fallback: first unclaimed unit of the right color in
+        #    spawn order.  This handles the common case where the
+        #    mainline only knows the color and lets the map's
+        #    initial_units decide the actual tile.
+        if candidate is None:
+            for u in units:
+                if u.id in claimed_ids:
+                    continue
+                if u.player_id != target_pid:
+                    continue
+                candidate = u
+                break
+
+        if candidate is None:
+            logger.warning(
+                "hero override could not find a unit: hero_id=%r "
+                "color=%r x=%s y=%s",
+                hero_id, target_color, target_x, target_y,
+            )
+            continue
+
+        # Apply the hero binding.
+        claimed_ids.add(candidate.id)
+        candidate.hero_id = hero_id
+        candidate.name = override_name or hero.display_cn
+
+        # ── Base-class reconciliation ──
+        # The candidate was spawned from the map's initial_units
+        # entry, which set ``unit_type`` and base stats from THAT
+        # base class.  When the hero's ``base_class_id`` differs
+        # (e.g. the map has only swordsmen but the chapter wants a
+        # warlock hero) we must RE-DERIVE the base stats from the
+        # hero's base class — otherwise stat fields the hero doesn't
+        # override (mdef / mp / matk) would silently keep the map's
+        # base-class values, producing a Frankenstein unit.  The
+        # same fix applies when a (x, y) match grabs a unit of a
+        # different class.
+        from app.classes.units import get_or_none as _get_unit_class
+        hero_base = _get_unit_class(hero.base_class_id)
+        if hero_base is None:
+            logger.warning(
+                "hero override skipped: hero %r declares unknown "
+                "base_class_id %r",
+                hero_id, hero.base_class_id,
+            )
+            continue
+        if candidate.unit_type != hero.base_class_id:
+            logger.warning(
+                "hero type mismatch: hero %r is %r but map placed a "
+                "%r at (%d, %d); re-deriving base stats from %r",
+                hero_id, hero.base_class_id,
+                candidate.unit_type, candidate.x, candidate.y,
+                hero.base_class_id,
+            )
+            candidate.unit_type = hero.base_class_id
+            candidate.hp = hero_base.base_hp
+            candidate.max_hp = hero_base.base_hp
+            candidate.atk = hero_base.base_atk
+            candidate.def_ = hero_base.base_def
+            candidate.matk = hero_base.base_matk
+            candidate.mdef = hero_base.base_mdef
+            candidate.mov = hero_base.base_mov
+            candidate.mp = hero_base.mp_pool
+            candidate.skills = list(hero_base.default_skills)
+
+        # Stat overrides — None means inherit from base class.  The
+        # base-class values were already written (either by the map
+        # at spawn time, or by the reconciliation above), so we only
+        # overwrite the fields the hero actually overrides.
+        if hero.hp_override is not None:
+            candidate.hp = hero.hp_override
+            candidate.max_hp = hero.hp_override
+        if hero.atk_override is not None:
+            candidate.atk = hero.atk_override
+        if hero.def_override is not None:
+            candidate.def_ = hero.def_override
+        if hero.matk_override is not None:
+            candidate.matk = hero.matk_override
+        if hero.mdef_override is not None:
+            candidate.mdef = hero.mdef_override
+        if hero.mov_override is not None:
+            candidate.mov = hero.mov_override
+        # mp_pool_override is applied independently of mov_override so
+        # designers can keep MP distinct from movement (e.g. a slow
+        # caster with deep MP).  When mp_pool_override is unset, MP
+        # already inherited from the base class.
+        if hero.mp_pool_override is not None:
+            candidate.mp = hero.mp_pool_override
+        # Skill union: base class default_skills + hero active + hero
+        # passive, deduped while preserving order.  Done AFTER the
+        # base-class reconciliation above (which may have rewritten
+        # candidate.skills to hero_base.default_skills), so we always
+        # start from the right base set.
+        merged_skills: List[str] = list(candidate.skills)
+        for sid in (*hero.active_skills, *hero.passive_skills):
+            if sid and sid not in merged_skills:
+                merged_skills.append(sid)
+        candidate.skills = merged_skills
+        logger.info(
+            "hero bound: unit_id=%d hero_id=%r class=%r name=%r "
+            "hp=%d atk=%d def=%d matk=%d mdef=%d mov=%d mp=%d",
+            candidate.id, hero_id, hero.base_class_id, candidate.name,
+            candidate.hp, candidate.atk, candidate.def_,
+            candidate.matk, candidate.mdef, candidate.mov, candidate.mp,
+        )
+
+
 async def _start_battle_internal(
     session: AsyncSession,
     game: Game,
@@ -121,6 +306,7 @@ async def _start_battle_internal(
     *,
     map_preset: Optional[str] = None,
     map_seed: Optional[int] = None,
+    hero_overrides: Optional[List[Dict]] = None,
 ) -> None:
     """Generate tiles, spawn units, mark castles + tile occupancy.
 
@@ -134,6 +320,15 @@ async def _start_battle_internal(
         players: Already-persisted ``Player`` rows belonging to ``game``.
         map_preset: Override the game's preset (otherwise game.map_preset).
         map_seed: Override the game's seed (otherwise game.map_seed).
+        hero_overrides: Optional list of hero binding descriptors. Each
+            entry is a dict shaped like
+            ``{"color": "blue", "x": 2, "y": 2, "hero_id": "yun", "name": "云"}``.
+            The helper matches each entry to a freshly-spawned unit and
+            applies the hero's name, stat overrides, and ``hero_id`` tag.
+            Matching priority is exact ``(color, x, y)`` first, then
+            color-only (first unclaimed unit of that color in map order).
+            Unmatched overrides log a warning and are skipped — the
+            spawn never crashes because a hero was mistyped.
     """
     game_id = game.id
 
@@ -255,6 +450,12 @@ async def _start_battle_internal(
     if units:
         session.add_all(units)
     await session.flush()
+
+    # P2.6+ — apply hero overrides on top of the freshly-spawned units.
+    # The base-class unit is already persisted; we just mutate its
+    # name / stats / hero_id tag so the hero "wears" the base class.
+    if hero_overrides:
+        _apply_hero_overrides(units, hero_overrides, real_players)
 
     seat_to_player = {p.seat: p for p in players}
     for seat, (cx, cy) in castle_xy.items():

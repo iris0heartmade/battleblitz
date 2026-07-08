@@ -206,6 +206,15 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE games DROP COLUMN unit_composition"
         ))
         logger.info("Migration: dropped games.unit_composition")
+    # 2026-07-08: hero system — Unit.hero_id links a spawned unit to
+    # a hero template in ``app.classes.heroes``. NULL for vanilla
+    # base-class units. VARCHAR(64) is generous (hero_ids are short
+    # kebab-case slugs in practice).
+    if "hero_id" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN hero_id VARCHAR(64)"
+        ))
+        logger.info("Migration: added units.hero_id")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

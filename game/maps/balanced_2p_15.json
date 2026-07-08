@@ -28,7 +28,7 @@
     {
       "x": 2,
       "y": 8,
-      "type": "swordsman",
+      "type": "warlock",
       "color": "red",
       "level": 1
     },
@@ -63,7 +63,7 @@
     {
       "x": 12,
       "y": 8,
-      "type": "swordsman",
+      "type": "warlock",
       "color": "blue",
       "level": 1
     },

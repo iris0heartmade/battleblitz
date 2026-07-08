@@ -222,6 +222,14 @@ class Unit(Base):
     # JSON array of skill strings, e.g. ["snipe", "heal"].
     skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
+    # Hero binding (P2.6+). When set, this unit was spawned from a
+    # hero template in ``app.classes.heroes`` rather than a generic
+    # base-class unit. The engine still uses ``unit_type`` (the base
+    # class) for combat — ``hero_id`` only drives the unit's name,
+    # art (sprite / portrait / crest), and any stat overrides the
+    # designer baked into the hero template. NULL for vanilla units.
+    hero_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     player: Mapped["Player"] = relationship("Player", back_populates="units")
 
     __table_args__ = (

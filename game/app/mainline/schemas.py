@@ -20,7 +20,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # Valid enums (kept in sync with classes/units/*.py type_id)
 # ============================================================
 
-VALID_CLASS_IDS: tuple[str, ...] = ("swordsman", "archer", "knight", "healer")
+VALID_CLASS_IDS: tuple[str, ...] = (
+    "swordsman", "archer", "knight", "warlock", "healer",
+)
 
 WinCondition = Literal["rout", "seize", "defend", "boss"]
 
@@ -44,10 +46,53 @@ class UnitSpec(APIModel):
     mainline engine can spawn the right unit subclass.
     `name` is an optional role nickname (e.g. "云"). If omitted the
     engine uses the class's default display name.
+
+    Hero binding (P2.6+):
+    * ``hero_id``  — references a hero in ``app.classes.heroes``.
+      When set, the spawn helper applies the hero's stat overrides
+      and art assets; ``class_id`` becomes the hero's
+      ``base_class_id`` (still required for combat framework
+      validation, even when the hero overrides every stat).
+    * ``color`` / ``x`` / ``y`` — explicit spawn placement. When
+      all three are present, the mainline engine matches this
+      unit to the map's ``initial_units`` entry with the same
+      ``color`` (or, if multiple match, the same ``(x, y)``) and
+      applies the hero binding on top. Without these the hero
+      spawns on the default base-class roster for its color.
     """
     class_id: str = Field(pattern=_class_id_pattern())
     level: int = Field(default=1, ge=1, le=99)
     name: Optional[str] = Field(default=None, max_length=32)
+    # Hero binding. Optional — when None, this is a vanilla base-class unit.
+    hero_id: Optional[str] = Field(default=None, max_length=64)
+    # Explicit spawn placement (used by the hero override path).
+    color: Optional[str] = Field(default=None, max_length=16)
+    x: Optional[int] = Field(default=None, ge=0, le=999)
+    y: Optional[int] = Field(default=None, ge=0, le=999)
+
+    @model_validator(mode="after")
+    def _check_hero_id(self) -> "UnitSpec":
+        """If ``hero_id`` is set, it must resolve to a registered hero,
+        and the hero's ``base_class_id`` must match this spec's
+        ``class_id`` (a swordsman hero cannot be declared as a knight
+        spec)."""
+        if self.hero_id is None:
+            return self
+        # Lazy import to avoid a circular import at module load time
+        # (game_logic imports from app.* in places).
+        from app.classes.heroes import get_or_none
+
+        profile = get_or_none(self.hero_id)
+        if profile is None:
+            raise ValueError(
+                f"hero_id {self.hero_id!r} not found in app.classes.heroes registry"
+            )
+        if profile.base_class_id != self.class_id:
+            raise ValueError(
+                f"hero_id {self.hero_id!r} is a {profile.base_class_id!r} "
+                f"hero but this spec declares class_id={self.class_id!r}"
+            )
+        return self
 
 
 class BattleSpec(APIModel):
