@@ -172,7 +172,7 @@ class TestStartMainline:
             assert enemy.is_ai is True
 
             # P2.6 — unit counts come from the map's `initial_units`
-            # (mountain_pass has 5 red + 5 blue) and colors are
+            # (balanced_2p_15 has 5 red + 5 blue) and colors are
             # routed by `teams` to the matching player. The human is
             # color=blue and the AI is color=red, so each player gets
             # 5 units.
@@ -184,7 +184,7 @@ class TestStartMainline:
                 select(Unit).where(Unit.player_id == enemy.id)
             )).scalars().all()
             assert len(enemy_units) == 5
-            # mountain_pass initial_units (red) is: 2 swordsman + 1
+            # balanced_2p_15 initial_units (red) is: 2 swordsman + 1
             # archer + 1 knight + 1 healer
             enemy_types = sorted(u.unit_type for u in enemy_units)
             assert enemy_types == ["archer", "healer", "knight", "swordsman", "swordsman"]

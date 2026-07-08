@@ -76,7 +76,7 @@ class TestLoadSample:
         assert b1.id == "battle_01"
         # P2.6 — map_preset was renamed to map_id; the map's
         # initial_units drive spawn (composition fields removed).
-        assert b1.map_id == "mountain_pass"
+        assert b1.map_id == "balanced_2p_15"
         assert b1.win_condition == "rout"
         assert b1.teams == {"ally": ["blue"], "enemy": ["red"]}
         assert b1.pre_battle_dialogue == "intro"

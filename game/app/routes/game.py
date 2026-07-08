@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -36,7 +36,6 @@ from app.database import get_session
 from app.game_logic import (
     MapPresetResult,
     build_ai_player,
-    castle_positions,
     generate_map_preset,
     _unit_name,
 )
@@ -192,7 +191,31 @@ async def _start_battle_internal(
         t.game_id = game_id
     session.add_all(tiles)
 
-    castle_xy = castle_positions(len(real_players), map_size)
+    # P2.6+ — derive castle ownership from the map's ACTUAL layout instead
+    # of using a hard-coded geometry (which silently mis-owned castles on
+    # every hand-authored map whose 'C' tiles didn't happen to land on
+    # the (2,2) / (12,12) / etc. corners).
+    #
+    # Algorithm: scan the loaded tiles for TERRAIN_CASTLE in row-major
+    # order (top-left → bottom-right) and pair the first N with the
+    # first N player seats.  The map author controls which cell is
+    # "seat 0's HQ" by placing it earliest in row-major order, which is
+    # the natural convention used by all hand-authored maps so far.
+    castle_xy: Dict[int, Tuple[int, int]] = {}
+    if len(real_players) > 0:
+        layout_castles = sorted(
+            ((t.x, t.y) for t in tiles if t.terrain == TERRAIN_CASTLE),
+            # row-major: by (y, x).  Equal y → leftmost first.
+            key=lambda xy: (xy[1], xy[0]),
+        )
+        for seat, pos in enumerate(layout_castles[: len(real_players)]):
+            castle_xy[seat] = pos
+        if len(layout_castles) < len(real_players):
+            logger.warning(
+                "Game %d: layout has %d castle tiles but %d players — "
+                "extra players will not own a castle",
+                game.id, len(layout_castles), len(real_players),
+            )
 
     # P2.6 — Data-driven spawn: units come from map's initial_units, NOT from a roster.
     # Each entry has {x, y, type, color, level} and is matched to a player by color.
@@ -221,7 +244,11 @@ async def _start_battle_internal(
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
             mov=uc.mp_pool, mp=uc.mp_pool,
-            morale=0,
+            # P2.6+ — new units start with 1 star of morale so the
+            # gold star UI is visible from turn 1 (instead of three
+            # empty stars that read as "no morale system").  Kills
+            # still bump it up to MORALE_MAX (3).
+            morale=1,
             x=int(u["x"]), y=int(u["y"]),
             has_acted=False, has_moved=False,
             skills=list(uc.default_skills),

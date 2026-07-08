@@ -1,105 +1,101 @@
 {
-  "id": "river_crossing",
-  "name": "河流分割",
-  "description": "对角线河流分割战场，需绕行或强渡",
-  "size": 15,
-  "chars": {
-    "P": "plain",
-    "F": "forest",
-    "M": "mountain",
-    "R": "river",
-    "C": "castle"
+  "id": "balanced_2p_15",
+  "name": "2 人标准图",
+  "description": "15×15，2 个 HQ 居中对阵。每玩家 5 兵 (1 Lv2 + 4 Lv1)。",
+  "biome": "grass",
+  "size": {
+    "width": 15,
+    "height": 15
   },
   "layout": [
+    "MMMMMMMMMMMMMMM",
+    "FFFFFFFFFFFFFFF",
+    "PPPPPFFFFFPPPPP",
     "PPPPPPPPPPPPPPP",
-    "PCRPPPPPPPPPPCP",
-    "PPRRPPPPPPPPPPP",
-    "PPPRRPPPPPPPPPP",
-    "PPPPRRPPPPPPPPP",
-    "PPPPFRRPPPFPPPP",
-    "PPPPPPRRPPPPPPP",
-    "PPPPPPPFRPPPPPP",
-    "PPPPPPPPRRPPPPP",
-    "PPPPPFPPPFRPPPP",
-    "PPPPPPPPPPRRPPP",
-    "PPPPPPPPPPPRRPP",
-    "PPPPPPPPPPPPRRP",
-    "PCPPPPPPPPPPPCP",
-    "PPPPPPPPPPPPPPP"
+    "PPvFFPPMPPFFvPP",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPHPbPPPPPbPHPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPMPPPPPPP",
+    "PPvFFPPMPPFFvPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPFFFFFPPPPP",
+    "FFFFFFFFFFFFFFF",
+    "MMMMMMMMMMMMMMM"
   ],
-  "recommended_players": 2,
-  "biome": "grass",
-  "notes": "2 人渡河会战，需绕行或强渡 [initial_units auto-generated]",
   "initial_units": [
     {
       "x": 2,
-      "y": 3,
+      "y": 8,
       "type": "swordsman",
       "color": "red",
       "level": 1
     },
     {
       "x": 3,
-      "y": 2,
+      "y": 7,
       "type": "swordsman",
       "color": "red",
       "level": 1
     },
     {
       "x": 3,
-      "y": 3,
+      "y": 8,
       "type": "archer",
       "color": "red",
       "level": 1
     },
     {
       "x": 4,
-      "y": 2,
+      "y": 7,
       "type": "knight",
       "color": "red",
       "level": 1
     },
     {
       "x": 2,
-      "y": 4,
+      "y": 9,
       "type": "healer",
       "color": "red",
       "level": 1
     },
     {
       "x": 12,
-      "y": 13,
+      "y": 8,
       "type": "swordsman",
       "color": "blue",
       "level": 1
     },
     {
       "x": 13,
-      "y": 12,
+      "y": 7,
       "type": "swordsman",
       "color": "blue",
       "level": 1
     },
     {
       "x": 13,
-      "y": 13,
+      "y": 8,
       "type": "archer",
       "color": "blue",
       "level": 1
     },
     {
       "x": 14,
-      "y": 12,
+      "y": 7,
       "type": "knight",
       "color": "blue",
       "level": 1
     },
     {
       "x": 12,
-      "y": 14,
+      "y": 9,
       "type": "healer",
       "color": "blue",
       "level": 1
     }
-  ]
+  ],
+  "recommended_players": 2,
+  "notes": "P2.6+ — HQ tiles use 'H'; layout has EXACTLY 2 HQ tiles, one per seat."
 }

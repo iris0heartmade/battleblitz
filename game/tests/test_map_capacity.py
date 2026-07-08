@@ -58,13 +58,12 @@ async def test_create_game_4p_map_capacity_4(game_client):
 
 
 @pytest.mark.asyncio
-async def test_create_game_open_plains_capacity_2(game_client):
-    """P2.4 polish — open_plains is a 2-castle 15×15 classic. The
-    recent metadata pass added `recommended_players: 2`, so a room
-    using it should be locked to 2 players (not the old 4p default)."""
+async def test_create_game_balanced_2p_capacity_2(game_client):
+    """P2.6+ — balanced_2p_15 is a 2-castle 15×15 map. A room using
+    it should be locked to 2 players (its `recommended_players`)."""
     r = await game_client.post("/games", json={
-        "name": "open",
-        "map_preset": "open_plains",
+        "name": "balanced-2p",
+        "map_preset": "balanced_2p_15",
     })
     assert r.status_code == 201, r.text
     assert r.json()["capacity"] == 2
@@ -188,12 +187,12 @@ async def test_lobby_endpoint_returns_capacity(game_client):
 
 
 @pytest.mark.asyncio
-async def test_lobby_open_plains_reports_2(game_client):
-    """P2.4 polish — open_plains lobby now reports max_players=2
-    (its recommended_players), not the legacy 4p default."""
+async def test_lobby_balanced_2p_reports_2(game_client):
+    """P2.6+ — balanced_2p_15 lobby reports max_players=2
+    (its `recommended_players`), not the legacy 4p default."""
     r = await game_client.post("/games", json={
-        "name": "open-lobby",
-        "map_preset": "open_plains",
+        "name": "balanced-2p-lobby",
+        "map_preset": "balanced_2p_15",
     })
     gid = r.json()["id"]
 

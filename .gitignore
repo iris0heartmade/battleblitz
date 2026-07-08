@@ -75,3 +75,8 @@ todolist
 # ===== Node.js dependencies for tools/ (jsdom, playwright) =====
 tools/node_modules/
 tools/package-lock.json
+
+# ===== Map previews (rendered PNGs) — regenerate with =====
+# `python -m app.tools.render_map_preview --all`
+# The PNGs are deliberately not tracked; only the index.html stays.
+map_previews/*.png

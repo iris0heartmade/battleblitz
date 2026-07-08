@@ -78,8 +78,12 @@ class TestMapsHaveInitialUnits:
         if not MAPS_DIR.is_dir():
             pytest.skip(f"maps directory not found at {MAPS_DIR}")
         files = sorted(MAPS_DIR.glob("*.json"))
-        assert len(files) >= 41, (
-            f"expected at least 41 built-in maps, found {len(files)}"
+        # P2.6+ — only 22 built-in maps remain (was 41). The deleted
+        # hand-authored maps were replaced by 3 new balanced maps
+        # (balanced_2p_15 / balanced_3p_15 / balanced_4p_20); the rest
+        # are auto-generated outer-style presets.
+        assert len(files) >= 22, (
+            f"expected at least 22 built-in maps, found {len(files)}"
         )
         return files
 

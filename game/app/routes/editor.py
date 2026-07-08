@@ -143,23 +143,18 @@ def _validate_layout(layout: List[str], width: int, height: int) -> None:
 
 
 def _validate_units(units: List[InitialUnit], width: int, height: int) -> None:
-    """Check units are within bounds and on passable terrain (not castle)."""
+    """Check units are within the map bounds.
+
+    Units may be placed on any terrain including castle tiles — the spawn
+    loop in ``start_game`` sets ``Tile.occupied_unit_id`` regardless of
+    terrain, and allowing castle placement lets map authors stack a
+    defender on their HQ (or design defence-in-depth spawns).
+    """
     for u in units:
         if not (0 <= u.x < width and 0 <= u.y < height):
             raise HTTPException(
                 status_code=400,
                 detail=f"unit at ({u.x},{u.y}) is out of bounds ({width}x{height})",
-            )
-
-
-def _validate_units_on_terrain(units: List[InitialUnit], layout: List[str]) -> None:
-    """Check units aren't placed on castle tiles (they need starting space)."""
-    for u in units:
-        row = layout[u.y] if u.y < len(layout) else ""
-        if u.x < len(row) and row[u.x] == "C":
-            raise HTTPException(
-                status_code=400,
-                detail=f"unit at ({u.x},{u.y}) is on a castle tile",
             )
 
 
@@ -236,10 +231,8 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
     """
     # Validate layout dimensions & characters
     _validate_layout(body.layout, body.size.width, body.size.height)
-    # Validate units in bounds
+    # Validate units in bounds (any terrain, including castle tiles).
     _validate_units(body.initial_units, body.size.width, body.size.height)
-    # Validate units not on castles
-    _validate_units_on_terrain(body.initial_units, body.layout)
 
     now = time.time()
 
