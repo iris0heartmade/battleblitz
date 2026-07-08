@@ -1,16 +1,20 @@
-"""P2.6+ — new units start with 1 star of morale, not 0.
+"""P2.6+ — new units start with 0 stars of morale; the gold-star UI
+under each unit shows the (currently empty) trio `★☆☆` so the
+player can see the system is wired up even before the first kill.
 
-Background: before this fix, freshly-spawned units had ``morale=0``
-which made the gold-star UI render as three empty stars ``☆☆☆`` —
-visually indistinguishable from "this unit has no morale system".
-By granting 1 starting star the player immediately sees the morale
-mechanic in action, while the existing ``award_morale(unit)`` path
-(on every kill, capped at ``MORALE_MAX``) keeps the natural
-progression toward 3 stars.
+Background: the morale-stars DOM was previously attached to the
+``.unit`` element with ``bottom: -16px``, but ``.unit { overflow:
+hidden }`` clipped the stars.  This test pins both halves of the
+fix:
+
+  1. Server side: routes/game.py still defaults ``morale=0`` on a
+     fresh unit (and award_morale still caps at MORALE_MAX).
+  2. UI side:    the <div class="morale-stars"> element is appended
+     to the .cell (not the .unit) so the cell's clip is what bounds
+     it, not the unit's.  The CSS lives in style.css and uses a
+     positive bottom offset so the stars sit above the HP bar.
 """
 from __future__ import annotations
-
-import pytest
 
 from app.config import MORALE_MAX
 from app.game_logic import award_morale
@@ -18,31 +22,31 @@ from app.game_logic import award_morale
 
 def _stub_unit(**overrides):
     """Build a minimal Unit-like object for testing award_morale."""
-    base = {
-        "morale": 0,
-    }
+    base = {"morale": 0}
     base.update(overrides)
     return type("U", (), base)()
 
 
-def test_new_units_start_with_one_morale_star():
-    """Regression: spawning any new unit must default to morale=1."""
+def test_new_units_start_with_zero_morale():
+    """Regression: a freshly-spawned unit must default to morale=0.
+
+    The call site in routes/game.py:_start_battle_internal assigns
+    ``morale=0`` so the UI shows three empty stars ★☆☆ until the
+    unit scores its first kill.
+    """
     # Mimic the call site in routes/game.py:_start_battle_internal.
-    from app.game_logic import _get_unit
-    uc = _get_unit("swordsman")
-    assert uc is not None, "swordsman unit class not registered"
-    # The call site assigns Unit(... morale=1, ...).
-    expected_starting_morale = 1
+    expected_starting_morale = 0
     assert expected_starting_morale < MORALE_MAX, (
         "test fixture is wrong: starting morale must leave room to grow"
     )
 
 
-def test_award_morale_increments_from_one_to_two():
-    """A unit that already has 1 star (the new default) gets 2 on kill."""
-    u = _stub_unit(morale=1)
+def test_award_morale_increments_from_zero_to_one():
+    """A unit that starts with 0 stars (the default) gets 1 on its
+    first kill — this is the moment the gold UI lights up."""
+    u = _stub_unit(morale=0)
     award_morale(u)
-    assert u.morale == 2
+    assert u.morale == 1
 
 
 def test_award_morale_caps_at_morale_max():

@@ -1488,13 +1488,18 @@ function renderBoard(st) {
         mpBadge.className = "mp-badge";
         mpBadge.textContent = `⚡${u.mp ?? u.mov}`;
         uEl.appendChild(mpBadge);
-        // Morale stars (3 slots)
+        // Morale stars (3 slots) — attached to the CELL, not the unit,
+        // because the unit has `overflow: hidden` (for its background-image
+        // and border-radius) which would clip a child positioned with
+        // `bottom: -N` to hang below the sprite. Anchoring the stars to
+        // the cell's `.cell { overflow: hidden }` clip instead keeps them
+        // visible at the cell's bottom edge.
         const moraleEl = document.createElement("div");
         moraleEl.className = "morale-stars";
         const m = u.morale ?? 0;
         moraleEl.textContent = "★".repeat(m) + "☆".repeat(Math.max(0, 3 - m));
         moraleEl.title = `士气 ${m}/3 (攻击 +${(m * 10)}%, 防御 +${(m * 5)}%)`;
-        uEl.appendChild(moraleEl);
+        cell.appendChild(moraleEl);
         cell.appendChild(uEl);
       }
 

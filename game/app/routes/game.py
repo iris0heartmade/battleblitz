@@ -244,11 +244,10 @@ async def _start_battle_internal(
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
             mov=uc.mp_pool, mp=uc.mp_pool,
-            # P2.6+ — new units start with 1 star of morale so the
-            # gold star UI is visible from turn 1 (instead of three
-            # empty stars that read as "no morale system").  Kills
-            # still bump it up to MORALE_MAX (3).
-            morale=1,
+            # New units start at 0 stars of morale; the gold-star UI
+            # is preserved as three empty ★☆☆ indicators and the
+            # engine bumps it by 1 per kill up to MORALE_MAX (3).
+            morale=0,
             x=int(u["x"]), y=int(u["y"]),
             has_acted=False, has_moved=False,
             skills=list(uc.default_skills),
