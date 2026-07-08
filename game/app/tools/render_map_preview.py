@@ -209,11 +209,47 @@ def _seat_color_for_hq_index(idx: int) -> tuple[int, int, int]:
 
 
 def _load_font(size: int) -> ImageFont.ImageFont:
-    """Try a few common Windows fonts, fall back to PIL's default."""
-    for name in ("segoeuib.ttf", "segoeui.ttf", "arialbd.ttf",
-                 "arial.ttf", "consolab.ttf"):
+    """Load a font that can render BOTH Latin and CJK (Chinese) text.
+
+    Map preset names like "2 人标准图" / "3 人三角图" carry Chinese
+    characters; if the chosen font only covers Latin glyphs, Pillow
+    draws the missing CJK codepoints as the small empty rectangles
+    known as "tofu" (□).  On Windows we have msyh.ttc (Microsoft
+    YaHei) and SimHei/SimSun available in C:/Windows/Fonts/, both
+    of which include the CJK Unified Ideographs block.  We try them
+    first, then fall back to Latin-only fonts, and finally to
+    Pillow's bitmap default (which is ugly but always works).
+
+    Returned fonts cover the full BMP, so the same call works for
+    banner titles, legend labels, and the small seat-number overlay.
+    """
+    # Order matters: CJK fonts are tried first so we get correct
+    # rendering for Chinese characters even when the Latin-only
+    # fonts (segoeui, arial) are also present and would otherwise
+    # win the search.
+    candidates = (
+        # Microsoft YaHei — primary CJK font on modern Windows
+        "C:/Windows/Fonts/msyh.ttc",
+        "msyh.ttc",
+        "msyhbd.ttc",
+        "msyhl.ttc",
+        # SimHei / SimSun — older fallbacks
+        "C:/Windows/Fonts/simhei.ttf",
+        "simhei.ttf",
+        "C:/Windows/Fonts/simsun.ttc",
+        "simsun.ttc",
+        # Noto CJK — Linux/macOS-friendly fallback
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+        # Latin-only fallbacks (won't fix tofu but at least keeps
+        # ASCII readable when no CJK font is installed)
+        "segoeuib.ttf", "segoeui.ttf",
+        "arialbd.ttf", "arial.ttf",
+        "consolab.ttf",
+    )
+    for path in candidates:
         try:
-            return ImageFont.truetype(name, size)
+            return ImageFont.truetype(path, size)
         except OSError:
             continue
     return ImageFont.load_default()
