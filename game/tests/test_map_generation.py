@@ -206,14 +206,19 @@ class TestBSP:
 
 class TestClusterTargetCount:
     def test_forest_count_by_size(self):
-        assert cluster_target_count(15, TERRAIN_FOREST) == 2
-        assert cluster_target_count(20, TERRAIN_FOREST) == 2
-        assert cluster_target_count(25, TERRAIN_FOREST) == 2  # 25 // 10
-        assert cluster_target_count(100, TERRAIN_FOREST) == 10
+        # P2.7+ — bumped from size//10 to size//8 (min 3) so the
+        # typical map has fewer, larger forests.
+        assert cluster_target_count(15, TERRAIN_FOREST) == 3  # max(3, 15//8)=3
+        assert cluster_target_count(20, TERRAIN_FOREST) == 3
+        assert cluster_target_count(25, TERRAIN_FOREST) == 3  # 25 // 8 = 3
+        assert cluster_target_count(100, TERRAIN_FOREST) == 12  # 100 // 8
 
     def test_mountain_count_by_size(self):
-        assert cluster_target_count(15, TERRAIN_MOUNTAIN) == 1
-        assert cluster_target_count(30, TERRAIN_MOUNTAIN) == 2
+        # P2.7+ — bumped from size//15 to size//12 (min 2) so
+        # mountains form visible ridges.
+        assert cluster_target_count(15, TERRAIN_MOUNTAIN) == 2  # max(2, 15//12)=2
+        assert cluster_target_count(30, TERRAIN_MOUNTAIN) == 2  # 30//12=2
+        assert cluster_target_count(36, TERRAIN_MOUNTAIN) == 3  # 36//12=3
 
     def test_invalid_kind_raises(self):
         with pytest.raises(ValueError):

@@ -1,0 +1,97 @@
+{
+  "id": "realistic_desert_2p_25",
+  "name": "荒漠绿洲 2p",
+  "description": "干旱沙漠中零星绿洲，河流是唯一的生命线",
+  "biome": "desert",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "PPPPPrvPPPPMPPPPPPPPbPMPv",
+    "PPPPPMrPPPPMPMPPPrPPrPMPP",
+    "PbPPPMrrrPPPMMPPPPPPPPPPP",
+    "PPPPPPRrPPPPPRPPPvPRPMPPP",
+    "MMPPPPrrPMPRPPPPPPMMRMRPP",
+    "PPPPRRrPPMPPPRPPPPrPPPPMP",
+    "PPPPPvrbRvPMMMMPRMMMPPPMv",
+    "PPPPPrrPPPPPPPMvPMMMRPPPM",
+    "PPMMPPPMPRPPPPMPPMRPPPPPM",
+    "PPPPPPPMPPPPrPbRRRRRRPMMP",
+    "PbMCPPPPPPMRRRRRRMrPRRRRR",
+    "PPPbPPPrPPMRMRRMMPMPPPPPP",
+    "PPPMPPMPPPPRRRRRPPMrPMPRM",
+    "PPPMPrMbPbPRMRRPPPPPPMPPM",
+    "PPPvPrPRPPrPRRPPPPPMPPRPP",
+    "PPPRPrrRMMPPRRPPPPrMrPPRR",
+    "PPMPPrrPvPPbPPPPrPPPPvMMM",
+    "rPMPPrPRMMMPPPPPvPPPPPMPP",
+    "PPPMPrPPPPPPPrPPMMPPPMMPv",
+    "PPPMPrPPvPvrPPPMMRPPPPPPr",
+    "PvPRPrPPPPMMvPPPbPPPPPPPP",
+    "PMMRPbMMPRrMPPPPPMMPMPPMP",
+    "PrPPPrvMMPvPPPPvPPPPMMPMP",
+    "PRPPPPrPPCPPPPPMMPPPvPPPP",
+    "RRRRRRPPPMPPPRPPrPrPPPPPr"
+  ],
+  "initial_units": [
+    {
+      "x": 9,
+      "y": 24,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 10,
+      "y": 23,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 10,
+      "y": 24,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 11,
+      "y": 23,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 11,
+      "type": "knight",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 10,
+      "type": "knight",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 11,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 5,
+      "y": 10,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    }
+  ],
+  "recommended_players": 2,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（4 red, 4 blue）"
+}

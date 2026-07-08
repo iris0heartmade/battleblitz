@@ -40,7 +40,7 @@ async def test_create_game_2p_map_capacity_2(game_client):
     """Choosing a 2p preset yields a room with capacity=2."""
     r = await game_client.post("/games", json={
         "name": "2p test",
-        "map_preset": "grass_outer_15_2p",
+        "map_preset": "realistic_grass_2p_20",
     })
     assert r.status_code == 201, r.text
     body = r.json()
@@ -51,7 +51,7 @@ async def test_create_game_2p_map_capacity_2(game_client):
 async def test_create_game_4p_map_capacity_4(game_client):
     r = await game_client.post("/games", json={
         "name": "4p test",
-        "map_preset": "grass_outer_15_4p",
+        "map_preset": "balanced_4p_20",
     })
     assert r.status_code == 201
     assert r.json()["capacity"] == 4
@@ -88,7 +88,7 @@ async def test_create_game_custom_map_defaults_to_4(game_client):
 async def test_join_2p_room_rejects_third_player(game_client):
     r = await game_client.post("/games", json={
         "name": "2p",
-        "map_preset": "grass_outer_15_2p",
+        "map_preset": "realistic_grass_2p_20",
     })
     gid = r.json()["id"]
 
@@ -107,7 +107,7 @@ async def test_join_2p_room_rejects_third_player(game_client):
 async def test_join_4p_room_allows_four_players(game_client):
     r = await game_client.post("/games", json={
         "name": "4p",
-        "map_preset": "grass_outer_15_4p",
+        "map_preset": "balanced_4p_20",
     })
     gid = r.json()["id"]
 
@@ -128,7 +128,7 @@ async def test_join_4p_room_allows_four_players(game_client):
 async def test_add_ai_2p_room_rejects_third_ai(game_client):
     r = await game_client.post("/games", json={
         "name": "2p-ai",
-        "map_preset": "grass_outer_15_2p",
+        "map_preset": "realistic_grass_2p_20",
     })
     gid = r.json()["id"]
 
@@ -150,7 +150,7 @@ async def test_add_ai_2p_room_rejects_third_ai(game_client):
 async def test_add_ai_4p_room_allows_three_more_ai(game_client):
     r = await game_client.post("/games", json={
         "name": "4p-ai",
-        "map_preset": "grass_outer_15_4p",
+        "map_preset": "balanced_4p_20",
     })
     gid = r.json()["id"]
 
@@ -174,7 +174,7 @@ async def test_add_ai_4p_room_allows_three_more_ai(game_client):
 async def test_lobby_endpoint_returns_capacity(game_client):
     r = await game_client.post("/games", json={
         "name": "lobby-cap",
-        "map_preset": "grass_outer_15_2p",
+        "map_preset": "realistic_grass_2p_20",
     })
     gid = r.json()["id"]
 

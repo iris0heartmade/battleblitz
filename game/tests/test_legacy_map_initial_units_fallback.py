@@ -171,12 +171,12 @@ class TestBuiltinMapsStillLoad:
     """Sanity check that the fallback doesn't break the remaining maps."""
 
     def test_all_builtin_maps_present_in_MAP_PRESETS(self):
-        # P2.6+ — 22 built-in maps + 1 inline "classic" = 23 in the
+        # P2.7+ — 7 built-in maps + 1 inline "classic" = 8 in the
         # registry (custom maps live under maps/custom/ and may or
         # may not be present).
         builtin = [p for p in MAP_PRESETS.keys() if p != "classic"]
-        assert len(builtin) >= 22, (
-            f"expected >=22 built-in maps, got {len(builtin)}"
+        assert len(builtin) >= 7, (
+            f"expected >=7 built-in maps, got {len(builtin)}"
         )
 
     def test_every_builtin_map_has_initial_units(self):

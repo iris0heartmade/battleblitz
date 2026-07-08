@@ -1,0 +1,99 @@
+{
+  "id": "realistic_grass_2p_20",
+  "name": "草原绿洲 2p",
+  "description": "开阔草原，森林簇簇，两条河流交汇",
+  "biome": "grass",
+  "size": {
+    "width": 20,
+    "height": 20
+  },
+  "layout": [
+    "PFRFvRPPrFFPRPRRRFFR",
+    "rFMrrPPFPMbRRRRrPFFF",
+    "PvMPRFrFFMRRPPRRFFFF",
+    "RFFPFFFFRPRPFRrFvPFF",
+    "FCPPPMMFRFRMFvPRRFFF",
+    "FPvrrrFPPFRPPFFPPRMR",
+    "PPMMPvRPFPRFPRRFFPMR",
+    "FbrrrrFPFMRPPRPPPMMr",
+    "RPrRPRMMvRRRRPFPRFMv",
+    "FPrFRRRFRRrRRPFvPFMF",
+    "FPrPrPPPRRRRRRMMPPPF",
+    "PPrRPPPRRrMMRRRRRRRR",
+    "PPrrRRPFRRRRRMMPRRRR",
+    "PbMbrPMMrRRRPrFMMFFr",
+    "FRMPrMMPPPPRMRFRPPvP",
+    "FFPPrrMPPRPMMMFrPPPP",
+    "FPRFFFMrPvPPMvRMFFPP",
+    "PFFPFPRPMMFMMrMMPPPP",
+    "MMvRMCPPFbFMFFPRMPPR",
+    "PvFFPPPPFPFMRPFFMRRR"
+  ],
+  "initial_units": [
+    {
+      "x": 1,
+      "y": 5,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 5,
+      "y": 19,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 2
+    },
+    {
+      "x": 6,
+      "y": 18,
+      "type": "knight",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 19,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 18,
+      "type": "warlock",
+      "color": "blue",
+      "level": 1
+    }
+  ],
+  "recommended_players": 2,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（5 red, 4 blue）"
+}

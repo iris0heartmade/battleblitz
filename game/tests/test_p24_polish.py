@@ -34,18 +34,14 @@ MAPS_DIR = Path(__file__).resolve().parent.parent / "maps"
 # 3-player procedural presets
 # ============================================================
 
-def test_3p_presets_exist_for_all_outer_styles():
-    """Each outer style should now have a *_3p.json preset (P2.4
-    polish). The 3p category in the lobby used to be empty.
-
-    castle_internal is intentionally excluded in P2.6+ — that style
-    has no hand-authored JSON files because every tile is a castle
-    sub-feature and designers don't author them by hand."""
-    outer_styles = ["grass_outer", "snow_outer", "desert_outer",
-                    "compact_outer"]
-    for style in outer_styles:
-        matches = list(MAPS_DIR.glob(f"{style}_*_3p.json"))
-        assert matches, f"no *_3p.json found for style={style}"
+def test_3p_presets_exist():
+    """There must be at least one 3-player map available in the lobby.
+    P2.7+ — the old outer-style 3p presets were deleted; we rely on
+    the hand-authored balanced_3p_15 (and future realistic 3p maps)."""
+    matches = list(MAPS_DIR.glob("*_3p*.json")) + list(MAPS_DIR.glob("*_3_*.json"))
+    assert len(matches) >= 1, (
+        f"expected at least one 3p preset, got {len(matches)}"
+    )
 
 
 def test_3p_preset_has_recommended_players_3():
@@ -103,13 +99,12 @@ def test_snow_outer_generated_map_never_has_mountain():
 
 def test_all_handcrafted_maps_have_recommended_players():
     """P2.4 polish — every handcrafted map JSON must declare its
-    recommended player count. Maps without this field used to fall
-    back to 4p, causing the miscategorisation the user reported."""
-    auto_prefixes = ("castle_internal_", "grass_outer_", "snow_outer_",
-                     "desert_outer_", "compact_outer_")
+    recommended player count. P2.7+ — the old auto-generated outer
+    presets were deleted; every remaining map is hand-authored and
+    must declare recommended_players."""
     for p in MAPS_DIR.glob("*.json"):
-        if p.name.startswith(auto_prefixes) or p.name == "classic.json":
-            continue
+        if p.name == "classic.json":
+            continue  # classic is procedural, no static file
         data = json.loads(p.read_text(encoding="utf-8"))
         rec = data.get("recommended_players")
         assert rec in (2, 3, 4), (

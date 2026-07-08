@@ -67,7 +67,7 @@ async def test_recruit_empty_barracks(client):
     # Contract: the API should NOT 422 (it'll 400 on a missing
     # barracks or wrong owner, that's fine).
     rsp = await client.post("/games", json={
-        "name": "empty-barracks-test", "map_preset": "grass_outer_15_4p",
+        "name": "empty-barracks-test", "map_preset": "balanced_4p_20",
     })
     gid = rsp.json()["id"]
     await client.post(f"/games/{gid}/join", json={"user_name": "host"})
@@ -254,7 +254,7 @@ async def test_state_includes_pending_claims(client):
     a unit onto an ENEMY-OWNED village/barracks.
     """
     r = await client.post("/games", json={
-        "name": "claim-progress", "map_preset": "grass_outer_15_2p",
+        "name": "claim-progress", "map_preset": "realistic_grass_2p_20",
     })
     gid = r.json()["id"]
     r = await client.post(f"/games/{gid}/join", json={"user_name": "host"})
