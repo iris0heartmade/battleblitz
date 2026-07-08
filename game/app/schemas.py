@@ -158,6 +158,12 @@ class UnitOut(APIModel):
     # threat-area overlays without hard-coding values per unit type.
     attack_range: int = 1
     min_attack_range: int = 0
+    # Hero binding (P2.6+). When set, the client should use the
+    # hero's bespoke art (sprite / portrait / crest) instead of the
+    # generic base-class asset. The hero's stat overrides have
+    # already been baked into the atk/def/matk/mdef/mov fields
+    # above by the spawn helper.
+    hero_id: Optional[str] = None
 
 
 class PlayerOut(APIModel):

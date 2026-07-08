@@ -9,6 +9,17 @@ const API = "";  // same origin
 // Chrome serves the old PNG forever because the filename is unchanged.
 const TILE_ASSET_VERSION = "2026-07-03-p24-snow-peak";
 
+// Hero grid-sprite resolver.  Heroes store their own art under
+// assets/heroes/<hero_id>.png (the path mirrors the registry key);
+// when no hero is bound the renderer falls back to the base-class
+// classic sprite at assets/classic/<unit_type>.png.
+function unitSpriteUrl(unit) {
+  if (unit && unit.hero_id) {
+    return `/ui/assets/heroes/${unit.hero_id}.png`;
+  }
+  return `/ui/assets/classic/${unit.unit_type}.png`;
+}
+
 // Stat labels used everywhere the side panel renders a unit's numbers.
 // Centralised so adding a new stat (e.g. crit chance) only requires
 // updating this map.
@@ -1461,8 +1472,9 @@ function renderBoard(st) {
         const pColor = occupant.player.color;
         uEl.className = `unit u-${pColor} unit-sprite` + (u.has_acted ? " acted" : "");
         uEl.dataset.unitId = u.id;
-        // Classic sprite as background
-        uEl.style.backgroundImage = `url(/ui/assets/classic/${u.unit_type}.png)`;
+        // Classic sprite as background — overridden by the hero's
+        // bespoke sprite when the unit has a hero_id binding.
+        uEl.style.backgroundImage = `url(${unitSpriteUrl(u)})`;
         uEl.title = `${u.name}（${UNIT_STAT_LABEL.level} ${u.level}） ${UNIT_STAT_LABEL.hp} ${u.hp}/${u.max_hp} ${UNIT_STAT_LABEL.mov} ${u.mp ?? u.mov}/${u.mov} ${UNIT_STAT_LABEL.morale} ${u.morale ?? 0}/3`;
         // Color indicator: small box in top-left corner.
         // Top half = team color (if in a multi-player team), bottom half = player color.
@@ -3192,12 +3204,40 @@ function skillName(s) {
 //   crest:    small circular icon shown in the dialog box avatar slot
 //   portrait: full character portrait shown in the standalone portrait panel
 // All portraits should be uniform dimensions for consistent display.
+//
+// Populated at boot from GET /heroes (P2.6+).  The hardcoded fallback
+// below keeps the dialog system working if the network call fails
+// during the first paint, and during early development when no hero
+// has been registered yet.
 const CHARACTER_ASSETS = {
   "云": {
     crest: "/ui/assets/crest_yun.png",
     portrait: "/ui/assets/portrait_yun.png",
   },
 };
+
+// P2.6+ — pull every registered hero from the server and merge its
+// crest/portrait URLs into the speaker lookup.  Safe to call any
+// number of times; later calls overwrite prior entries.
+async function refreshHeroAssets() {
+  try {
+    const heroes = await fetch("/heroes").then((r) => r.json());
+    for (const h of heroes) {
+      for (const key of [h.display_cn, h.dialogue_name]) {
+        if (!key) continue;
+        CHARACTER_ASSETS[key] = {
+          crest: h.crest_url,
+          portrait: h.portrait_url,
+          hero_id: h.hero_id,
+          base_class_id: h.base_class_id,
+        };
+      }
+    }
+    console.log(`[heroes] loaded ${heroes.length} hero(es) into dialog registry`);
+  } catch (err) {
+    console.warn("[heroes] failed to refresh; dialog registry stays on hardcoded fallback", err);
+  }
+}
 
 const Dialog = {
   // 运行状态
@@ -4315,6 +4355,11 @@ function initSplitDivider() {
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  // P2.6+ — pull the hero registry so the dialog system can resolve
+  // any registered speaker to its portrait/crest.  Non-blocking:
+  // dialogs can still use the hardcoded fallback until this resolves.
+  refreshHeroAssets().catch(() => {});
+
   // P2.4 — cascading selectors. Switching the player-count category
   // refilters the map dropdown in place (no need to reopen the view).
   document.getElementById("new-player-count")?.addEventListener("change", () => {

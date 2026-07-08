@@ -88,8 +88,15 @@ class TestLoadSample:
         m = load_mainline(SAMPLE_ID)
         assert m.required_classes == ["swordsman", "archer"]
         assert len(m.starting_units) == 2
-        assert m.starting_units[0].class_id == "swordsman"
+        # P2.6+ — yun is a warlock hero (hero_id "yun" derives from
+        # the warlock base class).  The base roster in
+        # `required_classes` still lists the original two careers
+        # (swordsman / archer) as the *narrative* requirement; the
+        # spawned unit's class_id is whatever the hero's
+        # base_class_id resolves to.
+        assert m.starting_units[0].class_id == "warlock"
         assert m.starting_units[0].name == "云"
+        assert m.starting_units[0].hero_id == "yun"
 
     def test_rewards_on_clear(self):
         m = load_mainline(SAMPLE_ID)

@@ -25,6 +25,7 @@ from app.routes import actions as actions_routes
 from app.routes import debug_ws as debug_ws_routes
 from app.routes import editor as editor_routes
 from app.routes import game as game_routes
+from app.routes import heroes as heroes_routes
 from app.routes import mainline as mainline_routes
 from app.routes import profile as profile_routes
 from app.routes import turns as turns_routes
@@ -119,3 +120,7 @@ app.include_router(profile_routes.router)
 # Mainline (campaign) orchestrator (Step 3). The router declares its
 # own `/mainlines` prefix.
 app.include_router(mainline_routes.router)
+# Hero metadata (P2.6+) — exposes registered heroes to the client so
+# the dialog system can resolve a speaker to the right portrait /
+# crest and the board renderer can pick a per-hero grid sprite.
+app.include_router(heroes_routes.router)

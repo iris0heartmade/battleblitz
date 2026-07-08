@@ -267,12 +267,43 @@ async def _spawn_battle_for_index(
     # The colors listed in `battle.teams` are matched to player.color
     # inside `_start_battle_internal`, so the map's initial_units for
     # each color are automatically assigned to the right seat.
+    #
+    # P2.6+ — collect hero overrides from mainline.starting_units.
+    # The mainline JSON's `starting_units[]` is finally the place
+    # where named characters (e.g. "云") can be wired in: each
+    # entry with a `hero_id` is converted to an override dict the
+    # spawn helper understands.  `color` is taken from the entry
+    # (falls back to "blue" for the human's roster), and
+    # `(x, y)` is passed through if the mainline author wants to
+    # pin the hero to a specific map tile.
+    hero_overrides: List[Dict] = []
+    for spec in ml.starting_units:
+        if not spec.hero_id:
+            continue
+        override_color = spec.color or "blue"
+        # When the mainline supplies a class_id that doesn't match
+        # the hero's base_class_id, the UnitSpec validator already
+        # rejected it; here we can trust the pairing.
+        hero_overrides.append({
+            "color": override_color,
+            "x": spec.x,
+            "y": spec.y,
+            "hero_id": spec.hero_id,
+            "name": spec.name,
+        })
+    if hero_overrides:
+        logger.info(
+            "mainline spawn: applying %d hero override(s): %s",
+            len(hero_overrides),
+            [ov["hero_id"] for ov in hero_overrides],
+        )
     await _start_battle_internal(
         session,
         game,
         [human, ai],
         map_preset=battle.map_id,
         map_seed=battle.map_seed,
+        hero_overrides=hero_overrides or None,
     )
 
     # 5. Audit log.

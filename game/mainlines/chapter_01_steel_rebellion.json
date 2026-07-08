@@ -5,8 +5,14 @@
   "cover_art": null,
   "required_classes": ["swordsman", "archer"],
   "starting_units": [
-    {"class_id": "swordsman", "level": 1, "name": "云"},
-    {"class_id": "archer",    "level": 1, "name": "红"}
+    {
+      "class_id": "warlock",
+      "level": 1,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "blue"
+    },
+    {"class_id": "archer", "level": 1, "name": "红"}
   ],
   "dialogues": {
     "intro":           "stories/chapter_01/intro.json",
