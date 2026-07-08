@@ -33,7 +33,7 @@ from app.game_logic import (
 _MAPS_DIR = _REPO / "game" / "maps"
 
 GENERATIONS: list[dict] = [
-    # name, style, seed, size, players, biome
+    # 2p — keep the originals (different seeds for variety)
     {"id": "realistic_grass_2p_20", "name": "草原绿洲 2p",
      "desc": "开阔草原，森林簇簇，两条河流交汇",
      "style": STYLE_GRASS_OUTER, "seed": 20260708, "size": 20, "players": 2,
@@ -45,6 +45,34 @@ GENERATIONS: list[dict] = [
     {"id": "realistic_desert_2p_25", "name": "荒漠绿洲 2p",
      "desc": "干旱沙漠中零星绿洲，河流是唯一的生命线",
      "style": STYLE_DESERT_OUTER, "seed": 20260710, "size": 25, "players": 2,
+     "biome": "desert"},
+    # P2.8+ — 3p and 4p variants.  Bumped size to 25×25 so 3-4 HQs
+    # plus their attack-line roads have room to breathe.  Each map
+    # is generated with a different seed so every biome has at
+    # least two distinct procedural layouts in the lobby.
+    {"id": "realistic_grass_3p_25", "name": "三王国 3p",
+     "desc": "三块领地围绕一片公共森林，道路连通各方",
+     "style": STYLE_GRASS_OUTER, "seed": 20260801, "size": 25, "players": 3,
+     "biome": "grass"},
+    {"id": "realistic_snow_3p_25", "name": "三方雪原 3p",
+     "desc": "三座冰封要塞，共享一条冰河",
+     "style": STYLE_SNOW_OUTER, "seed": 20260802, "size": 25, "players": 3,
+     "biome": "snow"},
+    {"id": "realistic_desert_3p_25", "name": "三方绿洲 3p",
+     "desc": "沙漠中三处绿洲彼此对峙，桥连通水源",
+     "style": STYLE_DESERT_OUTER, "seed": 20260803, "size": 25, "players": 3,
+     "biome": "desert"},
+    {"id": "realistic_grass_4p_25", "name": "四国之战 4p",
+     "desc": "四角对峙，道路穿越中央森林",
+     "style": STYLE_GRASS_OUTER, "seed": 20260804, "size": 25, "players": 4,
+     "biome": "grass"},
+    {"id": "realistic_snow_4p_25", "name": "四国雪战 4p",
+     "desc": "冰雪中四座要塞，桥跨冰河",
+     "style": STYLE_SNOW_OUTER, "seed": 20260805, "size": 25, "players": 4,
+     "biome": "snow"},
+    {"id": "realistic_desert_4p_25", "name": "四国荒漠 4p",
+     "desc": "沙漠四角，道路穿越贫瘠平原",
+     "style": STYLE_DESERT_OUTER, "seed": 20260806, "size": 25, "players": 4,
      "biome": "desert"},
 ]
 
@@ -131,6 +159,7 @@ def _tile_to_char(tile) -> str:
     """Reverse the char_to_terrain mapping used in _layout_to_tiles."""
     from app.config import (
         TERRAIN_PLAIN, TERRAIN_FOREST, TERRAIN_MOUNTAIN,
+        TERRAIN_BRIDGE,
         TERRAIN_SNOW_PEAK, TERRAIN_RIVER, TERRAIN_CASTLE,
         TERRAIN_VILLAGE, TERRAIN_BARRACKS, TERRAIN_ROAD, TERRAIN_GATE,
         CASTLE_VAULT,
@@ -145,6 +174,7 @@ def _tile_to_char(tile) -> str:
     if t == TERRAIN_VILLAGE:     return "v"
     if t == TERRAIN_BARRACKS:    return "b"
     if t == TERRAIN_ROAD:        return "r"
+    if t == TERRAIN_BRIDGE:      return "j"  # P2.8+
     if t == TERRAIN_GATE:        return "g"
     if t == CASTLE_VAULT:        return "$"
     return "."

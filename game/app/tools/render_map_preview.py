@@ -78,7 +78,8 @@ TERRAIN_COLOURS: dict[str, tuple[int, int, int]] = {
                                       # the HQ accent below)
     "village":      (240, 200, 100),  # straw yellow
     "barracks":     (180, 100, 60),   # brick red
-    "road":         (210, 190, 150),  # dusty tan
+    "road":         (180, 140, 90),   # darker tan so it stands out from plain
+    "bridge":       (110, 90, 60),    # dark wood — bridge is a small accent
     "gate":         (60, 60, 60),     # nearly black
     "castle_floor": (170, 140, 100),  # warm floor
     "castle_wall":  (80, 80, 80),     # dark wall
@@ -166,6 +167,7 @@ _CHAR_TERRAIN: dict[str, str] = {
     "v": "village",
     "b": "barracks",
     "r": "road",
+    "j": "bridge",
     "g": "gate",
     "$": "castle_vault",
 }

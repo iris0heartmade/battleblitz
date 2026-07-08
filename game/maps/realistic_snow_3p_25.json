@@ -1,0 +1,125 @@
+{
+  "id": "realistic_snow_3p_25",
+  "name": "三方雪原 3p",
+  "description": "三座冰封要塞，共享一条冰河",
+  "biome": "snow",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "RRRRSFRRRvPPRFRRRRRRRRPRP",
+    "FPFRRRRRPPPrrFSRPSvPCPPPP",
+    "FPSPPRRFFPFPRvrrvrPPrvRPP",
+    "rFRSSFPPRSFrrrRFPSrPPPvPv",
+    "SFPSRFRRPrrrFFFFPPSPrFFFS",
+    "FvRFRvrrbrRPFSSFSRPPrrPRR",
+    "FRSFPrrPPPPvPFRRPrPRRrRPr",
+    "RPvSRrPPPSPFPFSPrRRPRrPPR",
+    "SPSPPPRSSrSFvPRPSPSSrrPFF",
+    "FvvPCSPPbPFSPRFRrvPSrRSFv",
+    "FRSPPFPvFFFvvPFFSFSPbrPFS",
+    "FFFvPFRPFFFFRPSFPFRPRrFPP",
+    "vFPrrSPPvFPvPPRPPRPSPrrrR",
+    "FFPrRPPvPSPrFRPRvRRSRrSPv",
+    "RFrrSvPRSPPPFPRPRPPSFrSSP",
+    "PPrRSPSPSSPRFFPSPPRPSrSbS",
+    "PFrRRFFFFPrPRFRSSvRSvrrPP",
+    "rRrPFFFFFPPPvPSRRRrPRrSSP",
+    "PPrRSFFFPPRvFSPSPPFFrrFPP",
+    "PrrPRPFFSPPPFPRvPRvSrFRSF",
+    "FrRPFFPFRPRrPSSSPPbPrSSPF",
+    "PrRRrSPrRPrFSPPPSbvSRPvbR",
+    "RrFFPrrrrbrrrrSPPPRRPRSSS",
+    "vrrrrrRrvRPFPrrrbvPPCvSRP",
+    "RRFrSRSRPbvFSPPPRFFSPRPbv"
+  ],
+  "initial_units": [
+    {
+      "x": 20,
+      "y": 24,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 23,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 24,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 23,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 10,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 2
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 5,
+      "y": 10,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 9,
+      "type": "healer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 20,
+      "y": 2,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 1,
+      "type": "knight",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 2,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 1,
+      "type": "warlock",
+      "color": "green",
+      "level": 1
+    }
+  ],
+  "recommended_players": 3,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（4 red, 4 blue）"
+}

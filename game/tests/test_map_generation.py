@@ -214,11 +214,11 @@ class TestClusterTargetCount:
         assert cluster_target_count(100, TERRAIN_FOREST) == 12  # 100 // 8
 
     def test_mountain_count_by_size(self):
-        # P2.7+ — bumped from size//15 to size//12 (min 2) so
-        # mountains form visible ridges.
-        assert cluster_target_count(15, TERRAIN_MOUNTAIN) == 2  # max(2, 15//12)=2
-        assert cluster_target_count(30, TERRAIN_MOUNTAIN) == 2  # 30//12=2
-        assert cluster_target_count(36, TERRAIN_MOUNTAIN) == 3  # 36//12=3
+        # P2.8+ — bumped to size//8 (min 3) so 20×20 maps get 3-4
+        # mountain clusters and 25×25 gets 4-5 (thick ridges).
+        assert cluster_target_count(15, TERRAIN_MOUNTAIN) == 3  # max(3, 15//8)=3
+        assert cluster_target_count(30, TERRAIN_MOUNTAIN) == 3  # max(3, 30//8)=3
+        assert cluster_target_count(40, TERRAIN_MOUNTAIN) == 5  # 40//8=5
 
     def test_invalid_kind_raises(self):
         with pytest.raises(ValueError):

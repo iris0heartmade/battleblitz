@@ -1,0 +1,139 @@
+{
+  "id": "realistic_snow_4p_25",
+  "name": "四国雪战 4p",
+  "description": "冰雪中四座要塞，桥跨冰河",
+  "biome": "snow",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "SRSRRRRRRRRPFFFRPSPPSPrvP",
+    "FFSPFRPPSFFFFFFPRrSFRRvrR",
+    "RSPPPSPPPSPFFSFPPRFFvSSPP",
+    "RCPPSPPRSPSrPFPFPPSFPSPvR",
+    "RPRPPSSFRSPSSFRFPPRFRFRrP",
+    "PvPPRPFFRSSFPPRSRRRRPFCPb",
+    "PrbPSRFRSPbFrrrrRPPPRSPRS",
+    "PbrPSSSFPvrbrRPrrvrrPPRPP",
+    "PrrrrrrrrrvPrSRrPPPPRrSPr",
+    "PrrSPSrSSrrrrrrRRPvrjvrRP",
+    "FrRSRPrPPPPPRRrrrrrrRPrrP",
+    "FbPRbPrvRFFRRRPPSrRSFFFrr",
+    "PrrPPPrPFSPRRRSPrrRRFFFFr",
+    "FFPSPSrFFSPRRRRPPrRSPFFPr",
+    "SPPSvPrSRSFRRRRRvrSSvFFFr",
+    "vPCFFrvRPSFRRrPvSrSSPFFPr",
+    "PRPPPrPPPRRPRFFRRrPPRPSRP",
+    "SbPSSrFPvFFrRRSvrjrrrbPPC",
+    "SPRRbrRRrRSPRSbFvPFPRPPFR",
+    "FRSPPrrPRRRrRRvFRSFSSPPFR",
+    "FvSRRPrSPRPSRPPRPRPPSPSRP",
+    "PPPPFPrSPFFSRFFPrSPPPSSrS",
+    "SRRSFFvvPrFRRRRRRRSRPPPPR",
+    "RPPRFFFPrPSRFFbFRRRRRRRRR",
+    "PSPvFFvRPSPSPRPFFSRSPPSPv"
+  ],
+  "initial_units": [
+    {
+      "x": 2,
+      "y": 16,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 15,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 16,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 4,
+      "y": 15,
+      "type": "warlock",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 6,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 23,
+      "y": 5,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 23,
+      "y": 6,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 24,
+      "y": 5,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 7,
+      "type": "healer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "type": "warlock",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "type": "healer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "type": "swordsman",
+      "color": "green",
+      "level": 2
+    },
+    {
+      "x": 24,
+      "y": 18,
+      "type": "swordsman",
+      "color": "yellow",
+      "level": 1
+    }
+  ],
+  "recommended_players": 4,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（4 red, 5 blue）"
+}

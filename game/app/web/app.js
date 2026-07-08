@@ -1235,6 +1235,9 @@ const TILE_VARIANTS = {
   river: 4, castle: 2, desert: 2, snow: 2,
   // P0.4 new terrains
   village: 2, barracks: 2, road: 2, gate: 2,
+  // P2.8+ — bridge (road over river); 1 variant is enough since the
+  // bridge is small and visually consistent.
+  bridge: 1,
   // Castle sub-features are biome-aware like the legacy 'castle' tile.
   castle_floor: 2, castle_wall: 2, castle_throne: 2,
   castle_stairs: 2, castle_vault: 2, castle_door: 2,
@@ -1297,6 +1300,7 @@ const TERRAIN_CHAR_TO_NAME = {
   R: "river", C: "castle",
   // P0.4 new terrains
   v: "village", b: "barracks", r: "road", g: "gate",
+  j: "bridge",  // P2.8+ — bridge (road over river)
 };
 function terrainNameFromChar(ch) {
   return TERRAIN_CHAR_TO_NAME[ch] || "plain";

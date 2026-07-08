@@ -26,6 +26,10 @@ TERRAIN_VILLAGE: Final[str] = "village"   # 村落
 TERRAIN_BARRACKS: Final[str] = "barracks" # 佣兵站
 TERRAIN_ROAD: Final[str] = "road"         # 道路（MP 减半）
 TERRAIN_GATE: Final[str] = "gate"         # 关卡（敌方阻拦，不可走）
+# P2.8+ — bridge is a road tile that crosses a river (functionally
+# identical to road for movement, but visually distinct). Generated
+# by the road network when a path would otherwise step on a river.
+TERRAIN_BRIDGE: Final[str] = "bridge"
 
 # Castle interior sub-features (stored in Tile.subtype column)
 CASTLE_FLOOR: Final[str] = "castle_floor"     # 地板
@@ -46,6 +50,7 @@ TERRAIN_TYPES: Final[Tuple[str, ...]] = (
     TERRAIN_BARRACKS,
     TERRAIN_ROAD,
     TERRAIN_GATE,
+    TERRAIN_BRIDGE,
 )
 
 CASTLE_SUBTYPES: Final[Tuple[str, ...]] = (
@@ -73,6 +78,7 @@ TERRAIN_MOVE_COST: Final[Dict[str, int]] = {
     TERRAIN_VILLAGE: 2,
     TERRAIN_BARRACKS: 2,
     TERRAIN_ROAD: 1,   # road = half cost
+    TERRAIN_BRIDGE: 1,  # bridge = road over river, same half cost
     TERRAIN_GATE: 9999,  # impassable
     # Castle sub-features
     CASTLE_FLOOR: 2,
@@ -94,6 +100,7 @@ TERRAIN_DEF_BONUS: Final[Dict[str, int]] = {
     TERRAIN_VILLAGE: 0,
     TERRAIN_BARRACKS: 1,
     TERRAIN_ROAD: 0,
+    TERRAIN_BRIDGE: 0,  # bridge has no defensive bonus
     TERRAIN_GATE: 0,
     # Castle sub-features: throne is the safest spot, vault is also strong
     CASTLE_FLOOR: 3,

@@ -1,0 +1,125 @@
+{
+  "id": "realistic_grass_3p_25",
+  "name": "三王国 3p",
+  "description": "三块领地围绕一片公共森林，道路连通各方",
+  "biome": "grass",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "PRRRRRRPrPMMPRrFMPPFMFFPv",
+    "MMPRPRRRRMMMMMFFMPPFMPFFv",
+    "MMFFbPPPPvMMMPRPPPFFFbMFF",
+    "MMMMPRPPPMMFMPPvRRMFRRMPR",
+    "MMMRMPPrrrMFMFFPPPMvCPFFP",
+    "MMMFMMPrMrrrrrrrrrRrPvPPP",
+    "MrRMMvrrMFrFFMFRPvPvPPPFF",
+    "MMPPPbMPPFFMrMRPRRFrMMPrP",
+    "RMRFFrMMvRPMFPPFFbFrFPPPP",
+    "PbPPvrrPMMMPRRPPFFPrPrPPR",
+    "PCMMMMrMMRvRRRFPPRPrFPPMM",
+    "bPMvRPrMMMRRRRRFPFPrrRRPF",
+    "RPMRPPrrMMRRMMRMMFPrPPRPF",
+    "vRPPFFRvMbFRRRRPbFrrFPPPR",
+    "vPMMrPvrrrPPRPPMrMrMPPPvM",
+    "PPMFPPPFRrPMRRFMrMrMMPrPM",
+    "PPvFPPPFPrFMRPFFPFrFMPRMP",
+    "RPPbMMPPPvFMRPvMPPrPvFFMP",
+    "MMMMFFPPRrrRRPPMPRrRPbRPP",
+    "FFFFMMvPPrRvRPrvMMFPFPrMM",
+    "PPRFFPPRPrrPRRRRPMFPFPPPP",
+    "FFPPFrPPFRjRRMMPPCPvPRPPr",
+    "PFPPRRRRRRjMRjrFPbMMvRvPP",
+    "MrRRRRPPMMrvbrMMFFFFPPPFF",
+    "MPRRPRFFPPPPPMMPrPPPvPFFP"
+  ],
+  "initial_units": [
+    {
+      "x": 1,
+      "y": 11,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 10,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 11,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 10,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 22,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 21,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 22,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 19,
+      "y": 21,
+      "type": "healer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 20,
+      "y": 5,
+      "type": "warlock",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 4,
+      "type": "healer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 5,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 4,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    }
+  ],
+  "recommended_players": 3,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（4 red, 4 blue）"
+}
