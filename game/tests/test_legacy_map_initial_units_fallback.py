@@ -168,14 +168,15 @@ class TestLoaderLegacyFallback:
 # Regression: the 42 built-in maps must still load with no warnings.
 # ============================================================
 class TestBuiltinMapsStillLoad:
-    """Sanity check that the fallback doesn't break the canonical 42 maps."""
+    """Sanity check that the fallback doesn't break the remaining maps."""
 
     def test_all_builtin_maps_present_in_MAP_PRESETS(self):
-        # 42 built-in maps + 1 inline "classic" = 43 in the registry
-        # (custom maps live under maps/custom/ and may or may not be present)
+        # P2.6+ — 22 built-in maps + 1 inline "classic" = 23 in the
+        # registry (custom maps live under maps/custom/ and may or
+        # may not be present).
         builtin = [p for p in MAP_PRESETS.keys() if p != "classic"]
-        assert len(builtin) >= 42, (
-            f"expected >=42 built-in maps, got {len(builtin)}"
+        assert len(builtin) >= 22, (
+            f"expected >=22 built-in maps, got {len(builtin)}"
         )
 
     def test_every_builtin_map_has_initial_units(self):

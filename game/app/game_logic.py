@@ -1261,6 +1261,7 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
         "S": TERRAIN_SNOW_PEAK,   # P2.4 — snow-biome silver peaks
         "R": TERRAIN_RIVER,
         "C": TERRAIN_CASTLE,
+        "H": TERRAIN_CASTLE,        # P2.6+ — alias for "HQ" in hand-authored maps.
         "v": TERRAIN_VILLAGE,
         "b": TERRAIN_BARRACKS,
         "r": TERRAIN_ROAD,

@@ -1,39 +1,28 @@
 {
-  "id": "castle_internal_25_3p",
-  "name": "城堡内部 · 25×25 · 3人",
-  "description": "P2.4 自动生成：城堡内部 风格，3 人对战，25×25 棋盘 (种子 #1446)",
+  "id": "balanced_3p_15",
+  "name": "3 人三角图",
+  "description": "15×15，3 个 HQ 三角布置（上 2 + 下 1）。",
   "biome": "grass",
-  "size": 25,
-  "style": "castle_internal",
-  "mode": "castle_internal",
-  "recommended_players": 3,
-  "seed": 1446,
+  "size": {
+    "width": 15,
+    "height": 15
+  },
   "layout": [
-    "ffffffwffffffwfffwfwfffff",
-    "wfwfffwfffwfffwffffwffffw",
-    "fffffwfwwffffwfffffwfdwff",
-    "ffwtdffwwffffwwwffffstdff",
-    "fffsffffffffffffwffffffff",
-    "ffffwwffffffffffwffwfffff",
-    "ffffwfffffffffffffwffwfff",
-    "fffffwwfffwwvffffffffffff",
-    "ffffwwffffffwfffffwfffvff",
-    "wfwfffffffwfffffwffffffff",
-    "fffffffwfwfwffffwffffffff",
-    "fwfwfffffffffwwwfffffffff",
-    "fffffffffffffwfffffffffff",
-    "ffffffwfwfffffwffwfffffwf",
-    "fffffffffwfwfffffffffwwff",
-    "wffffwffffffffffwffwfffff",
-    "ffwfwffffffffffffffwfwfff",
-    "wfffffffffffffwfffffffwfw",
-    "fffffffwffffwfffffffffffv",
-    "ffwwffffffwffwwwfwfffwffw",
-    "ffwwwfffwfffdwwffffwfwfff",
-    "ffwfwfffwffstfffffffffffw",
-    "wffwffwfffffffwffffffffff",
-    "ffffffwfwfffffwfffffffffw",
-    "fffffffffwfffffwfffwfffwf"
+    "MMMMMMMMMMMMMMM",
+    "FPPPFFFFFFFPPPF",
+    "PPHPPPPPPPPPHPP",
+    "PPPPFFFPFFFPPPP",
+    "bPPPFFFMFFFPPPv",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPMPPPPPPP",
+    "PPPPPPPvPPPPPPP",
+    "PPPPPPPPPPPPPPP",
+    "PPPPPPPHPPPPPPP",
+    "FFFFFFPPPFFFFFF",
+    "MMMMMMMMMMMMMMM"
   ],
   "initial_units": [
     {
@@ -142,5 +131,6 @@
       "level": 1
     }
   ],
-  "notes": "[initial_units auto-generated]"
+  "recommended_players": 3,
+  "notes": "P2.6+ — HQ tiles use 'H'; layout has EXACTLY 3 HQ tiles, one per seat."
 }

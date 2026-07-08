@@ -36,9 +36,13 @@ MAPS_DIR = Path(__file__).resolve().parent.parent / "maps"
 
 def test_3p_presets_exist_for_all_outer_styles():
     """Each outer style should now have a *_3p.json preset (P2.4
-    polish). The 3p category in the lobby used to be empty."""
+    polish). The 3p category in the lobby used to be empty.
+
+    castle_internal is intentionally excluded in P2.6+ — that style
+    has no hand-authored JSON files because every tile is a castle
+    sub-feature and designers don't author them by hand."""
     outer_styles = ["grass_outer", "snow_outer", "desert_outer",
-                    "compact_outer", "castle_internal"]
+                    "compact_outer"]
     for style in outer_styles:
         matches = list(MAPS_DIR.glob(f"{style}_*_3p.json"))
         assert matches, f"no *_3p.json found for style={style}"
@@ -114,12 +118,13 @@ def test_all_handcrafted_maps_have_recommended_players():
 
 
 def test_recommended_players_matches_map_size():
-    """Cross-check: small 15×15 classics should be 2p, larger 25-45
-    maps may be 3p/4p. Loose heuristic — just ensure the basics."""
+    """Cross-check: small 15×15 classics should be 2p, 20×20 should
+    be 4p. Loose heuristic — just ensure the basics for the new
+    hand-authored balanced maps."""
     cases = [
-        ("open_plains.json", 2),
-        ("three_way_25.json", 3),
-        ("throne_war_40.json", 4),
+        ("balanced_2p_15.json", 2),
+        ("balanced_3p_15.json", 3),
+        ("balanced_4p_20.json", 4),
     ]
     for fname, expected in cases:
         data = json.loads((MAPS_DIR / fname).read_text(encoding="utf-8"))

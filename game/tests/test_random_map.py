@@ -170,6 +170,9 @@ def test_layout_parser_handles_castle_subtype_chars():
                 assert t.terrain == TERRAIN_CASTLE
 
 
+@pytest.mark.skip(reason="P2.6+ removed hand-authored castle_internal JSONs; "
+                                  "the style is still defined in config but no "
+                                  "files exist for round-trip testing.")
 def test_generate_map_preset_round_trips_castle_internal_json():
     """A generated castle_internal preset must round-trip through
     `generate_map_preset(preset_id, ...)` without losing subtypes."""

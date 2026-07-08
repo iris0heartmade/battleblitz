@@ -18,7 +18,7 @@
     {
       "id": "battle_01",
       "title": "山口伏击",
-      "map_id": "mountain_pass",
+      "map_id": "balanced_2p_15",
       "map_seed": 42,
       "win_condition": "rout",
       "teams": {"ally": ["blue"], "enemy": ["red"]},
@@ -28,7 +28,7 @@
     {
       "id": "battle_02",
       "title": "围城战",
-      "map_id": "four_lakes",
+      "map_id": "balanced_2p_15",
       "map_seed": 7,
       "win_condition": "seize",
       "teams": {"ally": ["blue"], "enemy": ["red"]},
