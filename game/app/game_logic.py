@@ -1034,6 +1034,34 @@ _CLASSIC_OFFSETS: tuple[tuple[int, int], ...] = (
     (0, 1), (1, 0), (1, 1), (2, 0), (0, 2),
 )
 
+# P2.7+ — varied roster templates for procedurally-generated maps.
+# Each entry is (name, weight, [(type, count), ...]).  Warlocks
+# appear in 4 of the 7 templates (up from 0% before).
+_VARIED_ROSTERS: list[tuple[str, int, list[tuple[str, int]]]] = [
+    ("defensive", 2, [
+        ("swordsman", 2), ("archer", 1), ("healer", 1),
+    ]),
+    ("offensive", 2, [
+        ("swordsman", 1), ("knight", 1), ("archer", 1), ("warlock", 1),
+    ]),
+    ("balanced", 2, [
+        ("swordsman", 2), ("archer", 1), ("knight", 1), ("healer", 1),
+    ]),
+    ("fast", 1, [
+        ("knight", 2), ("archer", 1), ("swordsman", 1),
+    ]),
+    ("magic", 1, [
+        ("warlock", 1), ("healer", 1), ("archer", 1), ("swordsman", 1),
+    ]),
+    ("siege", 1, [
+        ("knight", 1), ("warlock", 1), ("swordsman", 1),
+    ]),
+    ("economy", 1, [
+        ("swordsman", 2), ("archer", 2), ("healer", 1),
+    ]),
+]
+# Total weight sum = 2+2+2+1+1+1+1 = 10
+
 
 def _castle_positions_for_size(num_castles: int, width: int, height: int) -> List[Tuple[int, int]]:
     """Compute symmetric castle positions for any map size.
@@ -1106,6 +1134,81 @@ def _build_initial_units_from_castles(
                     "level": 1,
                 })
                 idx += 1
+    return units
+
+
+def _build_varied_initial_units(
+    castles: List[Tuple[int, int]],
+    rng: random.Random,
+    map_size: int = 15,
+) -> List[Dict[str, Any]]:
+    """P2.7+ — build a randomised starting roster per castle.
+
+    Each HQ gets a template picked from ``_VARIED_ROSTERS`` by
+    weighted random, producing 3–7 units with varied compositions
+    (including warlocks, which never appeared in the old classic
+    roster).  30% of the time one swordsman is promoted to Lv2.
+
+    The placement pattern mirrors ``_CLASSIC_OFFSETS`` but
+    truncated/extended for the random count.  Units that would
+    fall outside the map boundaries are silently skipped so
+    realistic HQ placement (which can put castles near the edge)
+    doesn't produce out-of-bounds spawns.
+    """
+    weights = [w for _, w, _ in _VARIED_ROSTERS]
+    templates = [t for t, _, _ in _VARIED_ROSTERS]
+    unit_types_flat: list[str] = [
+        ut for t, _, roster in _VARIED_ROSTERS
+        for ut, _ in roster
+    ]
+    units: List[Dict[str, Any]] = []
+    for seat, (cx, cy) in enumerate(castles):
+        color = (_CLASSIC_COLORS[seat]
+                 if seat < len(_CLASSIC_COLORS) else _CLASSIC_COLORS[-1])
+        # Pick template.
+        tpl = rng.choices(templates, weights=weights, k=1)[0]
+        roster: list[tuple[str, int]] = [
+            (ut, c) for tname, _, r in _VARIED_ROSTERS
+            if tname == tpl for ut, c in r
+        ]
+        # Build unit list from roster.
+        raw: list[tuple[str, int]] = []
+        for ut, c in roster:
+            raw.extend([(ut, 1)] * c)
+        total = len(raw)
+        # Clamp count to [3, 7].
+        if total < 3:
+            extra = rng.choice([u for u in unit_types_flat if u != "healer"])
+            raw.append((extra, 1))
+        elif total > 7:
+            raw = raw[:7]
+        # 30% chance to promote one swordsman to Lv2.
+        promote = False
+        if rng.random() < 0.30:
+            swordsmen = [i for i, (ut, _) in enumerate(raw) if ut == "swordsman"]
+            if swordsmen:
+                promote = True
+        idx = 0
+        for unit_type, _ in raw:
+            dx, dy = _CLASSIC_OFFSETS[idx % len(_CLASSIC_OFFSETS)]
+            ux, uy = cx + dx, cy + dy
+            # Skip units that would fall outside the map
+            # (can happen when realistic_hq places a castle
+            # near the edge and the offset pushes past the
+            # boundary).
+            if not (0 <= ux < map_size and 0 <= uy < map_size):
+                idx += 1
+                continue
+            lvl = 2 if (promote and unit_type == "swordsman"
+                        and idx == [i for i, (ut, _) in enumerate(raw)
+                                   if ut == "swordsman"][0]) else 1
+            units.append({
+                "x": ux, "y": uy,
+                "type": unit_type,
+                "color": color,
+                "level": lvl,
+            })
+            idx += 1
     return units
 
 
@@ -1228,7 +1331,16 @@ def generate_map_preset(
     # color checks see every color that's actually spawned.
     fallback_units: List[Dict[str, Any]] = []
     if preset_id == "classic":
-        fallback_units = _classic_initial_units(num_castles=num_castles)
+        # P2.7+ — use the varied roster (random composition per HQ)
+        # instead of the fixed 5-unit classic roster.  The static
+        # MAP_PRESETS entry still holds the old 5-unit list for
+        # schema validation; the *runtime* spawn gets variety.
+        castles = _castle_positions_for_size(num_castles, MAP_SIZE, MAP_SIZE)
+        fallback_units = _build_varied_initial_units(
+            castles[:num_castles],
+            rng=random.Random(seed),
+            map_size=MAP_SIZE,
+        )
     return MapPresetResult(
         tiles=generate_map(seed=seed, num_castles=num_castles, use_rich_generator=True),
         initial_units=fallback_units,

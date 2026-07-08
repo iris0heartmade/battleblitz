@@ -78,12 +78,13 @@ class TestMapsHaveInitialUnits:
         if not MAPS_DIR.is_dir():
             pytest.skip(f"maps directory not found at {MAPS_DIR}")
         files = sorted(MAPS_DIR.glob("*.json"))
-        # P2.6+ — only 22 built-in maps remain (was 41). The deleted
-        # hand-authored maps were replaced by 3 new balanced maps
-        # (balanced_2p_15 / balanced_3p_15 / balanced_4p_20); the rest
-        # are auto-generated outer-style presets.
-        assert len(files) >= 22, (
-            f"expected at least 22 built-in maps, found {len(files)}"
+        # P2.7+ — 7 built-in maps remain. The 18 auto-generated outer
+        # presets were deleted; replaced by 3 hand-authored balanced
+        # maps and 3 realistic maps (one per biome) generated with the
+        # improved P2.7 generator (realistic HQ, biome consistency,
+        # varied rosters).
+        assert len(files) >= 7, (
+            f"expected at least 7 built-in maps, found {len(files)}"
         )
         return files
 

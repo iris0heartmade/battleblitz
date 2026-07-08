@@ -1,0 +1,85 @@
+{
+  "id": "realistic_snow_2p_20",
+  "name": "雪域要塞 2p",
+  "description": "皑皑白雪中的银色山脊，冰河蜿蜒而过",
+  "biome": "snow",
+  "size": {
+    "width": 20,
+    "height": 20
+  },
+  "layout": [
+    "PRFPRPPRPPRRPRbFFRPR",
+    "SvFPvPPvPPRRRFFPRRSS",
+    "RrPRSPPvSPRRPSSPPPRS",
+    "SPrPRFFFPSRRSPPRPPPS",
+    "PPFFPFrPRRRPPSPPRSFF",
+    "FCPvPRSFFSRRFFSPrPPR",
+    "FPPvRvPFPRRPSPPRFFPP",
+    "SPSFRPPPPRRRRRRRRRRR",
+    "FFFFFSRPRRRRFSvRPPFP",
+    "PFFFFFPSRRRRFFRFSRFS",
+    "PPRrSFPrFRRRRRFFFPrR",
+    "SFFSPRFSFRRRRFFFFvRP",
+    "RFRSvRFRFRRRRSFPPvFF",
+    "PSPPPFPPFRRRRPPPPRPR",
+    "PPPSPFrRPRRSPRRPRRCP",
+    "FFSPrRSSPRRSFPbrPPFR",
+    "SSvPPPSRrPRFFSPFvRFP",
+    "PbPrRRFPPPFPPPRFPPrP",
+    "PPSRPRFPPRFSSPSSRSRr",
+    "PSrPRrFPFFrPRPSSRPRP"
+  ],
+  "initial_units": [
+    {
+      "x": 1,
+      "y": 6,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 15,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 19,
+      "y": 14,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 19,
+      "y": 15,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    }
+  ],
+  "recommended_players": 2,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（4 red, 3 blue）"
+}
