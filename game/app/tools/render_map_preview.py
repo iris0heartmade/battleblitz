@@ -89,6 +89,46 @@ TERRAIN_COLOURS: dict[str, tuple[int, int, int]] = {
     "castle_door":  (90, 50, 20),     # dark wood
 }
 
+# Chinese labels for the legend + banner.  Keys match the terrain
+# names exactly so the legend builder can look them up by name.
+TERRAIN_LABELS_CN: dict[str, str] = {
+    "plain":        "平原",
+    "forest":       "森林",
+    "mountain":     "山脉",
+    "snow_peak":    "雪山",
+    "river":        "河流",
+    "castle":       "城堡",
+    "village":      "村庄",
+    "barracks":     "兵营",
+    "road":         "道路",
+    "bridge":       "桥",
+    "gate":         "关隘",
+    "castle_floor": "城堡地板",
+    "castle_wall":  "城墙",
+    "castle_throne":"王座",
+    "castle_stairs":"阶梯",
+    "castle_vault": "金库",
+    "castle_door":  "门扉",
+}
+
+# Biome name → Chinese label (P2.8+ — was previously the raw English
+# string in the banner; now localised for the audience).
+BIOME_LABELS_CN: dict[str, str] = {
+    "grass":  "草原",
+    "snow":   "雪原",
+    "desert": "荒漠",
+    "compact":"紧凑",
+}
+
+# Seat → Chinese colour / faction name.  Used in the legend ("HQ
+# seat #0 (红方)") and on the per-unit overlay in the game.
+SEAT_LABELS_CN: dict[str, str] = {
+    "red":    "红方",
+    "blue":   "蓝方",
+    "green":  "绿方",
+    "yellow": "黄方",
+}
+
 # (color name, RGB) — one entry per seat.
 COLOUR_COLOURS: dict[str, tuple[int, int, int]] = {
     "red":    (220, 60, 60),
@@ -343,6 +383,7 @@ def _render_banner(spec: MapSpec, width_px: int) -> Image.Image:
     draw = ImageDraw.Draw(img)
     title_font = _load_font(22)
     sub_font = _load_font(14)
+    biome_cn = BIOME_LABELS_CN.get(spec.biome, spec.biome)
     _draw_text(
         draw, (12, 8),
         f"{spec.name}  ·  id={spec.map_id}",
@@ -350,11 +391,11 @@ def _render_banner(spec: MapSpec, width_px: int) -> Image.Image:
     )
     _draw_text(
         draw, (12, 38),
-        f"size={spec.width}×{spec.height}  "
-        f"recommended_players={spec.recommended_players}  "
-        f"biome={spec.biome}  "
-        f"hqs={len(_hq_positions(spec))}  "
-        f"units={len(spec.initial_units)}",
+        f"大小 {spec.width}×{spec.height}  ·  "
+        f"推荐 {spec.recommended_players} 人  ·  "
+        f"地貌 {biome_cn}  ·  "
+        f"城堡 {len(_hq_positions(spec))}  ·  "
+        f"单位 {len(spec.initial_units)}",
         font=sub_font, fill=(80, 80, 80),
     )
     if spec.description:
@@ -368,16 +409,23 @@ def _render_banner(spec: MapSpec, width_px: int) -> Image.Image:
 
 
 def _render_legend(width_px: int) -> Image.Image:
-    """Terrain + colour key, drawn down the right side."""
+    """Terrain + colour key, drawn down the right side.
+
+    P2.8+ — every label is in Chinese.  Terrain rows are looked up
+    by name in ``TERRAIN_LABELS_CN``; the four seat rows are built
+    from ``SEAT_LABELS_CN`` so they line up with the per-HQ overlay
+    drawn in the game UI.
+    """
     pad = 10
     line_h = 20
-    terrain_rows = list(TERRAIN_COLOURS.items())
-    # add a row for "HQ seat" and "starting unit"
+    terrain_rows: list[tuple[str, tuple[int, int, int]]] = [
+        (TERRAIN_LABELS_CN[name], colour)
+        for name, colour in TERRAIN_COLOURS.items()
+    ]
     extra_rows = [
-        ("HQ seat #0 (red)",    COLOUR_COLOURS["red"]),
-        ("HQ seat #1 (blue)",   COLOUR_COLOURS["blue"]),
-        ("HQ seat #2 (green)",  COLOUR_COLOURS["green"]),
-        ("HQ seat #3 (yellow)", COLOUR_COLOURS["yellow"]),
+        (f"{seat} HQ 城堡", COLOUR_COLOURS[col])
+        for col, seat in (("red", "红方"), ("blue", "蓝方"),
+                          ("green", "绿方"), ("yellow", "黄方"))
     ]
     rows = terrain_rows + extra_rows
     h = pad * 2 + line_h * len(rows) + 30
@@ -385,7 +433,7 @@ def _render_legend(width_px: int) -> Image.Image:
     draw = ImageDraw.Draw(img)
     font = _load_font(12)
     bold = _load_font(14)
-    _draw_text(draw, (pad, 4), "Legend", font=bold, fill=BANNER_FG)
+    _draw_text(draw, (pad, 4), "地形图例", font=bold, fill=BANNER_FG)
     for i, (label, colour) in enumerate(rows):
         y = 26 + i * line_h
         draw.rectangle(
