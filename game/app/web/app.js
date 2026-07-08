@@ -2577,11 +2577,13 @@ async function doMove(unit, toX, toY) {
     const moved = st.players.find(p => p.id === state.me.player_id)?.units?.find(u2 => u2.id === unit.id);
     if (moved && !moved.has_acted) {
       // Pure move (no action yet) → show full post-move bubble (attack / move-more / wait)
+      state.selectedUnit = moved;
       renderBoard(st);
       showPostMoveBubble(moved);
     } else if (moved && moved.has_acted && (moved.mp ?? 0) > 0 && CAN_MOVE_AFTER[moved.unit_type]) {
       // Post-action move (acted first, then moved because can_move_after_action).
       // Show the post-attack-style bubble (move-more / wait, no attack buttons).
+      state.selectedUnit = moved;
       renderBoard(st);
       showPostAttackBubble(moved);
     } else {
