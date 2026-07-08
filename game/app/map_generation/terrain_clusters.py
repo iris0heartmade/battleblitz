@@ -141,11 +141,19 @@ def _grow_cluster(
 
 
 def cluster_target_count(size: int, kind: str) -> int:
-    """Number of clusters to attempt for the given terrain kind."""
+    """Number of clusters to attempt for the given terrain kind.
+
+    P2.8+ — bumped mountain count and target size so mountains
+    form visible ridges and look "thick" rather than scattered.
+    Counts keep the per-size proportionality so a 15×15 and 25×25
+    map both produce a believable mountain layout.
+    """
     if kind == TERRAIN_FOREST:
         return max(3, size // 8)
     if kind == TERRAIN_MOUNTAIN:
-        return max(2, size // 12)
+        # Was size//12 (min 2). Bumped to size//8 (min 3) so 20×20
+        # maps get 3-4 mountain clusters and 25×25 gets 4-5.
+        return max(3, size // 8)
     raise ValueError(f"unknown cluster kind: {kind!r}")
 
 
@@ -228,7 +236,7 @@ def generate_mountain_clusters(
     size: int,
     castles: List[Coord],
     safe_radius: int = 2,
-    size_range: Tuple[int, int] = (3, 8),
+    size_range: Tuple[int, int] = (5, 14),
     count: Optional[int] = None,
 ) -> int:
     """Place mountain clusters; returns the number of clusters placed.
@@ -237,6 +245,11 @@ def generate_mountain_clusters(
     raised so mountains form visible ridges.  Single-tile "lone
     mountain" outcrops are dissolved into plain by the same
     ``_dissolve_isolated`` pass used for forests.
+
+    P2.8+ — bumped to (5, 14) so individual mountain clusters
+    span 5-14 cells.  Combined with the bumped count (size//8)
+    this gives a 20×20 map roughly 60-90 mountain cells, which
+    reads as "thick ridges" instead of "lone peaks".
 
     Mountains must not block castles from each other —
     ``verify_connectivity`` is the gatekeeper.  This function only

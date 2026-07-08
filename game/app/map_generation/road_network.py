@@ -17,6 +17,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from app.config import (
     TERRAIN_BARRACKS,
+    TERRAIN_BRIDGE,
     TERRAIN_MOUNTAIN,
     TERRAIN_PLAIN,
     TERRAIN_RIVER,
@@ -46,9 +47,16 @@ _LOCAL_COST: Dict[str, int] = {
     "castle": 2,
     TERRAIN_MOUNTAIN: 99,
     TERRAIN_RIVER: 6,
+    # Bridge: same cost as road (1) so the A* naturally prefers to
+    # cross via existing bridges when the road network already has
+    # one, which keeps new roads aligned with old ones.
+    TERRAIN_BRIDGE: 1,
 }
 
-_BLOCKED = {TERRAIN_MOUNTAIN, TERRAIN_RIVER, "castle_wall"}
+# Cells that A* will not enter for the road builder.  Rivers used to
+# be here, but P2.8+ lets roads cross rivers — the cell becomes a
+# ``bridge`` instead.  Mountains stay impassable (no mountain tunnel).
+_BLOCKED = {TERRAIN_MOUNTAIN, "castle_wall"}
 
 
 def _in_bounds(x: int, y: int, size: int) -> bool:
@@ -229,15 +237,25 @@ def generate_road_network(
 
     Returns the number of road tiles placed.  Existing road tiles are
     preserved (not double-counted).  Roads never overwrite castle
-    centres, river tiles, mountain tiles, castle_walls, or castle
-    safe-zone cells (when ``safe_zones`` is provided).
+    centres, mountain tiles, castle_walls, or castle safe-zone cells.
+
+    P2.8+ — roads are now allowed to cross rivers.  When an A* path
+    would step on a river tile, the cell is converted to a
+    ``bridge`` tile instead of a road, so the river stays
+    continuous on either side of the bridge and the player has a
+    clear "this is a crossing" visual cue.
+
+    For "attack lines" the road network also explicitly pairs each
+    HQ with the village / barracks cluster of its *farthest* enemy
+    HQ (when there are 2+ castles), guaranteeing a multi-HQ road
+    corridor on every realistic map.
     """
     terrain = _terrain_map(grid)
     blocked: Set[Coord] = {
         (x, y)
         for y in range(size)
         for x in range(size)
-        if grid[y][x].terrain in (TERRAIN_RIVER, TERRAIN_MOUNTAIN)
+        if grid[y][x].terrain == TERRAIN_MOUNTAIN
         or getattr(grid[y][x], "subtype", None) == "castle_wall"
     }
     # Don't draw roads on top of village/barracks/castle centres —
@@ -266,6 +284,19 @@ def generate_road_network(
         for _, b in ranked[:2]:
             pair = tuple(sorted((a, b)))
             pairs.add(pair)
+    # P2.8+ — also pair every castle with its farthest enemy castle
+    # so attack lines (multi-HQ road corridors) are guaranteed.
+    # Picked because long-range road corridors are what makes a map
+    # feel "driveable" instead of "scattered".
+    if len(castles) >= 2:
+        for i, a in enumerate(castles):
+            ranked = sorted(
+                ((_md(a, b), b) for j, b in enumerate(castles) if j != i),
+                key=lambda t: -t[0],  # farthest first
+            )
+            if ranked:
+                _, far = ranked[0]
+                pairs.add(tuple(sorted((a, far))))
 
     road_count = 0
     for a, b in pairs:
@@ -279,14 +310,22 @@ def generate_road_network(
             if step in anchor_blocked:
                 continue
             x, y = step
-            if grid[y][x].terrain == TERRAIN_ROAD:
-                continue
+            existing = grid[y][x].terrain
             # Don't bury a non-plain existing terrain that's not a
             # road — keeps the path readable.
-            cur = grid[y][x].terrain
-            if cur in (TERRAIN_VILLAGE, TERRAIN_BARRACKS, "castle"):
+            if existing in (TERRAIN_VILLAGE, TERRAIN_BARRACKS, "castle"):
                 continue
-            if cur in (TERRAIN_RIVER, TERRAIN_MOUNTAIN):
+            if existing == TERRAIN_MOUNTAIN:
+                continue
+            if existing == TERRAIN_ROAD:
+                continue  # already a road
+            if existing == TERRAIN_BRIDGE:
+                continue  # already a bridge
+            # P2.8+ — river cells along a road path become bridges.
+            if existing == TERRAIN_RIVER:
+                grid[y][x] = Tile(x=x, y=y, terrain=TERRAIN_BRIDGE)
+                terrain[(x, y)] = TERRAIN_BRIDGE
+                road_count += 1
                 continue
             grid[y][x] = Tile(x=x, y=y, terrain=TERRAIN_ROAD)
             terrain[(x, y)] = TERRAIN_ROAD

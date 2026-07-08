@@ -1,0 +1,139 @@
+{
+  "id": "realistic_grass_4p_25",
+  "name": "四国之战 4p",
+  "description": "四角对峙，道路穿越中央森林",
+  "biome": "grass",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "PFFPFMMMMMFFPPPrPFPPFMFPM",
+    "PPPFFMMMMMPRPvPRPFrFFMFPM",
+    "PPRPbMMrrrFMCRPbFMMPFrvrM",
+    "PrPvPRMrMRFvPPvrrrrrrrRrr",
+    "vPPFMMFrMPMMRPPRPPPPRrrrM",
+    "rPFFbrrrrRvFPPPPPPMPFMMvM",
+    "CPFrrRPPrRPFvPPRPPMPFPrrF",
+    "PFPvrFPRrFPPbPFrRMMFPPvPF",
+    "PFvvrrrrrFFRPPFPPMMMPFPMM",
+    "rPPPvPPFrFPvRRRFFRMFbrPPC",
+    "rPPMbPPFrRrRRRPRMMMMMMPvP",
+    "rPrMMPPFrrRRRRRRFMMMFPFrP",
+    "rMMFPPRFRrRMMMMPRMPPrrrvF",
+    "rRPFvPPRRjRRRRRFrMPrrMrMF",
+    "rrRMMRPRFrRRRvMMPPFvPMrMP",
+    "PrrFvFPRrrrjjrrrMMrrRRrMP",
+    "PbrrrrrrjRPRRRMrbrrRbRrPR",
+    "RPrPPPPMMFRRRRMRPbrPFFrFF",
+    "RRjMMRRRRRRRRrFFPPrrrrrMF",
+    "RRrRPFFPPMPPRFFPRvPRPFFMF",
+    "RPrrPPRPRMPPRFFRFPbPPPPPP",
+    "bPPvFMMMMMPrRrFPFvPPCFFFP",
+    "rMMRFPMMMMPRRFFPFFPvPPPFM",
+    "vPPPRPMrMMvRRPrPFFFFRFPFM",
+    "MMPrMMPRMRRRFPFFFFPPvFRPP"
+  ],
+  "initial_units": [
+    {
+      "x": 0,
+      "y": 7,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 1,
+      "y": 7,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 0,
+      "y": 8,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 24,
+      "y": 10,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 2
+    },
+    {
+      "x": 12,
+      "y": 3,
+      "type": "swordsman",
+      "color": "green",
+      "level": 2
+    },
+    {
+      "x": 13,
+      "y": 2,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 13,
+      "y": 3,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 14,
+      "y": 2,
+      "type": "healer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 20,
+      "y": 22,
+      "type": "warlock",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 21,
+      "type": "healer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 22,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 21,
+      "type": "swordsman",
+      "color": "yellow",
+      "level": 2
+    }
+  ],
+  "recommended_players": 4,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（5 red, 1 blue）"
+}

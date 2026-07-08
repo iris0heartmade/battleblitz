@@ -1,0 +1,125 @@
+{
+  "id": "realistic_desert_3p_25",
+  "name": "三方绿洲 3p",
+  "description": "沙漠中三处绿洲彼此对峙，桥连通水源",
+  "biome": "desert",
+  "size": {
+    "width": 25,
+    "height": 25
+  },
+  "layout": [
+    "PRPPMMMPPPRRRRRPPPRPrRPMP",
+    "PPPPMMMPvPvMRrPPPPMMPPPMP",
+    "MMvPMMMMrMPMRPMMPPbPMMMPP",
+    "MRPPMMMPrMPPRPPPbPMPPPPRP",
+    "MMMMMPPPrPPPRRPRrPMMMPPPR",
+    "MMPPPrPPrrrrjrrrrrrrRPRPv",
+    "MMPPbPMMMPrPRPPMPPPrMPPPP",
+    "MPMMPPPPPPrMRPPMPPPPMPRPv",
+    "MPPPPbMMMPrMRMPPPPbPPPPPP",
+    "RPPPPPPPPPrPRMPPMMMRCPbrR",
+    "PPPPPPPrPPrPRRMMPPMvPPPrr",
+    "PvMMPPRPPvrRRRRPPPPMMPPMr",
+    "PMMMPPPPMPrRRRRRPvPbrrrMb",
+    "PMMMMMRPMMrMRRRRPPPMrrrrv",
+    "PMPMPPPvPPvPRRRPPPPMrPPPP",
+    "PvPPPPMPPPrrRrrrrrrbrPPPP",
+    "PvPPPMMPPMMrrrMrPPMPPPMMr",
+    "PPPPPPPrbrrrvPMrPRMMPPMPP",
+    "PPPPPrrrMMMPrMMrPPMPMMMRP",
+    "PMCPbMMPPPPPrrrvPPPRPPPPP",
+    "PPPPRPPPPvRPPvPvMPPPPPPPP",
+    "PPPPPMPPPPPPPPPPMRPbrPPPP",
+    "PvrvPMPPPPrPPPRrPPPPPrPPP",
+    "rPPPPRbPPPPPRPMPPCPMMMRMM",
+    "PRRRRMMPMMPPMMMPPMPPPMPPR"
+  ],
+  "initial_units": [
+    {
+      "x": 20,
+      "y": 10,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 9,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 21,
+      "y": 10,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 22,
+      "y": 9,
+      "type": "knight",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 20,
+      "y": 11,
+      "type": "healer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 20,
+      "type": "knight",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 19,
+      "type": "warlock",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 20,
+      "type": "swordsman",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 24,
+      "type": "swordsman",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 23,
+      "type": "knight",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 24,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 19,
+      "y": 23,
+      "type": "warlock",
+      "color": "green",
+      "level": 1
+    }
+  ],
+  "recommended_players": 3,
+  "notes": "P2.7+ realistic 地图 — HQ 基于地形亲和力分布；开局单位随机（5 red, 3 blue）"
+}
