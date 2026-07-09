@@ -62,6 +62,25 @@ class TestGameLifecycle:
         assert body["battle_config"]["audio"]["bgm"]["track_id"] == "sample_battle_01"
         assert body["battle_config"]["audio"]["bgm"]["fade_in_ms"] == 1200
 
+    async def test_create_game_with_unknown_bgm_track_rejected(self, client):
+        """P2.9 — a free-build submission with an unregistered track_id
+        must be rejected at create-time (HTTP 400) instead of
+        persisting a battle_config the frontend cannot play."""
+        r = await client.post("/games", json={
+            "name": "Bad Audio",
+            "battle_config": {
+                "audio": {"bgm": {"track_id": "ghost_track_42"}},
+            },
+        })
+        assert r.status_code == 400
+        body = r.json()
+        # FastAPI wraps HTTPException detail; the message should
+        # mention the offending id and the available list so the
+        # frontend can show actionable feedback.
+        detail = body.get("detail", "")
+        assert "ghost_track_42" in detail
+        assert "sample_battle_01" in detail
+
     async def test_create_then_list(self, client):
         await client.post("/games", json={"name": "Game A"})
         await client.post("/games", json={"name": "Game B"})

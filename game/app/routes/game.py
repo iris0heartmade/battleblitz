@@ -40,7 +40,7 @@ from app.game_logic import (
     _unit_name,
 )
 from app.classes.units import get_or_none as _get_unit_or_none
-from app.battle_config import expand_battle_config
+from app.battle_config import UnknownBattleTrackError, expand_battle_config
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AddAIRequest,
@@ -114,6 +114,24 @@ _CHAR_TO_TERRAIN = {
 def _char_to_terrain(ch: str) -> str:
     """Map a single ASCII char (P/F/M/R/C) to its terrain string id."""
     return _CHAR_TO_TERRAIN.get(ch, TERRAIN_PLAIN)
+
+
+def _expand_user_battle_config(
+    battle_config: "BattleConfig | None",
+) -> dict:
+    """Expand a user-submitted BattleConfig into the stored form.
+
+    Centralised so ``create_game`` can catch ``UnknownBattleTrackError``
+    cleanly. ``strict=True`` is mandatory on the public create-game
+    path — silent fallback to a missing track would persist a config
+    the frontend can't play.
+    """
+    if battle_config is None:
+        return {}
+    return expand_battle_config(
+        battle_config.model_dump(exclude_none=True),
+        strict=True,
+    )
 
 
 def _apply_hero_overrides(
@@ -535,6 +553,24 @@ async def create_game(
     session: AsyncSession = Depends(get_session),
 ) -> GameSummaryOut:
     seed = body.map_seed if body.map_seed is not None else random.randint(0, 2**31 - 1)
+    # P2.9 — defensive expansion. expand_battle_config with strict=True
+    # raises UnknownBattleTrackError on a bad track_id; we convert that
+    # to HTTP 400 before reaching the DB session so the client gets a
+    # clear message and the available track list. The validator only
+    # fires when battle_config is actually supplied, so existing
+    # create_game callers without BGM continue to work.
+    try:
+        battle_config = _expand_user_battle_config(body.battle_config)
+    except UnknownBattleTrackError as exc:
+        available = ", ".join(exc.available) if exc.available else "(none)"
+        logger.warning(
+            "create_game rejected: unknown bgm track_id=%r available=%s",
+            exc.track_id, available,
+        )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"unknown bgm track_id: {exc.track_id!r} (available: {available})",
+        )
     # P2.4 — derive capacity from the chosen map's recommended_players.
     # `_effective_max_players` clamps to [MIN_PLAYERS, MAX_PLAYERS] and
     # falls back to the global cap when the preset doesn't declare one.
@@ -557,11 +593,10 @@ async def create_game(
         # DEFAULT_MAX_SPECTATORS; future versions may let the host
         # override at create-time.
         max_spectators=DEFAULT_MAX_SPECTATORS,
-        battle_config=expand_battle_config(
-            body.battle_config.model_dump(exclude_none=True)
-            if body.battle_config is not None
-            else {}
-        ),
+        # Strict mode: reject unknown track_ids at create-time instead
+        # of persisting a battle_config the frontend cannot play. Caught
+        # below and surfaced as HTTP 400 with the available list.
+        battle_config=_expand_user_battle_config(body.battle_config),
     )
     # P2.3 — for "reach" mode, look up the target tile so we can
     # render the goal pulse on the client + drive the win check.

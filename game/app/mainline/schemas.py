@@ -143,6 +143,36 @@ class BattleSpec(APIModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _check_bgm_track(self) -> "BattleSpec":
+        """If ``battle_config.audio.bgm.track_id`` is set, it must be
+        registered in ``game/config/battle_audio.json``.
+
+        Authoring-time check — a mistyped track_id in a mainline JSON
+        should fail at load_mainline, not silently slip through and
+        produce a silent no-audio battle. Pydantic wraps ValueError
+        into ValidationError, which the loader translates into
+        MainlineValidationError (422 to the client).
+        """
+        if self.battle_config is None or self.battle_config.audio is None:
+            return self
+        bgm = self.battle_config.audio.bgm
+        if bgm is None or not bgm.track_id:
+            return self
+        # Lazy import: keep mainline schemas importable without
+        # pulling in the audio config loader at module load time.
+        from app.battle_config import load_battle_audio_config
+
+        tracks = (load_battle_audio_config().get("tracks") or {})
+        if bgm.track_id not in tracks:
+            available = sorted(tracks.keys())
+            raise ValueError(
+                f"battle_config.audio.bgm.track_id {bgm.track_id!r} "
+                f"is not registered in battle_audio.json "
+                f"(available: {available})"
+            )
+        return self
+
 
 class MainlineRewards(APIModel):
     """Granted to the player when they finish the last battle."""

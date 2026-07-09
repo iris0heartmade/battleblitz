@@ -247,6 +247,32 @@ class TestErrors:
         with pytest.raises(MainlineError):
             load_mainline("broken")
 
+    def test_unknown_bgm_track_id_raises_validation(self, tmp_mainlines):
+        """P2.9 — battle_config.audio.bgm.track_id must be registered in
+        battle_audio.json. A mistyped id in a mainline JSON should
+        fail at load_mainline time (authoring feedback), not silently
+        persist and produce a silent no-audio battle at runtime."""
+        (tmp_mainlines / "bad_track.json").write_text(json.dumps({
+            "id": "bad_track",
+            "title": "Bad Track",
+            "required_classes": ["swordsman"],
+            "starting_units": [{"class_id": "swordsman"}],
+            "battles": [{
+                "id": "b1",
+                "title": "B1",
+                "map_id": "classic",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
+                "battle_config": {
+                    "audio": {"bgm": {"track_id": "ghost_track_42"}},
+                },
+            }],
+        }), encoding="utf-8")
+        with pytest.raises(MainlineValidationError) as ei:
+            load_mainline("bad_track")
+        # The message should mention the offending track and hint at
+        # the available list so the author can fix it without grep.
+        assert "ghost_track_42" in str(ei.value)
+
 
 # ============================================================
 # list_mainlines

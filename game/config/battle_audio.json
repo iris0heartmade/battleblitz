@@ -7,9 +7,13 @@
   },
   "tracks": {
     "sample_battle_01": {
+      "title": "示例战斗曲 01",
+      "category": "battle",
+      "file": "sample_battle_01.mp3",
       "volume": 0.8,
       "fade_in_ms": 1200,
-      "fade_out_ms": 800
+      "fade_out_ms": 800,
+      "notes": "默认 demo 曲目；用作章节 01 钢铁起义 与自由建房的兜底 BGM"
     }
   }
 }
