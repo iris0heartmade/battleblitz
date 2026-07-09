@@ -94,6 +94,129 @@ const state = {
   mainlineAdvancePending: false, // 防止 advance 重复触发
 };
 
+const AudioManager = {
+  _audio: null,
+  _currentSignature: null,
+  _currentConfig: null,
+  _transitionToken: 0,
+
+  resolveTrackUrl(trackId) {
+    return `/ui/assets/audio/bgm/${encodeURIComponent(trackId)}.mp3`;
+  },
+
+  applyBattleConfig(battleConfig) {
+    const bgm = battleConfig?.audio?.bgm || null;
+    if (!state.settings.soundOn || !bgm || !bgm.track_id) {
+      this.stopCurrentBgm(this._currentConfig?.fade_out_ms ?? 500);
+      return;
+    }
+    const signature = JSON.stringify(bgm);
+    if (signature === this._currentSignature && this._audio) {
+      return;
+    }
+    this._currentSignature = signature;
+    this._transitionToBgm(bgm).catch((err) => {
+      console.warn("[audio] bgm transition failed", err);
+    });
+  },
+
+  setEnabled(enabled) {
+    if (!enabled) {
+      this.stopCurrentBgm(this._currentConfig?.fade_out_ms ?? 500);
+      return;
+    }
+    if (state.game?.game?.battle_config) {
+      this.applyBattleConfig(state.game.game.battle_config);
+    }
+  },
+
+  stopCurrentBgm(fadeOutMs = 500) {
+    this._transitionToken += 1;
+    this._currentSignature = null;
+    this._currentConfig = null;
+    if (!this._audio) return;
+    const audio = this._audio;
+    this._audio = null;
+    this._fadeAudio(audio, audio.volume, 0, fadeOutMs, () => {
+      audio.pause();
+      audio.src = "";
+    });
+  },
+
+  async _transitionToBgm(bgm) {
+    const token = ++this._transitionToken;
+    const prevAudio = this._audio;
+    const prevConfig = this._currentConfig;
+    const nextAudio = new Audio(this.resolveTrackUrl(bgm.track_id));
+    nextAudio.loop = bgm.loop !== false;
+    nextAudio.preload = "auto";
+    nextAudio.volume = 0;
+
+    try {
+      await nextAudio.play();
+    } catch (err) {
+      if (token !== this._transitionToken) return;
+      toast(`BGM 无法播放：${bgm.track_id}`, 3000);
+      this._currentConfig = prevConfig;
+      this._audio = prevAudio;
+      return;
+    }
+
+    if (token !== this._transitionToken) {
+      nextAudio.pause();
+      nextAudio.src = "";
+      return;
+    }
+
+    this._audio = nextAudio;
+    this._currentConfig = bgm;
+    if (prevAudio) {
+      this._fadeAudio(
+        prevAudio,
+        prevAudio.volume,
+        0,
+        prevConfig?.fade_out_ms ?? 500,
+        () => {
+          prevAudio.pause();
+          prevAudio.src = "";
+        }
+      );
+    }
+    this._fadeAudio(
+      nextAudio,
+      0,
+      Math.max(0, Math.min(1, Number(bgm.volume ?? 0.8))),
+      Number(bgm.fade_in_ms ?? 1200)
+    );
+  },
+
+  _fadeAudio(audio, from, to, durationMs, onDone) {
+    if (!audio) return;
+    if (audio._bbFadeTimer) {
+      clearInterval(audio._bbFadeTimer);
+      audio._bbFadeTimer = null;
+    }
+    if (!durationMs || durationMs <= 0) {
+      audio.volume = to;
+      if (onDone) onDone();
+      return;
+    }
+    const startedAt = performance.now();
+    audio.volume = from;
+    audio._bbFadeTimer = setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      const progress = Math.min(1, elapsed / durationMs);
+      audio.volume = from + ((to - from) * progress);
+      if (progress >= 1) {
+        clearInterval(audio._bbFadeTimer);
+        audio._bbFadeTimer = null;
+        audio.volume = to;
+        if (onDone) onDone();
+      }
+    }, 40);
+  },
+};
+
 // ----- API helpers -----
 async function api(method, path, body) {
   const opts = {
@@ -140,6 +263,9 @@ function showView(name) {
   document.querySelectorAll(".view").forEach(v => { v.hidden = true; });
   const el = document.getElementById("view-" + name);
   if (el) el.hidden = false;
+  if (name !== "game") {
+    AudioManager.stopCurrentBgm();
+  }
 }
 
 function toast(msg, ms = 2200) {
@@ -350,6 +476,7 @@ async function createGame() {
   const name = document.getElementById("new-name").value.trim() || `房间-${Date.now()}`;
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
+  const bgmTrackId = document.getElementById("new-bgm-track-id").value.trim();
   // P2.4 polish — win condition is now universal (rout+seize). The
   // hidden #new-win-condition input still emits "rout" so the API
   // contract is preserved; reach/defend blocks are ignored.
@@ -363,6 +490,15 @@ async function createGame() {
     const body = { name, win_condition: winCondition };
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
+    if (bgmTrackId) {
+      body.battle_config = {
+        audio: {
+          bgm: {
+            track_id: bgmTrackId,
+          },
+        },
+      };
+    }
     // reach / defend blocks are kept in the DOM for legacy data but
     // are no longer wired into new game creation. The engine still
     // honors the values on legacy rows.
@@ -1011,6 +1147,7 @@ async function refreshGame() {
     }
     state.lastState = st;
     state.game = st;
+    AudioManager.applyBattleConfig(st.game?.battle_config || null);
     renderGame(st);
   } catch (e) {
     toast("状态获取失败：" + e.message, 2500);
@@ -4436,6 +4573,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       case "goto-new-game":
         document.getElementById("new-name").value = state.settings.playerName ? `${state.settings.playerName}的房间` : "";
+        document.getElementById("new-bgm-track-id").value = "sample_battle_01";
         document.getElementById("new-error").hidden = true;
         populatePresetSelects().catch(() => {});
         setupWinConditionUI();
@@ -4502,6 +4640,7 @@ document.addEventListener("DOMContentLoaded", () => {
         state.settings.soundOn = document.getElementById("setting-sound").checked;
         saveSettings(state.settings);
         applyTheme(state.settings.theme);
+        AudioManager.setEnabled(state.settings.soundOn);
         toast("设置已保存");
         break;
       case "create-game":

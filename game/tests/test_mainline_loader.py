@@ -79,6 +79,7 @@ class TestLoadSample:
         assert b1.map_id == "balanced_2p_15"
         assert b1.win_condition == "rout"
         assert b1.teams == {"ally": ["blue"], "enemy": ["red"]}
+        assert b1.battle_config.audio.bgm.track_id == "sample_battle_01"
         assert b1.pre_battle_dialogue == "intro"
         assert b1.post_battle_dialogue == "battle_01_after"
         assert b2.pre_battle_dialogue is None

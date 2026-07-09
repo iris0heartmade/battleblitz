@@ -38,6 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.battle_config import expand_battle_config
 from app.game_logic import build_ai_player
 from app.mainline import (
     MainlineNotFound,
@@ -244,6 +245,11 @@ async def _spawn_battle_for_index(
         current_player_index=0,
         map_seed=battle.map_seed if battle.map_seed is not None else 0,
         map_preset=battle.map_id,
+        battle_config=expand_battle_config(
+            battle.battle_config.model_dump(exclude_none=True)
+            if battle.battle_config is not None
+            else {}
+        ),
     )
     session.add(game)
     await session.flush()
@@ -580,6 +586,7 @@ async def start_mainline(
         battle_index=0,
         total_battles=total_battles,
         state=state,
+        battle_config=game.battle_config or {},
         pre_battle_dialogue_url=pre_url,
         pre_battle_dialogue_key=pre_key,
     )
@@ -815,6 +822,7 @@ async def next_battle_mainline(
         battle_index=next_idx,
         total_battles=total_battles,
         state="dialogue" if pre_url else "battle",
+        battle_config=game.battle_config or {},
         pre_battle_dialogue_url=pre_url,
         pre_battle_dialogue_key=pre_key,
     )

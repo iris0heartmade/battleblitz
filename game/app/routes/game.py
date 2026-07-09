@@ -40,6 +40,7 @@ from app.game_logic import (
     _unit_name,
 )
 from app.classes.units import get_or_none as _get_unit_or_none
+from app.battle_config import expand_battle_config
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AddAIRequest,
@@ -556,6 +557,11 @@ async def create_game(
         # DEFAULT_MAX_SPECTATORS; future versions may let the host
         # override at create-time.
         max_spectators=DEFAULT_MAX_SPECTATORS,
+        battle_config=expand_battle_config(
+            body.battle_config.model_dump(exclude_none=True)
+            if body.battle_config is not None
+            else {}
+        ),
     )
     # P2.3 — for "reach" mode, look up the target tile so we can
     # render the goal pulse on the client + drive the win check.

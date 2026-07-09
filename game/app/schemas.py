@@ -21,6 +21,29 @@ class APIModel(BaseModel):
 
 
 # ============================================================
+# Battle config
+# ============================================================
+
+TRACK_ID_PATTERN = r"^[a-z0-9_-]{1,64}$"
+
+
+class BattleBgmConfig(BaseModel):
+    track_id: str = Field(pattern=TRACK_ID_PATTERN)
+    loop: Optional[bool] = None
+    volume: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    fade_in_ms: Optional[int] = Field(default=None, ge=0, le=10000)
+    fade_out_ms: Optional[int] = Field(default=None, ge=0, le=10000)
+
+
+class BattleAudioConfig(BaseModel):
+    bgm: Optional[BattleBgmConfig] = None
+
+
+class BattleConfig(BaseModel):
+    audio: Optional[BattleAudioConfig] = None
+
+
+# ============================================================
 # Game lifecycle
 # ============================================================
 
@@ -39,6 +62,7 @@ class CreateGameRequest(BaseModel):
     # P2.3 — when win_condition == "defend", the round count at
     # which the surviving team wins.
     defend_turns: int = 10
+    battle_config: Optional[BattleConfig] = None
 
 
 class JoinGameRequest(BaseModel):
@@ -214,6 +238,7 @@ class GameSummaryOut(APIModel):
     # Game.capacity. Drives the lobby's add-AI button gate and the
     # "room full" check on join.
     capacity: int = 4
+    battle_config: Dict = Field(default_factory=dict)
     created_at: datetime
 
 
