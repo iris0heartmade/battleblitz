@@ -22,6 +22,7 @@ from app.config import APP_TITLE, APP_VERSION, DEFAULT_DB_PATH
 from app.database import dispose_db, init_db
 from app.logging_config import log_server_lifecycle, setup_logging
 from app.routes import actions as actions_routes
+from app.routes import audio as audio_routes
 from app.routes import debug_ws as debug_ws_routes
 from app.routes import editor as editor_routes
 from app.routes import game as game_routes
@@ -124,3 +125,6 @@ app.include_router(mainline_routes.router)
 # the dialog system can resolve a speaker to the right portrait /
 # crest and the board renderer can pick a per-hero grid sprite.
 app.include_router(heroes_routes.router)
+# BGM catalog (P2.9) — lets the free-build picker render a dropdown
+# of registered tracks instead of asking the user to type a track_id.
+app.include_router(audio_routes.router)

@@ -122,9 +122,16 @@
         <input id="new-seed" type="number" placeholder="留空使用随机种子" />
       </div>
       <div class="form-row">
-        <label>BGM Track ID</label>
-        <input id="new-bgm-track-id" type="text" maxlength="64" placeholder="例如：sample_battle_01" />
-        <p class="muted small">会映射到 <code>/ui/assets/audio/bgm/&lt;track_id&gt;.mp3</code>，音量与淡入淡出由后端配置文件统一补全</p>
+        <label>战斗 BGM</label>
+        <!-- P2.9 — BGM picker. The dropdown is populated from
+             GET /audio/tracks at view-open time (see populateBgmPicker).
+             Players no longer type a track_id; the metadata block
+             below surfaces category + notes for the selected track. -->
+        <select id="new-bgm-track-id">
+          <option value="">加载中…</option>
+        </select>
+        <p class="muted small" id="new-bgm-meta" hidden></p>
+        <p class="muted small">曲目参数（音量 / 淡入淡出）由后端配置统一补全,实际生效规则以创建房间后服务端返回的 <code>battle_config.audio.bgm</code> 为准</p>
       </div>
       <!-- P2.4 polish — victory condition is now universal; the
            dropdown offered 4 modes but rout+seize are the only ones

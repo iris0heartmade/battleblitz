@@ -560,6 +560,11 @@ async function populatePresetSelects() {
   const presets = await loadPresets();
   const mapSel = document.getElementById("new-map-preset");
   const countSel = document.getElementById("new-player-count");
+  // P2.9 — refresh the BGM picker alongside the map presets so the
+  // two dropdowns stay in sync. populateBgmPicker is fire-and-forget;
+  // if /audio/tracks fails the select keeps its "加载中…" placeholder
+  // (no crash on a flaky backend).
+  populateBgmPicker().catch(() => {});
   // Bug fix: the create-game view is shown repeatedly as the user
   // enters and leaves the lobby. Each time we'd appendChild new
   // <option>s without clearing the previous ones, so the dropdown
@@ -613,6 +618,105 @@ function updatePresetNotes(sel) {
     target.textContent = "";
     target.style.display = "none";
     target.classList.remove("warn");
+  }
+}
+
+// P2.9 — BGM picker. The create-game view used to ask the user to
+// type a track_id; the catalog now lives behind GET /audio/tracks
+// so we can show titles + categories in a dropdown. This mirrors
+// how populatePresetSelects handles the map selector.
+async function populateBgmPicker() {
+  const sel = document.getElementById("new-bgm-track-id");
+  if (!sel) return;
+  // Reset before refilling: the view opens repeatedly across the
+  // lobby cycle, otherwise we'd accumulate stale options.
+  sel.innerHTML = "";
+  let payload;
+  try {
+    payload = await api("GET", "/audio/tracks");
+  } catch (e) {
+    // Backend down or no route — fall back to a single placeholder
+    // option so the dropdown stays usable. The create-game call
+    // will still 400 if the user submits an unknown id, but at
+    // least the UI doesn't crash here.
+    const opt = document.createElement("option");
+    opt.value = "sample_battle_01";
+    opt.textContent = "示例战斗曲 01 (默认)";
+    sel.appendChild(opt);
+    sel.disabled = true;
+    return;
+  }
+  const tracks = (payload && payload.tracks) || [];
+  if (!tracks.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "暂无可用曲目";
+    sel.appendChild(opt);
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  for (const t of tracks) {
+    const opt = document.createElement("option");
+    opt.value = t.track_id;
+    // Title is the primary label; category sits inline so the user
+    // can tell at a glance whether this is a battle / boss / etc.
+    // track. `file` and resolved params live in `dataset` for the
+    // description renderer to pull from.
+    const cat = t.category ? ` · ${t.category}` : "";
+    opt.textContent = `${t.title || t.track_id}${cat}`;
+    opt.dataset.category = t.category || "";
+    opt.dataset.notes = t.notes || "";
+    if (t.params) opt.dataset.params = JSON.stringify(t.params);
+    sel.appendChild(opt);
+  }
+  // Default to the shipped sample track on first load.
+  if ([...sel.options].some((o) => o.value === "sample_battle_01")) {
+    sel.value = "sample_battle_01";
+  }
+  updateBgmMeta(sel);
+  // Live-update the meta line whenever the user picks a different
+  // track. One-time wiring; safe to re-attach on every populate
+  // because we replace the <select> children but not the element.
+  if (!sel.dataset.p2p9Wired) {
+    sel.dataset.p2p9Wired = "1";
+    sel.addEventListener("change", () => updateBgmMeta(sel));
+  }
+}
+
+// P2.9 — show the selected track's category + notes + resolved
+// params (volume / fade-in / ...) right under the dropdown, so the
+// player sees what they're picking without having to open the JSON.
+function updateBgmMeta(sel) {
+  const target = document.getElementById("new-bgm-meta");
+  if (!target) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) {
+    target.hidden = true;
+    target.textContent = "";
+    return;
+  }
+  const cat = opt.dataset.category || "";
+  const notes = opt.dataset.notes || "";
+  let params = {};
+  try {
+    params = opt.dataset.params ? JSON.parse(opt.dataset.params) : {};
+  } catch {
+    params = {};
+  }
+  const parts = [];
+  if (cat) parts.push(`分类:${cat}`);
+  if (typeof params.volume === "number") parts.push(`音量:${params.volume.toFixed(2)}`);
+  if (typeof params.fade_in_ms === "number") parts.push(`淡入:${params.fade_in_ms}ms`);
+  if (typeof params.fade_out_ms === "number") parts.push(`淡出:${params.fade_out_ms}ms`);
+  let line = parts.join(" · ");
+  if (notes) line = line ? `${line} — ${notes}` : notes;
+  if (line) {
+    target.textContent = line;
+    target.hidden = false;
+  } else {
+    target.textContent = "";
+    target.hidden = true;
   }
 }
 
