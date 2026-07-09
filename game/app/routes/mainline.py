@@ -270,19 +270,19 @@ async def _spawn_battle_for_index(
     session.add(game)
     await session.flush()
 
-    # 2. Create the human player (seat 0, blue).
+    # 2. Create the human player (seat 0, red / map-left).
     human = Player(
         game_id=game.id,
         user_name=profile.user_name,
-        color="blue",
+        color="red",
         seat=0,
         is_ai=False,
     )
     session.add(human)
     await session.flush()
 
-    # 3. Create the AI enemy (seat 1, red) — units spawn in step 4.
-    ai = await _build_enemy_player(session, game, seat=1, color="red")
+    # 3. Create the AI enemy (seat 1, blue / map-right) — units spawn in step 4.
+    ai = await _build_enemy_player(session, game, seat=1, color="blue")
 
     # 4. Spawn tiles + units via the shared helper. P2.6 — units are
     # driven by the map's initial_units JSON, not caller-supplied rosters.
@@ -295,14 +295,14 @@ async def _spawn_battle_for_index(
     # where named characters (e.g. "云") can be wired in: each
     # entry with a `hero_id` is converted to an override dict the
     # spawn helper understands.  `color` is taken from the entry
-    # (falls back to "blue" for the human's roster), and
+    # (falls back to "red" for the human's roster), and
     # `(x, y)` is passed through if the mainline author wants to
     # pin the hero to a specific map tile.
     hero_overrides: List[Dict] = []
     for spec in ml.starting_units:
         if not spec.hero_id:
             continue
-        override_color = spec.color or "blue"
+        override_color = spec.color or "red"
         # When the mainline supplies a class_id that doesn't match
         # the hero's base_class_id, the UnitSpec validator already
         # rejected it; here we can trust the pairing.
@@ -326,6 +326,11 @@ async def _spawn_battle_for_index(
         map_preset=battle.map_id,
         map_seed=battle.map_seed,
         hero_overrides=hero_overrides or None,
+        spawn_overrides=(
+            battle.spawn_overrides.model_dump(exclude_none=True)
+            if battle.spawn_overrides is not None
+            else None
+        ),
     )
 
     # 5. Audit log.

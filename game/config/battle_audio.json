@@ -9,7 +9,7 @@
     "sample_battle_01": {
       "title": "示例战斗曲 01",
       "category": "battle",
-      "file": "sample_battle_01.mp3",
+      "file": "1.mp3",
       "volume": 0.8,
       "fade_in_ms": 1200,
       "fade_out_ms": 800,

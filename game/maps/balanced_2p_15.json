@@ -97,5 +97,5 @@
     }
   ],
   "recommended_players": 2,
-  "notes": "P2.6+ — HQ tiles use 'H'; layout has EXACTLY 2 HQ tiles, one per seat."
+  "notes": "P2.6+ — HQ tiles use 'H'; layout has EXACTLY 2 HQ tiles, one per seat. Row-major left HQ is seat 0 / red / player side, right HQ is seat 1 / blue / enemy side. Edit initial_units directly to move the default left-vs-right spawn pattern."
 }

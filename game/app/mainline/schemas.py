@@ -97,6 +97,39 @@ class UnitSpec(APIModel):
         return self
 
 
+class SpawnUnitMatch(APIModel):
+    color: str = Field(min_length=1, max_length=16)
+    x: int = Field(ge=0, le=999)
+    y: int = Field(ge=0, le=999)
+
+
+class SpawnUnit(APIModel):
+    x: int = Field(ge=0, le=999)
+    y: int = Field(ge=0, le=999)
+    type: str = Field(pattern=_class_id_pattern())
+    color: str = Field(min_length=1, max_length=16)
+    level: int = Field(default=1, ge=1, le=99)
+
+
+class SpawnReplacementUnit(APIModel):
+    type: str = Field(pattern=_class_id_pattern())
+    color: str = Field(min_length=1, max_length=16)
+    level: int = Field(default=1, ge=1, le=99)
+    x: Optional[int] = Field(default=None, ge=0, le=999)
+    y: Optional[int] = Field(default=None, ge=0, le=999)
+
+
+class SpawnReplaceSpec(APIModel):
+    match: SpawnUnitMatch
+    unit: SpawnReplacementUnit
+
+
+class SpawnOverrides(APIModel):
+    remove: list[SpawnUnitMatch] = Field(default_factory=list)
+    replace: list[SpawnReplaceSpec] = Field(default_factory=list)
+    add: list[SpawnUnit] = Field(default_factory=list)
+
+
 class BattleSpec(APIModel):
     """One battle inside a mainline.
 
@@ -118,6 +151,7 @@ class BattleSpec(APIModel):
     teams: dict[str, list[str]] = Field(default_factory=dict)
     notes: Optional[str] = None
     battle_config: Optional[BattleConfig] = None
+    spawn_overrides: Optional[SpawnOverrides] = None
     pre_battle_dialogue: Optional[str] = None
     post_battle_dialogue: Optional[str] = None
 
@@ -134,12 +168,27 @@ class BattleSpec(APIModel):
         if map_data is None:
             raise ValueError(f"map_id {self.map_id!r} not found in MAP_PRESETS")
         all_colors = {c for team in self.teams.values() for c in team}
-        map_colors = {u["color"] for u in map_data.get("initial_units", [])}
+        from app.mainline.spawn_overrides import (
+            SpawnOverrideError,
+            apply_spawn_overrides,
+        )
+
+        try:
+            final_units = apply_spawn_overrides(
+                list(map_data.get("initial_units", [])),
+                self.spawn_overrides.model_dump(exclude_none=True)
+                if self.spawn_overrides is not None
+                else None,
+            )
+        except SpawnOverrideError as exc:
+            raise ValueError(str(exc)) from exc
+        map_colors = {u["color"] for u in final_units}
         missing = all_colors - map_colors
         if missing:
             raise ValueError(
                 f"team colors {sorted(missing)} have no units in map "
-                f"{self.map_id!r} (available: {sorted(map_colors)})"
+                f"{self.map_id!r} after spawn_overrides "
+                f"(available: {sorted(map_colors)})"
             )
         return self
 
