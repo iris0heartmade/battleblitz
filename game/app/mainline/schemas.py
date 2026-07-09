@@ -274,12 +274,38 @@ class MainlineSummary(APIModel):
 from pydantic import BaseModel as _PydanticBaseModel, Field as _Field  # noqa: E402
 
 
+class BattleBgmMeta(_PydanticBaseModel):
+    """Catalogue metadata for a battle's BGM, surfaced to the front-end.
+
+    Intentionally excludes parameter overrides (volume / fade / loop)
+    — those are server-controlled and re-merged by ``expand_battle_config``
+    before the client sees the final config. The catalogue metadata is
+    safe to expose so lobby detail panels and mainline headers can
+    show "BGM: <title> (<category>)" without a second API round-trip.
+
+    All four fields are optional because a track entry may declare
+    only some of them — title is the most common, ``notes`` is the
+    most likely to be omitted.
+    """
+    track_id: str
+    title: Optional[str] = None
+    category: Optional[str] = None
+    file: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class BattlePreview(_PydanticBaseModel):
     """Compact view of a battle for the lobby list."""
     id: str
     title: str
     win_condition: str
     map_id: str
+    # P2.9 — optional BGM catalogue metadata. None when the battle
+    # has no battle_config, or when battle_config.audio.bgm.track_id
+    # is unset / not registered. Frontend renders "BGM: <title>"
+    # from this block; never fall back to expanding the full
+    # battle_config on the client.
+    bgm: Optional[BattleBgmMeta] = None
 
 
 class MainlineDetailOut(_PydanticBaseModel):
@@ -317,6 +343,11 @@ class MainlineStartOut(_PydanticBaseModel):
     battle_config: Optional[BattleConfig] = None
     pre_battle_dialogue_url: Optional[str] = None
     pre_battle_dialogue_key: Optional[str] = None
+    # P2.9 — BGM catalogue metadata for the just-spawned battle, so
+    # the front-end can show "BGM: <title> (<category>)" in the
+    # mainline header without a second round-trip. None when the
+    # battle has no BGM or the track_id isn't registered.
+    bgm_meta: Optional[BattleBgmMeta] = None
 
 
 class MainlineAdvanceRequest(_PydanticBaseModel):
@@ -381,6 +412,7 @@ __all__ = [
     "Mainline",
     "MainlineSummary",
     # Route-level (Step 3)
+    "BattleBgmMeta",
     "BattlePreview",
     "MainlineDetailOut",
     "MainlineStartRequest",

@@ -38,7 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.battle_config import expand_battle_config
+from app.battle_config import battle_bgm_meta, expand_battle_config
 from app.game_logic import build_ai_player
 from app.mainline import (
     MainlineNotFound,
@@ -55,6 +55,7 @@ from app.mainline.engine import (
     utcnow_iso,
 )
 from app.mainline.schemas import (
+    BattleBgmMeta,
     BattlePreview,
     MainlineAbandonOut,
     MainlineAdvanceOut,
@@ -92,6 +93,21 @@ _GAME_ROOT: Path = Path(__file__).resolve().parents[2]
 def game_root() -> Path:
     """Absolute path to the ``game/`` directory. Exposed for tests."""
     return _GAME_ROOT
+
+
+# ============================================================
+# BGM helpers (P2.9)
+# ============================================================
+
+def _battle_track_id(battle: "BattleSpec") -> Optional[str]:
+    """Pull the bare ``audio.bgm.track_id`` from a BattleSpec, or
+    None if the battle declares no battle_config / audio / bgm."""
+    if battle.battle_config is None or battle.battle_config.audio is None:
+        return None
+    bgm = battle.battle_config.audio.bgm
+    if bgm is None:
+        return None
+    return bgm.track_id or None
 
 
 # ============================================================
@@ -444,6 +460,16 @@ async def get_mainline_detail(mainline_id: str) -> MainlineDetailOut:
                 title=b.title,
                 win_condition=b.win_condition,
                 map_id=b.map_id,
+                # P2.9 — surface catalogue metadata per battle so the
+                # front-end can render "BGM: <title>" in the lobby
+                # detail panel. None when the battle has no BGM or
+                # the track_id isn't registered. We deliberately use
+                # the battle's track_id (not the registry default) so
+                # per-battle overrides show through.
+                bgm=BattleBgmMeta.model_validate(
+                    battle_bgm_meta(_battle_track_id(b))
+                )
+                if _battle_track_id(b) else None,
             )
             for b in ml.battles
         ],
@@ -589,6 +615,10 @@ async def start_mainline(
         battle_config=game.battle_config or {},
         pre_battle_dialogue_url=pre_url,
         pre_battle_dialogue_key=pre_key,
+        # P2.9 — catalogue metadata for the just-spawned battle so
+        # the mainline header can show "BGM: <title> (<category>)".
+        bgm_meta=BattleBgmMeta.model_validate(battle_bgm_meta(_battle_track_id(ml.battles[0])))
+        if _battle_track_id(ml.battles[0]) else None,
     )
 
 
@@ -825,6 +855,8 @@ async def next_battle_mainline(
         battle_config=game.battle_config or {},
         pre_battle_dialogue_url=pre_url,
         pre_battle_dialogue_key=pre_key,
+        bgm_meta=BattleBgmMeta.model_validate(battle_bgm_meta(_battle_track_id(ml.battles[next_idx])))
+        if _battle_track_id(ml.battles[next_idx]) else None,
     )
 
 

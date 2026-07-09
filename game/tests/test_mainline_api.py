@@ -120,6 +120,25 @@ class TestMainlineDetail:
         assert len(body["dialogue_keys"]) == 4
         assert "intro" in body["dialogue_keys"]
 
+    async def test_get_detail_battles_carry_bgm_metadata(self, ml_client):
+        """P2.9 — battles that declare a track_id must surface BGM
+        catalogue metadata in their preview; battles with no
+        battle_config / audio block leave bgm as None."""
+        client, _ = ml_client
+        r = await client.get("/mainlines/chapter_01_steel_rebellion")
+        assert r.status_code == 200
+        by_id = {b["id"]: b for b in r.json()["battles"]}
+        # battle_01 declares sample_battle_01 — full metadata block.
+        assert by_id["battle_01"]["bgm"] is not None
+        bgm = by_id["battle_01"]["bgm"]
+        assert bgm["track_id"] == "sample_battle_01"
+        assert bgm["title"] == "示例战斗曲 01"
+        assert bgm["category"] == "battle"
+        assert bgm["file"] == "sample_battle_01.mp3"
+        assert "兜底 BGM" in bgm["notes"]
+        # battle_02 ships without battle_config — bgm stays None.
+        assert by_id["battle_02"]["bgm"] is None
+
     async def test_get_detail_unknown_returns_404(self, ml_client):
         client, _ = ml_client
         r = await client.get("/mainlines/does_not_exist_xyz")
@@ -147,6 +166,13 @@ class TestStartMainline:
         assert body["total_battles"] == 2
         assert body["battle_config"]["audio"]["bgm"]["track_id"] == "sample_battle_01"
         assert body["battle_config"]["audio"]["bgm"]["fade_out_ms"] == 800
+        # P2.9 — start response also carries BGM catalogue metadata
+        # so the mainline header can render the title without
+        # fetching /audio/tracks on its own.
+        assert body["bgm_meta"] is not None
+        assert body["bgm_meta"]["track_id"] == "sample_battle_01"
+        assert body["bgm_meta"]["title"] == "示例战斗曲 01"
+        assert body["bgm_meta"]["category"] == "battle"
         # skip_intro=True means no pre-battle dialogue URL
         assert body["state"] == "battle"
         assert body["pre_battle_dialogue_url"] is None
@@ -508,6 +534,10 @@ class TestNextBattle:
         # battle_02 has no pre_battle_dialogue
         assert body["state"] == "battle"
         assert body["pre_battle_dialogue_url"] is None
+        # P2.9 — battle_02 ships without a battle_config, so bgm_meta
+        # stays None on the next-battle response too. (Verifies the
+        # helper short-circuits to None rather than crashing.)
+        assert body["bgm_meta"] is None
 
     async def test_next_battle_without_active_mainline_rejected(self, ml_client):
         client, _ = ml_client
