@@ -3,7 +3,7 @@
   "title": "钢铁起义",
   "synopsis": "边境领主暴动，玩家扮演的剑士踏上收复失地之路。第一章：山口伏击 → 围城战。",
   "cover_art": null,
-  "required_classes": ["swordsman", "archer"],
+  "required_classes": ["swordsman", "archer", "healer"],
   "starting_units": [
     {
       "class_id": "warlock",
@@ -11,6 +11,15 @@
       "name": "云",
       "hero_id": "yun",
       "color": "blue"
+    },
+    {
+      "class_id": "healer",
+      "level": 1,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "blue",
+      "x": 12,
+      "y": 9
     },
     {"class_id": "archer", "level": 1, "name": "红"}
   ],
