@@ -100,8 +100,11 @@ const AudioManager = {
   _currentConfig: null,
   _transitionToken: 0,
 
-  resolveTrackUrl(trackId) {
-    return `/ui/assets/audio/bgm/${encodeURIComponent(trackId)}.mp3`;
+  resolveTrackUrl(bgm) {
+    const fileName = (bgm && typeof bgm.file === "string" && bgm.file.trim())
+      ? bgm.file.trim()
+      : `${bgm?.track_id || ""}.mp3`;
+    return `/ui/assets/audio/bgm/${encodeURIComponent(fileName)}`;
   },
 
   applyBattleConfig(battleConfig) {
@@ -147,7 +150,7 @@ const AudioManager = {
     const token = ++this._transitionToken;
     const prevAudio = this._audio;
     const prevConfig = this._currentConfig;
-    const nextAudio = new Audio(this.resolveTrackUrl(bgm.track_id));
+    const nextAudio = new Audio(this.resolveTrackUrl(bgm));
     nextAudio.loop = bgm.loop !== false;
     nextAudio.preload = "auto";
     nextAudio.volume = 0;

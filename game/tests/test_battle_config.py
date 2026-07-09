@@ -51,7 +51,7 @@ def test_load_battle_audio_config_exposes_metadata():
     entry = tracks["sample_battle_01"]
     assert entry.get("title") == "示例战斗曲 01"
     assert entry.get("category") == "battle"
-    assert entry.get("file") == "sample_battle_01.mp3"
+    assert entry.get("file") == "1.mp3"
     assert "notes" in entry and "兜底 BGM" in entry["notes"]
     # Parameter overrides still coexist with the new metadata.
     assert entry.get("volume") == 0.8
@@ -73,7 +73,7 @@ def test_expand_battle_config_does_not_strip_metadata():
     bgm = out["audio"]["bgm"]
     assert bgm["title"] == "示例战斗曲 01"
     assert bgm["category"] == "battle"
-    assert bgm["file"] == "sample_battle_01.mp3"
+    assert bgm["file"] == "1.mp3"
 
 
 # ============================================================
@@ -156,7 +156,7 @@ def test_battle_bgm_meta_returns_metadata_for_known_track():
     assert meta["track_id"] == "sample_battle_01"
     assert meta["title"] == "示例战斗曲 01"
     assert meta["category"] == "battle"
-    assert meta["file"] == "sample_battle_01.mp3"
+    assert meta["file"] == "1.mp3"
     # Parameter overrides must NOT leak into the meta block —
     # the front-end gets those via the full battle_config.audio.bgm.
     assert "volume" not in meta

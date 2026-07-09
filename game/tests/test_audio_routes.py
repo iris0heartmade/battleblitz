@@ -32,7 +32,7 @@ class TestAudioTracks:
         # Stage A metadata fields surface on the track entry.
         assert sample["title"] == "示例战斗曲 01"
         assert sample["category"] == "battle"
-        assert sample["file"] == "sample_battle_01.mp3"
+        assert sample["file"] == "1.mp3"
         assert "notes" in sample and sample["notes"]
         # The resolved params dict carries the merged defaults +
         # per-track overrides — useful for the picker to render

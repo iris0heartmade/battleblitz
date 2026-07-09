@@ -134,7 +134,7 @@ class TestMainlineDetail:
         assert bgm["track_id"] == "sample_battle_01"
         assert bgm["title"] == "示例战斗曲 01"
         assert bgm["category"] == "battle"
-        assert bgm["file"] == "sample_battle_01.mp3"
+        assert bgm["file"] == "1.mp3"
         assert "兜底 BGM" in bgm["notes"]
         # battle_02 ships without battle_config — bgm stays None.
         assert by_id["battle_02"]["bgm"] is None
@@ -198,12 +198,14 @@ class TestStartMainline:
             enemy = next(p for p in players if p.seat == 1)
             assert human.user_name == "alice"
             assert human.is_ai is False
+            assert human.color == "red"
             assert enemy.is_ai is True
+            assert enemy.color == "blue"
 
             # P2.6 — unit counts come from the map's `initial_units`
             # (balanced_2p_15 has 5 red + 5 blue) and colors are
             # routed by `teams` to the matching player. The human is
-            # color=blue and the AI is color=red, so each player gets
+            # color=red and the AI is color=blue, so each player gets
             # 5 units.
             ally_units = (await s.execute(
                 select(Unit).where(Unit.player_id == human.id)
@@ -222,6 +224,12 @@ class TestStartMainline:
             enemy_types = sorted(u.unit_type for u in enemy_units)
             assert enemy_types == [
                 "archer", "healer", "knight", "swordsman", "warlock",
+            ]
+            assert sorted((u.x, u.y) for u in ally_units) == [
+                (2, 8), (2, 9), (3, 7), (3, 8), (4, 7),
+            ]
+            assert sorted((u.x, u.y) for u in enemy_units) == [
+                (12, 8), (12, 9), (13, 7), (13, 8), (14, 7),
             ]
 
     async def test_start_with_intro_returns_dialogue_url(self, ml_client):

@@ -10,15 +10,15 @@
       "level": 1,
       "name": "云",
       "hero_id": "yun",
-      "color": "blue"
+      "color": "red"
     },
     {
       "class_id": "healer",
       "level": 1,
       "name": "安娜",
       "hero_id": "anna",
-      "color": "blue",
-      "x": 12,
+      "color": "red",
+      "x": 2,
       "y": 9
     },
     {"class_id": "archer", "level": 1, "name": "红"}
@@ -36,7 +36,8 @@
       "map_id": "balanced_2p_15",
       "map_seed": 42,
       "win_condition": "rout",
-      "teams": {"ally": ["blue"], "enemy": ["red"]},
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "主线约定：玩家=red（地图左侧），敌军=blue（地图右侧）。需要调站位时优先改 map.initial_units；局部差异再用 spawn_overrides。",
       "battle_config": {
         "audio": {
           "bgm": {
@@ -53,7 +54,22 @@
       "map_id": "balanced_2p_15",
       "map_seed": 7,
       "win_condition": "seize",
-      "teams": {"ally": ["blue"], "enemy": ["red"]},
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "同 battle_01：red 为玩家左侧，blue 为敌军右侧。这里保留一个 spawn_overrides 示例：先 remove 右侧蓝方 healer，再把右侧蓝方 warlock replace 成 2 级 knight，最后 add 一个 healer 到更靠内的位置。",
+      "spawn_overrides": {
+        "remove": [
+          {"color": "blue", "x": 12, "y": 9}
+        ],
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 12, "y": 8},
+            "unit": {"type": "knight", "color": "blue", "level": 2}
+          }
+        ],
+        "add": [
+          {"x": 11, "y": 9, "type": "healer", "color": "blue", "level": 1}
+        ]
+      },
       "pre_battle_dialogue": null,
       "post_battle_dialogue": "battle_02_after"
     }

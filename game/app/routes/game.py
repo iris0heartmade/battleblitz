@@ -39,6 +39,7 @@ from app.game_logic import (
     generate_map_preset,
     _unit_name,
 )
+from app.mainline.spawn_overrides import apply_spawn_overrides
 from app.classes.units import get_or_none as _get_unit_or_none
 from app.battle_config import UnknownBattleTrackError, expand_battle_config
 from app.models import ActionLog, Game, Player, Tile, Unit
@@ -326,6 +327,7 @@ async def _start_battle_internal(
     map_preset: Optional[str] = None,
     map_seed: Optional[int] = None,
     hero_overrides: Optional[List[Dict]] = None,
+    spawn_overrides: Optional[Dict] = None,
 ) -> None:
     """Generate tiles, spawn units, mark castles + tile occupancy.
 
@@ -348,6 +350,8 @@ async def _start_battle_internal(
             color-only (first unclaimed unit of that color in map order).
             Unmatched overrides log a warning and are skipped — the
             spawn never crashes because a hero was mistyped.
+        spawn_overrides: Optional battle-level patch applied to the
+            map's ``initial_units`` before Unit rows are materialized.
     """
     game_id = game.id
 
@@ -393,6 +397,11 @@ async def _start_battle_internal(
             preset_id=preset_id,
             seed=seed,
             num_castles=max(2, min(MAX_CASTLES, len(real_players))),
+        )
+    if spawn_overrides:
+        result.initial_units = apply_spawn_overrides(
+            list(result.initial_units),
+            spawn_overrides,
         )
 
     # If game.map_biome wasn't set but custom map has one, sync it

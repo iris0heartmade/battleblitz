@@ -78,12 +78,25 @@ class TestLoadSample:
         # initial_units drive spawn (composition fields removed).
         assert b1.map_id == "balanced_2p_15"
         assert b1.win_condition == "rout"
-        assert b1.teams == {"ally": ["blue"], "enemy": ["red"]}
+        assert b1.teams == {"ally": ["red"], "enemy": ["blue"]}
         assert b1.battle_config.audio.bgm.track_id == "sample_battle_01"
+        assert "玩家=red" in b1.notes
         assert b1.pre_battle_dialogue == "intro"
         assert b1.post_battle_dialogue == "battle_01_after"
         assert b2.pre_battle_dialogue is None
         assert b2.win_condition == "seize"
+        assert b2.spawn_overrides is not None
+        assert len(b2.spawn_overrides.remove) == 1
+        assert len(b2.spawn_overrides.replace) == 1
+        assert len(b2.spawn_overrides.add) == 1
+        assert b2.spawn_overrides.remove[0].color == "blue"
+        assert (b2.spawn_overrides.remove[0].x, b2.spawn_overrides.remove[0].y) == (12, 9)
+        assert b2.spawn_overrides.replace[0].match.color == "blue"
+        assert (b2.spawn_overrides.replace[0].match.x, b2.spawn_overrides.replace[0].match.y) == (12, 8)
+        assert b2.spawn_overrides.replace[0].unit.type == "knight"
+        assert b2.spawn_overrides.replace[0].unit.level == 2
+        assert (b2.spawn_overrides.add[0].x, b2.spawn_overrides.add[0].y) == (11, 9)
+        assert b2.spawn_overrides.add[0].type == "healer"
 
     def test_starting_units_and_required_classes(self):
         m = load_mainline(SAMPLE_ID)
@@ -100,8 +113,8 @@ class TestLoadSample:
         assert m.starting_units[1].class_id == "healer"
         assert m.starting_units[1].name == "安娜"
         assert m.starting_units[1].hero_id == "anna"
-        assert m.starting_units[1].color == "blue"
-        assert (m.starting_units[1].x, m.starting_units[1].y) == (12, 9)
+        assert m.starting_units[1].color == "red"
+        assert (m.starting_units[1].x, m.starting_units[1].y) == (2, 9)
 
     def test_rewards_on_clear(self):
         m = load_mainline(SAMPLE_ID)
@@ -272,6 +285,32 @@ class TestErrors:
         # The message should mention the offending track and hint at
         # the available list so the author can fix it without grep.
         assert "ghost_track_42" in str(ei.value)
+
+    def test_spawn_overrides_remove_last_team_unit_raises(self, tmp_mainlines):
+        (tmp_mainlines / "bad_spawn_override.json").write_text(json.dumps({
+            "id": "bad_spawn_override",
+            "title": "Bad Spawn Override",
+            "required_classes": ["swordsman"],
+            "starting_units": [{"class_id": "swordsman"}],
+            "battles": [{
+                "id": "b1",
+                "title": "B1",
+                "map_id": "balanced_2p_15",
+                "teams": {"ally": ["blue"], "enemy": ["red"]},
+                "spawn_overrides": {
+                    "remove": [
+                        {"color": "blue", "x": 12, "y": 8},
+                        {"color": "blue", "x": 12, "y": 9},
+                        {"color": "blue", "x": 13, "y": 7},
+                        {"color": "blue", "x": 13, "y": 8},
+                        {"color": "blue", "x": 14, "y": 7},
+                    ],
+                },
+            }],
+        }), encoding="utf-8")
+        with pytest.raises(MainlineValidationError) as ei:
+            load_mainline("bad_spawn_override")
+        assert "after spawn_overrides" in str(ei.value)
 
 
 # ============================================================
