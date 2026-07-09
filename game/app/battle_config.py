@@ -108,6 +108,37 @@ def expand_battle_config(
 __all__ = [
     "UnknownBattleTrackError",
     "battle_audio_config_path",
+    "battle_bgm_meta",
     "expand_battle_config",
     "load_battle_audio_config",
 ]
+
+
+def battle_bgm_meta(track_id: str | None) -> dict[str, Any] | None:
+    """Look up catalogue metadata for a single track.
+
+    Returns the subset of fields that are safe to surface to the
+    front-end without leaking parameter defaults:
+
+        {track_id, title, category, file, notes}
+
+    Returns ``None`` when ``track_id`` is falsy or not registered.
+    Used by the mainline route handlers to attach a ``bgm_meta`` /
+    ``bgm`` block to their responses so the lobby detail panel can
+    show "BGM: <title> (<category>)" without a second round-trip.
+
+    This intentionally does NOT raise on an unknown id — callers that
+    want strict validation should use ``expand_battle_config(strict=True)``
+    or the ``BattleSpec._check_bgm_track`` validator upstream.
+    """
+    if not track_id:
+        return None
+    data = load_battle_audio_config()
+    entry = (data.get("tracks") or {}).get(track_id)
+    if not isinstance(entry, dict):
+        return None
+    out: dict[str, Any] = {"track_id": track_id}
+    for key in ("title", "category", "file", "notes"):
+        if key in entry:
+            out[key] = entry[key]
+    return out

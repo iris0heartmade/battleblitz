@@ -4337,6 +4337,24 @@ const MainlineView = {
     const total = r.total_battles ?? "?";
     document.getElementById("mainline-progress").textContent =
       `第 ${idx} / ${total} 场 · 状态: ${r.state}`;
+    // P2.9 — show the active battle's BGM. We treat both startResp
+    // and advanceResp as having an optional bgm_meta; on the victory
+    // path there's no active battle anymore and the span stays hidden.
+    this._updateBgmHeader(r.bgm_meta || null);
+  },
+
+  _updateBgmHeader(bgmMeta) {
+    const el = document.getElementById("mainline-bgm");
+    if (!el) return;
+    if (!bgmMeta || !bgmMeta.track_id) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    const title = bgmMeta.title || bgmMeta.track_id;
+    const cat = bgmMeta.category ? ` · ${bgmMeta.category}` : "";
+    el.textContent = `BGM: ${title}${cat}`;
+    el.hidden = false;
   },
 
   async _enterBattlePhase(r) {

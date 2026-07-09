@@ -1,5 +1,6 @@
 from app.battle_config import (
     UnknownBattleTrackError,
+    battle_bgm_meta,
     expand_battle_config,
     load_battle_audio_config,
 )
@@ -140,3 +141,39 @@ def test_expand_battle_config_no_audio_passthrough():
 def test_expand_battle_config_none_passthrough():
     """None input is a no-op, even in strict mode."""
     assert expand_battle_config(None, strict=True) == {}
+
+
+# ============================================================
+# Stage D — battle_bgm_meta lookup helper
+# ============================================================
+
+def test_battle_bgm_meta_returns_metadata_for_known_track():
+    """Used by mainline routes to attach a bgm_meta block to the
+    start / next-battle / detail responses. Returns only the
+    catalogue metadata keys (no parameter overrides)."""
+    meta = battle_bgm_meta("sample_battle_01")
+    assert meta is not None
+    assert meta["track_id"] == "sample_battle_01"
+    assert meta["title"] == "示例战斗曲 01"
+    assert meta["category"] == "battle"
+    assert meta["file"] == "sample_battle_01.mp3"
+    # Parameter overrides must NOT leak into the meta block —
+    # the front-end gets those via the full battle_config.audio.bgm.
+    assert "volume" not in meta
+    assert "fade_in_ms" not in meta
+    assert "loop" not in meta
+
+
+def test_battle_bgm_meta_returns_none_for_unknown_track():
+    """Unknown / unregistered track_id resolves to None so callers
+    can serialise it as JSON null. This is intentional — the
+    strict validation already happened upstream (Pydantic on
+    BattleSpec, expand_battle_config strict=True on /games)."""
+    assert battle_bgm_meta("ghost_track_42") is None
+
+
+def test_battle_bgm_meta_returns_none_for_empty_input():
+    """An empty / None track_id must short-circuit to None rather
+    than crashing or returning a dict with a falsy track_id."""
+    assert battle_bgm_meta("") is None
+    assert battle_bgm_meta(None) is None

@@ -356,6 +356,11 @@
         <button class="btn btn-back" data-action="goto-mainline-list">← 返回章节列表</button>
         <h2 id="mainline-title">主线</h2>
         <span id="mainline-progress" class="muted small"></span>
+        <!-- P2.9 — surface the just-spawned battle's BGM catalogue
+             metadata here so the player knows which track is about
+             to start. Populated by MainlineView._updateBgmHeader from
+             the MainlineStartOut.bgm_meta / MainlineNextBattleOut.bgm_meta. -->
+        <span id="mainline-bgm" class="muted small" hidden></span>
       </div>
       <div id="mainline-content" class="mainline-content">
         <p class="muted">剧情/战斗由 MainlineView 动态填充…</p>
