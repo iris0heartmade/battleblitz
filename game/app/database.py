@@ -196,6 +196,11 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE games ADD COLUMN max_spectators INTEGER NOT NULL DEFAULT 8"
         ))
         logger.info("Migration: added games.max_spectators")
+    if "battle_config" not in game_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE games ADD COLUMN battle_config TEXT NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added games.battle_config")
     # 2026-07-07: P2.6 — drop the now-unused games.unit_composition column.
     # The create-game flow no longer accepts a `unit_composition` request
     # field and unit spawns are now driven by the map's `initial_units`

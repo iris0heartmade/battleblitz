@@ -145,6 +145,8 @@ class TestStartMainline:
         assert body["battle_id"] == "battle_01"
         assert body["battle_index"] == 0
         assert body["total_battles"] == 2
+        assert body["battle_config"]["audio"]["bgm"]["track_id"] == "sample_battle_01"
+        assert body["battle_config"]["audio"]["bgm"]["fade_out_ms"] == 800
         # skip_intro=True means no pre-battle dialogue URL
         assert body["state"] == "battle"
         assert body["pre_battle_dialogue_url"] is None
@@ -158,6 +160,7 @@ class TestStartMainline:
             game = games[0]
             assert game.name == "mainline:chapter_01_steel_rebellion:battle_01"
             assert game.status == "playing"
+            assert game.battle_config["audio"]["bgm"]["track_id"] == "sample_battle_01"
 
             players = (await s.execute(
                 select(Player).where(Player.game_id == game.id)
@@ -646,6 +649,8 @@ class TestGameStateAfterStart:
         state = r2.json()
         assert state["game"]["id"] == gid
         assert state["game"]["status"] == "playing"
+        assert state["game"]["battle_config"]["audio"]["bgm"]["track_id"] == "sample_battle_01"
+        assert state["game"]["battle_config"]["audio"]["bgm"]["volume"] == 0.8
         assert len(state["players"]) == 2
         # Tiles populated
         assert len(state["tiles"]) > 0

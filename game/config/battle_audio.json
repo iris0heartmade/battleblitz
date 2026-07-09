@@ -1,0 +1,15 @@
+{
+  "bgm_defaults": {
+    "loop": true,
+    "volume": 0.8,
+    "fade_in_ms": 1200,
+    "fade_out_ms": 800
+  },
+  "tracks": {
+    "sample_battle_01": {
+      "volume": 0.8,
+      "fade_in_ms": 1200,
+      "fade_out_ms": 800
+    }
+  }
+}

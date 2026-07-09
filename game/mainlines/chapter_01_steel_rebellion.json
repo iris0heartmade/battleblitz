@@ -28,6 +28,13 @@
       "map_seed": 42,
       "win_condition": "rout",
       "teams": {"ally": ["blue"], "enemy": ["red"]},
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01"
+          }
+        }
+      },
       "pre_battle_dialogue": "intro",
       "post_battle_dialogue": "battle_01_after"
     },

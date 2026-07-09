@@ -87,6 +87,9 @@ class Game(Base):
     # P2.4 — spectator slots are NOT counted against `capacity` so a full
     # room can still attract an audience. Defaults to MAX_SPECTATORS.
     max_spectators: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    # Battle template snapshot expanded at room-create / mainline-spawn time.
+    # Holds stable per-battle metadata such as audio cues.
+    battle_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )

@@ -121,6 +121,11 @@
         <label>地图种子（仅经典随机生效）</label>
         <input id="new-seed" type="number" placeholder="留空使用随机种子" />
       </div>
+      <div class="form-row">
+        <label>BGM Track ID</label>
+        <input id="new-bgm-track-id" type="text" maxlength="64" placeholder="例如：sample_battle_01" />
+        <p class="muted small">会映射到 <code>/ui/assets/audio/bgm/&lt;track_id&gt;.mp3</code>，音量与淡入淡出由后端配置文件统一补全</p>
+      </div>
       <!-- P2.4 polish — victory condition is now universal; the
            dropdown offered 4 modes but rout+seize are the only ones
            the engine fully supports, so we just inform the player. -->

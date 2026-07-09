@@ -15,6 +15,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas import BattleConfig
+
 
 # ============================================================
 # Valid enums (kept in sync with classes/units/*.py type_id)
@@ -115,6 +117,7 @@ class BattleSpec(APIModel):
     win_condition: WinCondition = "rout"
     teams: dict[str, list[str]] = Field(default_factory=dict)
     notes: Optional[str] = None
+    battle_config: Optional[BattleConfig] = None
     pre_battle_dialogue: Optional[str] = None
     post_battle_dialogue: Optional[str] = None
 
@@ -281,6 +284,7 @@ class MainlineStartOut(_PydanticBaseModel):
     battle_index: int
     total_battles: int
     state: str               # "dialogue" or "battle"
+    battle_config: Optional[BattleConfig] = None
     pre_battle_dialogue_url: Optional[str] = None
     pre_battle_dialogue_key: Optional[str] = None
 

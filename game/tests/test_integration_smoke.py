@@ -46,6 +46,22 @@ class TestGameLifecycle:
         assert body["status"] == "waiting"
         assert "id" in body
 
+    async def test_create_game_with_battle_bgm(self, client):
+        r = await client.post("/games", json={
+            "name": "Audio Test",
+            "battle_config": {
+                "audio": {
+                    "bgm": {
+                        "track_id": "sample_battle_01",
+                    }
+                }
+            },
+        })
+        assert r.status_code == 201
+        body = r.json()
+        assert body["battle_config"]["audio"]["bgm"]["track_id"] == "sample_battle_01"
+        assert body["battle_config"]["audio"]["bgm"]["fade_in_ms"] == 1200
+
     async def test_create_then_list(self, client):
         await client.post("/games", json={"name": "Game A"})
         await client.post("/games", json={"name": "Game B"})
