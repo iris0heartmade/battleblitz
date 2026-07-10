@@ -55,6 +55,9 @@ class PlayerProfile(Base):
     unlocked_cosmetics: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    unlocked_commanders: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
     current_season: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     rating: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     # ── Mainline (campaign) progress — Step 2 ─────────────────
