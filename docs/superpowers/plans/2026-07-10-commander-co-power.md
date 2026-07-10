@@ -1,4 +1,4 @@
-# BattleBlitz 指挥官 + CO Power 系统实施计划
+﻿# BattleBlitz 指挥官 + CO Power 系统实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -24,6 +24,24 @@
 - 全局 Python 测试：`cd game && PYTHONPATH=. python -m pytest tests/ -q --no-header`
 
 ---
+
+## 压缩执行策略（从 Task 5 起）
+
+原始 17 个 task 保持不变，但从 Task 5 开始按下列 5 个执行组推进。**每个执行组**仍严格遵守 TDD：failing test → run fail → implement → run pass → commit。
+
+| 组别 | 覆盖 task | 说明 |
+|---|---|---|
+| **G1 · 核心循环** | 5-7 | 合并 1 轮 review；覆盖 meter + CO Power fire/expire + turn_start lifecycle |
+| **G2 · Schema / API** | 8-10 | 绑定 BattleSpec、解锁逻辑与 API |
+| **G3 · 战斗集成** | 11-13 | attack / turn lifecycle / state payload 一次性收口 |
+| **G4 · AI + HUD** | 14-15 | AI 自动发动与 HUD 渲染并行推进 |
+| **G5 · 验证收尾** | 16-17 | snapshot 与 e2e 可合并行 |
+
+**执行规则：**
+- 每个执行组内保持单线程 TDD，不跨组偷跑实现
+- 子代理按组重建，不再要求每个 task 都 fresh 一个
+- 主控在 review 当前组时，提前准备下一组的测试壳与文件清单
+- 只要写入区域互不重叠，就允许并行子代理
 
 ## Milestone 1 · 数据模型基础
 
@@ -2483,15 +2501,14 @@ git commit -m "test(p3.0): add e2e smoke test for commander lifecycle"
 | Milestone | Task | 内容 |
 |---|---|---|
 | **M1 · 数据模型基础** | 1-3 | commanders 模块 + Hero 扩展 + DB 迁移 |
-| **M2 · 核心机制** | 4-7 | meter + passive 烘焙 + CO Power fire/expire + lifecycle hook |
-| **M3 · Schema + 解锁 + API** | 8-10 | BattleSpec schema + mainline 胜利 + 选择/发动 API |
-| **M4 · 战斗循环集成** | 11-13 | attack hook + 战斗创建烘焙 + lifecycle 集成 + state 暴露 |
-| **M5 · AI + 前端** | 14-15 | AI 自动 fire + HUD 渲染 |
-| **M6 · 验证与快照** | 16-17 | snapshot 测试 + e2e |
+| **M2 · 核心机制** | 4-7 | meter + passive 烘焙 + CO Power fire/expire + lifecycle hook（G1） |
+| **M3 · Schema + 解锁 + API** | 8-10 | BattleSpec schema + mainline 胜利 + 选择/发动 API（G2） |
+| **M4 · 战斗循环集成** | 11-13 | attack hook + 战斗创建烘焙 + lifecycle 集成 + state 暴露（G3） |
+| **M5 · AI + 前端** | 14-15 | AI 自动 fire + HUD 渲染（G4，可并行） |
+| **M6 · 验证与快照** | 16-17 | snapshot 测试 + e2e（G5，可并行） |
 
-**总计 17 个 task，每个 task 3-9 个 step，每个 step 2-5 分钟。**
+**总计 17 个 task 保持不变，但从 Task 5 起按 5 个执行组推进，目标将 review 轮次压缩到 8-10 轮，并把 14/15、16/17 尽量并行化。**
 
-## Self-Review 结果
 
 | 检查项 | 结论 |
 |---|---|
