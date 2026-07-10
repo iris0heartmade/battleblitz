@@ -110,6 +110,16 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE players ADD COLUMN gold INTEGER NOT NULL DEFAULT 0"
         ))
         logger.info("Migration: added players.gold")
+    if "commander_id" not in player_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE players ADD COLUMN commander_id VARCHAR(64)"
+        ))
+        logger.info("Migration: added players.commander_id")
+    if "co_state" not in player_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE players ADD COLUMN co_state JSON DEFAULT '{}'"
+        ))
+        logger.info("Migration: added players.co_state")
     tile_rows = sync_conn.execute(text("PRAGMA table_info(tiles)")).fetchall()
     tile_cols = {r[1] for r in tile_rows}
     if "subtype" not in tile_cols:
@@ -220,6 +230,16 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN hero_id VARCHAR(64)"
         ))
         logger.info("Migration: added units.hero_id")
+    # 2026-07-10: commander persistence for Player and PlayerProfile.
+    profile_rows = sync_conn.execute(text(
+        "PRAGMA table_info(player_profiles)"
+    )).fetchall()
+    profile_cols = {r[1] for r in profile_rows}
+    if "unlocked_commanders" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN unlocked_commanders JSON NOT NULL DEFAULT '[]'"
+        ))
+        logger.info("Migration: added player_profiles.unlocked_commanders")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

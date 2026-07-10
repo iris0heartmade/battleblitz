@@ -144,6 +144,10 @@ class Player(Base):
     # Personality preset name (e.g. "aggressive" / "defensive" / "balanced"
     # / "trickster"); only used when agent_kind == "llm".
     agent_personality: Mapped[str] = mapped_column(String(32), nullable=False, default="balanced")
+    # Commander binding for match-time persistence.
+    commander_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Plain dict payload for commander state; not a COState object.
+    co_state: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True, default=dict)
     # P2.3 — team grouping. When NULL, the front-end falls back to
     # `color` so 1V1 free-for-all (legacy) keeps working unchanged.
     # Multiple players with the same team_id are treated as one
