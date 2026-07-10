@@ -28,7 +28,22 @@ Art notes for the designer:
     * ``crest_yun.png``  — circular dialog avatar (re-used from
       ``assets/crest_yun.png``).
 """
+from dataclasses import dataclass
+
+from app.commanders import CommanderPassive, CommanderPower
 from app.classes.heroes.base import BaseHero
+
+
+@dataclass(frozen=True)
+class YunCommanderPassive(CommanderPassive):
+    atk_pct: float
+    range_delta: int
+
+
+@dataclass(frozen=True)
+class YunCommanderPower(CommanderPower):
+    atk_pct: float
+    heal_pct: float
 
 
 class Yun(BaseHero):
@@ -59,6 +74,10 @@ class Yun(BaseHero):
     # hook (e.g. +1 ATK on battle start).
     active_skills = ["arcane_strike"]
     passive_skills = []
+    is_commander = True
+    commander_passive = YunCommanderPassive(id="yun_passive", atk_pct=0.10, range_delta=1)
+    commander_power = YunCommanderPower(id="yun_power", atk_pct=0.30, heal_pct=0.50)
+    power_threshold = 22
 
     # ── Dialog binding ─────────────────────────────────────────
     # Scene files reference the speaker as "云" (display_cn), so
