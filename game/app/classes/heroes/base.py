@@ -31,6 +31,8 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import ClassVar, List, Optional, Tuple
 
+from app.commanders import CommanderPassive, CommanderPower
+
 
 # ----------------------------------------------------------------
 # Compiled hero profile (returned by BaseHero.compile())
@@ -88,6 +90,12 @@ class HeroProfile:
     # declaring ``speaker: "云"`` will look up this hero).
     dialogue_name: Optional[str] = None
 
+    # Commander metadata.
+    is_commander: bool = False
+    commander_passive: Optional[CommanderPassive] = None
+    commander_power: Optional[CommanderPower] = None
+    power_threshold: Optional[int] = None
+
 
 # ----------------------------------------------------------------
 # Abstract base
@@ -144,6 +152,12 @@ class BaseHero(ABC):
     # ``display_cn``.
     dialogue_name: ClassVar[Optional[str]] = None
 
+    # Commander metadata.  Safe defaults keep non-commander heroes inert.
+    is_commander: ClassVar[bool] = False
+    commander_passive: ClassVar[Optional[CommanderPassive]] = None
+    commander_power: ClassVar[Optional[CommanderPower]] = None
+    power_threshold: ClassVar[Optional[int]] = None
+
     @classmethod
     def compile(cls) -> HeroProfile:
         """Return an immutable snapshot for use by the engine."""
@@ -164,4 +178,8 @@ class BaseHero(ABC):
             portrait_path=cls.portrait_path,
             crest_path=cls.crest_path,
             dialogue_name=cls.dialogue_name,
+            is_commander=cls.is_commander,
+            commander_passive=cls.commander_passive,
+            commander_power=cls.commander_power,
+            power_threshold=cls.power_threshold,
         )
