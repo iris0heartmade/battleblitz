@@ -63,7 +63,11 @@ async def get_unlocked_commanders(
     profile = await session.scalar(select(PlayerProfile).where(PlayerProfile.user_name == user_name))
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
-    return {"user_name": user_name, "unlocked_commanders": list(profile.unlocked_commanders or [])}
+    return {
+        "user_name": user_name,
+        "unlocked_commanders": list(profile.unlocked_commanders or []),
+        "mainline_commanders": dict(profile.mainline_commanders or {}),
+    }
 
 
 @router.post("/mainlines/{mainline_id}/select-commander")

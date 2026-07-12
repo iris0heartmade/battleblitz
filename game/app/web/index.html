@@ -109,6 +109,15 @@
         <input id="new-team" type="text" maxlength="20" placeholder="例如：red / blue / 红队 / 蓝队" />
       </div>
       <div class="form-row">
+        <label>我的指挥官</label>
+        <select id="new-commander">
+          <option value="">无指挥官</option>
+          <option value="yun">云</option>
+          <option value="anna">安娜</option>
+        </select>
+        <p class="muted small">自由模式可直接选择；开局后指挥官锁定，并在战斗内显示 CO 能量。</p>
+      </div>
+      <div class="form-row">
         <label>地图</label>
         <select id="new-map-preset">
           <option value="classic">经典随机（按种子生成）</option>
@@ -231,6 +240,15 @@
       </div>
       <div id="mainline-slots" class="save-slots">
         <p class="muted">加载中…</p>
+      </div>
+      <div id="mainline-commander-panel" class="mainline-commander-panel">
+        <div class="save-slots-header">
+          <h3>指挥官选择</h3>
+          <span id="mainline-commander-status" class="muted small">加载中…</span>
+        </div>
+        <div id="mainline-commander-list" class="mainline-commander-list">
+          <p class="muted">加载中…</p>
+        </div>
       </div>
       <div class="save-slots-header">
         <h3>主线章节</h3>
