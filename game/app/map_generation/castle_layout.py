@@ -1,5 +1,5 @@
 """
-Castle / HQ layouts (P1.4 / MAP_GENERATION_PLAN.md §2 + §5).
+Castle / HQ layouts (P1.4 / docs/规范/地图生成方案.md §2 + §5).
 
 Two layers here:
 

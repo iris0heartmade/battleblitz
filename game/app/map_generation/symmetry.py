@@ -1,5 +1,5 @@
 """
-Symmetry helpers — castle positions and safe zones (P1.4 / MAP_GENERATION_PLAN.md §2 + P2.7).
+Symmetry helpers — castle positions and safe zones (P1.4 / docs/规范/地图生成方案.md §2 + P2.7).
 
 The number of castles equals the number of players (宁缺勿滥 / "宁缺勿滥"):
 

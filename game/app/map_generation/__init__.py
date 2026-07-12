@@ -1,5 +1,5 @@
 """
-Random map generation — P1.4 refactor (MAP_GENERATION_PLAN.md).
+Random map generation — P1.4 refactor (docs/规范/地图生成方案.md).
 
 Sub-modules:
 

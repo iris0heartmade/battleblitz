@@ -1,6 +1,6 @@
 """
 Main MapGenerator — orchestrates the layered pipeline
-(P1.4 / MAP_GENERATION_PLAN.md §1 + §8).
+(P1.4 / docs/规范/地图生成方案.md §1 + §8).
 
 Public surface:
 
@@ -8,7 +8,7 @@ Public surface:
     grid = gen.generate()                  # List[List[Tile]]
     castles = gen.castle_positions         # List[Tuple[int, int]]
 
-The pipeline (see random-map-generation-spec.md §8):
+The pipeline (see docs/superpowers/specs/2026-07-01-random-map-generation-spec.md §8):
 
     1. Initialize RNG (independent of global random).
     2. Compute castle positions and safe zones.
@@ -74,7 +74,7 @@ class MapGenerator:
     """Top-level procedural map generator.
 
     Parameters mirror ``game_logic.generate_map`` so the new module is
-    a drop-in replacement.  See ``MAP_GENERATION_PLAN.md`` for the
+    a drop-in replacement.  See ``docs/规范/地图生成方案.md`` for the
     rationale behind the layout choices.
     """
 

@@ -1,5 +1,5 @@
 """
-Terrain cluster generators (P1.4 / MAP_GENERATION_PLAN.md §3 + P2.7).
+Terrain cluster generators (P1.4 / docs/规范/地图生成方案.md §3 + P2.7).
 
 Forest and mountain clusters are placed with a Poisson-disk-style
 sampler: pick a seed, then walk to a random neighbour until the cluster

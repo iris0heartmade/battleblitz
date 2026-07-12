@@ -257,13 +257,13 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 BattleBlitz/
 ├── README.md
-├── docs/                   # 项目文档（详见 docs/README.md）
-│   ├── 架构.md              # 整体架构 + API 列表
-│   ├── 路线.md              # S0/P0-P3 路线图 + 进度
-│   ├── 阶段.md              # 分阶段开发方案
-│   ├── 死代码.md            # 死代码扫描结果
-│   ├── llm-agent/           # LLM Agent 子系统文档
-│   └── superpowers/specs/   # 设计 spec 文档
+├── docs/                   # 项目文档（详见 docs/README.md,按职能分了 6 个子目录）
+│   ├── 架构/                # 稳定的设计文档(架构.md + 阶段.md)
+│   ├── 路线/                # 活的进度(路线.md + 项目状态.md + 交接笔记.md)
+│   ├── 规范/                # 功能级 spec(地图生成方案 + 战斗音频 + 主线布阵)
+│   ├── 参考/                # 稳定的 how-to(地图JSON规范 + llm-agent/)
+│   ├── 维护/                # 死代码清单 + 审计/ 子目录
+│   └── superpowers/         # 历史 superpowers 工作法(specs/ + plans/),已封档
 ├── game/
 │   ├── app/
 │   │   ├── main.py          # FastAPI 入口
@@ -411,13 +411,25 @@ rm game/battleblitz.db   # 重启会自动建新表 + 自动迁移
 
 ## 📚 文档索引
 
-- [`docs/maps.md`](docs/maps.md) —— **地图作者必读**:地图 JSON 规范、地形字符表、`initial_units` 数组写法、老格式回退机制。
-- [`docs/架构.md`](docs/架构.md) —— 系统架构 / 数据库 / 模块依赖。
-- [`docs/路线.md`](docs/路线.md) —— 版本路线图(P2.6 及之前的里程碑)。
-- [`docs/阶段.md`](docs/阶段.md) —— 各开发阶段的产出与边界。
-- [`docs/死代码.md`](docs/死代码.md) —— 已弃用但暂未删除的代码清单。
-- [`docs/superpowers/specs/`](docs/superpowers/specs/) —— 各版本规格文档。
-- [`docs/superpowers/plans/`](docs/superpowers/plans/) —— 实施计划。
+> 2026-07-13 起按 [docs/维护/审计/2026-07-13-battleblitz-完整审计.md](docs/维护/审计/2026-07-13-battleblitz-完整审计.md) 的方案重组为 6 个子目录。
+> 完整导航见 [`docs/README.md`](docs/README.md)。
+
+| 类别 | 文档 |
+|------|------|
+| 入口 | [`docs/README.md`](docs/README.md) |
+| 架构 | [`docs/架构/架构.md`](docs/架构/架构.md) · [`docs/架构/阶段.md`](docs/架构/阶段.md) |
+| 路线 | [`docs/路线/路线.md`](docs/路线/路线.md) · [`docs/路线/项目状态.md`](docs/路线/项目状态.md) · [`docs/路线/交接笔记.md`](docs/路线/交接笔记.md) |
+| 规范 | [`docs/规范/地图生成方案.md`](docs/规范/地图生成方案.md) · [`docs/规范/战斗音频.md`](docs/规范/战斗音频.md) · [`docs/规范/主线战斗布阵覆盖.md`](docs/规范/主线战斗布阵覆盖.md) |
+| 参考 | [`docs/参考/地图JSON规范.md`](docs/参考/地图JSON规范.md) · [`docs/参考/llm-agent/README.md`](docs/参考/llm-agent/README.md) |
+| 维护 | [`docs/维护/死代码清单.md`](docs/维护/死代码清单.md) · [`docs/维护/审计/`](docs/维护/审计/) |
+| Specs | [`docs/superpowers/specs/`](docs/superpowers/specs/) |
+| Plans | [`docs/superpowers/plans/`](docs/superpowers/plans/) |
+
+### 文档亮点速查
+
+- [`docs/参考/地图JSON规范.md`](docs/参考/地图JSON规范.md) —— **地图作者必读**:JSON 规范、地形字符表、`initial_units` 数组写法、老格式回退机制
+- [`docs/规范/地图生成方案.md`](docs/规范/地图生成方案.md) —— 实施计划对照:随机地图生成器实现方案
+- [`docs/维护/审计/2026-07-13-battleblitz-完整审计.md`](docs/维护/审计/2026-07-13-battleblitz-完整审计.md) —— 后端 + 前端 + 测试完整审计
 
 ---
 

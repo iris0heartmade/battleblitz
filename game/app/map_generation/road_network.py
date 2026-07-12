@@ -1,5 +1,5 @@
 """
-Road network and building placement (P1.4 / MAP_GENERATION_PLAN.md §4).
+Road network and building placement (P1.4 / docs/规范/地图生成方案.md §4).
 
 Roads use a simple A* over the terrain-cost table.  Each "important
 node" (castle centre, village, barracks) gets connected to its two

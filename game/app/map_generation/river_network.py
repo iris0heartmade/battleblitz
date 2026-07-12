@@ -1,5 +1,5 @@
 """
-River network generator (P1.4 / MAP_GENERATION_PLAN.md §4).
+River network generator (P1.4 / docs/规范/地图生成方案.md §4).
 
 Algorithm (two-phase):
 
@@ -16,7 +16,7 @@ Constraints:
   * Rivers never overwrite castles or their 2-tile safe zone.
   * Rivers never overwrite roads.
   * Width is always 1 cell (the spec calls for lakes only as a future
-    extension — see random-map-generation-spec.md §13.C).
+    extension — see docs/superpowers/specs/2026-07-01-random-map-generation-spec.md §13.C).
 """
 from __future__ import annotations
 
