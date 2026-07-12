@@ -58,6 +58,11 @@ class PlayerProfile(Base):
     unlocked_commanders: Mapped[list[str]] = mapped_column(
         JSON, nullable=False, default=list
     )
+    # Pre-battle choices keyed by mainline id.  Keeping this on the profile
+    # prevents a lobby choice from mutating an already spawned battle.
+    mainline_commanders: Mapped[dict[str, str | None]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     current_season: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     rating: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     # ── Mainline (campaign) progress — Step 2 ─────────────────
