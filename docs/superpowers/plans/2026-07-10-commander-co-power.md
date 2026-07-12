@@ -8,6 +8,15 @@
 
 **Tech Stack:** Python 3.13, FastAPI, SQLAlchemy + SQLite (Alembic-style auto-migration), Pydantic, vanilla JS frontend, pytest
 
+## Current Execution Status (2026-07-13)
+
+This plan is now partly historical. The implementation advanced in grouped commits rather than every checkbox below being manually toggled.
+
+- Implemented: commander module/data flow, commander routes, create-game commander selection payloads, lobby UI, HUD state, commander API/HUD tests.
+- Implemented follow-up: AI attack counter consistency via `b0df415 fix ai counter attacks`.
+- Latest commander UI commit: `07d2081 update commander selection ui`.
+- Still worth doing: full test suite, PR creation, deeper AI commander decision tuning, and shared combat resolver cleanup.
+
 ## Global Constraints
 
 - 命名规则：模块 `app/commanders/` 平行于 `app/classes/heroes/`
