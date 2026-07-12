@@ -1790,10 +1790,19 @@ function renderBoard(st) {
         const hp = document.createElement("div");
         hp.className = "hpbar";
         const fill = document.createElement("div");
+        fill.className = "fill";
         const pct = u.max_hp ? (u.hp / u.max_hp) * 100 : 0;
         fill.style.width = pct + "%";
         if (pct < 35) fill.classList.add("low");
+        else if (pct < 70) fill.classList.add("mid");
         hp.appendChild(fill);
+        // Numeric HP overlay ("23/45") so the bar is readable even
+        // when the unit tile is small. The text rides the fill with the
+        // same width so half-half tones are still legible.
+        const hpText = document.createElement("span");
+        hpText.className = "hp-text";
+        hpText.textContent = `${u.hp}/${u.max_hp}`;
+        hp.appendChild(hpText);
         uEl.appendChild(hp);
         // MP badge (movement points remaining) — corner overlay on sprite.
         const mpBadge = document.createElement("div");
