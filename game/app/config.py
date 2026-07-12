@@ -386,6 +386,16 @@ COUNTER_IMMUNE_SKILLS: Final[tuple[str, ...]] = ()
 
 # AI player
 AI_THINK_DELAY_SECONDS: Final[float] = 1.2  # delay between AI actions so humans can watch
+
+# Mainline-only: starting gold for the human player when a battle spawns.
+# Without this the player has to wait one full turn cycle (>= 2.4s of
+# AI thinking + the income collection) just to afford a 200g swordsman
+# recruit. 200 is exactly enough to recruit one swordsman, mirroring
+# the cheapest recruit cost in app.game_logic.SWORDSMAN_COST.
+# Free-mode players stay at 0 so the existing economy balance is
+# unchanged; if you want free-mode players to also start with gold,
+# apply INITIAL_GOLD to start_game() in routes/game.py too.
+MAINLINE_INITIAL_GOLD: Final[int] = 200
 AI_MAX_ACTIONS_PER_TURN: Final[int] = 5      # safety cap so a buggy AI can't loop forever
 AI_AGGRO_RANGE: Final[int] = 4               # AI prefers targets within this many tiles
 

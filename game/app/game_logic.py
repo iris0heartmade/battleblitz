@@ -850,7 +850,7 @@ def claim_castle_if_present(tile: Tile, unit: Unit) -> bool:
 # ============================================================
 
 # Terrains a unit can perform the active `claim` action on.
-CLAIMABLE_TERRAINS = frozenset({TERRAIN_VILLAGE, TERRAIN_BARRACKS, CASTLE_VAULT})
+CLAIMABLE_TERRAINS = frozenset({TERRAIN_VILLAGE, TERRAIN_BARRACKS, CASTLE_VAULT, TERRAIN_CASTLE})
 
 
 def is_claimable(terrain: str) -> bool:
@@ -920,12 +920,13 @@ async def check_pending_claims(
         ))
         await session.delete(cs)
 
-    # P2.3 — under "seize" mode, a HQ-tile ownership flip between
+    # P0.5 — seize check is UNIVERSAL (works on any game, not just
+    # those with win_condition=="seize"). Any HQ-ownership flip between
     # different teams is an instant win. We do this AFTER all the
     # flips so the win_reason reflects the LAST valid seize (and
     # any earlier seizures are logged in the claim_complete rows
     # above for the action log).
-    if game.win_condition == "seize" and game.status == "playing":
+    if game.status == "playing":
         for tile_id in flipped:
             tile = await session.get(Tile, tile_id)
             if tile is None or tile.terrain != TERRAIN_CASTLE:
