@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal, Base, dispose_db, engine, init_db
-from app.game_logic import _ai_move, ai_take_one_action
+from app.game_logic import DamageResult, _ai_attack, _ai_move, ai_take_one_action
 
 
 @pytest.fixture
@@ -93,3 +93,67 @@ async def test_ai_unit_cannot_move_twice_in_one_turn(db_session):
         f"unit position should be unchanged after second AI pass; got "
         f"({unit.x}, {unit.y})"
     )
+
+
+def _hit(damage: int) -> DamageResult:
+    return DamageResult(
+        damage=damage,
+        is_crit=False,
+        is_kill=False,
+        effective_atk=damage,
+        defense_total=0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_ai_attack_triggers_counter_attack(db_session, monkeypatch):
+    """AI combat must use the same counter-attack rule as player combat."""
+    from app.config import TERRAIN_PLAIN
+    from app.models import Game, Player, Tile, Unit
+
+    game = Game(name="ai-counter-test", status="playing",
+                map_seed=0, map_preset="classic", map_biome="grass",
+                current_player_index=0, phase="ai",
+                first_player_done_first_turn=True)
+    db_session.add(game)
+    await db_session.flush()
+
+    ai_player = Player(game_id=game.id, user_name="AI", seat=0, color="red",
+                       is_alive=True, has_ended_turn=False, is_ai=True)
+    defender_player = Player(game_id=game.id, user_name="Human", seat=1,
+                             color="blue", is_alive=True,
+                             has_ended_turn=False)
+    db_session.add_all([ai_player, defender_player])
+    await db_session.flush()
+
+    attacker = Unit(player_id=ai_player.id, unit_type="swordsman", name="A",
+                    level=1, exp=0, hp=20, max_hp=20,
+                    atk=18, def_=12, matk=4, mdef=4,
+                    mov=3, mp=3, morale=0,
+                    x=0, y=0, has_acted=False, has_moved=False, skills=[])
+    defender = Unit(player_id=defender_player.id, unit_type="swordsman",
+                    name="D", level=1, exp=0, hp=20, max_hp=20,
+                    atk=18, def_=12, matk=4, mdef=4,
+                    mov=3, mp=3, morale=0,
+                    x=1, y=0, has_acted=False, has_moved=False, skills=[])
+    db_session.add_all([attacker, defender])
+    await db_session.flush()
+
+    db_session.add_all([
+        Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_PLAIN,
+             occupied_unit_id=attacker.id),
+        Tile(game_id=game.id, x=1, y=0, terrain=TERRAIN_PLAIN,
+             occupied_unit_id=defender.id),
+    ])
+    await db_session.flush()
+
+    damages = iter((1, 10))
+    monkeypatch.setattr(
+        "app.game_logic.attack_with_double_strike",
+        lambda *args, **kwargs: [_hit(next(damages))],
+    )
+
+    assert await _ai_attack(db_session, attacker, defender)
+
+    assert defender.hp == 19
+    assert attacker.hp == 15
