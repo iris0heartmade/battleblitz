@@ -2655,54 +2655,69 @@ html, body {
 .recruit-modal .recruit-name { font-weight: 600; }
 .recruit-modal .recruit-cost { color: #f0c75e; font-weight: 600; }
 
-/* P3.0 — commander power HUD */
+/* P3.0 — commander power HUD
+   Restyle: the P3.0 PR landed this overlay with position:fixed top:0 +
+   z-index:100, which visually overlapped the top action row (map-name,
+   status pills, reference button, end-turn button). Style used hardcoded
+   rgba(20,20,30,0.85) + #ff6600 + 12px font that didn't match the rest
+   of the project (faction-gold-bar / header-status-pill).
+
+   Now: inline in game-header-center next to faction-gold-bar; pill chip
+   pattern matching faction-gold-chip; CSS variables instead of literals. */
 .co-meters-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  z-index: 100;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  vertical-align: middle;
 }
 
 .co-meters-container[hidden] { display: none; }
 
 .co-meter {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: rgba(20, 20, 30, 0.85);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(75, 159, 255, 0.15);
+  border: 1px solid rgba(75, 159, 255, 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.co-meter.is-active {
+  background: rgba(255, 204, 0, 0.18);
+  border-color: rgba(255, 204, 0, 0.55);
+  color: var(--accent);
 }
 
 .co-meter-portrait {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   border-radius: 4px;
   background: #444;
+  color: var(--text-dim);
   object-fit: cover;
   display: grid;
   place-items: center;
+  font-size: 11px;
 }
 
 .co-meter.is-active .co-meter-portrait {
-  box-shadow: 0 0 8px #ffcc00;
+  box-shadow: 0 0 6px #ffcc00;
   animation: co-meter-pulse 1.5s infinite;
 }
 
 .co-meter-bar {
-  flex: 1;
-  height: 8px;
-  background: #333;
-  border-radius: 4px;
+  flex: 1 1 60px;
+  min-width: 40px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
   overflow: hidden;
 }
 
@@ -2712,22 +2727,32 @@ html, body {
   transition: width 0.3s;
 }
 
+.co-meter.is-active .co-meter-bar-fill {
+  background: linear-gradient(to right, #ffcc00, #ff9900);
+}
+
 .co-meter-fire-btn {
-  padding: 4px 12px;
-  background: #ff6600;
-  color: #fff;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: var(--bg);
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: bold;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .co-meter-fire-btn:disabled {
-  background: #666;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
   cursor: not-allowed;
 }
 
-.co-meter-active-tag { color: #ffcc00; }
+.co-meter-active-tag {
+  color: var(--accent);
+  font-weight: 700;
+}
 
 @keyframes co-meter-pulse {
   0%, 100% { opacity: 1; }

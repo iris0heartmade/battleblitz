@@ -443,6 +443,12 @@
           <div id="faction-gold-bar" class="faction-gold-bar">
             <span class="muted small">金币将在对局开始后显示</span>
           </div>
+          <!-- P3.0 — per-player commander meter HUD (charge bar + CO-power button).
+               Was position:fixed top-bar overlay that overlapped the map-name /
+               status pills / end-turn buttons. Now inline here next to the gold
+               bar so it shares the same chip-row visual language. Populated by
+               renderCommanderMeters() in app.js. -->
+          <div id="co-meters" class="co-meters-container" hidden></div>
         </div>
         <div class="game-header-right">
           <button class="btn btn-danger" data-action="end-turn">结束回合 →</button>
@@ -599,8 +605,6 @@
     <div class="dialog-narration-text"></div>
     <div class="dialog-narration-hint">▼ 点击继续</div>
   </div>
-
-  <div id="co-meters" class="co-meters-container" hidden></div>
 
   <script src="/ui/app.js"></script>
 </body>
