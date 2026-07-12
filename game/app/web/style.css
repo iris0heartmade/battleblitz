@@ -2654,3 +2654,82 @@ html, body {
 }
 .recruit-modal .recruit-name { font-weight: 600; }
 .recruit-modal .recruit-cost { color: #f0c75e; font-weight: 600; }
+
+/* P3.0 — commander power HUD */
+.co-meters-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  z-index: 100;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+}
+
+.co-meters-container[hidden] { display: none; }
+
+.co-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(20, 20, 30, 0.85);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.co-meter-portrait {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 4px;
+  background: #444;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+}
+
+.co-meter.is-active .co-meter-portrait {
+  box-shadow: 0 0 8px #ffcc00;
+  animation: co-meter-pulse 1.5s infinite;
+}
+
+.co-meter-bar {
+  flex: 1;
+  height: 8px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.co-meter-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, #4a9eff, #66ff66);
+  transition: width 0.3s;
+}
+
+.co-meter-fire-btn {
+  padding: 4px 12px;
+  background: #ff6600;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.co-meter-fire-btn:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.co-meter-active-tag { color: #ffcc00; }
+
+@keyframes co-meter-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

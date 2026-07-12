@@ -266,6 +266,8 @@ function showView(name) {
   document.querySelectorAll(".view").forEach(v => { v.hidden = true; });
   const el = document.getElementById("view-" + name);
   if (el) el.hidden = false;
+  const coMeters = document.getElementById("co-meters");
+  if (coMeters) coMeters.hidden = name !== "game" || coMeters.childElementCount === 0;
   if (name !== "game") {
     AudioManager.stopCurrentBgm();
   }
@@ -1256,8 +1258,58 @@ async function refreshGame() {
     state.game = st;
     AudioManager.applyBattleConfig(st.game?.battle_config || null);
     renderGame(st);
+    renderCOMeters(st);
   } catch (e) {
     toast("状态获取失败：" + e.message, 2500);
+  }
+}
+
+function renderCOMeters(gameState) {
+  const container = document.getElementById("co-meters");
+  if (!container) return;
+
+  const coStates = Array.isArray(gameState?.co_states) ? gameState.co_states : [];
+  const gameId = gameState?.game?.id;
+  const localPlayerId = Number(state.me?.player_id);
+  container.innerHTML = coStates.map((co) => {
+    const meter = Number.isFinite(Number(co.meter)) ? Number(co.meter) : 0;
+    const threshold = Number.isFinite(Number(co.threshold)) ? Number(co.threshold) : 0;
+    const pct = threshold > 0 ? Math.min(100, Math.max(0, (meter / threshold) * 100)) : 0;
+    const isActive = Boolean(co.is_power_active);
+    const canFire = Boolean(co.can_fire) && !isActive && Boolean(gameId)
+      && co.player_id === localPlayerId;
+    const commanderId = co.commander_id || "";
+    const portrait = commanderId
+      ? `<img class="co-meter-portrait" src="/ui/assets/heroes/${encodeURIComponent(commanderId)}.png" alt="${escapeHtml(commanderId)}" onerror="this.style.background='#666'" />`
+      : `<div class="co-meter-portrait" title="未选指挥官">?</div>`;
+    const action = canFire
+      ? `<button class="co-meter-fire-btn" type="button" onclick="fireCOPower(${Number(gameId)})">发动</button>`
+      : isActive
+        ? `<span class="co-meter-active-tag">⚡ 生效中</span>`
+        : "";
+    const color = String(co.color || "—").toUpperCase();
+
+    return `
+      <div class="co-meter ${isActive ? "is-active" : ""}">
+        ${portrait}
+        <span class="co-meter-label">${escapeHtml(color)}: ${escapeHtml(commanderId || "未选")}</span>
+        <div class="co-meter-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${threshold}" aria-valuenow="${meter}">
+          <div class="co-meter-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <span class="co-meter-text">${meter}/${threshold}</span>
+        ${action}
+      </div>`;
+  }).join("");
+  container.hidden = coStates.length === 0;
+}
+
+async function fireCOPower(gameId, localPlayerId = Number(state.me?.player_id)) {
+  if (!gameId || !localPlayerId) return;
+  try {
+    await api("POST", `/games/${gameId}/co-power`, { player_id: localPlayerId });
+    await refreshGame();
+  } catch (e) {
+    toast(`发动失败：${e.message}`, 3000);
   }
 }
 
