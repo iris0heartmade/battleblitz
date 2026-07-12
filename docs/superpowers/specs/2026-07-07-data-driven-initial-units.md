@@ -1,8 +1,15 @@
 # Spec: Data-Driven Initial Units — Map-Authored Spawn
 
 **Date:** 2026-07-07
-**Status:** Draft (awaiting user review)
+**Status:** Implemented and pushed (2026-07-13 update)
 **Scope:** Engine + 41 map JSONs + mainline JSONs + Web UI + DB migration
+
+## Implementation Status (2026-07-13)
+
+- P2.6 map-authored `initial_units` is implemented and pushed on `feat/p2.6-data-driven-initial-units`.
+- The old `unit_composition` / default roster path has been removed from the active create-game UI/API flow.
+- Related latest branch work continues through `07d2081 update commander selection ui`.
+- Remaining verification recommendation: run the full suite before merge; targeted follow-up suites have passed.
 
 ## Context
 

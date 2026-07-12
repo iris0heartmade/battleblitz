@@ -8,6 +8,14 @@
 
 **Tech Stack:** Python 3.13, FastAPI, SQLite (Alembic), vanilla JS frontend
 
+## Current Execution Status (2026-07-13)
+
+This plan is complete in the current branch and should be treated as historical execution detail.
+
+- Implemented and pushed: map-authored `initial_units`, removal of active unit-composition selection, startup validation, and Web UI create-game cleanup.
+- The branch has since advanced to commander/CO UI work and AI counter consistency fixes (`b0df415`, `07d2081`).
+- Remaining project-level step: full-suite verification and PR creation once GitHub permissions or local `gh` are available.
+
 ## Global Constraints
 
 - 41 built-in map JSONs MUST all gain valid `initial_units` (no fallback path)

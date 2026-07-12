@@ -1,9 +1,18 @@
 # Spec & Design: 指挥官 + CO Power 系统 (Commander & CO Power)
 
 **Date:** 2026-07-10
-**Status:** Design (待实施)
+**Status:** Implemented core + UI selection (2026-07-13 update)
 **Milestone:** P3.0
 **Scope:** Hero 系统扩展 + Player/Game 数据扩展 + 主线 schema 扩展 + 新模块 `app/commanders/` + 新路由 + UI HUD 改造 + AI 行为 + 测试覆盖
+
+---
+
+## Implementation Status (2026-07-13)
+
+- Core commander module, commander route surface, create-game commander payloads, lobby selection UI, HUD state rendering, and targeted commander tests have been implemented.
+- Latest related pushed commit: `07d2081 update commander selection ui`.
+- Combat parity follow-up is also complete: `b0df415 fix ai counter attacks` makes AI attacks trigger the same counter-attack rule as player attacks.
+- Remaining work: full-suite verification, PR creation, deeper AI commander behavior tuning, and optional shared combat resolver extraction to keep all attack paths unified.
 
 ---
 

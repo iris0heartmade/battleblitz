@@ -1,5 +1,7 @@
 # BattleBlitz · 战棋
 
+> 当前状态（2026-07-13）：分支 `feat/p2.6-data-driven-initial-units` 已推送到 `07d2081`。P2.6 数据驱动初始单位已落地，指挥官 / CO 选择 UI 与 API 已实现，AI 攻击现在和玩家攻击使用一致的反击规则。Draft PR 创建仍被 GitHub 集成权限和本地缺少 `gh` 阻塞。
+
 > 类似《火焰纹章》和《高级战争》风格的回合制战棋游戏。
 > 后端：Python + FastAPI + SQLAlchemy（异步）+ SQLite
 > 前端：原生 HTML / CSS / JS，由 FastAPI 静态托管

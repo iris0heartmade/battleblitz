@@ -1,8 +1,20 @@
 # BattleBlitz Project Status Report
 
-**Generated**: 2026-07-04  
-**Project Stage**: Beta (P0 完整 ✅ | P2.3 完工 ✅ | P1/P2/P3 进行中)  
-**Current Branch**: master
+**Generated**: 2026-07-13
+**Project Stage**: Beta (P0 完整 ✅ | P2.3 完工 ✅ | P1/P2/P3 进行中)
+**Current Branch**: feat/p2.6-data-driven-initial-units
+
+---
+
+## Current Status Update (2026-07-13)
+
+- Active branch is `feat/p2.6-data-driven-initial-units`, pushed to `origin`.
+- Latest pushed commits: `b0df415 fix ai counter attacks` and `07d2081 update commander selection ui`.
+- P2.6 data-driven initial units are implemented and no longer an open migration task.
+- Commander / CO selection core flow is implemented across backend routes, create-game data, lobby UI, HUD state, and targeted tests.
+- AI counter consistency is fixed: AI attacks now trigger the same 50% survivor/range/immunity counter-attack rule as player attacks.
+- Current remaining engineering focus: full-suite verification, PR creation, production WebSocket gateway, AI reaction presentation, mainline expansion, and shared combat resolver cleanup.
+- PR creation blocker: GitHub connector returned `Resource not accessible by integration`; local `gh` CLI is unavailable.
 
 ---
 
@@ -411,6 +423,6 @@ BattleBlitz 是一款类似《火焰纹章》和《高级战争》的浏览器�
 
 ---
 
-**最后更新**: 2026-07-04  
-**报告生成工具**: Claude Code Analysis  
+**最后更新**: 2026-07-13
+**报告生成工具**: Claude Code Analysis
 **下次更新建议**: P0 收尾完成时 (预计 1 周后)
