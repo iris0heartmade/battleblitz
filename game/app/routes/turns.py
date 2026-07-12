@@ -448,6 +448,12 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
                 next_idx = (idx + 1) % len(alive_seats)
                 next_seat = alive_seats[next_idx]
                 next_player = next(p for p in players if p.seat == next_seat)
+                # P0.4 income — mirror what /end-turn endpoint does on line
+                # 229. Without this, the player AFTER the AI silently loses
+                # gold every turn (only the AI's /end-turn caller used to
+                # get income for its next_player). The endpoint fires for
+                # human→AI handoffs; the AI chain must fire for AI→human.
+                await _collect_income_for_player(session, game, next_player)
                 if next_player.has_ended_turn:
                     # Round wrap -> resolve end-of-turn
                     await apply_end_of_turn(session, game)
