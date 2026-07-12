@@ -37,6 +37,8 @@
       "map_seed": 42,
       "win_condition": "rout",
       "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": "anna",
+      "enemy_commander": null,
       "notes": "主线约定：玩家=red（地图左侧），敌军=blue（地图右侧）。需要调站位时优先改 map.initial_units；局部差异再用 spawn_overrides。",
       "battle_config": {
         "audio": {

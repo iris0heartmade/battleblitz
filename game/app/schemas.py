@@ -41,6 +41,8 @@ class BattleAudioConfig(BaseModel):
 
 class BattleConfig(BaseModel):
     audio: Optional[BattleAudioConfig] = None
+    commander: Optional[str] = None
+    ai_commanders: Optional[Dict[int, str]] = None
 
 
 # ============================================================
@@ -259,6 +261,18 @@ class PendingClaimOut(APIModel):
     target_player_id: int
 
 
+class PlayerCOStateOut(APIModel):
+    """Public commander state used by the in-battle HUD."""
+    player_id: int
+    seat: int
+    color: str
+    commander_id: Optional[str] = None
+    meter: int = 0
+    threshold: int = 20
+    is_power_active: bool = False
+    can_fire: bool = False
+
+
 class GameStateOut(APIModel):
     """Full game state for a player's dashboard."""
     game: GameSummaryOut
@@ -268,6 +282,7 @@ class GameStateOut(APIModel):
     logs: List[ActionLogOut] = []
     # P2.4 polish — list of in-flight claim sessions.
     pending_claims: List[PendingClaimOut] = []
+    co_states: List[PlayerCOStateOut] = Field(default_factory=list)
 
 
 class LobbyTeamOut(APIModel):

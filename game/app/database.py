@@ -240,6 +240,11 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE player_profiles ADD COLUMN unlocked_commanders JSON NOT NULL DEFAULT '[]'"
         ))
         logger.info("Migration: added player_profiles.unlocked_commanders")
+    if "mainline_commanders" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN mainline_commanders JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.mainline_commanders")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

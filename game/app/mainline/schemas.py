@@ -154,6 +154,31 @@ class BattleSpec(APIModel):
     spawn_overrides: Optional[SpawnOverrides] = None
     pre_battle_dialogue: Optional[str] = None
     post_battle_dialogue: Optional[str] = None
+    unlocks_commander: Optional[str] = Field(
+        default=None, description="Commander hero_id unlocked after victory"
+    )
+    enemy_commander: Optional[str] = Field(
+        default=None, description="Commander hero_id used by the enemy"
+    )
+
+    @model_validator(mode="after")
+    def _check_commander_fields(self) -> "BattleSpec":
+        from app.classes.heroes import get_or_none
+
+        for field_name in ("unlocks_commander", "enemy_commander"):
+            hero_id = getattr(self, field_name)
+            if hero_id is None:
+                continue
+            hero = get_or_none(hero_id)
+            if hero is None:
+                raise ValueError(
+                    f"{field_name}={hero_id!r} not found in heroes registry"
+                )
+            if not hero.is_commander:
+                raise ValueError(
+                    f"{field_name}={hero_id!r} is not a commander"
+                )
+        return self
 
     @model_validator(mode="after")
     def _check_team_colors(self) -> "BattleSpec":
