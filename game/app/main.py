@@ -31,6 +31,7 @@ from app.routes import heroes as heroes_routes
 from app.routes import mainline as mainline_routes
 from app.routes import profile as profile_routes
 from app.routes import turns as turns_routes
+from app.routes import ws_gateway as ws_gateway_routes
 from app.progression import api as progression_api
 
 
@@ -114,6 +115,7 @@ app.include_router(game_routes.router)
 app.include_router(actions_routes.router)
 app.include_router(turns_routes.router)
 app.include_router(debug_ws_routes.router)
+app.include_router(ws_gateway_routes.router)
 app.include_router(editor_routes.router)
 app.include_router(progression_api.router, prefix="/progression")
 # Profile-keyed (user_name) routes — mainline progress endpoints
