@@ -824,21 +824,54 @@ html, body {
 .unit.acted { opacity: 0.5; }
 .unit.dead  { display: none; }
 
-/* hp bar */
+/* hp bar — thicker + numeric overlay so it reads at a glance.
+   Bar sits inside the unit (anchored `bottom` near the unit's lower
+   edge); numeric HP/MP rounds up below it. Morale stars were moved
+   to the TOP of the cell (.cell .morale-stars) so they no longer share
+   vertical real estate with this bar. */
 .unit .hpbar {
   position: absolute;
-  bottom: calc(var(--cell-size) * 0.05);             /* ~2px @ 44px */
-  left: calc(var(--cell-size) * 0.05);
-  right: calc(var(--cell-size) * 0.05);
-  height: clamp(2px, calc(var(--cell-size) * 0.07), 4px);  /* ~3px @ 44px */
-  background: rgba(0,0,0,0.5);
-  border-radius: 1px;
+  bottom: calc(var(--cell-size) * 0.06);             /* ~3px @ 44px — sits at unit's lower edge */
+  left: calc(var(--cell-size) * 0.06);
+  right: calc(var(--cell-size) * 0.06);
+  height: clamp(5px, calc(var(--cell-size) * 0.16), 8px);  /* was 3px → now ~7px */
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.20);      /* visual border for contrast over tile bg */
+  border-radius: 2px;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
-.unit .hpbar > div {
+.unit .hpbar > div.fill {
   height: 100%;
-  background: var(--good);
+  /* Gradient top→bottom keeps contrast in tiny scales. */
+  background: linear-gradient(to top, #4ea268, #6dd58c);
+  transition: width 0.3s;
+}
+
+.unit .hpbar > div.fill.mid {
+  background: linear-gradient(to top, #b8923a, #f0c75e);  /* amber 35-70% */
+}
+
+.unit .hpbar > div.fill.low {
+  background: linear-gradient(to top, #b8424f, #e85a6a);  /* red < 35% */
+}
+
+.unit .hpbar > .hp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(5px, calc(var(--cell-size) * 0.20), 9px);  /* ~9px @ 44px, ~5px @ 22px */
+  color: white;
+  font-weight: 700;
+  text-shadow: 0 0 2px rgba(0,0,0,1), 0 1px 1px rgba(0,0,0,0.85);
+  letter-spacing: -0.2px;
+  pointer-events: none;
+  /* Stay above fill — fill is the first child but absolute positioning
+     + z-index might overlap depending on flex order. */
+  z-index: 2;
 }
 
 .unit .hpbar > div.low { background: var(--danger); }
@@ -860,22 +893,18 @@ html, body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* Morale stars — placed BELOW the unit, INSIDE the cell.
-   Originally the rule used `bottom: -16px` so the stars hung
-   below the unit, but that was clipped by `.unit { overflow: hidden }`
-   (the unit's own background-image + border-radius rely on that clip).
-   P2.6+ — pin the stars INSIDE the cell with a positive bottom offset,
-   above the HP bar. The visual order is: unit sprite → stars → HP bar.
-   .cell { overflow: hidden } is the clipping bound, so we now sit
-   safely above the HP bar with a thin gold strip. */
+/* Morale stars — placed at TOP of cell so they never share vertical
+   real estate with the (now-thicker) HP bar at the bottom of the unit.
+   The unit has `overflow: hidden` (background-image clip) so stars stay
+   attached to `.cell`. */
 .cell .morale-stars {
   position: absolute;
-  bottom: calc(var(--cell-size) * 0.16);           /* ~7px @ 44px — above HP bar */
+  top: calc(var(--cell-size) * 0.04);              /* ~2px @ 44px — top edge of cell */
   left: 50%;
   transform: translateX(-50%);
-  font-size: clamp(7px, calc(var(--cell-size) * 0.24), 11px);  /* ~11px @ 44px */
+  font-size: clamp(6px, calc(var(--cell-size) * 0.20), 9px);  /* ~9px @ 44px, ~6px @ 22px */
   line-height: 1;
-  color: #f0c75e;  /* gold */
+  color: #f0c75e;
   text-shadow: 0 0 2px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.7);
   white-space: nowrap;
   letter-spacing: -1px;
