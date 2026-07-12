@@ -297,6 +297,19 @@ def unit_attack_range(unit: Unit) -> int:
     """Maximum attack range (Manhattan distance)."""
     from app.classes.units.skills import get_passive_for
     base = _get_unit(unit.unit_type).attack_range
+    player = getattr(unit, "player", None)
+    commander_id = getattr(player, "commander_id", None) if player is not None else None
+    if commander_id is not None:
+        from app.commanders.registry import get_commander_passive, get_commander_power
+
+        passive = get_commander_passive(commander_id)
+        base += getattr(passive, "range_delta", 0) if passive is not None else 0
+        co = getattr(player, "co_state", None) or {}
+        if co.get("is_power_active"):
+            power = get_commander_power(commander_id)
+            base += getattr(power, "range_delta", 0) if power is not None else 0
+    else:
+        base = getattr(unit, "_base_attack_range", base)
     for sk in get_passive_for(unit):
         base = sk.modify_attack_range(base, unit)
     return base
@@ -560,11 +573,26 @@ async def _load_game_actors(session: AsyncSession, game: Game) -> Tuple[List[Pla
 
 
 async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> List[int]:
-    """Delete units with hp <= 0 and free the tiles they were occupying."""
-    dead = [u for u in units if u.hp <= 0]
+    """Delete dead units, awarding one death score per unique casualty."""
+    pending_delete = tuple(getattr(session, "deleted", ()))
+    dead_by_id = {
+        u.id: u for u in units
+        if u.hp <= 0 and not any(u is deleted for deleted in pending_delete)
+    }
+    dead = list(dead_by_id.values())
     if not dead:
         return []
     dead_ids = [u.id for u in dead]
+    from app.commanders.meter import on_death
+    from sqlalchemy.orm.attributes import flag_modified
+
+    for player_id in {u.player_id for u in dead}:
+        owning_player = await session.get(Player, player_id)
+        if owning_player is None or owning_player.commander_id is None:
+            continue
+        for _ in (u for u in dead if u.player_id == player_id):
+            on_death(owning_player)
+        flag_modified(owning_player, "co_state")
     # Free tiles first so the FK SET NULL doesn't fight our delete
     await session.execute(
         update(Tile)
