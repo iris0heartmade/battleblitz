@@ -23,7 +23,8 @@ from app.config import (
     AI_MAX_ACTIONS_PER_TURN,
     BASE_CRIT_RATE, MAX_CASTLES, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
     CASTLE_FLOOR, CASTLE_STAIRS, CASTLE_THRONE, CASTLE_VAULT, CASTLE_WALL,
-    CLAIM_TURNS_REQUIRED, CRIT_MULTIPLIER, CRIT_PER_LEVEL,
+    CLAIM_TURNS_REQUIRED, COUNTER_DAMAGE_MULT, COUNTER_IMMUNE_SKILLS,
+    CRIT_MULTIPLIER, CRIT_PER_LEVEL,
     EXP_PER_ASSIST, EXP_PER_KILL, EXP_TO_LEVEL,
     LEVEL_UP_BONUS_POINTS, LEVEL_UP_STAT_BONUS, MAP_STYLES, MAP_SIZE,
     MAX_LEVEL, MORALE_ATK_PER_STAR, MORALE_DEF_PER_STAR, MORALE_MAX,
@@ -1876,14 +1877,29 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
     hits = attack_with_double_strike(attacker, target, bonus, rng=rng)
     for h in hits:
         apply_damage(target, h.damage)
+
+    counter_dmg = 0
+    defender_skills = set(target.skills or [])
+    has_counter_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    if (
+        target.hp > 0
+        and not has_counter_immunity
+        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    ):
+        counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
+        for h in counter_hits:
+            counter_dmg += max(1, int(h.damage * COUNTER_DAMAGE_MULT))
+        apply_damage(attacker, counter_dmg)
+
     if target.hp <= 0:
         award_exp(attacker, "kill")
     else:
         award_exp(attacker, "hit")
     attacker.has_acted = True
     # Immediately remove dead unit from the board/DB
-    if target.hp <= 0:
-        await cleanup_dead_units(session, [target])
+    dead_after_combat = [u for u in (target, attacker) if u.hp <= 0]
+    if dead_after_combat:
+        await cleanup_dead_units(session, dead_after_combat)
     return True
 
 
