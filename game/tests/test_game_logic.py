@@ -8,6 +8,7 @@ need an integration test instead — see `test_integration_smoke.py`.
 from __future__ import annotations
 
 import random
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +28,7 @@ from app.game_logic import (
     award_morale,
     calculate_damage,
     castle_positions,
+    can_attack_from_position,
     generate_map,
     unit_attack_range,
 )
@@ -328,6 +330,17 @@ class TestAttackRange:
         # snipe extends range by 1, so 4 + 1 = 5.
         u = _stub_unit("archer", skills=["snipe"])
         assert unit_attack_range(u) == 5
+
+    def test_commander_baked_range_affects_shared_attack_path(self):
+        u = _stub_unit("swordsman")
+        u.__dict__["player"] = SimpleNamespace(
+            commander_id="yun", co_state={"is_power_active": False}, units=[u],
+        )
+        from app.commanders.effects import bake_passive_into_units
+        bake_passive_into_units(u.player)
+        del u._base_attack_range  # simulate a freshly loaded ORM unit
+        assert unit_attack_range(u) == 2
+        assert can_attack_from_position(u, 0, 0, 0, 2) is True
 
 
 # ============================================================
