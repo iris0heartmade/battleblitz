@@ -92,6 +92,10 @@ const state = {
   mainlineGameId: null,       // 主线中正在进行的 game.id
   mainlinePlayerId: null,     // 该 game 中的人类玩家 id
   mainlineAdvancePending: false, // 防止 advance 重复触发
+  // ----- WebSocket gateway (P0.1) -----
+  ws: null,                   // WebSocket instance
+  wsConnected: false,         // mirrors ws.readyState === OPEN
+  lastSeq: 0,                 // last seq we observed, sent as ?since_seq= on reconnect
 };
 
 const AudioManager = {
@@ -263,6 +267,11 @@ async function api(method, path, body) {
 
 // ----- View switching -----
 function showView(name) {
+  // When leaving the game view, tear down the WS stream so we don't
+  // hold an idle subscription to a game the user is no longer in.
+  if (name !== "game" && state.ws) {
+    disconnectWS();
+  }
   document.querySelectorAll(".view").forEach(v => { v.hidden = true; });
   const el = document.getElementById("view-" + name);
   if (el) el.hidden = false;
@@ -1202,12 +1211,13 @@ async function startGame() {
 async function enterGame() {
   showView("game");
   await refreshGame();
-  // start polling. Use a fast cadence during AI phase (so the player can
-  // see each action as it happens) and the user-configured cadence otherwise.
+  // WebSocket gateway is the primary update channel. The setInterval
+  // below is a SAFETY-NET poll that fires slowly when WS is up and
+  // at the user-configured cadence when WS is down.
   clearInterval(state.refreshTimer);
   const baseInterval = Math.max(1000, state.settings.refreshSeconds * 1000);
-  state.refreshTimer = setInterval(refreshGame, baseInterval);
   state.baseRefreshMs = baseInterval;
+  connectWS();
   // P2.4 — if we landed in the game view directly during AI or
   // spectator phase (e.g. lobby polling caught status='playing'),
   // accelerate polling immediately rather than waiting for the next
@@ -1219,21 +1229,171 @@ async function enterGame() {
   }
 }
 
-// Re-arm the poll interval based on the current phase. While AI is acting
-// (or a spectator is asked to confirm) we poll fast (400ms) so the user
-// sees each action appear in near real-time; in other phases we fall back
-// to the user's configured refresh rate.
+// ============================================================
+// WebSocket client (P0.1) — replaces 3-second polling with event push
+// ============================================================
+//
+// Why: the legacy 3s timer means the player sees actions ~1.5s late
+// on average. The WS gateway pushes every event as it happens, and a
+// short safety-net poll (5s+) acts as a backstop if WS is down.
+//
+// Auth: dev mode uses ?player_id=N. Production should swap for a JWT
+// or session cookie. The server accepts the query param as fallback
+// because browser WebSocket can't set custom headers like X-Player-Id.
+
+let _wsReconnectTimer = null;
+let _wsReconnectAttempts = 0;
+let _wsSoftRefreshTimer = null;
+
+function _wsUrl() {
+  if (!state.me?.game_id || !state.me?.player_id) return null;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/ws/games/${state.me.game_id}` +
+    `?since_seq=${state.lastSeq || 0}&player_id=${state.me.player_id}`;
+}
+
+function _wsSoftRefresh() {
+  // Coalesce a flurry of events into a single /state fetch.
+  clearTimeout(_wsSoftRefreshTimer);
+  _wsSoftRefreshTimer = setTimeout(refreshGame, 200);
+}
+
+function _wsApplyEvent(ev) {
+  if (!state.game) return;
+  if (ev.event_type === "move" && ev.actor_unit_id != null) {
+    // Move event carries the new tile in context. Patch the local unit
+    // and let the renderer re-draw without a server round-trip.
+    const u = state.game.players.flatMap(p => p.units)
+      .find(uu => uu.id === ev.actor_unit_id);
+    if (u && ev.context) {
+      if (typeof ev.context.to_x === "number") u.x = ev.context.to_x;
+      if (typeof ev.context.to_y === "number") u.y = ev.context.to_y;
+    }
+    _wsSoftRefresh();
+  } else if (ev.event_type === "kill" && ev.target_unit_id != null) {
+    for (const p of state.game.players) {
+      const i = p.units.findIndex(uu => uu.id === ev.target_unit_id);
+      if (i >= 0) p.units.splice(i, 1);
+    }
+    _wsSoftRefresh();
+  } else if (ev.event_type === "turn_end" || ev.event_type === "round_end") {
+    // Turn / round meta is hard to keep in sync locally; refetch to be
+    // safe (the WS still saved us from polling between events).
+    refreshGame();
+  } else {
+    _wsSoftRefresh();
+  }
+}
+
+function _wsHandleMessage(msg) {
+  if (msg.seq != null) state.lastSeq = msg.seq;
+  switch (msg.type) {
+    case "server.hello":
+      // Already connected; nothing to do — the snapshot follows.
+      break;
+    case "state.snapshot":
+      state.game = msg.payload.game;
+      state.lastState = msg.payload.game;
+      renderGame(state.game);
+      renderCOMeters(state.game);
+      AudioManager.applyBattleConfig(state.game?.game?.battle_config || null);
+      break;
+    case "event.delta":
+      _wsApplyEvent(msg.payload);
+      break;
+    case "server.pong":
+      // Heartbeat — no-op
+      break;
+    case "error":
+      console.warn("[WS] server error:", msg.payload);
+      break;
+    default:
+      // Unknown type — forward-compat: ignore
+  }
+}
+
+function connectWS() {
+  disconnectWS();  // ensure single connection
+  const url = _wsUrl();
+  if (!url) return;
+  let ws;
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    console.warn("[WS] open failed", e);
+    _wsScheduleReconnect();
+    return;
+  }
+  state.ws = ws;
+  ws.onopen = () => {
+    _wsReconnectAttempts = 0;
+    state.wsConnected = true;
+    // Slow safety-net poll while WS is up. We rely on the event stream
+    // for real-time updates; the timer just catches missed events.
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = setInterval(refreshGame, 15000);
+  };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      _wsHandleMessage(msg);
+    } catch (err) {
+      console.warn("[WS] message parse", err);
+    }
+  };
+  ws.onclose = () => {
+    state.wsConnected = false;
+    _wsScheduleReconnect();
+  };
+  ws.onerror = (e) => {
+    // onclose fires after this; reconnect is handled there.
+    console.warn("[WS] error", e);
+  };
+}
+
+function _wsScheduleReconnect() {
+  if (_wsReconnectTimer) return;
+  _wsReconnectAttempts++;
+  // Exponential backoff capped at 30s: 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
+  const delay = Math.min(30000, 1000 * 2 ** (_wsReconnectAttempts - 1));
+  _wsReconnectTimer = setTimeout(() => {
+    _wsReconnectTimer = null;
+    if (state.me?.game_id) connectWS();
+  }, delay);
+}
+
+function disconnectWS() {
+  clearTimeout(_wsSoftRefreshTimer);
+  clearTimeout(_wsReconnectTimer);
+  _wsReconnectTimer = null;
+  _wsReconnectAttempts = 0;
+  if (state.ws) {
+    try { state.ws.close(); } catch (_) { /* noop */ }
+    state.ws = null;
+  }
+  state.wsConnected = false;
+}
+
+// Re-arm the poll interval based on the current phase. With WS up we
+// don't need fast polling — the safety-net timer can run at 5s+ in any
+// phase. Without WS we fall back to the legacy 400ms / user-configured
+// cadence.
 function adjustPollInterval(phase) {
-  if (!state.refreshTimer) return;
-  // P2.4 — also fast-poll the spectator's "confirm slot" so the
-  // audience doesn't miss the brief window between "AI ended"
-  // and "spectator's turn starts".
-  const target = (phase === "ai" || phase === "animating" || phase === "spectator")
-    ? 400
-    : state.baseRefreshMs;
-  // setInterval has a minimum granularity; calling it again resets cleanly.
-  clearInterval(state.refreshTimer);
-  state.refreshTimer = setInterval(refreshGame, target);
+  if (state.wsConnected) {
+    const target = (phase === "ai" || phase === "animating" || phase === "spectator")
+      ? 2000
+      : 5000;
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = setInterval(refreshGame, target);
+  } else {
+    // No WS — keep the legacy polling cadence.
+    if (!state.refreshTimer) return;
+    const target = (phase === "ai" || phase === "animating" || phase === "spectator")
+      ? 400
+      : state.baseRefreshMs;
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = setInterval(refreshGame, target);
+  }
 }
 
 async function refreshGame() {
