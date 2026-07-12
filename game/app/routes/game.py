@@ -44,6 +44,8 @@ from app.classes.units import get_or_none as _get_unit_or_none
 from app.battle_config import UnknownBattleTrackError, expand_battle_config
 from app.commanders.effects import bake_passive_into_units, can_fire_co_power
 from app.commanders.actions import can_player_fire_now
+from app.commanders.registry import get_power_threshold
+from app.classes.heroes import get_or_none as _get_hero_or_none
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AddAIRequest,
@@ -136,6 +138,17 @@ def _expand_user_battle_config(
         battle_config.model_dump(exclude_none=True),
         strict=True,
     )
+
+
+def _validate_commander_id(commander_id: str | None) -> None:
+    if commander_id is None:
+        return
+    hero = _get_hero_or_none(commander_id)
+    if hero is None or not getattr(hero, "is_commander", False):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"unknown commander: {commander_id}",
+        )
 
 
 def _apply_hero_overrides(
@@ -608,6 +621,10 @@ async def create_game(
             status.HTTP_400_BAD_REQUEST,
             f"unknown bgm track_id: {exc.track_id!r} (available: {available})",
         )
+    commander_id = battle_config.get("commander")
+    _validate_commander_id(commander_id)
+    for ai_commander_id in (battle_config.get("ai_commanders") or {}).values():
+        _validate_commander_id(ai_commander_id)
     # P2.4 — derive capacity from the chosen map's recommended_players.
     # `_effective_max_players` clamps to [MIN_PLAYERS, MAX_PLAYERS] and
     # falls back to the global cap when the preset doesn't declare one.
@@ -633,7 +650,7 @@ async def create_game(
         # Strict mode: reject unknown track_ids at create-time instead
         # of persisting a battle_config the frontend cannot play. Caught
         # below and surfaced as HTTP 400 with the available list.
-        battle_config=_expand_user_battle_config(body.battle_config),
+        battle_config=battle_config,
     )
     # P2.3 — for "reach" mode, look up the target tile so we can
     # render the goal pulse on the client + drive the win check.
@@ -926,6 +943,25 @@ async def start_game(
             status.HTTP_400_BAD_REQUEST,
             f"need at least {MIN_PLAYERS} players (currently {real_player_count})",
         )
+
+    battle_config = game.battle_config or {}
+    host_commander = battle_config.get("commander")
+    ai_commanders = battle_config.get("ai_commanders") or {}
+    for player in players:
+        commander_id = None
+        if not player.is_spectator and player.seat == 0:
+            commander_id = host_commander
+        if player.is_ai:
+            commander_id = ai_commanders.get(player.seat) or ai_commanders.get(str(player.seat)) or commander_id
+        if commander_id:
+            player.commander_id = commander_id
+            player.co_state = {
+                "commander_id": commander_id,
+                "meter": 0,
+                "threshold": get_power_threshold(commander_id),
+                "is_power_active": False,
+                "last_start_turn": -1,
+            }
 
     await _start_battle_internal(session, game, players)
 

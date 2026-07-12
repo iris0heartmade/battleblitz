@@ -111,6 +111,41 @@ async def test_fire_co_power_rejects_completely_absent_body(commander_client):
     assert response.status_code == 422
 
 
+@pytest.mark.integration
+async def test_free_mode_battle_config_commander_spawns_on_host(commander_client):
+    from sqlalchemy import select
+    from app.models import Player
+
+    c, sessions = commander_client
+    created = await c.post("/games", json={
+        "name": "free commander",
+        "map_preset": "balanced_2p_15",
+        "battle_config": {"commander": "anna"},
+    })
+    assert created.status_code == 201, created.text
+    game_id = created.json()["id"]
+
+    joined_host = await c.post(f"/games/{game_id}/join", json={"user_name": "host"})
+    assert joined_host.status_code == 201, joined_host.text
+    joined_guest = await c.post(f"/games/{game_id}/join", json={"user_name": "guest"})
+    assert joined_guest.status_code == 201, joined_guest.text
+
+    started = await c.post(f"/games/{game_id}/start")
+    assert started.status_code == 200, started.text
+
+    async with sessions() as session:
+        host = await session.scalar(
+            select(Player).where(Player.game_id == game_id, Player.seat == 0)
+        )
+        guest = await session.scalar(
+            select(Player).where(Player.game_id == game_id, Player.seat == 1)
+        )
+        assert host.commander_id == "anna"
+        assert host.co_state["commander_id"] == "anna"
+        assert host.co_state["threshold"] == 18
+        assert guest.commander_id is None
+
+
 def test_profile_has_prebattle_commander_selection_field():
     from app.progression.models import PlayerProfile
 

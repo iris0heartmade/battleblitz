@@ -98,6 +98,31 @@ const state = {
   lastSeq: 0,                 // last seq we observed, sent as ?since_seq= on reconnect
 };
 
+const COMMANDER_OPTIONS = [
+  {
+    id: "",
+    name: "无指挥官",
+    title: "不启用 CO 能力",
+    desc: "保持标准规则，不显示指挥官能量。",
+  },
+  {
+    id: "yun",
+    name: "云",
+    title: "云 · 进攻型",
+    desc: "被动提升攻击与射程，CO Power 强化输出并回复部队。",
+  },
+  {
+    id: "anna",
+    name: "安娜",
+    title: "安娜 · 防守型",
+    desc: "被动提升防御与魔防，CO Power 大幅回复并稳住阵线。",
+  },
+];
+
+function commanderOption(id) {
+  return COMMANDER_OPTIONS.find(c => c.id === id) || COMMANDER_OPTIONS[0];
+}
+
 const AudioManager = {
   _audio: null,
   _currentSignature: null,
@@ -491,6 +516,7 @@ async function createGame() {
   const seedRaw = document.getElementById("new-seed").value.trim();
   const mapPreset = document.getElementById("new-map-preset").value;
   const bgmTrackId = document.getElementById("new-bgm-track-id").value.trim();
+  const commanderId = document.getElementById("new-commander").value;
   // P2.4 polish — win condition is now universal (rout+seize). The
   // hidden #new-win-condition input still emits "rout" so the API
   // contract is preserved; reach/defend blocks are ignored.
@@ -504,14 +530,18 @@ async function createGame() {
     const body = { name, win_condition: winCondition };
     if (seedRaw) body.map_seed = parseInt(seedRaw);
     if (mapPreset) body.map_preset = mapPreset;
+    if (bgmTrackId || commanderId) {
+      body.battle_config = {};
+    }
     if (bgmTrackId) {
-      body.battle_config = {
-        audio: {
-          bgm: {
-            track_id: bgmTrackId,
-          },
+      body.battle_config.audio = {
+        bgm: {
+          track_id: bgmTrackId,
         },
       };
+    }
+    if (commanderId) {
+      body.battle_config.commander = commanderId;
     }
     // reach / defend blocks are kept in the DOM for legacy data but
     // are no longer wired into new game creation. The engine still
@@ -4466,6 +4496,81 @@ const MainlineView = {
     }
   },
 
+  async renderCommanderSelection(mainlineId = "chapter_01_steel_rebellion") {
+    const panel = document.getElementById("mainline-commander-panel");
+    const list = document.getElementById("mainline-commander-list");
+    const statusEl = document.getElementById("mainline-commander-status");
+    if (!panel || !list || !statusEl) return;
+
+    const userName = (state.settings?.playerName || "").trim();
+    if (!userName) {
+      statusEl.textContent = "未设置昵称";
+      list.innerHTML = `<p class="muted">请先在【设置】里填写玩家昵称，再选择主线指挥官。</p>`;
+      return;
+    }
+
+    statusEl.textContent = "加载中…";
+    let profile = null;
+    let commanderInfo = null;
+    try {
+      profile = await api("GET", `/profile/${encodeURIComponent(userName)}`);
+    } catch (e) {
+      if (e.status !== 404) {
+        statusEl.textContent = "读取失败";
+        list.innerHTML = `<p class="error-text">档案读取失败：${escapeHtml(e.message)}</p>`;
+        return;
+      }
+    }
+    try {
+      commanderInfo = await api("GET", `/players/me/commanders?user_name=${encodeURIComponent(userName)}`);
+    } catch (e) {
+      if (e.status === 404) {
+        statusEl.textContent = "暂无档案";
+        list.innerHTML = `<p class="muted">当前玩家档案尚未创建。开始主线会自动创建档案；创建后再回来选择指挥官。</p>`;
+        return;
+      }
+      statusEl.textContent = "读取失败";
+      list.innerHTML = `<p class="error-text">指挥官读取失败：${escapeHtml(e.message)}</p>`;
+      return;
+    }
+
+    const unlocked = new Set(commanderInfo?.unlocked_commanders || []);
+    const current = (commanderInfo?.mainline_commanders || {})[mainlineId] || "";
+    const activeMainline = profile?.active_mainline || null;
+    const isLocked = Boolean(activeMainline);
+    statusEl.textContent = isLocked
+      ? "已开始，选择锁定"
+      : `当前：${commanderOption(current).name}`;
+
+    list.innerHTML = COMMANDER_OPTIONS.map((cmd) => {
+      const selected = cmd.id === current;
+      const lockedByUnlock = Boolean(cmd.id) && !unlocked.has(cmd.id);
+      const disabled = isLocked || lockedByUnlock;
+      const reason = isLocked
+        ? "主线已开始，选择锁定"
+        : lockedByUnlock
+          ? "未解锁"
+          : selected
+            ? "当前选择"
+            : "可选择";
+      return `
+        <div class="mainline-commander-card ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}">
+          <div class="commander-card-main">
+            <div class="commander-card-name">${escapeHtml(cmd.title)}</div>
+            <div class="muted small">${escapeHtml(cmd.desc)}</div>
+            <div class="commander-card-reason">${escapeHtml(reason)}</div>
+          </div>
+          <button
+            class="btn ${selected ? "btn-secondary" : "btn-primary"} btn-sm"
+            data-action="mainline-select-commander"
+            data-mainline-id="${escapeHtml(mainlineId)}"
+            data-commander-id="${escapeHtml(cmd.id)}"
+            ${disabled || selected ? "disabled" : ""}
+          >${selected ? "已选择" : "选择"}</button>
+        </div>`;
+    }).join("");
+  },
+
   // ---------- 入口：点击"开始"后走这个流程 ----------
 
   async startAndEnter(id, triggerBtn) {
@@ -5002,8 +5107,32 @@ document.addEventListener("DOMContentLoaded", () => {
         await Promise.all([
           MainlineView.renderList(),
           MainlineView.renderSlots(),
+          MainlineView.renderCommanderSelection(),
         ]);
         break;
+      case "mainline-select-commander": {
+        const mid = target.dataset.mainlineId || "chapter_01_steel_rebellion";
+        const commanderId = target.dataset.commanderId || null;
+        const userName = (state.settings?.playerName || "").trim();
+        if (!userName) {
+          toast("请先在【设置】里填写玩家昵称", 3000);
+          break;
+        }
+        target.disabled = true;
+        try {
+          await api("POST", `/mainlines/${encodeURIComponent(mid)}/select-commander`, {
+            user_name: userName,
+            commander_id: commanderId,
+          });
+          toast(commanderId ? `已选择指挥官：${commanderOption(commanderId).name}` : "已取消指挥官");
+          await MainlineView.renderCommanderSelection(mid);
+        } catch (e) {
+          const lockMessage = "commander selection is closed after mainline start";
+          toast(e.message === lockMessage ? "主线已开始，指挥官选择已锁定" : `选择失败：${e.message}`, 3000);
+          await MainlineView.renderCommanderSelection(mid);
+        }
+        break;
+      }
       case "mainline-slot-resume": {
         const gid = parseInt(target.dataset.gameId);
         if (!gid) break;
