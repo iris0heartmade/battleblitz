@@ -134,6 +134,7 @@ async def production_event_stream(
     game_id: int,
     since_seq: int = Query(default=0, ge=0, description="Replay events with seq > since_seq"),
     x_player_id: str | None = Header(default=None, alias="X-Player-Id"),
+    player_id: int | None = Query(default=None, description="Auth via query param (browser WebSocket can't set custom headers)"),
 ) -> None:
     """Real-time GameEvent stream for production clients.
 
@@ -144,12 +145,18 @@ async def production_event_stream(
       4. forward every published GameEvent as event.delta
       5. heartbeat every HEARTBEAT_SEC (sends server.pong)
       6. on disconnect, unsubscribe + cleanup
+
+    Auth: prefer ``X-Player-Id`` header. Falls back to ``?player_id=``
+    query param so browser WebSocket clients (which can't set custom
+    headers) can authenticate. Production should swap for a JWT or
+    session cookie.
     """
     # Auth happens AFTER accept so we can send an `error` envelope
     # before closing with a structured status code.
     await ws.accept()
+    auth_value = x_player_id if x_player_id else (str(player_id) if player_id else None)
     try:
-        player = await _check_auth(ws, game_id, x_player_id)
+        player = await _check_auth(ws, game_id, auth_value)
     except HTTPException:
         return  # _check_auth already closed the socket
 
@@ -201,7 +208,33 @@ async def production_event_stream(
             },
         ).to_wire())
 
-        # 2. Replay missed events from the ring buffer.
+        # 2. Initial state snapshot so the client has the full game to
+        #    render. Reuse the same _build_state() helper the /state REST
+        #    endpoint uses so the wire shape matches exactly. If the build
+        #    fails (e.g. game was deleted between auth and snapshot) we
+        #    close with a clean error rather than hang.
+        try:
+            from app.database import AsyncSessionLocal
+            from app.routes.game import _build_state
+            async with AsyncSessionLocal() as ss:
+                game = await ss.get(Game, game_id)
+                if game is None:
+                    await _send_error(ws, "GAME_NOT_FOUND",
+                                      f"game {game_id} disappeared")
+                    return
+                snapshot = await _build_state(ss, game)
+            await ws.send_json(WSMessage(
+                v=PROTOCOL_VERSION,
+                type=STATE_SNAPSHOT,
+                seq=client_seq,
+                payload={"game": snapshot.model_dump(mode="json")},
+            ).to_wire())
+        except Exception:  # noqa: BLE001
+            logger.exception("WS gateway: state.snapshot build failed for game=%d", game_id)
+            await _send_error(ws, "INTERNAL", "failed to build initial snapshot")
+            return
+
+        # 3. Replay missed events from the ring buffer.
         replayed = 0
         for seq, ev in _replay.get(game_id, []):
             if seq > since_seq and ev.game_id == game_id:
