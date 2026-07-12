@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import (
@@ -94,7 +95,22 @@ async def _load_active_game(session: AsyncSession, game_id: int) -> Game:
 
 
 async def _load_unit(session: AsyncSession, unit_id: int) -> Unit:
-    unit = await session.get(Unit, unit_id)
+    """Load a unit, eagerly including its ``player`` relationship.
+
+    Several sync helpers in ``app.game_logic`` access ``unit.player``
+    (e.g. ``unit_attack_range`` reads the player's ``commander_id`` for
+    range bonuses). Without eager loading, that access would trigger
+    an async DB I/O inside a sync function and raise
+    ``sqlalchemy.exc.MissingGreenlet`` (HTTP 500). Loading the player
+    up front via ``selectinload`` keeps the relationship in memory
+    for the duration of the request.
+    """
+    stmt = (
+        select(Unit)
+        .where(Unit.id == unit_id)
+        .options(selectinload(Unit.player))
+    )
+    unit = (await session.execute(stmt)).scalars().first()
     if unit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "单位不存在")
     if unit.hp <= 0:
