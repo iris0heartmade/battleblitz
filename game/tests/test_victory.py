@@ -357,11 +357,38 @@ async def test_seize_2v1_team_share_hq_both_players_can_trigger(db_session, tmp_
 
 
 @pytest.mark.asyncio
-async def test_rout_mode_unaffected_by_claim_completion(db_session, tmp_db_path):
-    """In rout mode (default), a claim completing on a castle just
-    transfers ownership without ending the game — only rout decides."""
+async def test_rout_mode_unaffected_by_non_hq_claim(db_session, tmp_db_path):
+    """In rout mode (default), a non-HQ claim just flips ownership
+    without ending the game — only rout decides."""
     game, players = await _make_seize_game(db_session)
     game.win_condition = "rout"  # override
+    await db_session.flush()
+    tile = Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_VILLAGE, owner_id=players[0].id)
+    db_session.add(tile)
+    await db_session.flush()
+    attacker = await _add_alive_unit(db_session, game, players[1], 0, 0)
+    await _add_alive_unit(db_session, game, players[0], 5, 5)
+    await db_session.flush()
+    cs = ClaimSession(
+        game_id=game.id, tile_id=tile.id, unit_id=attacker.id,
+        target_player_id=players[1].id,
+        started_turn=1, completes_turn=game.turn_number,
+    )
+    db_session.add(cs)
+    await db_session.flush()
+    await check_pending_claims(db_session, game)
+    await db_session.flush()
+    assert tile.owner_id == players[1].id  # ownership DID flip
+    assert game.status == "playing"  # game continues — not a castle
+    assert game.win_reason is None
+
+
+@pytest.mark.asyncio
+async def test_hq_claim_wins_under_any_win_condition(db_session, tmp_db_path):
+    """Universal seize: claiming an enemy HQ ends the game even when
+    win_condition is 'rout'."""
+    game, players = await _make_seize_game(db_session)
+    game.win_condition = "rout"
     await db_session.flush()
     hq = Tile(game_id=game.id, x=0, y=0, terrain=TERRAIN_CASTLE, owner_id=players[0].id)
     db_session.add(hq)
@@ -378,10 +405,9 @@ async def test_rout_mode_unaffected_by_claim_completion(db_session, tmp_db_path)
     await db_session.flush()
     await check_pending_claims(db_session, game)
     await db_session.flush()
-    # Both players still alive → game continues.
-    assert hq.owner_id == players[1].id  # ownership DID flip
-    assert game.status == "playing"
-    assert game.win_reason is None
+    assert hq.owner_id == players[1].id
+    assert game.status == "finished"
+    assert game.win_reason == "seize"
 
 
 # ============================================================

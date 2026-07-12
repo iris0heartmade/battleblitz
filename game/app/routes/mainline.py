@@ -39,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.battle_config import battle_bgm_meta, expand_battle_config
+from app.config import MAINLINE_INITIAL_GOLD
 from app.game_logic import build_ai_player
 from app.mainline import (
     MainlineNotFound,
@@ -210,11 +211,15 @@ async def _build_enemy_player(
     which reads each map's ``initial_units`` field to seed both players
     in a single, transactional pass.
     """
+    # P0.5 — AI gets the same starting gold as the human so the first
+    # turn is fair (both can recruit a swordsman on turn 1 instead of
+    # waiting one cycle for the first income tick).
     ai = build_ai_player(
         game, seat=seat, color=color, name=f"主线敌人-{seat}"
     )
     ai.agent_kind = "rules"
     ai.agent_personality = "aggressive"
+    ai.gold = MAINLINE_INITIAL_GOLD
     session.add(ai)
     await session.flush()
     return ai
@@ -272,12 +277,17 @@ async def _spawn_battle_for_index(
     await session.flush()
 
     # 2. Create the human player (seat 0, red / map-left).
+    #    P0.5 — give the mainline player a starting gold budget so they
+    #    can recruit on turn 1 instead of waiting one full cycle for
+    #    the first income tick. AI opponent gets the same budget so the
+    #    economy stays symmetric (both can make one recruit at start).
     human = Player(
         game_id=game.id,
         user_name=profile.user_name,
         color="red",
         seat=0,
         is_ai=False,
+        gold=MAINLINE_INITIAL_GOLD,
         commander_id=(profile.mainline_commanders or {}).get(mainline_id),
     )
     human.co_state = {
