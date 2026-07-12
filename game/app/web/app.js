@@ -80,7 +80,7 @@ const state = {
   pendingMove: null,     // { toX, toY } - awaiting move confirmation
   path: null,            // [{x, y}, ...] - computed path for mouse hover
   refreshTimer: null,
-  presets: null,         // { maps: [], unit_compositions: [] }
+  presets: null,         // { maps: [] }
   refPanelOpen: false,
   refTab: "terrain",
   lastTurnKey: null,     // for detecting turn changes (banner trigger)
