@@ -38,6 +38,7 @@ EVENT_DELTA         = "event.delta"           # Single GameEvent
 COMMENTARY_TEXT     = "commentary.text"       # Text only
 COMMENTARY_AUDIO    = "commentary.audio"      # Text + base64 audio bytes
 TURN_ADVANCE        = "turn.advance"          # Whose turn is it now
+SERVER_PONG         = "server.pong"           # Heartbeat reply to client.ping
 ERROR               = "error"
 
 # Client → server
@@ -151,7 +152,7 @@ __all__ = [
     "PROTOCOL_VERSION",
     # Type constants
     "SERVER_HELLO", "STATE_SNAPSHOT", "EVENT_DELTA",
-    "COMMENTARY_TEXT", "COMMENTARY_AUDIO", "TURN_ADVANCE", "ERROR",
+    "COMMENTARY_TEXT", "COMMENTARY_AUDIO", "TURN_ADVANCE", "SERVER_PONG", "ERROR",
     "CLIENT_HELLO", "CLIENT_PING",
     "ACTION_MOVE", "ACTION_ATTACK", "ACTION_SKILL", "ACTION_WAIT", "ACTION_END_TURN",
     # Envelope + payload models
