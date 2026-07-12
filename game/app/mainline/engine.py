@@ -328,7 +328,19 @@ class MainlineEngine:
         )
         return dict(summary.mainline_progress)
 
-    async def apply_victory(self) -> MainlineRewards:
+    def apply_battle_victory(self, completed_battle: BattleSpec) -> None:
+        """Grant rewards declared by exactly one completed battle."""
+        unlocked = list(
+            getattr(self.profile, "unlocked_commanders", None) or []
+        )
+        commander_id = getattr(completed_battle, "unlocks_commander", None)
+        if commander_id and commander_id not in unlocked:
+            unlocked.append(commander_id)
+        self.profile.unlocked_commanders = unlocked
+
+    async def apply_victory(
+        self, completed_battle: Optional[BattleSpec] = None
+    ) -> MainlineRewards:
         """Called after the last battle is won.
 
         Awards ``mainline.rewards_on_clear`` to the profile (gold +
@@ -360,6 +372,9 @@ class MainlineEngine:
             if rewards.unlock_class not in unlocked:
                 unlocked.append(rewards.unlock_class)
                 self.profile.unlocked_classes = unlocked
+
+        if completed_battle is not None:
+            self.apply_battle_victory(completed_battle)
 
         # Clear active mainline via the service (single source of truth).
         svc = ProgressionService(self.session)
