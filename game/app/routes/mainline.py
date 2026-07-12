@@ -72,6 +72,7 @@ from app.progression import (
     ProgressionService,
 )
 from app.routes.game import _start_battle_internal
+from app.commanders.registry import get_power_threshold
 
 logger = logging.getLogger(__name__)
 # USER_ACTION audit lines per §15 of the logging standard
@@ -277,12 +278,28 @@ async def _spawn_battle_for_index(
         color="red",
         seat=0,
         is_ai=False,
+        commander_id=(profile.mainline_commanders or {}).get(mainline_id),
     )
+    human.co_state = {
+        "commander_id": human.commander_id,
+        "meter": 0,
+        "threshold": get_power_threshold(human.commander_id),
+        "is_power_active": False,
+        "last_start_turn": -1,
+    }
     session.add(human)
     await session.flush()
 
     # 3. Create the AI enemy (seat 1, blue / map-right) — units spawn in step 4.
     ai = await _build_enemy_player(session, game, seat=1, color="blue")
+    ai.commander_id = battle.enemy_commander
+    ai.co_state = {
+        "commander_id": ai.commander_id,
+        "meter": 0,
+        "threshold": get_power_threshold(ai.commander_id),
+        "is_power_active": False,
+        "last_start_turn": -1,
+    }
 
     # 4. Spawn tiles + units via the shared helper. P2.6 — units are
     # driven by the map's initial_units JSON, not caller-supplied rosters.
@@ -711,7 +728,9 @@ async def advance_mainline(
     is_last = next_index >= total_battles
 
     if is_last:
-        rewards = await engine.apply_victory()
+        rewards = await engine.apply_victory(
+            completed_battle=ml.battles[battle_index]
+        )
         logger.info(
             "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=victory "
             "gold=+%d unlock=%s exp_per_unit=+%d",
@@ -738,6 +757,7 @@ async def advance_mainline(
     # for the battle we just won (so the frontend can play it before
     # requesting /next-battle).
     battle = ml.battles[battle_index]
+    engine.apply_battle_victory(battle)
     post_key = battle.post_battle_dialogue
     post_url = ml.dialogues.get(post_key) if post_key else None
 
