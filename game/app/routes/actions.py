@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import (
     COUNTER_DAMAGE_MULT,
@@ -25,6 +26,7 @@ from app.config import (
     TERRAIN_DEF_BONUS,
 )
 from app.database import get_session
+from app.game_locks import game_write_guard
 from app.game_logic import (
     apply_damage,
     attack_with_double_strike,
@@ -319,6 +321,7 @@ async def attack(
     game_id: int,
     body: AttackRequest,
     session: AsyncSession = Depends(get_session),
+    _write_guard: None = Depends(game_write_guard),
 ) -> AttackResult:
     game = await _load_active_game(session, game_id)
     player = await _ensure_current_player(session, game, body.player_id)
@@ -413,6 +416,19 @@ async def attack(
             f"（×{COUNTER_DAMAGE_MULT}）",
         )
 
+    # Award commander meter to the unit that actually dealt the killing
+    # blow.  A counter-kill belongs to the defender, not the player whose
+    # action happened to open this combat exchange.
+    from app.commanders.meter import on_kill
+    if is_kill and player.commander_id is not None:
+        on_kill(player, target.unit_type)
+        flag_modified(player, "co_state")
+    elif attacker.hp <= 0:
+        counter_player = await session.get(Player, target.player_id)
+        if counter_player is not None and counter_player.commander_id is not None:
+            on_kill(counter_player, attacker.unit_type)
+            flag_modified(counter_player, "co_state")
+
     # Mark attacker as having acted.
     # If the attacker's class allows move-after-action AND it still has MP,
     # keep mp as is; otherwise zero it out (unit is rooted for the turn).
@@ -465,6 +481,10 @@ async def attack(
         player.id, game_id, attacker.id, target.id, total_dmg,
         is_kill, hits[0].is_crit if hits else False,
     )
+
+    # Persist while the per-game guard is still held. The session dependency's
+    # later commit is intentionally idempotent.
+    await session.commit()
 
     return AttackResult(
         hits=[DamageInfo(damage=h.damage, is_crit=h.is_crit, is_kill=is_kill,

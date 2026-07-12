@@ -46,6 +46,8 @@ from app.logging_config import (
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import EndTurnRequest, EndTurnResult
 from app.log_format import fmt_end_turn
+from app.commanders.ai import ai_should_fire_co_power
+from app.commanders.effects import fire_co_power, on_player_turn_start
 
 logger = logging.getLogger(__name__)
 audit = get_audit_logger()
@@ -257,6 +259,8 @@ async def end_turn(
                 # If the new round starts with an AI, keep it in 'ai' phase;
                 # otherwise mark as 'player' so the human can act.
                 first_player = next(p for p in players if p.seat == alive_seats[0])
+                await session.refresh(first_player, ["units"])
+                on_player_turn_start(first_player, game.turn_number)
                 game.phase = "ai" if first_player.is_ai else "player"
                 # P2.4 — round resolution previously only flipped
                 # phase but never spawned the AI background chain,
@@ -297,6 +301,8 @@ async def end_turn(
 
     # Otherwise, just advance to the next alive player (within the same round).
     game.current_player_index = next_seat
+    await session.refresh(next_player, ["units"])
+    on_player_turn_start(next_player, game.turn_number)
 
     # If the next player is AI, schedule it to play automatically in the
     # background so the human user can watch without doing anything.
@@ -360,6 +366,14 @@ def _request_respawn(game_id: int) -> None:
 
 async def _run_ai_turn_chain_locked(game_id: int) -> None:
     """Body of the AI chain (caller must hold the per-game slot)."""
+    from app.game_locks import game_write_lock
+    async with game_write_lock(game_id):
+        await _run_ai_turn_chain_write_locked(game_id)
+
+
+async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
+    """Run one AI write step under the shared HTTP/AI game lock."""
+    session = None
     try:
         # Step 1: wait for the "AI thinking" pause before the first action.
         await asyncio.sleep(AI_THINK_DELAY_SECONDS)
@@ -396,11 +410,27 @@ async def _run_ai_turn_chain_locked(game_id: int) -> None:
                 await session.commit()
                 return
 
+            # Re-read persisted meter/active state immediately before the
+            # decision so a stale chain cannot emit a duplicate activation.
+            await session.refresh(current, ["co_state", "units"])
+            if ai_should_fire_co_power(current):
+                fire_co_power(current)
+                session.add(ActionLog(
+                    game_id=game.id,
+                    turn_number=game.turn_number,
+                    player_id=current.id,
+                    action_type="co_power_fired",
+                    description=(f"AI {current.user_name} auto fired CO power "
+                                 f"{current.commander_id}"),
+                ))
+                await session.commit()
+
             # Step 2: take ONE action (rules AI path; LLM uses its own
             # dispatch_ai_turn which still runs the whole turn in one shot).
             try:
                 acted = await ai_take_one_action(session, game, current)
             except Exception:
+                await session.rollback()
                 logger.exception("AI step failed; aborting chain for game %d", game_id)
                 return
 
@@ -438,12 +468,16 @@ async def _run_ai_turn_chain_locked(game_id: int) -> None:
                             game.current_player_index = new_alive[0]
                             game.turn_number += 1
                             first_p = next(p for p in players if p.seat == new_alive[0])
+                            await session.refresh(first_p, ["units"])
+                            on_player_turn_start(first_p, game.turn_number)
                             game.phase = "ai" if first_p.is_ai else "player"
                         else:
                             game.status = "finished"
                             game.phase = "player"
                 else:
                     game.current_player_index = next_seat
+                    await session.refresh(next_player, ["units"])
+                    on_player_turn_start(next_player, game.turn_number)
                     # Phase decision: if next is AI, keep phase=ai; if spectator
                     # hand control to the front-end for human confirmation;
                     # otherwise it's a regular player's turn.
@@ -471,6 +505,8 @@ async def _run_ai_turn_chain_locked(game_id: int) -> None:
             await session.commit()
             _request_respawn(game_id)
     except Exception:  # noqa: BLE001
+        if session is not None and session.in_transaction():
+            await session.rollback()
         logger.exception("AI turn chain error in game %d", game_id)
 
 
@@ -671,6 +707,25 @@ async def _check_stale_turns() -> None:
                         if new_alive:
                             game.current_player_index = new_alive[0]
                             game.turn_number += 1
+                            first_player = next(
+                                p for p in players if p.seat == new_alive[0]
+                            )
+                            await session.refresh(first_player, ["units"])
+                            on_player_turn_start(first_player, game.turn_number)
+                            game.phase = "ai" if first_player.is_ai else "player"
+                else:
+                    idx = alive_seats.index(expected_seat)
+                    next_seat = alive_seats[(idx + 1) % len(alive_seats)]
+                    next_player = next(p for p in players if p.seat == next_seat)
+                    game.current_player_index = next_seat
+                    await session.refresh(next_player, ["units"])
+                    on_player_turn_start(next_player, game.turn_number)
+                    if next_player.is_ai:
+                        game.phase = "ai"
+                    elif next_player.is_spectator:
+                        game.phase = "spectator"
+                    else:
+                        game.phase = "player"
         await session.commit()
 
 

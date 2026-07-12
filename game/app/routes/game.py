@@ -42,6 +42,8 @@ from app.game_logic import (
 from app.mainline.spawn_overrides import apply_spawn_overrides
 from app.classes.units import get_or_none as _get_unit_or_none
 from app.battle_config import UnknownBattleTrackError, expand_battle_config
+from app.commanders.effects import bake_passive_into_units, can_fire_co_power
+from app.commanders.actions import can_player_fire_now
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.schemas import (
     AddAIRequest,
@@ -50,6 +52,7 @@ from app.schemas import (
     GameSummaryOut,
     JoinGameRequest,
     LobbyInfoOut,
+    PlayerCOStateOut,
     PlayerOut,
     PresetInfo,
     PresetsResponse,
@@ -484,6 +487,31 @@ async def _start_battle_internal(
     # name / stats / hero_id tag so the hero "wears" the base class.
     if hero_overrides:
         _apply_hero_overrides(units, hero_overrides, real_players)
+
+    for player in real_players:
+        owned_units = [unit for unit in units if unit.player_id == player.id]
+        if owned_units:
+            from types import SimpleNamespace
+            target = SimpleNamespace(commander_id=player.commander_id,
+                                     units=owned_units, co_state=player.co_state)
+            bake_passive_into_units(target)
+            player.co_state = target.co_state
+
+    # The initial current player has already started turn 1 when battle
+    # creation completes; record that lifecycle edge immediately.
+    first_player = next(
+        (p for p in real_players if p.seat == game.current_player_index), None,
+    )
+    if first_player is not None:
+        from types import SimpleNamespace
+        target = SimpleNamespace(
+            commander_id=first_player.commander_id,
+            units=[u for u in units if u.player_id == first_player.id],
+            co_state=first_player.co_state,
+        )
+        from app.commanders.effects import on_player_turn_start
+        on_player_turn_start(target, game.turn_number)
+        first_player.co_state = target.co_state
 
     seat_to_player = {p.seat: p for p in players}
     for seat, (cx, cy) in castle_xy.items():
@@ -1377,4 +1405,20 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
         # P2.4 polish — client uses this to draw a "X turns remaining"
         # progress indicator on the tile.
         pending_claims=pending_claims,
+        co_states=[
+            PlayerCOStateOut(
+                player_id=p.id,
+                seat=p.seat,
+                color=p.color,
+                commander_id=p.commander_id,
+                meter=(p.co_state or {}).get("meter", 0),
+                threshold=(p.co_state or {}).get("threshold", 20),
+                is_power_active=(p.co_state or {}).get("is_power_active", False),
+                can_fire=(
+                    can_player_fire_now(p, game, players)
+                    and can_fire_co_power(p)
+                ),
+            )
+            for p in players
+        ],
     )
