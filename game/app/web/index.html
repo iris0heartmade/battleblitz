@@ -264,17 +264,41 @@
     <div class="panel">
       <button class="btn btn-back" data-action="goto-menu">← 返回</button>
       <h2>📁 存档管理</h2>
-      <p class="muted">数据库结构更新可能导致旧存档报错（数据库迁移会清空一切）。在这里可以删除有问题的存档。</p>
+      <p class="muted">主线模式存档系统（3 手动 + 1 自动 + 1 中断）。自动存档在章节结算和章前准备完成后由系统写入；中断存档在战斗中途掉线时自动捕获。</p>
 
-      <h3>🏠 开房模式存档</h3>
-      <div id="saves-open" class="saves-list">
+      <!-- ===== 新存档系统（FE8 风格） ===== -->
+      <h3>📖 主线进度存档</h3>
+
+      <h4>手动存档（3 格）</h4>
+      <div id="save-system-manual" class="save-slots">
         <p class="muted">加载中…</p>
       </div>
 
-      <h3>📖 主线模式存档</h3>
-      <div id="saves-mainline" class="saves-list">
+      <h4>自动存档（系统写入，1 格）</h4>
+      <div id="save-system-auto" class="save-slots">
         <p class="muted">加载中…</p>
       </div>
+
+      <h4>中断存档（掉线保留，1 格）</h4>
+      <div id="save-system-suspend" class="save-slots">
+        <p class="muted">加载中…</p>
+      </div>
+
+      <!-- ===== 旧存档系统（开房 + 主线 兼容保留） ===== -->
+      <details class="saves-legacy">
+        <summary>旧版存档（开房模式 / 旧主线模式，迁移期保留）</summary>
+        <p class="muted small">数据库结构更新可能导致旧存档报错（数据库迁移会清空一切）。在这里可以删除有问题的存档。</p>
+
+        <h4>🏠 开房模式存档</h4>
+        <div id="saves-open" class="saves-list">
+          <p class="muted">加载中…</p>
+        </div>
+
+        <h4>📖 主线模式存档（旧版）</h4>
+        <div id="saves-mainline" class="saves-list">
+          <p class="muted">加载中…</p>
+        </div>
+      </details>
     </div>
   </section>
 
@@ -386,6 +410,7 @@
       </div>
       <div class="mainline-actions">
         <button class="btn btn-ghost btn-sm" data-action="mainline-abandon">🚪 放弃主线</button>
+        <button class="btn btn-secondary" data-action="mainline-prepare-complete" id="mainline-prepare-ready-btn">✅ 准备好了（写入自动存档）</button>
         <button class="btn btn-primary" data-action="mainline-start-battle">▶ 开始战斗</button>
       </div>
     </div>
@@ -592,6 +617,9 @@
       </aside>
 
       <div id="game-toast" class="toast" hidden></div>
+  <!-- 自动存档提示（章节结算 / 章前准备完成时由系统显示，
+       独立于 game-toast 因为自动存档在主菜单/章节准备界面也会触发） -->
+  <div id="auto-save-toast" class="toast auto-save-toast" hidden></div>
       <div id="game-over-modal" class="modal" hidden>
         <div class="modal-card">
           <h2 id="game-over-title">游戏结束</h2>

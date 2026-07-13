@@ -2404,6 +2404,73 @@ html, body {
   font-style: italic;
 }
 
+/* ===== 新存档系统（FE8 风格：manual + auto + suspend） ===== */
+.save-slot-manual { border-color: var(--accent, #6abf6a); }
+.save-slot-auto   { border-color: #5a8ae8; background: rgba(90, 138, 232, 0.08); }
+.save-slot-suspend{ border-color: #e8d65a; background: rgba(232, 214, 90, 0.08); }
+
+.save-kind-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.save-kind-badge.manual  { background: var(--accent, #6abf6a); color: #1a1a1a; }
+.save-kind-badge.auto    { background: #5a8ae8; color: #fff; }
+.save-kind-badge.suspend { background: #e8d65a; color: #1a1a1a; }
+
+.save-slot-label {
+  font-size: 12px;
+  color: var(--text-dim, #888);
+  margin-top: 4px;
+}
+
+.save-slot-empty {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+/* 旧存档折叠区（迁移期保留） */
+.saves-legacy {
+  margin-top: 24px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.saves-legacy summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+  color: var(--text-dim, #888);
+}
+.saves-legacy[open] summary {
+  margin-bottom: 12px;
+}
+
+/* ===== 自动存档 toast ===== */
+.auto-save-toast {
+  /* 跟 .toast 一起 fixed top:80px，但用蓝色区分 */
+  border-color: #5a8ae8 !important;
+  background: rgba(36, 48, 80, 0.96) !important;
+  min-width: 240px;
+  text-align: center;
+  font-weight: 600;
+}
+.auto-save-toast.success {
+  border-color: var(--accent, #6abf6a) !important;
+}
+
+/* 准备好了按钮 — 准备好后变 disabled+success */
+#mainline-prepare-ready-btn.ready {
+  background: var(--accent, #6abf6a) !important;
+  color: #1a1a1a !important;
+}
+#mainline-prepare-ready-btn.ready::before {
+  content: "✓ ";
+}
+
 .mainline-header {
   display: flex;
   flex-wrap: wrap;

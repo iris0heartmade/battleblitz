@@ -446,6 +446,378 @@ async function renderSavesView() {
   renderSavesList(mlEl, ml, "暂无主线模式存档。");
 }
 
+// ============================================================
+// 新存档系统（FE8 风格：3 manual + 1 auto + 1 suspend）
+//
+//  * GET   /saves                — 列出当前 user 的存档
+//  * POST  /saves/save           — 手动存档（写到 slot_index 0/1/2）
+//  * POST  /saves/load           — 读档（恢复 profile + cursor）
+//  * POST  /saves/erase          — 删除存档格（cascade suspend）
+//  * POST  /saves/load_suspend   — 读中断（返回 game_id 给 FE rejoin）
+//  * POST  /mainlines/{id}/prepare/complete — 玩家点「准备好了」
+//
+// 与旧 renderSavesView 互不干扰 —— 旧版只是迁移期兼容。
+// ============================================================
+
+const MANUAL_SLOT_COUNT = 3;
+
+async function renderNewSaveSlots() {
+  const userName = (state.settings.playerName || "").trim();
+  const manualEl = document.getElementById("save-system-manual");
+  const autoEl = document.getElementById("save-system-auto");
+  const susEl = document.getElementById("save-system-suspend");
+  if (!manualEl || !autoEl || !susEl) return;
+  if (!userName) {
+    const msg = `<p class="muted">请先在【设置】里填写玩家昵称</p>`;
+    manualEl.innerHTML = msg;
+    autoEl.innerHTML = msg;
+    susEl.innerHTML = msg;
+    return;
+  }
+  manualEl.innerHTML = `<p class="muted">加载中…</p>`;
+  autoEl.innerHTML = `<p class="muted">加载中…</p>`;
+  susEl.innerHTML = `<p class="muted">加载中…</p>`;
+  let data;
+  try {
+    data = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
+  } catch (e) {
+    const err = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+    manualEl.innerHTML = err;
+    autoEl.innerHTML = "";
+    susEl.innerHTML = "";
+    return;
+  }
+  // Map server slot_index → array index for stable render order.
+  const manualByIdx = new Map();
+  for (const s of data.manual_slots || []) {
+    if (s) manualByIdx.set(s.slot_index, s);
+  }
+  renderManualSlots(manualEl, manualByIdx, userName);
+  renderAutoSlot(autoEl, data.auto_slot, userName);
+  renderSuspendSlot(susEl, data.suspend, userName);
+}
+
+function renderManualSlots(container, byIdx, userName) {
+  container.innerHTML = "";
+  for (let i = 0; i < MANUAL_SLOT_COUNT; i++) {
+    const slot = byIdx.get(i);
+    const card = document.createElement("div");
+    card.className = "save-slot " + (slot ? "save-slot-manual" : "empty");
+    if (slot) {
+      const titleText = slot.label || `第 ${slot.chapter_index ?? "?"} 章`;
+      const savedAt = slot.saved_at ? new Date(slot.saved_at).toLocaleString() : "—";
+      card.innerHTML = `
+        <div class="slot-title">
+          存档 ${i + 1}
+          <span class="save-kind-badge manual">手动</span>
+        </div>
+        <div class="slot-content">
+          <div><strong>${escapeHtml(titleText)}</strong></div>
+          <div class="save-slot-label">${escapeHtml(slot.mainline_id || "—")}</div>
+          <div class="save-slot-label">${escapeHtml(savedAt)}</div>
+        </div>
+        <div class="slot-actions">
+          <button class="btn btn-primary btn-sm"
+                  data-action="load-new-save" data-kind="manual" data-slot-index="${i}">
+            ▶ 从此继续
+          </button>
+          <button class="btn btn-danger btn-sm"
+                  data-action="erase-new-save" data-kind="manual" data-slot-index="${i}">
+            🗑️
+          </button>
+        </div>
+      `;
+    } else {
+      card.innerHTML = `
+        <div class="slot-title">存档 ${i + 1} · 空</div>
+        <div class="slot-content">空存档 — 在章节列表手动存档</div>
+      `;
+    }
+    container.appendChild(card);
+  }
+}
+
+function renderAutoSlot(container, slot, userName) {
+  container.innerHTML = "";
+  const card = document.createElement("div");
+  if (slot) {
+    const titleText = slot.label || "—";
+    const savedAt = slot.saved_at ? new Date(slot.saved_at).toLocaleString() : "—";
+    card.className = "save-slot save-slot-auto occupied";
+    card.innerHTML = `
+      <div class="slot-title">
+        自动存档
+        <span class="save-kind-badge auto">系统</span>
+      </div>
+      <div class="slot-content">
+        <div><strong>${escapeHtml(titleText)}</strong></div>
+        <div class="save-slot-label">${escapeHtml(slot.mainline_id || "—")}</div>
+        <div class="save-slot-label">${escapeHtml(savedAt)}</div>
+      </div>
+      <div class="slot-actions">
+        <button class="btn btn-primary btn-sm"
+                data-action="load-new-save" data-kind="auto" data-slot-index="0">
+          ▶ 从此继续
+        </button>
+        <button class="btn btn-danger btn-sm"
+                data-action="erase-new-save" data-kind="auto" data-slot-index="0">
+          🗑️
+        </button>
+      </div>
+    `;
+  } else {
+    card.className = "save-slot save-slot-auto save-slot-empty";
+    card.innerHTML = `
+      <div class="slot-title">自动存档 · 空</div>
+      <div class="slot-content">章节结算或准备完成后由系统写入</div>
+    `;
+  }
+  container.appendChild(card);
+}
+
+function renderSuspendSlot(container, sus, userName) {
+  container.innerHTML = "";
+  const card = document.createElement("div");
+  if (sus) {
+    const pointLabel = ({
+      disconnect: "掉线中断",
+      phase_change: "阶段切换",
+      player_idle: "玩家空闲",
+      during_action: "行动中",
+      manual: "手动中断",
+    })[sus.suspend_point] || sus.suspend_point;
+    const savedAt = sus.saved_at ? new Date(sus.saved_at).toLocaleString() : "—";
+    card.className = "save-slot save-slot-suspend occupied";
+    card.innerHTML = `
+      <div class="slot-title">
+        中断存档
+        <span class="save-kind-badge suspend">${escapeHtml(pointLabel)}</span>
+      </div>
+      <div class="slot-content">
+        <div><strong>${escapeHtml(sus.mainline_id || "—")}</strong></div>
+        <div class="save-slot-label">战斗 #${sus.game_id ?? "?"}${sus.battle_id ? " · " + escapeHtml(sus.battle_id) : ""}</div>
+        <div class="save-slot-label">${escapeHtml(savedAt)}</div>
+      </div>
+      <div class="slot-actions">
+        <button class="btn btn-accent btn-sm" data-action="continue-suspend">
+          ▶ 继续中断战斗
+        </button>
+      </div>
+    `;
+  } else {
+    card.className = "save-slot save-slot-suspend save-slot-empty";
+    card.innerHTML = `
+      <div class="slot-title">中断存档 · 空</div>
+      <div class="slot-content">掉线或中断时由系统自动捕获</div>
+    `;
+  }
+  container.appendChild(card);
+}
+
+async function loadNewSaveSlot(kind, slotIndex) {
+  const userName = (state.settings.playerName || "").trim();
+  if (!userName) {
+    toast("请先在【设置】里填写玩家昵称", 3000);
+    return;
+  }
+  // 显示「自动存档中……」 — 模拟服务器延迟
+  showAutoSaveToast("reading");
+  try {
+    const r = await api("POST", "/saves/load", {
+      user_name: userName, kind, slot_index: slotIndex,
+    });
+    if (r.auto_cleared) {
+      toast("已读档（自动存档已清空）", 2500);
+    } else {
+      toast("已读档", 2500);
+    }
+    showAutoSaveToast("done");
+    // 进入该主线：找到 mainlineId，去 startMainline 流程
+    await enterMainlineAfterLoad(r);
+  } catch (e) {
+    hideAutoSaveToast();
+    toast(`读档失败：${e.message}`, 3000);
+  }
+}
+
+async function eraseNewSaveSlot(kind, slotIndex) {
+  const userName = (state.settings.playerName || "").trim();
+  if (!userName) {
+    toast("请先在【设置】里填写玩家昵称", 3000);
+    return;
+  }
+  const kindLabel = { manual: "手动存档", auto: "自动存档" }[kind] || kind;
+  if (!confirm(`确定要删除${kindLabel} #${slotIndex + (kind === "manual" ? 1 : 0)}吗？`)) return;
+  try {
+    const r = await api("POST", "/saves/erase", {
+      user_name: userName, kind, slot_index: slotIndex,
+    });
+    let msg = "已删除存档";
+    if (r.suspend_cleared) msg += "（关联的中断存档也已清空）";
+    toast(msg, 2500);
+    await renderNewSaveSlots();
+  } catch (e) {
+    toast(`删除失败：${e.message}`, 3000);
+  }
+}
+
+async function continueSuspend() {
+  const userName = (state.settings.playerName || "").trim();
+  if (!userName) {
+    toast("请先在【设置】里填写玩家昵称", 3000);
+    return;
+  }
+  try {
+    const r = await api("POST", "/saves/load_suspend", { user_name: userName });
+    // r.game_id / r.mainline_id / r.battle_id — 把玩家塞回那个游戏
+    state.me = {
+      ...(state.me || {}),
+      user_name: userName,
+      game_id: r.game_id,
+      // player_id will come from rejoin_by_name below
+    };
+    const rejoin = await api("POST", `/games/${r.game_id}/rejoin_by_name`, { user_name: userName });
+    state.me.player_id = rejoin.player.id;
+    state.me.color = rejoin.player.color;
+    state.me.seat = rejoin.player.seat;
+    saveSession(state.me);
+    if (r.aborted_game_count > 0) {
+      toast(`已继续中断战斗（清理了 ${r.aborted_game_count} 个其他进行中游戏）`, 3000);
+    } else {
+      toast("已继续中断战斗", 2500);
+    }
+    showView("game");
+    await refreshGame();
+  } catch (e) {
+    if (e.status === 404) {
+      toast("没有可用的中断存档", 2500);
+      await renderNewSaveSlots();
+    } else {
+      toast(`继续中断失败：${e.message}`, 3000);
+    }
+  }
+}
+
+// 进入主线：读档后通常玩家从准备阶段开始。
+// 走 startAndEnter 时 force=true，强制允许重启（同 mainline）。
+async function enterMainlineAfterLoad(loadResp) {
+  const mid = loadResp.mainline_id;
+  if (!mid) {
+    toast("存档里没有主线 id，无法继续", 3000);
+    return;
+  }
+  // 通过 list endpoint 找到 index
+  try {
+    const list = await api("GET", "/mainlines");
+    const found = (list || []).find(m => m.id === mid);
+    if (!found) {
+      toast(`找不到主线 ${mid}`, 3000);
+      return;
+    }
+    showView("mainline-list");
+    // 触发 startAndEnter —— 内部已经处理 force=true
+    await MainlineView.startAndEnter(mid, null, { force: true });
+  } catch (e) {
+    toast(`进入主线失败：${e.message}`, 3000);
+  }
+}
+
+// ============================================================
+// 自动存档 toast（独立于普通 toast，可与 game-toast 共存）
+// ============================================================
+let _autoSaveToastTimer = null;
+function showAutoSaveToast(phase /* "reading" | "saving" | "done" */) {
+  const el = document.getElementById("auto-save-toast");
+  if (!el) return;
+  if (phase === "done") {
+    el.textContent = "自动存档完毕 ✓";
+    el.classList.add("success");
+    clearTimeout(_autoSaveToastTimer);
+    _autoSaveToastTimer = setTimeout(hideAutoSaveToast, 1500);
+  } else {
+    el.textContent = "自动存档中…";
+    el.classList.remove("success");
+    // 短延迟显示 "完毕"（不会无限等待）
+    clearTimeout(_autoSaveToastTimer);
+    _autoSaveToastTimer = setTimeout(() => showAutoSaveToast("done"), 600);
+  }
+  el.hidden = false;
+}
+function hideAutoSaveToast() {
+  const el = document.getElementById("auto-save-toast");
+  if (!el) return;
+  el.hidden = true;
+  el.classList.remove("success");
+  clearTimeout(_autoSaveToastTimer);
+}
+
+// ============================================================
+// 准备好了（章前准备完成 → 触发自动存档）
+// ============================================================
+async function completeMainlinePrep() {
+  if (!state.mainline || !state.mainline.id) {
+    toast("没有进行中的主线", 2500);
+    return;
+  }
+  const userName = (state.settings.playerName || "").trim();
+  if (!userName) {
+    toast("请先在【设置】里填写玩家昵称", 3000);
+    return;
+  }
+  const btn = document.getElementById("mainline-prepare-ready-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 写入自动存档中…"; }
+  showAutoSaveToast("saving");
+  try {
+    const r = await api("POST", `/mainlines/${encodeURIComponent(state.mainline.id)}/prepare/complete`, {
+      user_name: userName,
+    });
+    // r.auto_save — AutoSaveCheckpointOut
+    if (r.auto_save) {
+      // toast 已显示
+    } else {
+      // 服务器没回 auto_save 也显示一下
+      showAutoSaveToast("done");
+    }
+    if (btn) {
+      btn.textContent = "已准备 ✓";
+      btn.classList.add("ready");
+    }
+    // 重新拉一次准备数据，让 UI 显示 hero 准备状态
+    if (typeof MainlineView.refreshPrepare === "function") {
+      await MainlineView.refreshPrepare();
+    } else {
+      // fallback：重新走 _enterPrepareView
+      try {
+        const prep = await MainlineView.fetchPrepare(state.mainline.id, userName);
+        state.mainlinePrepare = prep;
+        MainlineView._enterPrepareView(prep);
+      } catch (_) {}
+    }
+  } catch (e) {
+    toast(`准备完成失败：${e.message}`, 3000);
+    hideAutoSaveToast();
+    if (btn) { btn.disabled = false; btn.textContent = "✅ 准备好了（写入自动存档）"; }
+  }
+}
+
+// 章节结算后服务端返回 auto_save 时显示 toast
+function handleAdvanceAutoSave(autoSave) {
+  if (!autoSave) return;
+  const label = autoSave.label || "章节结束";
+  // Toast 显示 label + 完毕
+  const el = document.getElementById("auto-save-toast");
+  if (el) {
+    el.textContent = `自动存档中…  ${label}`;
+    el.hidden = false;
+    el.classList.remove("success");
+    setTimeout(() => {
+      el.textContent = `自动存档完毕 ✓ (${label})`;
+      el.classList.add("success");
+      setTimeout(() => { el.hidden = true; el.classList.remove("success"); }, 2000);
+    }, 600);
+  }
+}
+
 function renderSavesList(container, games, emptyMsg) {
   if (!games.length) {
     container.innerHTML = `<p class="muted">${escapeHtml(emptyMsg)}</p>`;
@@ -865,7 +1237,25 @@ async function joinGame(gid, teamOverride, options = {}) {
 }
 
 // Try to resume a previously-saved session. Returns true if rejoin succeeded.
+//
+// 新流程：
+//   1. 先看有没有「中断存档」—— 有就优先走 continueSuspend（处理 WS 掉线场景）
+//   2. 否则才走老的 /games/{id}/rejoin 流程（房间模式）
 async function tryResumeSession() {
+  const userName = (state.settings.playerName || "").trim();
+  // 1. 优先检查中断存档（掉线恢复的关键路径）
+  if (userName) {
+    try {
+      const saves = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
+      if (saves && saves.suspend) {
+        await continueSuspend();
+        return true;
+      }
+    } catch (_) {
+      // /saves 拉取失败不阻塞老路径
+    }
+  }
+  // 2. 老路径：localStorage session
   const sess = loadSession();
   if (!sess || !sess.game_id || !sess.player_id) {
     updateResumeButton(null);
@@ -907,6 +1297,37 @@ function updateResumeButton(sess) {
     btn.textContent = `▶ 继续房间 #${sess.game_id}（${sess.user_name || ""}）`;
   } else {
     btn.hidden = true;
+  }
+  // 异步检查是否有「中断存档」—— 如果有，就在主菜单额外显示一个
+  // 「▶ 继续中断战斗」按钮（如果有的话）
+  refreshResumeSuspendButton();
+}
+
+// 在主菜单检查中断存档。如果有，挂一个「继续中断」按钮到 .menu-buttons
+async function refreshResumeSuspendButton() {
+  const wrap = document.querySelector("#view-menu .menu-buttons");
+  if (!wrap) return;
+  // 移除旧的（避免重复）
+  const old = document.getElementById("resume-suspend-btn");
+  if (old) old.remove();
+  const userName = (state.settings.playerName || "").trim();
+  if (!userName) return;
+  let saves;
+  try {
+    saves = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
+  } catch (_) { return; }
+  if (!saves || !saves.suspend) return;
+  const btn = document.createElement("button");
+  btn.id = "resume-suspend-btn";
+  btn.className = "btn btn-accent btn-lg";
+  btn.dataset.action = "continue-suspend";
+  btn.textContent = "▶ 继续中断战斗";
+  // 插到「继续上次」按钮之前（如果存在），否则插到首位
+  const resumeBtn = document.getElementById("resume-btn");
+  if (resumeBtn && resumeBtn.parentElement === wrap && !resumeBtn.hidden) {
+    wrap.insertBefore(btn, resumeBtn);
+  } else {
+    wrap.insertBefore(btn, wrap.firstChild);
   }
 }
 
@@ -1383,6 +1804,14 @@ function connectWS() {
   };
   ws.onclose = () => {
     state.wsConnected = false;
+    // 后端已经在 ws_gateway._capture_disconnect_suspend 自动捕获了
+    // 当前游戏状态到 SuspendState —— 这里只负责给玩家一个可见提示。
+    // 注意：后端的捕获是 fire-and-await 而不是 fire-and-forget，但
+    // 因为 ws_gateway 用的是独立 AsyncSessionLocal，不依赖这个回调。
+    if (state.me?.game_id) {
+      toast("与服务器断开连接。战斗状态已自动保存，可在主菜单「继续中断战斗」恢复。", 3500);
+      state.disconnectedAt = Date.now();
+    }
     _wsScheduleReconnect();
   };
   ws.onerror = (e) => {
@@ -4412,6 +4841,10 @@ const MainlineView = {
         game_id: gameId,
       });
       console.info(`[mainline] advance OK: id=${id} state=${r && r.state} battle_index=${r && r.battle_index}`);
+      // 服务端在章节结算后写自动存档 → 显示 toast
+      if (r && r.auto_save) {
+        handleAdvanceAutoSave(r.auto_save);
+      }
       return r;
     } catch (e) {
       console.error(`[mainline] advance failed: id=${id} err=${e && e.message} status=${e && e.status}`);
@@ -4479,7 +4912,10 @@ const MainlineView = {
             <span>战斗数: ${m.battle_count}</span>
             <span>所需职业: ${(m.required_classes || []).join(", ") || "无"}</span>
           </div>
-          <button class="btn btn-primary btn-sm" data-action="mainline-card-click" data-mainline-id="${escapeHtml(m.id)}">开始 →</button>
+          <div class="card-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" data-action="mainline-card-click" data-mainline-id="${escapeHtml(m.id)}">开始 →</button>
+            <button class="btn btn-secondary btn-sm" data-action="mainline-card-save" data-mainline-id="${escapeHtml(m.id)}">💾 存档</button>
+          </div>
         `;
         container.appendChild(card);
       }
@@ -5627,6 +6063,7 @@ document.addEventListener("DOMContentLoaded", () => {
         state.selectedUnit = null;
         state.actionMode = null;
         updateResumeButton(loadSession());
+        refreshResumeSuspendButton();   // 检查是否有「中断存档」
         showView("menu");
         break;
       case "resume-game":
@@ -5641,7 +6078,26 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "goto-saves":
         showView("saves");
-        await renderSavesView();
+        // 并行拉两个：旧版（迁移期）+ 新版（FE8 风格）
+        await Promise.all([renderSavesView(), renderNewSaveSlots()]);
+        break;
+      case "load-new-save": {
+        const kind = target.dataset.kind;
+        const slotIndex = parseInt(target.dataset.slotIndex || "0", 10);
+        await loadNewSaveSlot(kind, slotIndex);
+        break;
+      }
+      case "erase-new-save": {
+        const kind = target.dataset.kind;
+        const slotIndex = parseInt(target.dataset.slotIndex || "0", 10);
+        await eraseNewSaveSlot(kind, slotIndex);
+        break;
+      }
+      case "continue-suspend":
+        await continueSuspend();
+        break;
+      case "mainline-prepare-complete":
+        await completeMainlinePrep();
         break;
       case "save-delete": {
         const gid = parseInt(target.dataset.gameId);
@@ -5817,6 +6273,56 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         // 把按钮引用传过去，让 startAndEnter 加 loading 状态防狂点
         await MainlineView.startAndEnter(mid, target);
+        break;
+      }
+      case "mainline-card-save": {
+        const mid = target.dataset.mainlineId;
+        if (!mid) {
+          toast("无效的章节 id", 2000);
+          break;
+        }
+        const userName = (state.settings.playerName || "").trim();
+        if (!userName) {
+          toast("请先在【设置】里填写玩家昵称", 3000);
+          break;
+        }
+        // 先拉一下存档列表，找出第一个空 slot，否则默认 slot 0（覆盖）
+        let targetSlot = 0;
+        try {
+          const saves = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
+          const occupiedIdx = new Set(
+            (saves.manual_slots || []).filter(Boolean).map(s => s.slot_index)
+          );
+          for (let i = 0; i < 3; i++) {
+            if (!occupiedIdx.has(i)) { targetSlot = i; break; }
+          }
+          // 都满 → 弹出 confirm 让用户选要不要覆盖 slot 0
+          if (occupiedIdx.has(targetSlot)) {
+            if (!confirm(`所有手动存档都已占用。要覆盖存档 ${targetSlot + 1} 吗？`)) break;
+          }
+        } catch (_) {
+          // 拉不到就默认 slot 0
+        }
+        target.disabled = true;
+        const label = `第 ${state.mainline?.battle_index ? state.mainline.battle_index + 1 : "?"} 章 - 手动`;
+        try {
+          await api("POST", "/saves/save", {
+            user_name: userName,
+            slot_index: targetSlot,
+            mainline_id: mid,
+            chapter_index: state.mainline?.battle_index || 0,
+            label,
+          });
+          toast(`已保存到存档 ${targetSlot + 1}`, 2500);
+          // 刷新 mainline-slots（新存档出现在 3 格视图里）
+          if (typeof MainlineView.renderSlots === "function") {
+            await MainlineView.renderSlots();
+          }
+        } catch (e) {
+          toast(`存档失败：${e.message}`, 3000);
+        } finally {
+          target.disabled = false;
+        }
         break;
       }
       case "mainline-abandon":
