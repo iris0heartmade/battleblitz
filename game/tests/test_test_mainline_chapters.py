@@ -56,6 +56,16 @@ async def _create_profile(client, user_name="alice"):
 # Loader visibility
 # ============================================================
 
+def test_test_chapters_define_an_ordered_campaign_chain():
+    """The test chapters are separate files but form one campaign path."""
+    from app.mainline import clear_cache, load_mainline
+
+    clear_cache()
+    assert load_mainline("chapter_test_01").next_mainline_id == "chapter_test_02"
+    assert load_mainline("chapter_test_02").next_mainline_id == "chapter_test_03"
+    assert load_mainline("chapter_test_03").next_mainline_id is None
+
+
 @pytest.mark.integration
 class TestListTestMainlines:
     async def test_test_chapters_appear_in_list(self, tml_client):

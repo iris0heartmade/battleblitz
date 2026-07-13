@@ -1199,6 +1199,17 @@ async def advance_mainline(
         rewards = await engine.apply_victory(
             completed_battle=ml.battles[battle_index]
         )
+        next_mainline_id = ml.next_mainline_id
+        next_mainline_title = None
+        if next_mainline_id:
+            try:
+                next_mainline_title = load_mainline(next_mainline_id).title
+            except MainlineNotFound:
+                logger.warning(
+                    "mainline_advance successor missing: mainline=%s next=%s",
+                    mainline_id, next_mainline_id,
+                )
+                next_mainline_id = None
         logger.info(
             "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=victory "
             "gold=+%d unlock=%s exp_per_unit=+%d",
@@ -1219,6 +1230,10 @@ async def advance_mainline(
             post_battle_dialogue_url=None,
             post_battle_dialogue_key=None,
             rewards=rewards,
+            victory_dialogue_url=ml.dialogues.get("victory"),
+            victory_dialogue_key="victory" if ml.dialogues.get("victory") else None,
+            next_mainline_id=next_mainline_id,
+            next_mainline_title=next_mainline_title,
             auto_save=auto_save_out.model_dump(),
         )
 

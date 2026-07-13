@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mainline.loader import Mainline, MainlineNotFound, load_mainline
@@ -388,16 +389,30 @@ class MainlineEngine:
         if rewards.exp_per_unit:
             try:
                 from app.progression.service import ProgressionService as _PS
+                from app.progression.models import UnitInstance
 
                 svc2 = _PS(self.session)
-                units = list(getattr(self.profile, "units", []) or [])
-                for u in units:
+                # Do not dereference profile.units here. It is a lazy ORM
+                # relationship and this async request would otherwise raise
+                # MissingGreenlet after the campaign has already cleared.
+                unit_ids = (
+                    await self.session.scalars(
+                        select(UnitInstance.id).where(
+                            UnitInstance.profile_id == self.profile.id
+                        )
+                    )
+                ).all()
+                for unit_id in unit_ids:
                     try:
-                        await svc2.award_xp(u.id, int(rewards.exp_per_unit), reason="mainline_clear")
+                        await svc2.award_xp(
+                            unit_id,
+                            int(rewards.exp_per_unit),
+                            reason="mainline_clear",
+                        )
                         exp_units_awarded += 1
                     except Exception:  # pragma: no cover — defensive
                         logger.exception(
-                            "Failed to award mainline exp to unit %s", getattr(u, "id", "?")
+                            "Failed to award mainline exp to unit %s", unit_id
                         )
             except Exception:  # pragma: no cover — defensive
                 logger.exception("Failed to award mainline clear exp")

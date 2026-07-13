@@ -281,6 +281,9 @@ class Mainline(APIModel):
     dialogues: dict[str, str] = Field(default_factory=dict)
     battles: list[BattleSpec] = Field(min_length=1, max_length=32)
     rewards_on_clear: MainlineRewards = Field(default_factory=MainlineRewards)
+    # Optional campaign link. Completion remains an explicit player choice;
+    # this only tells the client which chapter can be entered next.
+    next_mainline_id: Optional[str] = Field(default=None, pattern=r"^[a-z0-9_]{3,64}$")
     art_assets: dict = Field(default_factory=dict)
 
     @property
@@ -499,6 +502,11 @@ class MainlineAdvanceOut(_PydanticBaseModel):
     post_battle_dialogue_url: Optional[str] = None
     post_battle_dialogue_key: Optional[str] = None
     rewards: Optional[MainlineRewards] = None
+    victory_dialogue_url: Optional[str] = None
+    victory_dialogue_key: Optional[str] = None
+    # Present only when the completed chapter declares a linked successor.
+    next_mainline_id: Optional[str] = None
+    next_mainline_title: Optional[str] = None
     # Auto-save checkpoint written at chapter end.  None if the
     # advance did not produce an auto-save (e.g. mid-battle advance
     # that just bumped the cursor).  The FE renders

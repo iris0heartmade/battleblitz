@@ -1843,8 +1843,6 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
             t.occupied_unit_id = None
         if (t.x, t.y) == dest:
             t.occupied_unit_id = unit.id
-            if t.terrain == TERRAIN_CASTLE:
-                claim_castle_if_present(t, unit)
     unit.x, unit.y = dest
     # Deduct movement cost — same logic as the human route (actions.py).
     from app.config import TERRAIN_MOVE_COST

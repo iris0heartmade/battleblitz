@@ -1446,7 +1446,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
     # Current player = first alive player whose seat >= current_player_index, else wrap.
     current_player_id = None
     if players:
-        alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+        alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
         if alive_seats:
             seat = next(
                 (s for s in alive_seats if s >= game.current_player_index),

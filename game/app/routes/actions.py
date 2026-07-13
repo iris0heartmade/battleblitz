@@ -137,7 +137,7 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     # every action endpoint eventually routes through this helper, so
     # the block lives here (rather than at each route) to guarantee
     # parity across move / attack / skill / wait / claim / recruit.
-    alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+    alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
     if not alive_seats:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
     expected_seat = next(
@@ -276,14 +276,10 @@ async def move_unit(
     # further non-move actions.
     unit.has_moved = True
 
-    # Castle capture
+    # A castle remains owned by its defender until the unit completes the
+    # explicit two-turn claim action. Moving onto it must not call the old
+    # immediate-capture helper.
     castle_captured = False
-    if tile_terrain == TERRAIN_CASTLE and owners.get(target) != player.id:
-        for t in (await session.execute(select(Tile).where(Tile.game_id == game_id))).scalars():
-            if (t.x, t.y) == target:
-                if claim_castle_if_present(t, unit):
-                    castle_captured = True
-                break
 
     _log(session, game, player, "move",
          f"{unit.name} moved to ({target[0]}, {target[1]}) cost={spent_mp}"

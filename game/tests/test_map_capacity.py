@@ -166,6 +166,29 @@ async def test_add_ai_4p_room_allows_three_more_ai(game_client):
     assert r.status_code == 409
 
 
+@pytest.mark.asyncio
+async def test_spectator_does_not_consume_an_ai_player_slot(game_client):
+    r = await game_client.post("/games", json={
+        "name": "4p-with-spectator",
+        "map_preset": "balanced_4p_20",
+    })
+    gid = r.json()["id"]
+
+    assert (await game_client.post(
+        f"/games/{gid}/join", json={"user_name": "host"}
+    )).status_code == 201
+    assert (await game_client.post(
+        f"/games/{gid}/join", json={"user_name": "viewer", "role": "spectator"}
+    )).status_code == 201
+
+    for i in range(3):
+        response = await game_client.post(f"/games/{gid}/add-ai", json={"difficulty": "normal"})
+        assert response.status_code == 201, f"AI #{i + 1} should succeed with a spectator"
+
+    response = await game_client.post(f"/games/{gid}/add-ai", json={"difficulty": "normal"})
+    assert response.status_code == 409
+
+
 # ============================================================
 # Lobby endpoint reports capacity
 # ============================================================

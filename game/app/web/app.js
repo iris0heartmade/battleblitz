@@ -482,11 +482,15 @@ async function renderNewSaveSlots() {
   try {
     data = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
   } catch (e) {
-    const err = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
-    manualEl.innerHTML = err;
-    autoEl.innerHTML = "";
-    susEl.innerHTML = "";
-    return;
+    if (e.status === 404) {
+      data = { manual_slots: [], auto_slot: null, suspend: null };
+    } else {
+      const err = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+      manualEl.innerHTML = err;
+      autoEl.innerHTML = "";
+      susEl.innerHTML = "";
+      return;
+    }
   }
   // Map server slot_index → array index for stable render order.
   const manualByIdx = new Map();
@@ -1525,8 +1529,11 @@ function renderLobby(st, lobby) {
   // is the chosen map's recommended_players) instead of the global
   // hard-coded constants.
   const capacity = st.game.capacity ?? 4;
-  addAiBtn.hidden = state.me.seat !== 0 || st.players.length >= capacity;
-  const canStart = st.players.length >= 2 && state.me.seat === 0;
+  // Spectators have independent slots and must not hide "add AI" or make a
+  // one-player room look ready to start.
+  const activePlayerCount = st.players.filter((player) => !player.is_spectator).length;
+  addAiBtn.hidden = state.me.seat !== 0 || activePlayerCount >= capacity;
+  const canStart = activePlayerCount >= 2 && state.me.seat === 0;
   startBtn.disabled = !canStart;
 
   // P2.4 — spectator hint: when this viewer is a spectator in a
@@ -2200,7 +2207,10 @@ function pickTileVariant(terrain, x, y) {
 
 function tileImageUrl(terrain, biome, x, y) {
   const variant = pickTileVariant(terrain, x, y);
-  const base = BIOME_AWARE_TERRAINS.has(terrain) ? `${terrain}_${biome}` : terrain;
+  // A dedicated bridge sprite is optional. Until one is shipped, use the
+  // existing road sprite rather than continuously requesting a missing PNG.
+  const assetTerrain = terrain === "bridge" ? "road" : terrain;
+  const base = BIOME_AWARE_TERRAINS.has(assetTerrain) ? `${assetTerrain}_${biome}` : assetTerrain;
   // Bump TILE_ASSET_VERSION whenever game/app/web/assets/tiles/* pngs are
   // regenerated. The version query string busts browser disk cache so the
   // new pixel art is fetched immediately on next page load — without it,
@@ -2824,6 +2834,8 @@ function showBubbleAt(tileX, tileY, html, opts = {}) {
   const bubble = document.getElementById("action-bubble");
   bubble.innerHTML = html;
   bubble.classList.toggle("compact", !!opts.compact);
+  bubble.classList.toggle("draggable", !!opts.draggable);
+  bubble.classList.remove("is-dragging", "is-detached");
   bubble.hidden = false;
   // Defer positioning so the DOM is updated
   requestAnimationFrame(() => {
@@ -2842,6 +2854,48 @@ function showBubbleAt(tileX, tileY, html, opts = {}) {
     bubble.style.left = `${left}px`;
     bubble.style.top = `${top}px`;
     bubble.style.transform = translate;
+    if (opts.draggable) enableBubbleDrag(bubble);
+  });
+}
+
+function enableBubbleDrag(bubble) {
+  const handle = bubble.querySelector(".ab-title");
+  if (!handle) return;
+
+  handle.title = "按住标题栏拖动位置";
+  handle.addEventListener("pointerdown", (event) => {
+    // Keep touch interaction as regular tap behaviour; this is a mouse-only
+    // escape hatch for panels obscuring important map cells.
+    if (event.pointerType && event.pointerType !== "mouse") return;
+    if (event.button !== 0) return;
+
+    const rect = bubble.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+    bubble.style.left = `${rect.left}px`;
+    bubble.style.top = `${rect.top}px`;
+    bubble.style.transform = "none";
+    bubble.classList.add("is-dragging", "is-detached");
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+
+    const move = (moveEvent) => {
+      const maxLeft = Math.max(8, window.innerWidth - bubble.offsetWidth - 8);
+      const maxTop = Math.max(8, window.innerHeight - bubble.offsetHeight - 8);
+      const left = Math.min(maxLeft, Math.max(8, moveEvent.clientX - offsetX));
+      const top = Math.min(maxTop, Math.max(8, moveEvent.clientY - offsetY));
+      bubble.style.left = `${left}px`;
+      bubble.style.top = `${top}px`;
+    };
+    const end = () => {
+      bubble.classList.remove("is-dragging");
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
   });
 }
 
@@ -3237,12 +3291,12 @@ function enterAttackMode(unit) {
   const targets = state.attackTargets;
   const count = targets?.size ?? 0;
   const html = `
-    <div class="ab-title">选择攻击目标 · 可攻击 ${count} 个敌人</div>
+    <div class="ab-title">选择攻击目标 · 可攻击 ${count} 个敌人 · 可拖动</div>
     <div class="ab-row">
       <button class="ab-btn cancel" data-ab="cancel-attack">❌ 取消</button>
     </div>
   `;
-  showBubbleAt(unit.x, unit.y, html, { compact: true });
+  showBubbleAt(unit.x, unit.y, html, { compact: true, draggable: true });
   document.getElementById("action-bubble").querySelectorAll("[data-ab]").forEach(btn => {
     btn.addEventListener("click", () => onBubbleClick(btn.dataset.ab, unit));
   });
@@ -4913,8 +4967,12 @@ const MainlineView = {
     try {
       saves = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
     } catch (e) {
-      container.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
-      return;
+      if (e.status === 404) {
+        saves = { manual_slots: [], auto_slot: null, suspend: null };
+      } else {
+        container.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+        return;
+      }
     }
     container.innerHTML = "";
     for (let i = 0; i < this.MAINLINE_SLOT_COUNT; i++) {
@@ -5115,7 +5173,12 @@ const MainlineView = {
         startResp.pre_battle_dialogue_url,
         startResp.pre_battle_dialogue_key || "intro"
       );
-      if (scenes === null) return;  // 用户中途关闭，暂停在 play 视图
+      // The battle has already been created successfully. A dialogue fetch
+      // failure or a player closing the dialogue must not strand the player
+      // on the mainline page with no route back to the map.
+      if (scenes === null) {
+        toast("剧情已跳过，进入战斗地图", 2500);
+      }
     }
 
     // 2. 进入战斗视图（复用 view-game 全部代码）
@@ -5237,13 +5300,13 @@ const MainlineView = {
     showView("mainline-play");
     this._updateHeader({ ...r, battle_index: (r.battle_index ?? 0) });
 
-    // 播放 victory 对话
-    try {
-      const scenes = await this.fetchDialogue("stories/chapter_01/victory.json");
-      // 让用户点 choice：把每个 option.value 作为推进动作
-      await Dialog.play(scenes);
-    } catch (e) {
-      console.warn("victory 对话播放失败", e);
+    // Play the completed chapter's configured victory dialogue. Do not use a
+    // hard-coded chapter_01 path because test chapters are separate content.
+    if (r.victory_dialogue_url) {
+      await this._playDialogueSafely(
+        r.victory_dialogue_url,
+        r.victory_dialogue_key || "victory"
+      );
     }
 
     // 弹奖励提示
@@ -5258,8 +5321,17 @@ const MainlineView = {
       toast("🎉 通关！", 4000);
     }
 
-    // 清空主线状态
+    const nextMainlineId = r.next_mainline_id || null;
+    const nextMainlineTitle = r.next_mainline_title || nextMainlineId;
+
+    // The chapter is complete. Clear its cursor before offering the linked
+    // chapter so starting it establishes a fresh, independent cursor while
+    // retaining the same profile's heroes, inventory, and rewards.
     this._clearMainlineState();
+    if (nextMainlineId && confirm(`本章已完成。是否进入下一章节「${nextMainlineTitle}」？`)) {
+      await this.startAndEnter(nextMainlineId);
+      return;
+    }
     showView("mainline-list");
   },
 

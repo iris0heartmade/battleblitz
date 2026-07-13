@@ -1379,6 +1379,20 @@ html, body {
   padding-bottom: 6px;
 }
 
+.action-bubble.draggable .ab-title {
+  cursor: grab;
+  user-select: none;
+}
+
+.action-bubble.is-dragging .ab-title {
+  cursor: grabbing;
+}
+
+/* A detached panel no longer points at the original map cell. */
+.action-bubble.is-detached::after {
+  display: none;
+}
+
 .ab-row {
   display: flex;
   gap: 4px;

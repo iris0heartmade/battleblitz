@@ -84,5 +84,6 @@
     "unlock_class": "knight",
     "exp_per_unit": 80
   },
+  "next_mainline_id": "chapter_test_03",
   "art_assets": {}
 }
