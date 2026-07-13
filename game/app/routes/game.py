@@ -182,6 +182,7 @@ def _apply_hero_overrides(
     # import time would slow every test fixture that just exercises
     # base-class unit logic.
     from app.classes.heroes import get_or_none as _get_hero
+    from app.classes.units import get_or_none as _get_unit_class
 
     color_to_pid = {p.color: p.id for p in real_players if p.color}
     # Track which units have been claimed so color-only matches don't
@@ -265,7 +266,6 @@ def _apply_hero_overrides(
         # base-class values, producing a Frankenstein unit.  The
         # same fix applies when a (x, y) match grabs a unit of a
         # different class.
-        from app.classes.units import get_or_none as _get_unit_class
         hero_base = _get_unit_class(hero.base_class_id)
         if hero_base is None:
             logger.warning(
@@ -326,6 +326,44 @@ def _apply_hero_overrides(
             if sid and sid not in merged_skills:
                 merged_skills.append(sid)
         candidate.skills = merged_skills
+        campaign_state = override.get("campaign_state")
+        if isinstance(campaign_state, dict):
+            campaign_class_id = campaign_state.get("class_id")
+            campaign_stats = dict(campaign_state.get("base_stats", {}))
+            if campaign_class_id and campaign_class_id != candidate.unit_type:
+                campaign_class = _get_unit_class(campaign_class_id)
+                if campaign_class is None:
+                    logger.warning(
+                        "hero campaign state skipped: hero_id=%r class_id=%r unknown",
+                        hero_id,
+                        campaign_class_id,
+                    )
+                else:
+                    candidate.unit_type = campaign_class_id
+                    candidate.skills = list(campaign_class.default_skills)
+            candidate.level = int(campaign_state.get("level", candidate.level))
+            candidate.exp = int(campaign_state.get("exp", candidate.exp))
+            if "hp" in campaign_stats:
+                hp = int(campaign_stats["hp"])
+                candidate.hp = hp
+                candidate.max_hp = hp
+            if "atk" in campaign_stats:
+                candidate.atk = int(campaign_stats["atk"])
+            if "def" in campaign_stats:
+                candidate.def_ = int(campaign_stats["def"])
+            if "matk" in campaign_stats:
+                candidate.matk = int(campaign_stats["matk"])
+            if "mdef" in campaign_stats:
+                candidate.mdef = int(campaign_stats["mdef"])
+            if "mov" in campaign_stats:
+                candidate.mov = int(campaign_stats["mov"])
+            if "mp" in campaign_stats:
+                candidate.mp = int(campaign_stats["mp"])
+            merged_skills = list(candidate.skills)
+            for sid in campaign_state.get("learned_skills", []):
+                if sid and sid not in merged_skills:
+                    merged_skills.append(sid)
+            candidate.skills = merged_skills
         logger.info(
             "hero bound: unit_id=%d hero_id=%r class=%r name=%r "
             "hp=%d atk=%d def=%d matk=%d mdef=%d mov=%d mp=%d",

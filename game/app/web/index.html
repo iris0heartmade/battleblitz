@@ -367,6 +367,30 @@
     </div>
   </section>
 
+  <!-- ====================== 主线：战前准备 ====================== -->
+  <section id="view-mainline-prepare" class="view" hidden>
+    <div class="panel mainline-play-panel">
+      <div class="mainline-header">
+        <button class="btn btn-back" data-action="goto-mainline-list">← 返回章节列表</button>
+        <h2 id="mainline-prepare-title">战前准备</h2>
+        <span id="mainline-prepare-progress" class="muted small"></span>
+        <span id="mainline-prepare-bgm" class="muted small" hidden></span>
+      </div>
+      <div id="mainline-prepare-tabs" class="mainline-prepare-tabs">
+        <button class="mainline-prepare-tab active" data-action="mainline-prepare-tab" data-tab="roster">编成</button>
+        <button class="mainline-prepare-tab" data-action="mainline-prepare-tab" data-tab="items">道具整理</button>
+        <button class="mainline-prepare-tab" data-action="mainline-prepare-tab" data-tab="briefing">章节简报</button>
+      </div>
+      <div id="mainline-prepare-content" class="mainline-content">
+        <p class="muted">战前准备信息加载中…</p>
+      </div>
+      <div class="mainline-actions">
+        <button class="btn btn-ghost btn-sm" data-action="mainline-abandon">🚪 放弃主线</button>
+        <button class="btn btn-primary" data-action="mainline-start-battle">▶ 开始战斗</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ====================== 主线：游玩（剧情 + 战斗） ====================== -->
   <section id="view-mainline-play" class="view" hidden>
     <div class="panel mainline-play-panel">

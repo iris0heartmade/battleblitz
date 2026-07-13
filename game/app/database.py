@@ -245,6 +245,21 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE player_profiles ADD COLUMN mainline_commanders JSON NOT NULL DEFAULT '{}'"
         ))
         logger.info("Migration: added player_profiles.mainline_commanders")
+    if "hero_campaign_states" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN hero_campaign_states JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.hero_campaign_states")
+    if "hero_inventory" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN hero_inventory JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.hero_inventory")
+    if "mercenary_roster_state" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN mercenary_roster_state JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.mercenary_roster_state")
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

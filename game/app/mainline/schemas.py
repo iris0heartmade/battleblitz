@@ -394,6 +394,49 @@ class MainlineDetailOut(_PydanticBaseModel):
     dialogue_keys: list[str]
 
 
+class MainlinePrepareHeroOut(_PydanticBaseModel):
+    hero_id: str
+    name: str
+    class_id: str
+    level: int
+    exp: int
+    promoted: bool
+    can_promote: bool
+    promotion_options: list[str]
+    learned_skills: list[str]
+    base_stats: dict
+    equipment: dict
+
+
+class MainlinePrepareUnitOut(_PydanticBaseModel):
+    class_id: str
+    level: int
+    name: Optional[str] = None
+    hero_id: Optional[str] = None
+    color: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+
+class MainlinePrepareOut(_PydanticBaseModel):
+    mainline_id: str
+    title: str
+    synopsis: str
+    battle_index: int
+    total_battles: int
+    battle_id: str
+    battle_title: str
+    win_condition: str
+    required_classes: list[str]
+    pre_battle_dialogue_key: Optional[str] = None
+    post_battle_dialogue_key: Optional[str] = None
+    bgm_meta: Optional[BattleBgmMeta] = None
+    inventory: dict[str, int]
+    heroes: list[MainlinePrepareHeroOut]
+    roster_units: list[MainlinePrepareUnitOut]
+    rewards_on_clear: MainlineRewards
+
+
 class MainlineStartRequest(_PydanticBaseModel):
     """`POST /mainlines/{id}/start` body.
 
@@ -403,6 +446,7 @@ class MainlineStartRequest(_PydanticBaseModel):
     user_name: str = _Field(min_length=1, max_length=64)
     # V1 optional: skip the opening dialogue and go straight to battle.
     skip_intro: bool = False
+    disabled_unit_indices: list[int] = _Field(default_factory=list)
 
 
 class MainlineStartOut(_PydanticBaseModel):
@@ -445,6 +489,22 @@ class MainlineAdvanceOut(_PydanticBaseModel):
 class MainlineNextBattleRequest(_PydanticBaseModel):
     """`POST /mainlines/{id}/next-battle` body."""
     user_name: str = _Field(min_length=1, max_length=64)
+    disabled_unit_indices: list[int] = _Field(default_factory=list)
+
+
+class MainlinePreparePromoteRequest(_PydanticBaseModel):
+    user_name: str = _Field(min_length=1, max_length=64)
+    hero_id: str = _Field(min_length=1, max_length=64)
+    target_class_id: str = _Field(min_length=1, max_length=64)
+
+
+class MainlinePreparePromoteOut(_PydanticBaseModel):
+    ok: bool = True
+    hero_id: str
+    class_id: str
+    level: int
+    promoted: bool
+    hero_crest_left: int
 
 
 class MainlineNextBattleOut(MainlineStartOut):
@@ -489,12 +549,17 @@ __all__ = [
     "BattleBgmMeta",
     "BattlePreview",
     "MainlineDetailOut",
+    "MainlinePrepareHeroOut",
+    "MainlinePrepareUnitOut",
+    "MainlinePrepareOut",
     "MainlineStartRequest",
     "MainlineStartOut",
     "MainlineAdvanceRequest",
     "MainlineAdvanceOut",
     "MainlineNextBattleRequest",
     "MainlineNextBattleOut",
+    "MainlinePreparePromoteRequest",
+    "MainlinePreparePromoteOut",
     "MainlineAbandonRequest",
     "MainlineAbandonOut",
     "MainlineStepOut",

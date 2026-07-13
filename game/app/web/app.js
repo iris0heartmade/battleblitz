@@ -4225,6 +4225,18 @@ const MainlineView = {
     return r;
   },
 
+  async fetchPrepare(id, userName) {
+    console.debug(`[mainline] fetchPrepare: id=${id} user_name=${userName}`);
+    const r = await api(
+      "GET",
+      `/mainlines/${encodeURIComponent(id)}/prepare?user_name=${encodeURIComponent(userName)}`
+    );
+    console.info(
+      `[mainline] fetchPrepare OK: id=${id} battle_id=${r && r.battle_id} heroes=${(r && r.heroes || []).length}`
+    );
+    return r;
+  },
+
   async fetchDialogue(path) {
     // 服务端 GET /mainlines/dialogue?path=<相对路径>
     // 安全：服务端会校验 path 不能逃出 game/ 根
@@ -4344,6 +4356,7 @@ const MainlineView = {
     const callStart = () => api("POST", `/mainlines/${encodeURIComponent(id)}/start`, {
       user_name: userName,
       skip_intro: !!opts.skipIntro,
+      disabled_unit_indices: Array.isArray(opts.disabledUnitIndices) ? opts.disabledUnitIndices : [],
     });
     try {
       const r = await callStart();
@@ -4406,11 +4419,12 @@ const MainlineView = {
     }
   },
 
-  async startNextBattle(id, userName) {
+  async startNextBattle(id, userName, opts = {}) {
     console.debug(`[mainline] startNextBattle entry: id=${id} user_name=${userName}`);
     try {
       const r = await api("POST", `/mainlines/${encodeURIComponent(id)}/next-battle`, {
         user_name: userName,
+        disabled_unit_indices: Array.isArray(opts.disabledUnitIndices) ? opts.disabledUnitIndices : [],
       });
       console.info(`[mainline] startNextBattle OK: id=${id} game_id=${r && r.game_id} battle_index=${r && r.battle_index}`);
       return r;
@@ -4432,6 +4446,14 @@ const MainlineView = {
       console.error(`[mainline] abandon failed: id=${id} err=${e && e.message}`);
       throw e;
     }
+  },
+
+  async promotePreparedHero(id, userName, heroId, targetClassId) {
+    return api("POST", `/mainlines/${encodeURIComponent(id)}/prepare/promote`, {
+      user_name: userName,
+      hero_id: heroId,
+      target_class_id: targetClassId,
+    });
   },
 
   // ---------- 章节列表视图 ----------
@@ -4911,6 +4933,587 @@ const MainlineView = {
     // 退化：返回 null，调用方据此 toast 提示
     return null;
   },
+
+  async startAndEnter(id, triggerBtn) {
+    let restored = false;
+    const restoreBtn = () => {
+      if (restored) return;
+      restored = true;
+      if (triggerBtn && triggerBtn.isConnected) {
+        triggerBtn.disabled = false;
+        triggerBtn.textContent = "开始 →";
+      }
+    };
+    if (triggerBtn && triggerBtn.isConnected) {
+      triggerBtn.disabled = true;
+      triggerBtn.textContent = "准备中...";
+    }
+
+    const userName = await this.ensureProfile();
+    if (!userName) {
+      restoreBtn();
+      return;
+    }
+
+    try {
+      const prep = await this.fetchPrepare(id, userName);
+      state.mainline = {
+        id,
+        title: prep.title || id,
+        total_battles: prep.total_battles,
+        battle_index: prep.battle_index,
+        state: "prepare",
+      };
+      state.mainlinePrepare = prep;
+      state.mainlinePrepareMode = "start";
+      state.mainlinePrepareDraft = null;
+      state.mainlineGameId = null;
+      state.mainlinePlayerId = null;
+      state.me.game_id = null;
+      state.me.player_id = null;
+      state.me.user_name = userName;
+      const sess = loadSession() || {};
+      saveSession({
+        ...sess,
+        mainline_id: id,
+        user_name: userName,
+      });
+      this._enterPrepareView(prep);
+    } catch (e) {
+      toast("开始主线失败：" + e.message, 3000);
+      restoreBtn();
+    }
+  },
+
+  _enterPrepareView(prep) {
+    showView("mainline-prepare");
+    const titleEl = document.getElementById("mainline-prepare-title");
+    const progressEl = document.getElementById("mainline-prepare-progress");
+    const bgmEl = document.getElementById("mainline-prepare-bgm");
+    const contentEl = document.getElementById("mainline-prepare-content");
+    if (titleEl) titleEl.textContent = prep.title || prep.mainline_id || "主线";
+    if (progressEl) {
+      progressEl.textContent = `第 ${Number(prep.battle_index ?? 0) + 1} / ${prep.total_battles ?? "?"} 战`;
+    }
+    if (bgmEl) {
+      if (prep.bgm_meta && prep.bgm_meta.track_id) {
+        const title = prep.bgm_meta.title || prep.bgm_meta.track_id;
+        const category = prep.bgm_meta.category ? ` / ${prep.bgm_meta.category}` : "";
+        bgmEl.textContent = `BGM: ${title}${category}`;
+        bgmEl.hidden = false;
+      } else {
+        bgmEl.hidden = true;
+        bgmEl.textContent = "";
+      }
+    }
+    if (!contentEl) return;
+
+    const heroes = Array.isArray(prep.heroes) ? prep.heroes : [];
+    const roster = Array.isArray(prep.roster_units) ? prep.roster_units : [];
+    const rewards = Array.isArray(prep.rewards_on_clear?.unlock_classes)
+      ? prep.rewards_on_clear.unlock_classes
+      : [];
+    const inventory = prep.inventory || {};
+    const inventoryEntries = Object.entries(inventory);
+
+    const heroRows = heroes.length
+      ? heroes.map((hero) => {
+          const promoText = hero.can_promote && hero.promotion_options.length
+            ? `可转职：${hero.promotion_options.join(" / ")}`
+            : "当前不可转职";
+          return `
+            <div class="mainline-prepare-row">
+              <div>
+                <strong>${escapeHtml(hero.name || hero.hero_id)}</strong>
+                <div class="mainline-prepare-meta">Lv.${hero.level} / ${escapeHtml(hero.class_id)} / EXP ${hero.exp}</div>
+              </div>
+              <div class="mainline-prepare-meta">${escapeHtml(promoText)}</div>
+            </div>`;
+        }).join("")
+      : `<div class="muted">本章没有需要持久化的英雄单位。</div>`;
+
+    const rosterRows = roster.length
+      ? roster.map((unit) => `
+          <div class="mainline-prepare-row">
+              <div>
+                <strong>${escapeHtml(unit.name || unit.hero_id || unit.class_id)}</strong>
+              <div class="mainline-prepare-meta">${escapeHtml(unit.hero_id ? "hero" : "mercenary")} / ${escapeHtml(unit.class_id)}</div>
+            </div>
+            <div class="mainline-prepare-meta">Lv.${unit.level ?? 1}</div>
+          </div>`).join("")
+      : `<div class="muted">暂无上阵单位预览。</div>`;
+
+    const rewardHtml = rewards.length
+      ? rewards.map((item) => `<span class="mainline-prepare-chip">${escapeHtml(item)}</span>`).join("")
+      : `<span class="muted">本战暂无额外奖励预览</span>`;
+
+    const inventoryHtml = inventoryEntries.length
+      ? inventoryEntries.map(([itemId, count]) => `
+          <div class="mainline-prepare-row">
+            <span>${escapeHtml(itemId)}</span>
+            <strong>x${escapeHtml(String(count))}</strong>
+          </div>`).join("")
+      : `<div class="muted">当前没有主线英雄道具库存。</div>`;
+
+    contentEl.innerHTML = `
+      <div class="mainline-prepare-grid">
+        <section class="mainline-prepare-card">
+          <h3>英雄状态</h3>
+          <div class="mainline-prepare-list">${heroRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>出战编成</h3>
+          <div class="mainline-prepare-list">${rosterRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>英雄道具</h3>
+          <div class="mainline-prepare-list">${inventoryHtml}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>本章信息</h3>
+          <div class="mainline-prepare-list">
+            <div class="mainline-prepare-row">
+              <span>当前战斗</span>
+              <strong>${escapeHtml(prep.battle_id || "")}</strong>
+            </div>
+            <div class="mainline-prepare-row">
+              <span>主线状态</span>
+              <strong>${escapeHtml(prep.state || "prepare")}</strong>
+            </div>
+            <div class="mainline-prepare-row">
+              <span>奖励预览</span>
+              <div class="mainline-prepare-inventory">${rewardHtml}</div>
+            </div>
+          </div>
+        </section>
+      </div>`;
+  },
+
+  async startPreparedBattle() {
+    if (!state.mainline || !state.mainline.id) return;
+    const userName = await this.ensureProfile();
+    if (!userName) return;
+    try {
+      const disabledUnitIndices = this._currentDisabledUnitIndices();
+      const r = state.mainlinePrepareMode === "next-battle"
+        ? await this.startNextBattle(state.mainline.id, userName, { disabledUnitIndices })
+        : await this.start(state.mainline.id, userName, { disabledUnitIndices });
+      state.mainline.title = r.title || state.mainline.title || state.mainline.id;
+      state.mainline.total_battles = r.total_battles;
+      state.mainline.battle_index = r.battle_index;
+      state.mainline.state = r.state;
+      state.mainlinePrepareMode = null;
+      state.mainlineGameId = r.game_id;
+      state.mainlinePlayerId = r.player_id;
+      state.me.game_id = r.game_id;
+      state.me.player_id = r.player_id;
+      const sess = loadSession() || {};
+      saveSession({
+        ...sess,
+        mainline_id: state.mainline.id,
+        mainline_game_id: r.game_id,
+        mainline_player_id: r.player_id,
+        game_id: r.game_id,
+        player_id: r.player_id,
+        user_name: state.me.user_name,
+      });
+      await this._enterPlayView(r);
+    } catch (e) {
+      toast("进入战斗失败：" + e.message, 3000);
+    }
+  },
+
+  _createPrepareDraft(prep) {
+    const roster = Array.isArray(prep?.roster_units) ? prep.roster_units : [];
+    const heroes = Array.isArray(prep?.heroes) ? prep.heroes : [];
+    return {
+      activeTab: "roster",
+      focusedHeroId: heroes[0]?.hero_id || null,
+      rosterEnabled: Object.fromEntries(roster.map((_, index) => [String(index), true])),
+      itemAssignments: {},
+    };
+  },
+
+  _ensurePrepareDraft(prep) {
+    if (!state.mainlinePrepareDraft) {
+      state.mainlinePrepareDraft = this._createPrepareDraft(prep);
+    }
+    return state.mainlinePrepareDraft;
+  },
+
+  _setPrepareTab(tab) {
+    if (!state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    draft.activeTab = tab;
+    this._enterPrepareView(state.mainlinePrepare);
+  },
+
+  _focusPrepareHero(heroId) {
+    if (!state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    draft.focusedHeroId = heroId;
+    this._enterPrepareView(state.mainlinePrepare);
+  },
+
+  _togglePrepareUnit(index) {
+    if (!state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    const unit = (state.mainlinePrepare.roster_units || [])[index];
+    if (!unit) return;
+    if (unit.hero_id) {
+      toast("主线英雄当前固定随军，暂不在这里下阵。", 2500);
+      return;
+    }
+    const key = String(index);
+    draft.rosterEnabled[key] = !draft.rosterEnabled[key];
+    this._enterPrepareView(state.mainlinePrepare);
+  },
+
+  _assignPrepareItem(itemId) {
+    if (!state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    if (!draft.focusedHeroId) {
+      toast("先选择一名英雄，再整理道具。", 2500);
+      return;
+    }
+    const current = draft.itemAssignments[itemId] || null;
+    draft.itemAssignments[itemId] = current === draft.focusedHeroId ? null : draft.focusedHeroId;
+    this._enterPrepareView(state.mainlinePrepare);
+  },
+
+  _currentDisabledUnitIndices() {
+    const draft = state.mainlinePrepareDraft;
+    if (!draft || !draft.rosterEnabled) return [];
+    return Object.entries(draft.rosterEnabled)
+      .filter(([, enabled]) => enabled === false)
+      .map(([index]) => parseInt(index, 10))
+      .filter((index) => Number.isInteger(index) && index >= 0);
+  },
+
+  async _promoteFocusedHero() {
+    if (!state.mainline || !state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    const hero = (state.mainlinePrepare.heroes || []).find((it) => it.hero_id === draft.focusedHeroId);
+    if (!hero || !hero.can_promote || !hero.promotion_options?.length) {
+      toast("当前英雄还不能转职。", 2500);
+      return;
+    }
+    const userName = await this.ensureProfile();
+    if (!userName) return;
+    try {
+      const targetClassId = hero.promotion_options[0];
+      await this.promotePreparedHero(state.mainline.id, userName, hero.hero_id, targetClassId);
+      const prep = await this.fetchPrepare(state.mainline.id, userName);
+      state.mainlinePrepare = prep;
+      state.mainlinePrepareDraft = {
+        ...draft,
+        focusedHeroId: hero.hero_id,
+      };
+      this._enterPrepareView(prep);
+      toast(`已将 ${hero.name || hero.hero_id} 转职为 ${targetClassId}`, 3000);
+    } catch (e) {
+      toast("转职失败：" + e.message, 3000);
+    }
+  },
+
+  _renderPrepareRosterTab(prep, draft) {
+    const heroes = Array.isArray(prep.heroes) ? prep.heroes : [];
+    const roster = Array.isArray(prep.roster_units) ? prep.roster_units : [];
+    const enabledCount = roster.filter((_, index) => draft.rosterEnabled[String(index)] !== false).length;
+    const heroRows = heroes.length
+      ? heroes.map((hero) => {
+          const selected = draft.focusedHeroId === hero.hero_id ? " selected" : "";
+          const promoText = hero.can_promote && hero.promotion_options.length
+            ? `可转职：${hero.promotion_options.join(" / ")}`
+            : (hero.promoted ? "已完成转职" : "当前不可转职");
+          const skillText = Array.isArray(hero.learned_skills) && hero.learned_skills.length
+            ? hero.learned_skills.join(" / ")
+            : "暂无技能";
+          return `
+            <button class="mainline-prepare-row selectable${selected}" data-action="mainline-prepare-focus-hero" data-hero-id="${escapeHtml(hero.hero_id)}">
+              <div>
+                <strong>${escapeHtml(hero.name || hero.hero_id)}</strong>
+                <div class="mainline-prepare-meta">Lv.${hero.level} / ${escapeHtml(hero.class_id)} / EXP ${hero.exp}</div>
+                <div class="mainline-prepare-meta">${escapeHtml(skillText)}</div>
+              </div>
+              <div class="mainline-prepare-meta">${escapeHtml(promoText)}</div>
+            </button>`;
+        }).join("")
+      : `<div class="mainline-prepare-empty">本章没有持久化英雄。</div>`;
+
+    const rosterRows = roster.length
+      ? roster.map((unit, index) => {
+          const enabled = draft.rosterEnabled[String(index)] !== false;
+          const statusLabel = unit.hero_id ? "固定" : (enabled ? "出战" : "待命");
+          const buttonLabel = unit.hero_id ? "主线" : (enabled ? "待命" : "上阵");
+          const buttonClass = unit.hero_id ? "btn-secondary" : (enabled ? "btn-ghost" : "btn-primary");
+          return `
+            <div class="mainline-prepare-row">
+              <div>
+                <strong>${escapeHtml(unit.name || unit.hero_id || unit.class_id)}</strong>
+                <div class="mainline-prepare-meta">${escapeHtml(unit.hero_id ? "hero" : "mercenary")} / ${escapeHtml(unit.class_id)} / Lv.${unit.level ?? 1}</div>
+                <div class="mainline-prepare-meta">状态：${escapeHtml(statusLabel)}</div>
+              </div>
+              <button class="btn ${buttonClass} btn-sm mainline-prepare-toggle" data-action="mainline-prepare-toggle-unit" data-unit-index="${index}">
+                ${escapeHtml(buttonLabel)}
+              </button>
+            </div>`;
+        }).join("")
+      : `<div class="mainline-prepare-empty">暂无上阵单位预览。</div>`;
+
+    const focusedHero = heroes.find((hero) => hero.hero_id === draft.focusedHeroId) || heroes[0] || null;
+    const statsHtml = focusedHero
+      ? Object.entries(focusedHero.base_stats || {}).map(([key, value]) => `
+          <span class="mainline-prepare-chip">${escapeHtml(String(key).toUpperCase())}: ${escapeHtml(String(value))}</span>
+        `).join("")
+      : `<span class="muted">暂无英雄详情</span>`;
+    const equipHtml = focusedHero && Object.keys(focusedHero.equipment || {}).length
+      ? Object.entries(focusedHero.equipment || {}).map(([slot, value]) => `
+          <span class="mainline-prepare-chip">${escapeHtml(slot)}: ${escapeHtml(String(value))}</span>
+        `).join("")
+      : `<span class="muted">当前没有装备记录</span>`;
+
+    return `
+      <div class="mainline-prepare-grid">
+        <section class="mainline-prepare-card">
+          <div class="mainline-prepare-card-header">
+            <h3>人物选择</h3>
+            <div class="mainline-prepare-summary">
+              <span class="mainline-prepare-chip">英雄 ${heroes.length}</span>
+              <span class="mainline-prepare-chip">上阵 ${enabledCount}/${roster.length}</span>
+            </div>
+          </div>
+          <div class="mainline-prepare-list">${heroRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <div class="mainline-prepare-card-header">
+            <h3>出战编成</h3>
+            <span class="muted small">编成开关已进 UI，下一步接入实际生成</span>
+          </div>
+          <div class="mainline-prepare-list">${rosterRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>英雄详情</h3>
+          ${focusedHero ? `
+            <div class="mainline-prepare-note">
+              ${escapeHtml(focusedHero.name || focusedHero.hero_id)} / ${escapeHtml(focusedHero.class_id)} / Lv.${focusedHero.level}
+            </div>
+          ` : `<div class="mainline-prepare-empty">请选择英雄查看详情。</div>`}
+          <div class="mainline-prepare-inventory">${statsHtml}</div>
+          <div class="mainline-prepare-actions">
+            <button
+              class="btn btn-secondary btn-sm"
+              data-action="mainline-prepare-promote"
+              ${focusedHero && focusedHero.can_promote && focusedHero.promotion_options?.length ? "" : "disabled"}
+            >转职</button>
+          </div>
+          <div class="mainline-prepare-note">装备与长期成长数据直接来自主线存档。</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>装备记录</h3>
+          <div class="mainline-prepare-inventory">${equipHtml}</div>
+        </section>
+      </div>`;
+  },
+
+  _renderPrepareItemsTab(prep, draft) {
+    const heroes = Array.isArray(prep.heroes) ? prep.heroes : [];
+    const inventory = prep.inventory || {};
+    const inventoryEntries = Object.entries(inventory);
+    const focusedHero = heroes.find((hero) => hero.hero_id === draft.focusedHeroId) || heroes[0] || null;
+    const itemRows = inventoryEntries.length
+      ? inventoryEntries.map(([itemId, count]) => {
+          const assignedHeroId = draft.itemAssignments[itemId] || null;
+          const assignedHero = heroes.find((hero) => hero.hero_id === assignedHeroId) || null;
+          return `
+            <div class="mainline-prepare-row">
+              <div>
+                <strong>${escapeHtml(itemId)}</strong>
+                <div class="mainline-prepare-meta">库存 x${escapeHtml(String(count))}</div>
+                <div class="mainline-prepare-meta">${escapeHtml(assignedHero ? `计划交给 ${assignedHero.name || assignedHero.hero_id}` : "尚未分配")}</div>
+              </div>
+              <div class="mainline-prepare-actions">
+                <button class="btn btn-secondary btn-sm" data-action="mainline-prepare-assign-item" data-item-id="${escapeHtml(itemId)}" ${focusedHero ? "" : "disabled"}>
+                  ${escapeHtml(assignedHeroId === draft.focusedHeroId ? "取消分配" : "交给当前英雄")}
+                </button>
+              </div>
+            </div>`;
+        }).join("")
+      : `<div class="mainline-prepare-empty">当前没有主线英雄道具库存。</div>`;
+
+    const heroRows = heroes.length
+      ? heroes.map((hero) => {
+          const selected = draft.focusedHeroId === hero.hero_id ? " selected" : "";
+          const assignmentCount = Object.values(draft.itemAssignments).filter((heroId) => heroId === hero.hero_id).length;
+          return `
+            <button class="mainline-prepare-row selectable${selected}" data-action="mainline-prepare-focus-hero" data-hero-id="${escapeHtml(hero.hero_id)}">
+              <div>
+                <strong>${escapeHtml(hero.name || hero.hero_id)}</strong>
+                <div class="mainline-prepare-meta">${escapeHtml(hero.class_id)} / Lv.${hero.level}</div>
+              </div>
+              <div class="mainline-prepare-meta">已分配 ${assignmentCount}</div>
+            </button>`;
+        }).join("")
+      : `<div class="mainline-prepare-empty">暂无可整理道具的英雄。</div>`;
+
+    let suggestion = "先选择英雄，再整理库存。";
+    if (focusedHero?.can_promote && Number(inventory.hero_crest || 0) > 0) {
+      suggestion = `${focusedHero.name || focusedHero.hero_id} 已满足转职条件，可作为转职道具入口。`;
+    } else if (focusedHero?.promoted) {
+      suggestion = `${focusedHero.name || focusedHero.hero_id} 已转职，当前更适合整理通用道具。`;
+    }
+
+    return `
+      <div class="mainline-prepare-grid">
+        <section class="mainline-prepare-card">
+          <div class="mainline-prepare-card-header">
+            <h3>道具整理</h3>
+            <span class="muted small">先做战前整理骨架，后接正式使用逻辑</span>
+          </div>
+          <div class="mainline-prepare-list">${itemRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>目标英雄</h3>
+          <div class="mainline-prepare-list">${heroRows}</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>使用建议</h3>
+          <div class="mainline-prepare-note">${escapeHtml(suggestion)}</div>
+          <div class="mainline-prepare-note">纹章、战后奖励、章节事件都可以继续挂在这一栏，不用重做 UI。</div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>当前计划</h3>
+          ${focusedHero ? `
+            <div class="mainline-prepare-note">
+              ${escapeHtml(focusedHero.name || focusedHero.hero_id)} / ${escapeHtml(focusedHero.class_id)} / Lv.${focusedHero.level}
+            </div>
+          ` : `<div class="mainline-prepare-empty">暂无选中英雄。</div>`}
+          <div class="mainline-prepare-inventory">
+            ${Object.entries(draft.itemAssignments).map(([itemId, heroId]) => {
+              if (!heroId) return "";
+              const hero = heroes.find((it) => it.hero_id === heroId);
+              return `<span class="mainline-prepare-chip">${escapeHtml(itemId)} → ${escapeHtml(hero?.name || heroId)}</span>`;
+            }).join("") || `<span class="muted">尚未做出分配计划</span>`}
+          </div>
+        </section>
+      </div>`;
+  },
+
+  _renderPrepareBriefingTab(prep) {
+    const rewardChips = [
+      ...(Array.isArray(prep.rewards_on_clear?.unlock_classes) ? prep.rewards_on_clear.unlock_classes.map((it) => `解锁 ${it}`) : []),
+      ...(prep.rewards_on_clear?.gold ? [`金币 +${prep.rewards_on_clear.gold}`] : []),
+      ...(prep.rewards_on_clear?.exp_per_unit ? [`全员经验 +${prep.rewards_on_clear.exp_per_unit}`] : []),
+    ];
+    const required = Array.isArray(prep.required_classes) ? prep.required_classes : [];
+    return `
+      <div class="mainline-prepare-grid">
+        <section class="mainline-prepare-card">
+          <h3>章节简报</h3>
+          <div class="mainline-prepare-note">${escapeHtml(prep.synopsis || "暂无章节简介。")}</div>
+          <div class="mainline-prepare-list">
+            <div class="mainline-prepare-row">
+              <span>当前战斗</span>
+              <strong>${escapeHtml(prep.battle_title || prep.battle_id || "")}</strong>
+            </div>
+            <div class="mainline-prepare-row">
+              <span>胜利条件</span>
+              <strong>${escapeHtml(prep.win_condition || "rout")}</strong>
+            </div>
+            <div class="mainline-prepare-row">
+              <span>战前事件</span>
+              <strong>${escapeHtml(prep.pre_battle_dialogue_key || "无")}</strong>
+            </div>
+            <div class="mainline-prepare-row">
+              <span>战后事件</span>
+              <strong>${escapeHtml(prep.post_battle_dialogue_key || "无")}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="mainline-prepare-card">
+          <h3>条件与奖励</h3>
+          <div class="mainline-prepare-inventory">
+            ${required.length ? required.map((item) => `<span class="mainline-prepare-chip">${escapeHtml(item)}</span>`).join("") : `<span class="muted">无额外职业前置</span>`}
+          </div>
+          <div class="mainline-prepare-inventory">
+            ${rewardChips.length ? rewardChips.map((item) => `<span class="mainline-prepare-chip">${escapeHtml(item)}</span>`).join("") : `<span class="muted">本章暂无明确通关奖励</span>`}
+          </div>
+        </section>
+      </div>`;
+  },
+
+  _enterPrepareView(prep) {
+    showView("mainline-prepare");
+    const draft = this._ensurePrepareDraft(prep);
+    const titleEl = document.getElementById("mainline-prepare-title");
+    const progressEl = document.getElementById("mainline-prepare-progress");
+    const bgmEl = document.getElementById("mainline-prepare-bgm");
+    const contentEl = document.getElementById("mainline-prepare-content");
+    const tabsEl = document.getElementById("mainline-prepare-tabs");
+    if (titleEl) titleEl.textContent = prep.title || prep.mainline_id || "主线";
+    if (progressEl) {
+      progressEl.textContent = `第 ${Number(prep.battle_index ?? 0) + 1} / ${prep.total_battles ?? "?"} 战`;
+    }
+    if (bgmEl) {
+      if (prep.bgm_meta && prep.bgm_meta.track_id) {
+        const title = prep.bgm_meta.title || prep.bgm_meta.track_id;
+        const category = prep.bgm_meta.category ? ` / ${prep.bgm_meta.category}` : "";
+        bgmEl.textContent = `BGM: ${title}${category}`;
+        bgmEl.hidden = false;
+      } else {
+        bgmEl.hidden = true;
+        bgmEl.textContent = "";
+      }
+    }
+    if (tabsEl) {
+      tabsEl.querySelectorAll("[data-tab]").forEach((tabButton) => {
+        tabButton.classList.toggle("active", tabButton.dataset.tab === draft.activeTab);
+      });
+    }
+    if (!contentEl) return;
+    if (draft.activeTab === "items") {
+      contentEl.innerHTML = this._renderPrepareItemsTab(prep, draft);
+      return;
+    }
+    if (draft.activeTab === "briefing") {
+      contentEl.innerHTML = this._renderPrepareBriefingTab(prep);
+      return;
+    }
+    contentEl.innerHTML = this._renderPrepareRosterTab(prep, draft);
+  },
+
+  async _requestNextBattle() {
+    const userName = await this.ensureProfile();
+    if (!userName) return;
+    try {
+      const prep = await this.fetchPrepare(state.mainline.id, userName);
+      state.mainlinePrepare = prep;
+      state.mainlinePrepareMode = "next-battle";
+      state.mainlinePrepareDraft = null;
+      state.mainline.battle_index = prep.battle_index;
+      state.mainline.state = "prepare";
+      this._enterPrepareView(prep);
+    } catch (e) {
+      toast("加载下一场战斗失败：" + e.message, 3000);
+    }
+  },
+
+  _clearMainlineState() {
+    state.mainline = null;
+    state.mainlinePrepare = null;
+    state.mainlinePrepareDraft = null;
+    state.mainlinePrepareMode = null;
+    state.mainlineGameId = null;
+    state.mainlinePlayerId = null;
+    state.mainlineAdvancePending = false;
+    const sess = loadSession();
+    if (sess && sess.mainline_id) {
+      delete sess.mainline_id;
+      delete sess.mainline_game_id;
+      delete sess.mainline_player_id;
+      saveSession(sess);
+    }
+  },
 };
 
 // 暴露给浏览器控制台
@@ -5218,6 +5821,30 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       case "mainline-abandon":
         await MainlineView.abandon();
+        break;
+      case "mainline-start-battle":
+        await MainlineView.startPreparedBattle();
+        break;
+      case "mainline-prepare-tab":
+        if (target.dataset.tab) {
+          MainlineView._setPrepareTab(target.dataset.tab);
+        }
+        break;
+      case "mainline-prepare-focus-hero":
+        if (target.dataset.heroId) {
+          MainlineView._focusPrepareHero(target.dataset.heroId);
+        }
+        break;
+      case "mainline-prepare-toggle-unit":
+        MainlineView._togglePrepareUnit(parseInt(target.dataset.unitIndex || "-1", 10));
+        break;
+      case "mainline-prepare-assign-item":
+        if (target.dataset.itemId) {
+          MainlineView._assignPrepareItem(target.dataset.itemId);
+        }
+        break;
+      case "mainline-prepare-promote":
+        await MainlineView._promoteFocusedHero();
         break;
     }
   });
