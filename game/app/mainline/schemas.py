@@ -109,6 +109,10 @@ class SpawnUnit(APIModel):
     type: str = Field(pattern=_class_id_pattern())
     color: str = Field(min_length=1, max_length=16)
     level: int = Field(default=1, ge=1, le=99)
+    # Test fixtures: explicitly set the spawned Unit's starting HP. When
+    # set, the engine overrides both ``hp`` and ``max_hp`` so the unit
+    # spawns wounded. ``None`` (default) keeps the class's ``base_hp``.
+    hp: Optional[int] = Field(default=None, ge=1, le=999)
 
 
 class SpawnReplacementUnit(APIModel):
@@ -117,6 +121,8 @@ class SpawnReplacementUnit(APIModel):
     level: int = Field(default=1, ge=1, le=99)
     x: Optional[int] = Field(default=None, ge=0, le=999)
     y: Optional[int] = Field(default=None, ge=0, le=999)
+    # See ``SpawnUnit.hp`` — same semantics on replacement units.
+    hp: Optional[int] = Field(default=None, ge=1, le=999)
 
 
 class SpawnReplaceSpec(APIModel):
@@ -447,6 +453,12 @@ class MainlineStartRequest(_PydanticBaseModel):
     # V1 optional: skip the opening dialogue and go straight to battle.
     skip_intro: bool = False
     disabled_unit_indices: list[int] = _Field(default_factory=list)
+    # When True, allow restarting the SAME mainline (e.g. after
+    # loading a save).  Any in-flight game for the user is
+    # force-aborted before the new battle spawns.  Defaults to
+    # False so the existing "another mainline is active" 409
+    # behaviour is preserved.
+    force: bool = False
 
 
 class MainlineStartOut(_PydanticBaseModel):
@@ -484,6 +496,11 @@ class MainlineAdvanceOut(_PydanticBaseModel):
     post_battle_dialogue_url: Optional[str] = None
     post_battle_dialogue_key: Optional[str] = None
     rewards: Optional[MainlineRewards] = None
+    # Auto-save checkpoint written at chapter end.  None if the
+    # advance did not produce an auto-save (e.g. mid-battle advance
+    # that just bumped the cursor).  The FE renders
+    # "自动存档中…… 自动存档完毕" when this is non-null.
+    auto_save: Optional[dict] = None
 
 
 class MainlineNextBattleRequest(_PydanticBaseModel):
@@ -537,6 +554,65 @@ class MainlineStepOut(_PydanticBaseModel):
     rewards: Optional[MainlineRewards] = None
 
 
+# ============================================================
+# Mercenary domain wire formats
+# ============================================================
+
+
+class ChapterBalanceConfigOut(_PydanticBaseModel):
+    """Chapter-wide enemy / resource modifiers for mercenary battles.
+
+    Mirrors ``app.mercenary_domain.ChapterBalanceConfig`` — kept as a
+    separate Pydantic model so the wire format is stable even if the
+    in-memory dataclass gains private fields.
+    """
+    enemy_modifiers: dict[str, int]
+    max_recruit_count: int
+    starting_fund: int
+
+
+class CommanderAllocationOut(_PydanticBaseModel):
+    """Per-profile mercenary point allocation.
+
+    The frontend uses this to render the pre-battle upgrade panel
+    (spend 100 points across infantry / archer / knight …).
+    """
+    total_points: int
+    spent_points: int
+    unit_type_upgrades: dict[str, dict[str, int]]
+
+
+class MainlineMercenaryConfigOut(_PydanticBaseModel):
+    """Response shape for ``GET /mainlines/{id}/mercenary/config``.
+
+    The mainline JSON can optionally override ``balance`` with a
+    ``chapter_balance`` block; until that ships, the endpoint returns
+    the dataclass defaults so the FE can render the panel without a
+    second round-trip.
+    """
+    mainline_id: str
+    balance: ChapterBalanceConfigOut
+    allocation: CommanderAllocationOut
+    # total - spent, recomputed for FE convenience.
+    mercenary_points: int
+
+
+class MainlineMercenaryAllocateRequest(_PydanticBaseModel):
+    """Body for ``POST /mainlines/{id}/mercenary/allocate``."""
+    user_name: str = _Field(min_length=1, max_length=64)
+    unit_type: str = _Field(min_length=1, max_length=16)
+    stat: str = _Field(min_length=1, max_length=16)
+    value: int = _Field(ge=1, le=10)
+    cost: int = _Field(ge=1, le=100)
+
+
+class MainlineMercenaryAllocateOut(_PydanticBaseModel):
+    ok: bool = True
+    spent_points: int
+    remaining_points: int
+    unit_type_upgrades: dict[str, dict[str, int]]
+
+
 __all__ = [
     "VALID_CLASS_IDS",
     "WinCondition",
@@ -563,4 +639,10 @@ __all__ = [
     "MainlineAbandonRequest",
     "MainlineAbandonOut",
     "MainlineStepOut",
+    # Mercenary domain wire formats
+    "ChapterBalanceConfigOut",
+    "CommanderAllocationOut",
+    "MainlineMercenaryConfigOut",
+    "MainlineMercenaryAllocateRequest",
+    "MainlineMercenaryAllocateOut",
 ]

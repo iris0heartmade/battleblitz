@@ -261,6 +261,26 @@ def _run_legacy_migrations(sync_conn) -> None:
         ))
         logger.info("Migration: added player_profiles.mercenary_roster_state")
 
+    # 2026-07-13: save / suspend system. Two new tables:
+    #   game_save_slots — formal mainline saves (3 manual + 1 auto)
+    #   suspend_states  — single mid-battle interrupt slot
+    # New tables are auto-created by ``Base.metadata.create_all`` below
+    # (we don't need an ALTER for fresh DBs). For already-existing DBs
+    # the same ``create_all`` will create them as long as the models
+    # are imported (see app.main: `from app.save import models`).
+
+    # Defensive check: if the tables don't exist (legacy DB), log so
+    # ops can confirm create_all ran.
+    table_rows = sync_conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )).fetchall()
+    existing_tables = {r[0] for r in table_rows}
+    for tbl in ("game_save_slots", "suspend_states"):
+        if tbl not in existing_tables:
+            logger.info(
+                "Migration note: %s not present; create_all will add it", tbl,
+            )
+
 
 async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency: yields a session, commits on success, rolls back on error."""

@@ -259,10 +259,108 @@ async def production_event_stream(
     finally:
         heartbeat_task.cancel()
         bus.unsubscribe(game_id, queue)
+        # 2026-07-13: auto-capture suspend on WS disconnect.  When a
+        # player's WS drops mid-battle (browser closed, network died,
+        # tab crashed), we write a SuspendState so the player can
+        # resume from where they left off.  See save-design-v2.md §2.3
+        # and SuspendPoint.DISCONNECT.
+        #
+        # Awaits inline (rather than fire-and-forget): the WS test
+        # harness runs the handler on a separate event loop from the
+        # test's main loop, so a fire-and-forget task would never be
+        # observable from the test.  In production the additional
+        # ~5-20 ms before close is acceptable for the
+        # "browser-closed-and-comes-back" UX guarantee.
+        try:
+            await _capture_disconnect_suspend(
+                user_name=player.user_name, game_id=game_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("WS gateway: disconnect suspend handler failed")
         try:
             await ws.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+async def _capture_disconnect_suspend(*, user_name: str, game_id: int) -> None:
+    """Write a SuspendState when a player's WS connection drops.
+
+    Called from the WS gateway's finally block.  Opens a fresh DB
+    session (the one in the WS handler is already closed) and:
+
+      1. Re-loads the game; if it has been force-ended (status !=
+         "playing") or deleted, skip — there's nothing to suspend.
+      2. Captures only the *meta* snapshot (game_id, mainline_id,
+         battle_id, suspend_point).  The full game state lives in
+         the live Game/Player/Unit/Tile rows already; the suspend
+         row is a pointer that tells the loader "go re-fetch this
+         game" rather than a duplicate of the state.
+      3. Calls ``SaveService.capture_suspend``.
+
+    Critical invariant: this function does **not** touch
+    ``hero_campaign_states`` or any other long-term profile column.
+    See ``app.save.service.SaveService.capture_suspend`` for the
+    snapshot shape and the FE8-style cascade rules.
+    """
+    try:
+        from app.database import AsyncSessionLocal
+        from app.models import Game
+        from app.save import SaveService
+        from app.save.models import SuspendPoint
+
+        async with AsyncSessionLocal() as session:
+            game = await session.get(Game, game_id)
+            if game is None or game.status != "playing":
+                logger.info(
+                    "WS disconnect: skipping suspend — game=%d status=%s",
+                    game_id, getattr(game, "status", "<missing>"),
+                )
+                return
+            # Pull mainline_id + battle_id out of the name.  Mainline
+            # games are named "mainline:<id>:<battle_id>"; for
+            # non-mainline games we leave the fields empty.
+            name = game.name or ""
+            if name.startswith("mainline:"):
+                parts = name.split(":")
+                mainline_id = parts[1] if len(parts) > 1 else ""
+                battle_id = parts[-1] if len(parts) > 2 else ""
+            else:
+                mainline_id = ""
+                battle_id = name
+
+            svc = SaveService(session)
+            await svc.capture_suspend(
+                user_name=user_name,
+                game_id=game_id,
+                mainline_id=mainline_id,
+                battle_id=battle_id,
+                suspend_point=SuspendPoint.DISCONNECT,
+                # Snapshot is a meta pointer — see docstring.  The
+                # actual game state is re-fetched on resume via
+                # /games/{id}/state.
+                game_state={
+                    "kind": "live_state_pointer",
+                    "game_id": game_id,
+                    "note": (
+                        "state re-fetched on resume from /games/{id}/state"
+                    ),
+                },
+            )
+            await session.commit()
+            logger.info(
+                "WS disconnect suspend ok: user=%s game=%d battle=%s",
+                user_name, game_id, battle_id,
+            )
+    except Exception:  # noqa: BLE001
+        # Suspend is best-effort.  A failure here means the player
+        # can't auto-resume; they'll see the Game row still in
+        # "playing" state and can rejoin via the existing
+        # /rejoin_by_name endpoint.
+        logger.exception(
+            "WS disconnect suspend FAILED: user=%s game=%d",
+            user_name, game_id,
+        )
 
 
 def _event_to_message(ev: "GameEvent", seq: int) -> dict:

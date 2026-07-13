@@ -58,9 +58,14 @@ from app.mainline.engine import (
 from app.mainline.schemas import (
     BattleBgmMeta,
     BattlePreview,
+    ChapterBalanceConfigOut,
+    CommanderAllocationOut,
     MainlineAbandonOut,
     MainlineAdvanceOut,
     MainlineDetailOut,
+    MainlineMercenaryAllocateOut,
+    MainlineMercenaryAllocateRequest,
+    MainlineMercenaryConfigOut,
     MainlineNextBattleOut,
     MainlinePrepareHeroOut,
     MainlinePrepareOut,
@@ -89,6 +94,11 @@ from app.progression import (
     ProgressionService,
 )
 from app.routes.game import _start_battle_internal
+from app.routes.save import auto_save_checkpoint
+from app.save import (
+    AutoSaveCheckpointOut,
+    PrepCompleteRequest,
+)
 from app.commanders.registry import get_power_threshold
 
 logger = logging.getLogger(__name__)
@@ -868,6 +878,69 @@ async def promote_mainline_hero(
 
 
 # ============================================================
+# POST /mainlines/{mainline_id}/prepare/complete
+# ============================================================
+
+
+@router.post(
+    "/{mainline_id}/prepare/complete",
+    response_model=AutoSaveCheckpointOut,
+)
+async def complete_prepare(
+    mainline_id: str,
+    body: PrepCompleteRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AutoSaveCheckpointOut:
+    """Player signals "I'm done prepping — ready to start".
+
+    Triggers an auto-save with label ``f"{mainline_id}-准备"`` so the
+    player can later reload to the post-prep / pre-battle state.
+    The FE renders "自动存档中…… 自动存档完毕" on success.
+
+    Pre-conditions (matches the FE8 design v2 §2.6 invariants):
+      * profile exists
+      * mainline is valid
+      * the player may prep an inactive mainline too — the
+        auto-save then captures them at the *post-prep / pre-start*
+        state of an inactive profile, useful for stash-style flow
+    """
+    logger.debug(
+        "complete_prepare entry: user=%s mainline=%s",
+        body.user_name, mainline_id,
+    )
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _load_profile(session, body.user_name)
+    # Persist hero_campaign_states for any heroes in this mainline
+    # that haven't been initialised yet, so the auto-save captures
+    # a complete snapshot rather than a half-empty one.  This is
+    # the same initialisation the /start path performs.
+    svc = ProgressionService(session)
+    try:
+        ml = load_mainline(mainline_id)
+        cursor_index = int(
+            (profile.mainline_progress or {}).get("battle_index", 0)
+        )
+        if not (0 <= cursor_index < len(ml.battles)):
+            cursor_index = 0
+    except Exception:  # pragma: no cover
+        cursor_index = 0
+
+    return await auto_save_checkpoint(
+        session,
+        profile,
+        mainline_id=mainline_id,
+        chapter_index=cursor_index,
+        label=f"{mainline_id}-准备",
+    )
+
+
+# ============================================================
 # POST /mainlines/{mainline_id}/start
 # ============================================================
 
@@ -937,10 +1010,26 @@ async def start_mainline(
         )
 
     # Set active mainline via the progression service. Raises
-    # MainlineAlreadyActive if another campaign is in progress.
+    # MainlineAlreadyActive if another campaign is in progress
+    # (unless ``body.force`` is True, which allows restart of the
+    # same mainline after a save load).
     svc = ProgressionService(session)
+    # When force=True, also abort any in-flight game for this user
+    # so the new battle spawn doesn't leave an orphan.
+    if body.force:
+        from app.save import SaveService
+        save_svc = SaveService(session)
+        aborted = await save_svc._abort_in_flight_games(body.user_name)  # noqa: SLF001
+        if aborted:
+            logger.info(
+                "mainline_start force=true aborted in-flight games: "
+                "user=%s count=%d",
+                body.user_name, aborted,
+            )
     try:
-        await svc.set_active_mainline(body.user_name, mainline_id)
+        await svc.set_active_mainline(
+            body.user_name, mainline_id, force=body.force,
+        )
     except MainlineAlreadyActive as exc:
         logger.warning(
             "mainline_start already active: user=%s mainline=%s err=%s",
@@ -1093,6 +1182,18 @@ async def advance_mainline(
     next_index = battle_index + 1
     is_last = next_index >= total_battles
 
+    # Auto-save at chapter-end (per FE8 design v2 §2.3).  Fires on
+    # both the victory path and the next-battle path — the player
+    # gets a fresh checkpoint after every settlement so they can
+    # always reload to "post-this-battle" state.  The FE uses
+    # ``auto_save`` to render "自动存档中…… 自动存档完毕".
+    auto_save_out = await auto_save_checkpoint(
+        session,
+        profile,
+        mainline_id=mainline_id,
+        chapter_index=next_index,
+        label=f"{mainline_id}-结束",
+    )
     if is_last:
         rewards = await engine.apply_victory(
             completed_battle=ml.battles[battle_index]
@@ -1117,6 +1218,7 @@ async def advance_mainline(
             post_battle_dialogue_url=None,
             post_battle_dialogue_key=None,
             rewards=rewards,
+            auto_save=auto_save_out.model_dump(),
         )
 
     # Otherwise: advance the cursor and return the post-battle dialogue
@@ -1159,6 +1261,7 @@ async def advance_mainline(
         post_battle_dialogue_url=post_url,
         post_battle_dialogue_key=post_key,
         rewards=None,
+        auto_save=auto_save_out.model_dump(),
     )
 
 
@@ -1307,6 +1410,195 @@ async def abandon_mainline(
         ok=True,
         mainline_id=mainline_id if was_active else None,
         abandoned_at=abandoned_at,
+    )
+
+
+# ============================================================
+# Mercenary domain endpoints (dual-track phase 3)
+# ============================================================
+
+
+def _build_default_mercenary_balance() -> "ChapterBalanceConfig":
+    """Return the chapter's ``ChapterBalanceConfig``.
+
+    Until the mainline JSON supports a ``chapter_balance`` block, we
+    always return the dataclass defaults. This keeps the FE panel
+    stable across mainlines.
+    """
+    from app.mercenary_domain import ChapterBalanceConfig
+    return ChapterBalanceConfig()
+
+
+def _load_allocation_from_profile(
+    profile: PlayerProfile,
+) -> tuple["CommanderAllocation", "ChapterBalanceConfig"]:
+    """Read ``profile.mercenary_roster_state`` into a fresh
+    ``CommanderAllocation`` (or a default if absent).
+
+    Returns ``(allocation, balance)`` — the balance is always the
+    chapter default for now; future revision may override it from
+    the mainline JSON.
+    """
+    from app.mercenary_domain import CommanderAllocation
+    stored = dict(getattr(profile, "mercenary_roster_state", {}) or {})
+    alloc_payload = dict(stored.get("allocation") or {})
+    allocation = CommanderAllocation(
+        total_points=int(alloc_payload.get("total_points", 100)),
+        spent_points=int(alloc_payload.get("spent_points", 0)),
+        unit_type_upgrades={
+            str(ut): dict(stats)
+            for ut, stats in (alloc_payload.get("unit_type_upgrades") or {}).items()
+        },
+    )
+    return allocation, _build_default_mercenary_balance()
+
+
+async def _save_allocation_to_profile(
+    session: AsyncSession,
+    profile: PlayerProfile,
+    allocation: "CommanderAllocation",
+) -> None:
+    """Write the allocation back into the JSON column on the profile.
+
+    The dataclass ``unit_type_upgrades`` keys must round-trip as
+    ``str``; SQLAlchemy's JSON type may coerce them, so we re-wrap
+    here.
+    """
+    stored = dict(getattr(profile, "mercenary_roster_state", {}) or {})
+    stored["allocation"] = {
+        "total_points": int(allocation.total_points),
+        "spent_points": int(allocation.spent_points),
+        "unit_type_upgrades": {
+            str(ut): {str(stat): int(value) for stat, value in stats.items()}
+            for ut, stats in allocation.unit_type_upgrades.items()
+        },
+    }
+    profile.mercenary_roster_state = stored
+    await session.flush()
+
+
+@router.get(
+    "/{mainline_id}/mercenary/config",
+    response_model=MainlineMercenaryConfigOut,
+)
+async def get_mercenary_config(
+    mainline_id: str,
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> MainlineMercenaryConfigOut:
+    """Return the chapter's balance config + the player's allocation.
+
+    Auto-creates the profile on miss (mirrors ``/start``) so a fresh
+    player can open the panel without a 404 round-trip.
+    """
+    logger.debug(
+        "get_mercenary_config entry: mainline=%s user=%s",
+        mainline_id, user_name,
+    )
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        logger.warning("get_mercenary_config not found: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        logger.exception("get_mercenary_config invalid: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _ensure_profile_or_create(session, user_name)
+    allocation, balance = _load_allocation_from_profile(profile)
+    return MainlineMercenaryConfigOut(
+        mainline_id=mainline_id,
+        balance=ChapterBalanceConfigOut(
+            enemy_modifiers=dict(balance.enemy_modifiers),
+            max_recruit_count=int(balance.max_recruit_count),
+            starting_fund=int(balance.starting_fund),
+        ),
+        allocation=CommanderAllocationOut(
+            total_points=int(allocation.total_points),
+            spent_points=int(allocation.spent_points),
+            unit_type_upgrades={
+                str(ut): {str(stat): int(value) for stat, value in stats.items()}
+                for ut, stats in allocation.unit_type_upgrades.items()
+            },
+        ),
+        mercenary_points=int(allocation.total_points - allocation.spent_points),
+    )
+
+
+@router.post(
+    "/{mainline_id}/mercenary/allocate",
+    response_model=MainlineMercenaryAllocateOut,
+)
+async def allocate_mercenary_points(
+    mainline_id: str,
+    body: MainlineMercenaryAllocateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlineMercenaryAllocateOut:
+    """Spend mercenary points on a per-unit-type stat upgrade.
+
+    Validates the point cost against the player's remaining budget,
+    writes the upgrade into the profile's
+    ``mercenary_roster_state.allocation``, and returns the new state.
+
+    This is the dual-track "pre-battle" panel; the *application* of
+    these upgrades to spawned ``Unit`` rows is a follow-up wiring
+    step (Task #1 phase 2).
+    """
+    logger.debug(
+        "allocate_mercenary_points entry: mainline=%s user=%s unit_type=%s stat=%s",
+        mainline_id, body.user_name, body.unit_type, body.stat,
+    )
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        logger.warning(
+            "allocate_mercenary_points not found: mainline=%s", mainline_id,
+        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        logger.exception(
+            "allocate_mercenary_points invalid: mainline=%s", mainline_id,
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    # Strict 404: a typo'd user_name must not auto-create a wrong
+    # profile (mirrors /advance, /abandon).
+    profile = await _load_profile(session, body.user_name)
+    allocation, _balance = _load_allocation_from_profile(profile)
+
+    try:
+        allocation.add_upgrade(
+            body.unit_type, body.stat, body.value, body.cost,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "allocate_mercenary_points overspend: user=%s spent=%d cost=%d",
+            body.user_name, allocation.spent_points, body.cost,
+        )
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"mercenary points exceeded: have "
+            f"{allocation.total_points - allocation.spent_points}, "
+            f"need {body.cost}",
+        )
+
+    await _save_allocation_to_profile(session, profile, allocation)
+    logger.info(
+        "allocate_mercenary_points ok: user=%s unit_type=%s stat=%s "
+        "value=%d cost=%d spent=%d",
+        body.user_name, body.unit_type, body.stat,
+        body.value, body.cost, allocation.spent_points,
+    )
+    return MainlineMercenaryAllocateOut(
+        ok=True,
+        spent_points=int(allocation.spent_points),
+        remaining_points=int(
+            allocation.total_points - allocation.spent_points
+        ),
+        unit_type_upgrades={
+            str(ut): {str(stat): int(value) for stat, value in stats.items()}
+            for ut, stats in allocation.unit_type_upgrades.items()
+        },
     )
 
 
