@@ -2567,6 +2567,7 @@ function showPostMoveBubble(unit) {
   // Called after a successful move. Decide what to offer:
   //   - enemies in range → attack options + (continue moving if can_move_after_action) + wait
   //   - no enemies, MP left and can_move_after_action → "continue moving"
+  //   - claim button when standing on a claimable tile (P0.4)
   //   - otherwise → close bubble (unit is done this turn)
   const targets = computeAttackTargets(unit);
   const enemyList = [];
@@ -2580,7 +2581,14 @@ function showPostMoveBubble(unit) {
   enemyList.sort((a, b) => a.hp - b.hp);
 
   const canContinue = unit.mp > 0;
-  const hasContent = enemyList.length > 0 || canContinue;
+  // P0.4 — show the claim button when standing on a claimable tile
+  // we don't yet own. Same rule as the pre-move bubble.
+  const st = state.lastState || state.game;
+  const myPlayer = st.players?.find(p => p.id === state.me.player_id);
+  const tile = getTileAt(st, unit.x, unit.y);
+  const onClaimable = tile && CLAIMABLE_FRONT.has(tile.terrain);
+  const onOwnUnclaimed = onClaimable && tile.owner_id !== (myPlayer?.id ?? -1);
+  const hasContent = enemyList.length > 0 || canContinue || onOwnUnclaimed;
   if (!hasContent) {
     toast("移动完成，当前范围内无目标");
     hideBubble();
@@ -2601,6 +2609,11 @@ function showPostMoveBubble(unit) {
   parts.push(`<div class="ab-row">`);
   if (canContinue) {
     parts.push(`<button class="ab-btn primary" data-ab="move-more">🚶 继续移动 (${unit.mp} MP)</button>`);
+  }
+  // P0.4 — claim button after a move, same title copy as pre-move
+  // bubble so the player sees consistent wording across bubbles.
+  if (onOwnUnclaimed) {
+    parts.push(`<button class="ab-btn claim" data-ab="claim" title="开始占领该地块（2 回合）">🚩 占领</button>`);
   }
   parts.push(`<button class="ab-btn cancel" data-ab="wait">⏭ 待机</button>`);
   parts.push(`</div>`);
@@ -3213,7 +3226,12 @@ async function doClaim(unit) {
       unit_id: unit?.id || state.selectedUnit?.id,
     });
     if (r.started) {
-      toast(`🚩 开始占领（${r.completes_turn} 回合完成）`);
+      // r.completes_turn is the absolute turn number when ownership flips.
+      // Convert to "X more turns from now" so the user understands they
+      // need to claim again on that turn to complete the flip.
+      const curTurn = state.game?.game?.turn_number ?? state.game?.turn_number ?? 0;
+      const turnsRemaining = Math.max(1, (r.completes_turn ?? curTurn) - curTurn);
+      toast(`🚩 开始占领（还需 ${turnsRemaining} 回合后完成）`);
     } else if (r.completed) {
       toast(`🚩 占领完成！`);
     }
