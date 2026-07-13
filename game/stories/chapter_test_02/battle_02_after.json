@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 2 — 第二场结束。章节通关。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "第二场结束。整个章节打完，查看 rewards_on_clear 是否正确发放。"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "id": "chapter_test_01",
+  "title": "测试章节 1：单场残血战",
+  "synopsis": "临时测试章节。单场战斗，敌人 1 个残血单位。验证 prepare → 战斗 → 结算的完整闭环。",
+  "cover_art": null,
+  "required_classes": ["swordsman", "archer", "healer"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 1,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red"
+    },
+    {
+      "class_id": "healer",
+      "level": 1,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red"
+    },
+    {"class_id": "swordsman", "level": 1, "name": "红刀"}
+  ],
+  "dialogues": {
+    "intro":            "stories/chapter_test_01/intro.json",
+    "battle_01_after":  "stories/chapter_test_01/after.json",
+    "victory":          "stories/chapter_test_01/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "测试战：一只残血怪",
+      "map_id": "balanced_2p_15",
+      "map_seed": 1001,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "测试目的：spawn_overrides 移除 4 个蓝方单位，replace 第 5 个为 hp=1 的残血 swordsman。",
+      "spawn_overrides": {
+        "remove": [
+          {"color": "blue", "x": 12, "y": 8},
+          {"color": "blue", "x": 13, "y": 7},
+          {"color": "blue", "x": 13, "y": 8},
+          {"color": "blue", "x": 12, "y": 9}
+        ],
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 14, "y": 7},
+            "unit":  {"type": "swordsman", "color": "blue", "level": 1, "hp": 1}
+          }
+        ]
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 100,
+    "unlock_class": null,
+    "exp_per_unit": 50
+  },
+  "art_assets": {}
+}

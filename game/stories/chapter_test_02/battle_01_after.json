@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 2 — 第一场结束。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "第一场结束。点击「下一场」进入 battle_02。"
+    }
+  ]
+}

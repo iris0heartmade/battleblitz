@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 1 — 战终结算对话。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "搞定。看看战后结算页面的字段是否符合预期。"
+    }
+  ]
+}

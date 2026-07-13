@@ -517,7 +517,13 @@ async def _start_battle_internal(
             name=_unit_name(unit_type, name_idx),
             level=int(u.get("level", 1)),
             exp=0,
-            hp=uc.base_hp, max_hp=uc.base_hp,
+            # Spawn-level HP override (test fixtures). When ``u["hp"]``
+            # is set, the unit spawns wounded; both current and max
+            # collapse to the override so HP bars and ``max_hp``
+            # queries stay consistent. ``None`` (default) keeps the
+            # class's ``base_hp``.
+            hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
+            max_hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
             mov=uc.mp_pool, mp=uc.mp_pool,
