@@ -1,0 +1,20 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/board/board.gd" id="1_board"]
+[ext_resource type="Script" path="res://scripts/board/highlights.gd" id="2_highlights"]
+
+[node name="Board" type="Node2D"]
+script = ExtResource("1_board")
+
+[node name="TerrainLayer" type="TileMapLayer" parent="."]
+
+[node name="CastleLayer" type="TileMapLayer" parent="."]
+
+[node name="Highlights" type="Node2D" parent="."]
+script = ExtResource("2_highlights")
+
+[node name="Units" type="Node2D" parent="."]
+
+[node name="Effects" type="Node2D" parent="."]
+
+[node name="Camera2D" type="Camera2D" parent="."]

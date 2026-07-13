@@ -1,0 +1,21 @@
+# Godot 4.7 generated/import files
+# (These live in `.godot/` next to `project.godot` once the editor opens
+# the project for the first time. Safe to delete + regenerate.)
+.godot/
+.import/
+*.import
+
+# Imported translations (none today; reserved for future i18n).
+*.translation
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Local build outputs (none today; reserved for CI).
+build/
+dist/
+*.log
