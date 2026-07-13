@@ -80,3 +80,9 @@ tools/package-lock.json
 # `python -m app.tools.render_map_preview --all`
 # The PNGs are deliberately not tracked; only the index.html stays.
 map_previews/*.png
+
+# ===== Reference projects (downloaded separately into ref/) =====
+# Open-source战棋参考项目从 GitHub clone 下来的副本，
+# 不进版本控制。本地手动跑 `cd ref/ && git clone <url>` 即可。
+# README 索引和 .bat 快捷启动脚本仍进版本控制。
+ref/*/
