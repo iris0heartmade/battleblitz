@@ -75,6 +75,8 @@ const state = {
   settings: loadSettings(),
   me: { player_id: null, user_name: null, color: null, game_id: null, seat: null },
   game: null,            // GameStateOut
+  // Mirror of game.game for legacy callers; populated alongside game.
+  lastState: null,
   selectedUnit: null,    // UnitOut (the unit whose bubble is currently open)
   actionMode: null,      // "move" | "attack" | "range" | null (driven by bubble)
   pendingMove: null,     // { toX, toY } - awaiting move confirmation
@@ -97,6 +99,14 @@ const state = {
   wsConnected: false,         // mirrors ws.readyState === OPEN
   lastSeq: 0,                 // last seq we observed, sent as ?since_seq= on reconnect
 };
+
+// Expose a few hooks on window for E2E tests (Playwright / DevTools).
+// Read-only access; please don't mutate state from outside.
+if (typeof window !== "undefined") {
+  window.__bbState = state;
+  window.__bbMe = () => state.me;
+  window.__bbLastState = () => state.game || state.lastState;
+}
 
 const COMMANDER_OPTIONS = [
   {
@@ -1446,6 +1456,7 @@ async function refreshGame() {
     }
     state.lastState = st;
     state.game = st;
+    state.lastState = st;
     AudioManager.applyBattleConfig(st.game?.battle_config || null);
     renderGame(st);
     renderCOMeters(st);
@@ -2582,12 +2593,15 @@ function showPostMoveBubble(unit) {
 
   const canContinue = unit.mp > 0;
   // P0.4 — show the claim button when standing on a claimable tile
-  // we don't yet own. Same rule as the pre-move bubble.
+  // we don't yet own AND the unit has not yet acted this turn. The
+  // server-side claim endpoint refuses acted units, so the button
+  // would just 400 — better to hide it.
   const st = state.lastState || state.game;
   const myPlayer = st.players?.find(p => p.id === state.me.player_id);
   const tile = getTileAt(st, unit.x, unit.y);
   const onClaimable = tile && CLAIMABLE_FRONT.has(tile.terrain);
-  const onOwnUnclaimed = onClaimable && tile.owner_id !== (myPlayer?.id ?? -1);
+  const onOwnUnclaimed = onClaimable && tile.owner_id !== (myPlayer?.id ?? -1)
+                         && !unit.has_acted;
   const hasContent = enemyList.length > 0 || canContinue || onOwnUnclaimed;
   if (!hasContent) {
     toast("移动完成，当前范围内无目标");
