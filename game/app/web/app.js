@@ -94,6 +94,7 @@ const state = {
   mainlineGameId: null,       // 主线中正在进行的 game.id
   mainlinePlayerId: null,     // 该 game 中的人类玩家 id
   mainlineAdvancePending: false, // 防止 advance 重复触发
+  mainlineAbandonPending: false, // 防止放弃确认与请求重入
   // ----- WebSocket gateway (P0.1) -----
   ws: null,                   // WebSocket instance
   wsConnected: false,         // mirrors ws.readyState === OPEN
@@ -2572,7 +2573,6 @@ function computeReachable(unit) {
       const t = tileMap.get(key);
       if (!t) continue;
       if (TERRAIN_BLOCKED.has(t.terrain)) continue;
-      if (t.terrain === "castle" && t.owner_id !== null && t.owner_id !== state.me.player_id) continue;
       if (occupied.has(key)) continue;
       const stepCost = TERRAIN_COST_X2[t.terrain] ?? 2;   // fallback = plain (2)
       const newCost = cur.cost + stepCost;
@@ -2865,7 +2865,7 @@ function renderUnitHtml(u, p) {
 }
 
 // P0.4: claimable / recruit helpers
-const CLAIMABLE_FRONT = new Set(["village", "barracks", "castle_vault"]);
+const CLAIMABLE_FRONT = new Set(["village", "barracks", "castle_vault", "castle"]);
 
 function getTileAt(st, x, y) {
   for (const t of st.tiles) {
@@ -3309,7 +3309,6 @@ function computeClientPath(unit, toX, toY, reachable) {
       const t = tileMap.get(k);
       if (!t) continue;
       if (TERRAIN_BLOCKED.has(t.terrain)) continue;
-      if (t.terrain === "castle" && t.owner_id !== null && t.owner_id !== state.me.player_id) continue;
       if (occupied.has(k)) continue;
       const step = TERRAIN_COST_X2[t.terrain] ?? 2;
       const newCost = cur.cost + step;
@@ -4016,7 +4015,7 @@ const TERRAIN_REF = [
   { id: "forest",   name: "森林",   color: "#4f8a47", move: 2, def: 2, note: "防御+2，远程视野受阻" },
   { id: "mountain", name: "山地",   color: "#8c8c8c", move: 3, def: 3, note: "防御+3，移动慢" },
   { id: "river",    name: "河流",   color: "#5fb0e8", move: 3, def: 0, note: "移动慢，但无防御" },
-  { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "需占 2 回合，敌不可入" },
+  { id: "castle",   name: "城堡",   color: "#f0c75e", move: 1, def: 5, note: "进入后需占 2 回合" },
   // P0.4 new terrains
   { id: "village",  name: "村落",   color: "#d9c98e", move: 1, def: 0, note: "归属后每回合 +50 金" },
   { id: "barracks", name: "佣兵站", color: "#b58a4a", move: 1, def: 1, note: "归属后可招募新单位 +100 金/回合" },
@@ -4795,36 +4794,6 @@ const MainlineView = {
       );
       return r;
     } catch (e) {
-      // 409 "already active" → 自动重置并重试一次（带 _retried 防无限递归）。
-      // 用户点"开始"就是想玩，撞上旧的 active mainline 时最直觉的体验就是
-      // 自动 abandon 旧进度并立刻重开 — 而不是让用户再点一次 abandon 再点 start。
-      if (e.status === 409 && !opts._retried) {
-        const detail = e && e.body && e.body.detail;
-        const isActiveMainline = detail && detail.error === "mainline_already_active";
-        if (isActiveMainline) {
-          console.warn(
-            `[mainline] start 409 active, auto-reset: id=${id} user=${userName} ` +
-            `active_mainline=${detail.active_mainline}`
-          );
-          toast("检测到进行中的主线，正在重置并重新开始…", 1500);
-          try {
-            await api("POST", `/mainlines/${encodeURIComponent(id)}/abandon`, {
-              user_name: userName,
-            });
-            console.info(`[mainline] auto-abandon OK, retrying start: id=${id} user=${userName}`);
-          } catch (abandonErr) {
-            console.error(
-              `[mainline] auto-abandon failed: id=${id} user=${userName}`,
-              abandonErr
-            );
-            toast("放弃旧进度失败：" + (abandonErr.message || ""), 3000);
-            throw abandonErr;
-          }
-          // 重试一次（_retried=true 防止再 409 时再次进入 auto-retry 流程）
-          const r2 = await this.start(id, userName, { ...opts, _retried: true });
-          return r2;
-        }
-      }
       console.error(
         `[mainline] start failed: id=${id} err=${e && e.message} status=${e && e.status}`,
         e && e.body
@@ -4867,7 +4836,7 @@ const MainlineView = {
     }
   },
 
-  async abandon(id, userName) {
+  async abandonRequest(id, userName) {
     console.debug(`[mainline] abandon entry: id=${id} user_name=${userName}`);
     try {
       const r = await api("POST", `/mainlines/${encodeURIComponent(id)}/abandon`, {
@@ -4935,44 +4904,35 @@ const MainlineView = {
     const container = document.getElementById("mainline-slots");
     if (!container) return;
     container.innerHTML = `<p class="muted">加载中…</p>`;
-    let userName = (state.settings && state.settings.playerName) || "";
-    // 没设昵称时给个临时占位（不写入 settings）
-    const probeName = userName || "__mainline_slot_probe__";
-    let profile = null;
-    try {
-      profile = await api("GET", `/profile/${encodeURIComponent(probeName)}`);
-    } catch (_) {
-      // 没创建过 profile — 3 个槽位全空
-      profile = null;
+    const userName = ((state.settings && state.settings.playerName) || "").trim();
+    if (!userName) {
+      container.innerHTML = `<p class="muted">请先在【设置】里填写玩家昵称</p>`;
+      return;
     }
-    // 列出所有 mainline 存档并按 chapter+battle 归到槽位
-    let saves = [];
+    let saves;
     try {
-      const allGames = await api("GET", `/games?user_name=${encodeURIComponent(probeName)}`);
-      saves = (allGames || []).filter(g => (g.name || "").startsWith("mainline:"));
-    } catch (_) {}
-    // 当前用户的 active 主线存档
-    const myActiveSaves = profile ? saves.filter(g => g.status === "playing") : [];
-    // 简单分配策略：每个 active 存档占一个槽位（按 id 升序），其余为空。
-    // 复杂度：3 个存档格 = 最多 3 个 active 存档。
-    const sortedActives = myActiveSaves.slice(0, this.MAINLINE_SLOT_COUNT).sort((a, b) => a.id - b.id);
+      saves = await api("GET", `/saves?user_name=${encodeURIComponent(userName)}`);
+    } catch (e) {
+      container.innerHTML = `<p class="error-text">加载失败：${escapeHtml(e.message)}</p>`;
+      return;
+    }
     container.innerHTML = "";
     for (let i = 0; i < this.MAINLINE_SLOT_COUNT; i++) {
       const slot = document.createElement("div");
-      const g = sortedActives[i];
-      if (g) {
-        const slotLabel = `存档 ${i + 1}`;
-        const chapterName = (g.name || "").split(":")[1] || g.name;
-        slot.className = "save-slot occupied";
+      const saved = (saves.manual_slots || [])[i];
+      if (saved) {
+        const title = saved.label || `第 ${Number(saved.chapter_index ?? 0) + 1} 战`;
+        const savedAt = saved.saved_at ? new Date(saved.saved_at).toLocaleString() : "—";
+        slot.className = "save-slot save-slot-manual occupied";
         slot.innerHTML = `
-          <div class="slot-title">${slotLabel} · 进行中</div>
+          <div class="slot-title">存档 ${i + 1} · 手动</div>
           <div class="slot-content">
-            <div><strong>${escapeHtml(chapterName)}</strong></div>
-            <div class="muted small">回合 ${g.turn_number ?? "?"} · #${g.id}</div>
+            <div><strong>${escapeHtml(title)}</strong></div>
+            <div class="muted small">${escapeHtml(saved.mainline_id)} · ${escapeHtml(savedAt)}</div>
           </div>
           <div class="slot-actions">
-            <button class="btn btn-primary btn-sm" data-action="mainline-slot-resume" data-game-id="${g.id}" data-slot-idx="${i}">▶ 从记录开始</button>
-            <button class="btn btn-danger btn-sm" data-action="mainline-slot-delete" data-game-id="${g.id}">🗑️</button>
+            <button class="btn btn-primary btn-sm" data-action="load-new-save" data-kind="manual" data-slot-index="${i}">▶ 从此继续</button>
+            <button class="btn btn-danger btn-sm" data-action="erase-new-save" data-kind="manual" data-slot-index="${i}">🗑️</button>
           </div>
         `;
       } else {
@@ -4983,6 +4943,19 @@ const MainlineView = {
         `;
       }
       container.appendChild(slot);
+    }
+    if (saves.auto_slot) {
+      const auto = saves.auto_slot;
+      const card = document.createElement("div");
+      card.className = "save-slot save-slot-auto occupied";
+      card.innerHTML = `<div class="slot-title">自动存档</div><div class="slot-content"><strong>${escapeHtml(auto.label || auto.mainline_id)}</strong></div><div class="slot-actions"><button class="btn btn-primary btn-sm" data-action="load-new-save" data-kind="auto" data-slot-index="0">▶ 从此继续</button><button class="btn btn-danger btn-sm" data-action="erase-new-save" data-kind="auto" data-slot-index="0">🗑️</button></div>`;
+      container.appendChild(card);
+    }
+    if (saves.suspend) {
+      const card = document.createElement("div");
+      card.className = "save-slot save-slot-suspend occupied";
+      card.innerHTML = `<div class="slot-title">中断战斗</div><div class="slot-content"><strong>${escapeHtml(saves.suspend.mainline_id || "主线战斗")}</strong></div><div class="slot-actions"><button class="btn btn-primary btn-sm" data-action="continue-suspend">▶ 继续战斗</button></div>`;
+      container.appendChild(card);
     }
   },
 
@@ -5320,15 +5293,26 @@ const MainlineView = {
   },
 
   async abandon() {
-    if (!state.mainline) return;
+    if (!state.mainline || state.mainlineAbandonPending) return;
     if (!confirm("确定放弃当前主线？")) return;
+    state.mainlineAbandonPending = true;
+    document.querySelectorAll("[data-action='mainline-abandon']").forEach((button) => {
+      button.disabled = true;
+    });
     const userName = await this.ensureProfile();
-    if (!userName) return;  // ensureProfile 已 toast
+    if (!userName) {
+      state.mainlineAbandonPending = false;
+      return;
+    }
     console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_ABANDON | mainline=${state.mainline.id}`);
     try {
-      await this.abandon(state.mainline.id, userName);
+      await this.abandonRequest(state.mainline.id, userName);
     } catch (e) {
       toast("放弃失败：" + e.message, 3000);
+      state.mainlineAbandonPending = false;
+      document.querySelectorAll("[data-action='mainline-abandon']").forEach((button) => {
+        button.disabled = false;
+      });
       return;
     }
     this._clearMainlineState();
@@ -5342,6 +5326,7 @@ const MainlineView = {
     state.mainlineGameId = null;
     state.mainlinePlayerId = null;
     state.mainlineAdvancePending = false;
+    state.mainlineAbandonPending = false;
     // 同步清掉 session 里 mainline 字段
     const sess = loadSession();
     if (sess && sess.mainline_id) {
@@ -5401,7 +5386,7 @@ const MainlineView = {
         state: "prepare",
       };
       state.mainlinePrepare = prep;
-      state.mainlinePrepareMode = "start";
+      state.mainlinePrepareMode = prep.is_active ? "next-battle" : "start";
       state.mainlinePrepareDraft = null;
       state.mainlineGameId = null;
       state.mainlinePlayerId = null;
@@ -5942,6 +5927,7 @@ const MainlineView = {
     state.mainlineGameId = null;
     state.mainlinePlayerId = null;
     state.mainlineAdvancePending = false;
+    state.mainlineAbandonPending = false;
     const sess = loadSession();
     if (sess && sess.mainline_id) {
       delete sess.mainline_id;
@@ -6304,13 +6290,16 @@ document.addEventListener("DOMContentLoaded", () => {
           // 拉不到就默认 slot 0
         }
         target.disabled = true;
-        const label = `第 ${state.mainline?.battle_index ? state.mainline.battle_index + 1 : "?"} 章 - 手动`;
+        const battleIndex = state.mainline?.id === mid
+          ? Number(state.mainline.battle_index ?? 0)
+          : 0;
+        const label = `第 ${battleIndex + 1} 战 - 手动`;
         try {
           await api("POST", "/saves/save", {
             user_name: userName,
             slot_index: targetSlot,
             mainline_id: mid,
-            chapter_index: state.mainline?.battle_index || 0,
+            chapter_index: battleIndex,
             label,
           });
           toast(`已保存到存档 ${targetSlot + 1}`, 2500);

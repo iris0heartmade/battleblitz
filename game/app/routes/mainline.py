@@ -178,6 +178,7 @@ async def _build_prepare_payload(
 
     return MainlinePrepareOut(
         mainline_id=ml.id,
+        is_active=getattr(profile, "active_mainline", None) == ml.id,
         title=ml.title,
         synopsis=ml.synopsis,
         battle_index=battle_index,

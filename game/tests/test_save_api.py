@@ -137,6 +137,20 @@ class TestManualSave:
         assert slots[1] is None
         assert slots[2] is None
 
+    async def test_list_serializes_saved_at_as_utc(self, save_client):
+        client, _ = save_client
+        await _create_profile(client, "alice")
+        await client.post(
+            "/saves/save",
+            json={
+                "user_name": "alice", "slot_index": 0,
+                "mainline_id": "chapter_test_01", "chapter_index": 0,
+            },
+        )
+        response = await client.get("/saves", params={"user_name": "alice"})
+        assert response.status_code == 200, response.text
+        assert response.json()["manual_slots"][0]["saved_at"].endswith("Z")
+
     async def test_save_rejects_invalid_slot(self, save_client):
         client, _ = save_client
         await _create_profile(client, "alice")

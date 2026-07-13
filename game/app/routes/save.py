@@ -18,7 +18,7 @@ explicitly signals "I'm done prepping" by clicking the Ready button.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -49,6 +49,13 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["save"])
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Restore SQLite's dropped timezone information for API responses."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 # ============================================================
@@ -83,7 +90,7 @@ def _slot_to_out(slot: Optional[GameSaveSlot]) -> Optional[GameSaveSlotOut]:
         mainline_id=slot.mainline_id,
         chapter_index=slot.chapter_index,
         label=slot.label or "",
-        saved_at=slot.saved_at,
+        saved_at=_as_utc(slot.saved_at),
         has_snapshot=bool(slot.snapshot),
     )
 
@@ -97,7 +104,7 @@ def _suspend_to_out(sus: Optional[SuspendState]) -> Optional[SuspendStateOut]:
         mainline_id=sus.mainline_id,
         battle_id=sus.battle_id,
         suspend_point=sus.suspend_point.value,
-        saved_at=sus.saved_at,
+        saved_at=_as_utc(sus.saved_at),
     )
 
 
@@ -285,7 +292,7 @@ async def load_suspend(
         mainline_id=sus.mainline_id,
         battle_id=sus.battle_id,
         suspend_point=sus.suspend_point.value,
-        saved_at=sus.saved_at,
+        saved_at=_as_utc(sus.saved_at),
         aborted_game_count=aborted_other,
     )
 
@@ -388,7 +395,7 @@ async def capture_suspend(
         suspend_point=SuspendPoint.MANUAL,
         game_state={},  # populated on resume from /games/{id}/state
     )
-    return SuspendOut(ok=True, saved_at=datetime.utcnow())
+    return SuspendOut(ok=True, saved_at=datetime.now(timezone.utc))
 
 
 # ============================================================

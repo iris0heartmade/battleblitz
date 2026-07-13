@@ -414,6 +414,24 @@ class TestStartMainline:
         assert "sage" in yun["promotion_options"]
         assert anna["level"] >= 1
 
+    async def test_prepare_marks_an_active_campaign_for_resume(self, ml_client):
+        client, SessionLocal = ml_client
+        profile_id = await _create_profile(client, "alice")
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            profile = await s.get(PlayerProfile, profile_id)
+            profile.active_mainline = "chapter_01_steel_rebellion"
+            profile.mainline_progress = {"battle_index": 1, "scene_id": "battle_01_after"}
+            await s.commit()
+
+        response = await client.get(
+            "/mainlines/chapter_01_steel_rebellion/prepare",
+            params={"user_name": "alice"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["is_active"] is True
+        assert response.json()["battle_index"] == 1
+
     async def test_prepare_promote_consumes_crest_and_updates_hero_state(self, ml_client):
         client, SessionLocal = ml_client
         await _create_profile(client, "alice")

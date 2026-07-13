@@ -426,6 +426,9 @@ class MainlinePrepareUnitOut(_PydanticBaseModel):
 
 class MainlinePrepareOut(_PydanticBaseModel):
     mainline_id: str
+    # True when the profile already has this campaign active.  The client
+    # must then resume the persisted cursor instead of starting battle zero.
+    is_active: bool = False
     title: str
     synopsis: str
     battle_index: int

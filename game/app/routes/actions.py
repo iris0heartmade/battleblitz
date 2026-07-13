@@ -35,7 +35,6 @@ from app.game_logic import (
     calculate_damage,
     can_attack_from_position,
     check_win_condition,
-    claim_castle_if_present,
     cleanup_dead_units,
     unit_attack_range,
     unit_min_attack_range,
@@ -217,10 +216,9 @@ async def move_unit(
     if occ.get(target) is not None and occ.get(target) != unit.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标格已被占据")
 
-    # Cannot enter an enemy castle
+    # Enemy HQs are valid movement targets. Claiming the HQ remains an
+    # explicit two-turn action after the unit arrives.
     tile_terrain = terrain.get(target)
-    if tile_terrain == TERRAIN_CASTLE and owners.get(target) not in (None, player.id):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法进入敌方城堡")
 
     # Pathfind with movement budget
     blocked = {(x, y) for (x, y), u in occ.items() if u is not None and u != unit.id}

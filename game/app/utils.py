@@ -87,7 +87,7 @@ def terrain_passable(
     """Whether a unit may stand on this terrain.
 
     Rules:
-      - castle and gate: only passable for the owner (or unowned).
+      - castles are passable so a unit can enter an enemy HQ and seize it.
       - castle_wall, gate, and any terrain missing from TERRAIN_MOVE_COST
         are impassable for everyone.
       - everything else: passable.
@@ -97,7 +97,7 @@ def terrain_passable(
     if terrain in ("castle_wall", "gate"):
         return False
     if terrain == TERRAIN_CASTLE:
-        return owner_id is None or owner_id == viewer_owner_id
+        return True
     # River, mountain, village, barracks, road, and all castle sub-features
     # are passable; their cost is handled by the BFS (cost=2, road=1).
     return terrain in TERRAIN_MOVE_COST
