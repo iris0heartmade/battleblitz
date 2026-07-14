@@ -19,18 +19,26 @@ from app.schemas import BattleConfig
 
 
 # ============================================================
-# Valid enums (kept in sync with classes/units/*.py type_id)
+# Valid unit identifiers are discovered from classes/units/*.py. Content
+# schemas must not need a code edit whenever a new data-defined class lands.
 # ============================================================
 
-VALID_CLASS_IDS: tuple[str, ...] = (
-    "swordsman", "archer", "knight", "warlock", "healer",
-)
+CLASS_ID_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
+
+
+def valid_class_ids() -> set[str]:
+    from app.classes.units import type_ids
+    return set(type_ids())
+
+
+# Backward-compatible export for callers that only need a startup snapshot.
+VALID_CLASS_IDS: tuple[str, ...] = tuple(sorted(valid_class_ids()))
 
 WinCondition = Literal["rout", "seize", "defend", "boss"]
 
 
 def _class_id_pattern() -> str:
-    return f"^({'|'.join(VALID_CLASS_IDS)})$"
+    return CLASS_ID_PATTERN
 
 
 # ============================================================
@@ -299,17 +307,34 @@ class Mainline(APIModel):
 
     @model_validator(mode="after")
     def _validate_classes(self) -> "Mainline":
+        known = valid_class_ids()
         for cid in self.required_classes:
-            if cid not in VALID_CLASS_IDS:
+            if cid not in known:
                 raise ValueError(
                     f"required_classes contains unknown class_id {cid!r}; "
-                    f"valid: {VALID_CLASS_IDS}"
+                    f"valid: {sorted(known)}"
                 )
         for cid in self.starting_units:
-            if cid.class_id not in VALID_CLASS_IDS:
+            if cid.class_id not in known:
                 raise ValueError(
                     f"starting_units contains unknown class_id {cid.class_id!r}"
                 )
+        for battle in self.battles:
+            if battle.spawn_overrides is None:
+                continue
+            spawn_types = [
+                *(entry.type for entry in battle.spawn_overrides.add),
+                *(entry.unit.type for entry in battle.spawn_overrides.replace),
+            ]
+            for class_id in spawn_types:
+                if class_id not in known:
+                    raise ValueError(
+                        f"battle {battle.id!r} contains unknown class_id {class_id!r}"
+                    )
+        if self.rewards_on_clear.unlock_class and self.rewards_on_clear.unlock_class not in known:
+            raise ValueError(
+                f"rewards_on_clear.unlock_class is unknown: {self.rewards_on_clear.unlock_class!r}"
+            )
         # Each BattleSpec.dialogue key must exist in self.dialogues
         for b in self.battles:
             for key_name, key_val in (

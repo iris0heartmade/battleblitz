@@ -39,6 +39,7 @@ from app.game_logic import (
     unit_attack_range,
 )
 from app.models import Game, Player, Tile, Unit
+from app.movement import movement_key, resolve_movement_profile
 from app.utils import bfs_reachable, has_line_of_sight, manhattan
 
 
@@ -62,7 +63,7 @@ async def enumerate_legal_actions(
     tiles = (await session.execute(
         select(Tile).where(Tile.game_id == game.id)
     )).scalars().all()
-    terrain: dict = {(t.x, t.y): t.terrain for t in tiles}
+    terrain: dict = {(t.x, t.y): movement_key(t) for t in tiles}
     owners: dict = {(t.x, t.y): t.owner_id for t in tiles}
 
     players = (await session.execute(
@@ -132,6 +133,7 @@ def _legal_actions_for_unit(
             mov=unit.mp,
             viewer_owner_id=None,  # AI can pass through anywhere its units can
             blocked_units=blocked,
+            movement_profile=resolve_movement_profile(unit),
         )
         # Remove the current tile (no-op)
         reachable.pop((unit.x, unit.y), None)

@@ -42,6 +42,7 @@ from app.game_logic import (
 )
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
+from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
 from app.log_format import fmt_attack, fmt_move, fmt_wait
 from app.schemas import (
     AttackRequest,
@@ -162,7 +163,7 @@ async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coo
     owners: Dict[Coord, Optional[int]] = {}
     occ: Dict[Coord, Optional[int]] = {}
     for t in tiles:
-        terrain[(t.x, t.y)] = t.terrain
+        terrain[(t.x, t.y)] = movement_key(t)
         owners[(t.x, t.y)] = t.owner_id
         occ[(t.x, t.y)] = t.occupied_unit_id
     return terrain, owners, occ
@@ -211,6 +212,7 @@ async def move_unit(
 
     terrain, owners, occ = await _load_tile_grid(session, game_id)
     target = (body.to_x, body.to_y)
+    movement_profile = resolve_movement_profile(unit)
 
     # Target must be empty (no unit on it)
     if occ.get(target) is not None and occ.get(target) != unit.id:
@@ -230,6 +232,7 @@ async def move_unit(
         mov=unit.mp,
         viewer_owner_id=player.id,
         blocked_units=blocked,
+        movement_profile=movement_profile,
     )
     if path is None or path[-1] != target:
         logger.info(f"move_unit: pathfinding FAILED (game {game_id}, unit {unit.id} at ({unit.x},{unit.y}) -> {target}, mp={unit.mp})")
@@ -240,8 +243,7 @@ async def move_unit(
     # comment: "Real cost = integer_cost / 2").  We keep the doubled value
     # for the comparison / deduction so we never lose the half-MP that
     # road tiles (cost=1) consume.
-    from app.config import TERRAIN_MOVE_COST
-    cost_x2 = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
+    cost_x2 = sum(terrain_cost_x2(movement_profile, terrain[c]) or 0 for c in path[1:])
 
     # Enforce MP budget — double unit.mp to match the doubled cost scale.
     if cost_x2 > unit.mp * 2:

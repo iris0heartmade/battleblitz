@@ -28,3 +28,13 @@ class DragonRider(BaseUnitClass):
     can_move_after_action = True
 
     strong_against = ["archer"]
+
+    # Data only: movement.py applies these rules for player, AI, and UI.
+    # Flying units may cross walls/gates, but they must not stop on them.
+    terrain_movement = {
+        "mountain": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
+        "snow_peak": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
+        "river": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
+        "castle_wall": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},
+        "gate": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},
+    }

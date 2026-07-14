@@ -2132,6 +2132,31 @@ const TERRAIN_COST_X2 = {
 // Terrains that are outright impassable (checked before cost lookup).
 const TERRAIN_BLOCKED = new Set(["gate", "castle_wall"]);
 
+function movementTerrainKey(tile) {
+  return tile?.subtype || tile?.terrain || "plain";
+}
+
+function unitMovementRule(unit, terrain) {
+  return unit?.terrain_movement?.[terrain] || {};
+}
+
+function canTraverseTerrain(unit, terrain) {
+  const rule = unitMovementRule(unit, terrain);
+  const defaultAllowed = !TERRAIN_BLOCKED.has(terrain) && TERRAIN_COST_X2[terrain] != null;
+  return rule.can_traverse ?? defaultAllowed;
+}
+
+function canEndOnTerrain(unit, terrain) {
+  return canTraverseTerrain(unit, terrain) && (unitMovementRule(unit, terrain).can_end_on ?? true);
+}
+
+function terrainCostX2ForUnit(unit, terrain) {
+  if (!canTraverseTerrain(unit, terrain)) return null;
+  const rule = unitMovementRule(unit, terrain);
+  const base = rule.cost_override_x2 ?? TERRAIN_COST_X2[terrain] ?? 9999;
+  return Math.max(1, base + (rule.cost_delta_x2 ?? 0));
+}
+
 const CELL_MIN = 14;              // hard floor so tiles stay readable
 const CELL_MAX = 48;              // hard ceiling (desktop default 44)
 
@@ -2582,14 +2607,16 @@ function computeReachable(unit) {
       const key = `${nx},${ny}`;
       const t = tileMap.get(key);
       if (!t) continue;
-      if (TERRAIN_BLOCKED.has(t.terrain)) continue;
+      const terrain = movementTerrainKey(t);
+      if (!canTraverseTerrain(unit, terrain)) continue;
       if (occupied.has(key)) continue;
-      const stepCost = TERRAIN_COST_X2[t.terrain] ?? 2;   // fallback = plain (2)
+      const stepCost = terrainCostX2ForUnit(unit, terrain);
+      if (stepCost == null) continue;
       const newCost = cur.cost + stepCost;
       if (newCost > budget) continue;
       if ((visited.get(key) ?? Infinity) <= newCost) continue;
       visited.set(key, newCost);
-      reachable.add(key);
+      if (canEndOnTerrain(unit, terrain)) reachable.add(key);
       queue.push({ x: nx, y: ny, cost: newCost });
     }
   }
@@ -3362,9 +3389,11 @@ function computeClientPath(unit, toX, toY, reachable) {
       const k = `${nx},${ny}`;
       const t = tileMap.get(k);
       if (!t) continue;
-      if (TERRAIN_BLOCKED.has(t.terrain)) continue;
+      const terrain = movementTerrainKey(t);
+      if (!canTraverseTerrain(unit, terrain)) continue;
       if (occupied.has(k)) continue;
-      const step = TERRAIN_COST_X2[t.terrain] ?? 2;
+      const step = terrainCostX2ForUnit(unit, terrain);
+      if (step == null) continue;
       const newCost = cur.cost + step;
       if (newCost > budget) continue;
       if ((bestCost.get(k) ?? Infinity) <= newCost) continue;

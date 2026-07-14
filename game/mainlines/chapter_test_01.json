@@ -19,7 +19,9 @@
       "hero_id": "anna",
       "color": "red"
     },
-    {"class_id": "swordsman", "level": 1, "name": "红刀"}
+    {"class_id": "swordsman", "level": 1, "name": "红刀"},
+    {"class_id": "dragon_rider", "level": 1, "name": "赤翼"},
+    {"class_id": "dragon_rider", "level": 1, "name": "暮翼"}
   ],
   "dialogues": {
     "intro":            "stories/chapter_test_01/intro.json",
@@ -47,6 +49,10 @@
             "match": {"color": "blue", "x": 14, "y": 7},
             "unit":  {"type": "swordsman", "color": "blue", "level": 1, "hp": 1}
           }
+        ],
+        "add": [
+          {"x": 1, "y": 7, "type": "dragon_rider", "color": "red", "level": 1},
+          {"x": 1, "y": 8, "type": "dragon_rider", "color": "red", "level": 1}
         ]
       },
       "pre_battle_dialogue": "intro",

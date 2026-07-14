@@ -1247,6 +1247,9 @@ async def list_unit_classes():
             "can_move_after_action": u.can_move_after_action,
             "default_skills": list(u.default_skills),
             "strong_against": list(u.strong_against),
+            "terrain_movement": {
+                terrain: dict(rule) for terrain, rule in u.terrain_movement.items()
+            },
         }
         for u in list_all()
     ]
@@ -1379,10 +1382,12 @@ def _with_combat_stats(unit: Unit) -> dict:
     """
     from app.classes.units import get as _get_unit
     profile = _get_unit(unit.unit_type)
+    from app.movement import resolve_movement_profile
     return {
         **unit.__dict__,
         "attack_range": profile.attack_range,
         "min_attack_range": profile.min_attack_range,
+        "terrain_movement": resolve_movement_profile(unit).as_dict(),
     }
 
 
