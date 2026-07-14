@@ -660,7 +660,15 @@ async function eraseNewSaveSlot(kind, slotIndex) {
     let msg = "已删除存档";
     if (r.suspend_cleared) msg += "（关联的中断存档也已清空）";
     toast(msg, 2500);
-    await renderNewSaveSlots();
+    // This handler is shared by the save manager and the mainline page.
+    // Refresh both views; previously only the hidden save-manager view was
+    // updated, leaving the mainline page to display a deleted slot.
+    await Promise.all([
+      renderNewSaveSlots(),
+      typeof MainlineView !== "undefined" && typeof MainlineView.renderSlots === "function"
+        ? MainlineView.renderSlots()
+        : Promise.resolve(),
+    ]);
   } catch (e) {
     toast(`删除失败：${e.message}`, 3000);
   }
@@ -4868,6 +4876,7 @@ const MainlineView = {
       user_name: userName,
       skip_intro: !!opts.skipIntro,
       disabled_unit_indices: Array.isArray(opts.disabledUnitIndices) ? opts.disabledUnitIndices : [],
+      force: !!opts.force,
     });
     try {
       const r = await callStart();
@@ -5478,10 +5487,28 @@ const MainlineView = {
     }
 
     try {
-      const prep = await this.fetchPrepare(id, userName);
+      let targetId = id;
+      let prep = await this.fetchPrepare(targetId, userName);
+      // Respect the chapter the player explicitly clicked. Starting a
+      // different chapter is destructive to the active cursor, so ask for
+      // confirmation instead of silently redirecting to that cursor.
+      if (!prep.is_active) {
+        const profile = await api("GET", `/profile/${encodeURIComponent(userName)}`);
+        const activeId = profile?.active_mainline;
+        if (activeId && activeId !== targetId) {
+          const mainlines = await this.fetchList();
+          const activeTitle = mainlines.find((item) => item.id === activeId)?.title || activeId;
+          if (!confirm(`当前正在进行「${activeTitle}」。是否放弃它并开始「${prep.title || targetId}」？`)) {
+            restoreBtn();
+            return;
+          }
+          await this.abandonRequest(activeId, userName);
+          prep = await this.fetchPrepare(targetId, userName);
+        }
+      }
       state.mainline = {
-        id,
-        title: prep.title || id,
+        id: targetId,
+        title: prep.title || targetId,
         total_battles: prep.total_battles,
         battle_index: prep.battle_index,
         state: "prepare",
@@ -5497,7 +5524,7 @@ const MainlineView = {
       const sess = loadSession() || {};
       saveSession({
         ...sess,
-        mainline_id: id,
+        mainline_id: targetId,
         user_name: userName,
       });
       this._enterPrepareView(prep);
