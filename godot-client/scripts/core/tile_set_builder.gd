@@ -25,7 +25,9 @@ extends RefCounted
 ##     `Config.TERRAIN_VARIANT_COUNTS` order for determinism.
 ##   - `SOURCE_IDS["{terrain}|{biome}"]` → source_id.
 
-const TILE_SIZE := Vector2i(48, 48)
+const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
+const MAP_THEME_SCRIPT := preload("res://scripts/core/map_theme.gd")
+const TILE_SIZE := MAP_METRICS_SCRIPT.TILE_SIZE
 const TILES_DIR := "res://assets/tiles"
 
 # Populated by `build()`. Keyed by "{terrain}|{biome}" → source_id.
@@ -62,8 +64,7 @@ static func build() -> TileSet:
 		# known biome so the MapLoader's `source_id_for(terrain, biome)`
 		# lookup hits whether the caller passes a biome or not.
 		for terrain in Config.FE8_TILE_COORDS.keys():
-			SOURCE_IDS["%s|" % terrain] = fe8_source_id
-			for biome in Config.BIOMES:
+			for biome in MAP_THEME_SCRIPT.source_registration_biomes(String(terrain)):
 				SOURCE_IDS["%s|%s" % [terrain, biome]] = fe8_source_id
 
 	# 2. Legacy per-terrain atlases for non-FE8 terrains. Registered in
@@ -72,9 +73,8 @@ static func build() -> TileSet:
 	for terrain in Config.TERRAIN_VARIANT_COUNTS.keys():
 		if terrain in Config.FE8_TILE_COORDS:
 			continue  # already handled by the FE8 atlas
-		var biomes := _biomes_for(terrain)
-		for biome in biomes:
-			var source := _build_legacy_source_for(terrain, biome)
+		for biome in MAP_THEME_SCRIPT.source_registration_biomes(String(terrain)):
+			var source := _build_legacy_source_for(terrain, String(biome))
 			if source == null:
 				continue
 			var source_id := ts.add_source(source)
@@ -111,11 +111,6 @@ static func export_to_tres(path: String) -> int:
 # ============================================================
 # Source construction
 # ============================================================
-
-static func _biomes_for(terrain: String) -> Array:
-	if terrain in Config.BIOME_AWARE_TERRAINS:
-		return Config.BIOMES.duplicate()
-	return [""]    # empty biome → non-biome asset
 
 ## Build the single shared FE8 atlas source. The texture is the
 ## 512×512 master tilemap upscaled 3× to 1536×1536 with NEAREST so
