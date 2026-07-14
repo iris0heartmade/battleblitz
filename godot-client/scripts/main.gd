@@ -6,7 +6,7 @@ extends Node
 ## and renders it. M2 will add a "new game / join game" lobby before
 ## the board is instantiated.
 
-@onready var board: Board = $Board
+@onready var board = $Board
 @onready var status_label: Label = $UI/StatusLabel
 
 const DEFAULT_MAP_ID := "balanced_2p_15"

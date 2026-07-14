@@ -19,6 +19,8 @@ class_name Highlights
 ## cell outlines into a multi‑mesh if profiling shows 25×25
 ## boards stutter.
 
+const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
+
 enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER }
 
 const _COLORS := {
@@ -37,6 +39,7 @@ var _mode_nodes: Dictionary = {}
 # as Node2D to dodge Variant-inference warnings).
 var _pool: Dictionary = {}
 
+var _metrics = null
 var _board_size: Vector2i = Vector2i.ZERO
 var _tile_size: Vector2i = Vector2i(48, 48)
 var _terrain_layer: TileMapLayer = null
@@ -53,9 +56,10 @@ func bind_terrain_layer(layer: TileMapLayer) -> void:
 
 ## Wipe all highlights and (re)size the sprite pools.
 ## Called by `Board` after a new map is loaded.
-func reset(map_size: Vector2i) -> void:
-	_board_size = map_size
-	_tile_size = Vector2i(TileSetBuilder.TILE_SIZE)
+func reset(metrics) -> void:
+	_metrics = metrics
+	_board_size = _board_size_from_metrics(metrics)
+	_tile_size = MAP_METRICS_SCRIPT.TILE_SIZE
 	_pool.clear()
 	# Eagerly allocate one pool per known mode.
 	for mode in _COLORS.keys():
@@ -199,4 +203,25 @@ func _make_dot_sprite(color: Color) -> ColorRect:
 func _tile_to_viewport(tile: Vector2i) -> Vector2:
 	if _terrain_layer == null:
 		return Vector2.ZERO
+	if _metrics != null and _metrics.has_method("cell_to_local"):
+		return _terrain_layer.to_global(_metrics.cell_to_local(tile))
 	return _terrain_layer.to_global(_terrain_layer.map_to_local(tile))
+
+
+func _board_size_from_metrics(metrics) -> Vector2i:
+	if metrics == null:
+		return Vector2i.ZERO
+	if _has_property(metrics, "board_size"):
+		return metrics.board_size
+	if _has_property(metrics, "map_size"):
+		return metrics.map_size
+	return Vector2i.ZERO
+
+
+func _has_property(target: Object, property_name: String) -> bool:
+	if target == null:
+		return false
+	for property_info in target.get_property_list():
+		if String(property_info.get("name", "")) == property_name:
+			return true
+	return false
