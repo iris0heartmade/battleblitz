@@ -1,4 +1,5 @@
 extends Node
+const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -30,12 +31,25 @@ extends Node
 @onready var co_meter: ProgressBar = $GameView/HUD/Top/Left/COBar
 @onready var action_log: RichTextLabel = $GameView/HUD/Bottom/ActionLog
 @onready var unit_info: RichTextLabel = $GameView/HUD/Bottom/UnitInfo
-@onready var players_list: RichTextLabel = $GameView/HUD/Right/PlayersList
+@onready var players_list: RichTextLabel = $GameView/HUD/Right2/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
-@onready var menu_button: Button = $Menu/Container/ButtonRow/FreePlayButton
-@onready var connecting_label: Label = $Connecting/ConnectingLabel
-@onready var exit_button: Button = $Menu/Container/ButtonRow/ExitButton
-@onready var reconnect_button: Button = $Connecting/ReconnectButton
+# Main menu widgets (GBA 风 V2)
+@onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
+@onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
+@onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
+@onready var exit_button: Button = $Menu/CenterContainer/ButtonCol/ExitButton
+@onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
+@onready var menu_subtitle: Label = $Menu/CenterContainer/TitleBlock/TitleLine2
+@onready var menu_footer: Label = $Menu/Footer/FooterLabel
+@onready var connecting_label: Label = $Connecting/ConnectingInner/ConnectingLabel
+@onready var connecting_title: Label = $Connecting/ConnectingInner/ConnectingTitle
+@onready var reconnect_button: Button = $Connecting/ConnectingInner/ReconnectButton
+
+# 框架面板(灌主题用) — 改用 ColorRect + ReferenceRect 组合更稳
+@onready var backdrop: ColorRect = $Backdrop
+@onready var frame_outer: ColorRect = $Menu/FrameOuter
+@onready var frame_inner_border: ReferenceRect = $Menu/FrameInnerBorder
+@onready var connecting_frame: ColorRect = $Connecting/ConnectingFrame
 
 # Local game state
 var _game_id: int = 0
@@ -52,8 +66,13 @@ func _ready() -> void:
 		_user_name = "学妹喵" if _random_suffix() > 0.5 else "学长"
 		UserSettings.set_value("settings.v1.player_name", _user_name)
 
+	# === GBA 火纹风主题注入(UI V2 第 1 轮) ===
+	_apply_gba_theme()
+
 	_show_view("menu")
 	menu_button.pressed.connect(_on_free_play_pressed)
+	lobby_button.pressed.connect(_on_lobby_pressed)
+	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
@@ -65,11 +84,9 @@ func _ready() -> void:
 		NetworkClient.ws_message_received.connect(_on_raw_ws_message)
 	if not GameState.state_updated.is_connected(_on_state_updated):
 		GameState.state_updated.connect(_on_state_updated)
-	if not GameState.event_delta_received.has_connections():
-		# GameState autoload already binds its own event-delta handler
-		# that dispatches typed signals. We just need to react to the
-		# high-level ones for the HUD.
-		pass
+	# GameState autoload already binds its own event-delta handler
+	# that dispatches typed signals (log_received / unit_moved / ...).
+	# We just react to the high-level ones for the HUD.
 	# Subscribe to the typed signals GameState emits.
 	if not GameState.log_received.is_connected(_on_log_received):
 		GameState.log_received.connect(_on_log_received)
@@ -443,6 +460,41 @@ func _on_raw_ws_message(_msg: Dictionary) -> void:
 
 func _update_status(text: String) -> void:
 	status_label.text = text
+
+
+# ============================================================
+# GBA 火纹风主题注入(UI V2 第 1 轮)
+# ============================================================
+
+func _apply_gba_theme() -> void:
+	# 1) 全屏深绿背景(ColorRect 颜色已在 .tscn 设)
+	backdrop.color = MenuTheme.C_BG_DEEP
+	# 2) 边框由 ReferenceRect 画,这里只调整颜色变量(已硬编码在 .tscn)
+	# 3) Connecting 框(深绿底)
+	connecting_frame.color = MenuTheme.C_BG_PANEL
+	# 4) 主菜单 4 按钮统一灌主题
+	for btn in [menu_button, lobby_button, settings_button, exit_button, reconnect_button, end_turn_button]:
+		if btn != null and is_instance_valid(btn):
+			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
+	# 5) 标题/副标题/footer 文字色
+	MenuTheme.apply_label_theme(menu_title, MenuTheme.FS_HERO, MenuTheme.C_GOLD)
+	MenuTheme.apply_label_theme(menu_subtitle, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
+	MenuTheme.apply_label_theme(menu_footer, MenuTheme.FS_FOOT, MenuTheme.C_TEXT_DIM)
+	MenuTheme.apply_label_theme(connecting_title, 22, MenuTheme.C_GOLD)
+	MenuTheme.apply_label_theme(connecting_label, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
+
+
+# ============================================================
+# 主菜单新增按钮 handler
+# ============================================================
+
+func _on_lobby_pressed() -> void:
+	# M3 会实装:进入大厅/创建/加入。这里先给个提示,不破坏 V2 渐进节奏。
+	_update_status("联机大厅将在 M3 实装,目前先走自由对局喵~")
+
+
+func _on_settings_pressed() -> void:
+	_update_status("设置面板将在下一轮实现喵~")
 
 
 func _random_suffix() -> float:

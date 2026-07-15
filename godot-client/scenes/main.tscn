@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -7,90 +7,196 @@
 script = ExtResource("1_main")
 
 ; ============================================================
-; Status label (top, always visible)
+; 全局状态栏(顶部,常驻)
 ; ============================================================
 [node name="StatusLabel" type="Label" parent="."]
 offset_left = 8.0
 offset_top = 4.0
 offset_right = 1264.0
-offset_bottom = 24.0
-text = "BattleBlitz Godot Client"
+offset_bottom = 22.0
+text = "BattleBlitz Godot Client · GBA 风 V2"
+modulate = Color(0.7, 0.65, 0.5, 1)
 
 ; ============================================================
-; Menu view — main menu (default visible)
+; 背景层(全屏,深绿底)
+; ============================================================
+[node name="Backdrop" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.102, 0.2, 0.161, 1)
+mouse_filter = 2
+
+; ============================================================
+; Menu 视图 — GBA 火纹风主菜单
 ; ============================================================
 [node name="Menu" type="Control" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="Container" type="VBoxContainer" parent="Menu"]
+; --- 外框(烫金,粗 4px)---
+[node name="FrameOuter" type="ColorRect" parent="Menu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 36.0
+offset_right = -12.0
+offset_bottom = -12.0
+color = Color(1, 1, 1, 0)
+mouse_filter = 2
+
+[node name="FrameOuterBorder" type="ReferenceRect" parent="Menu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 36.0
+offset_right = -12.0
+offset_bottom = -12.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 4.0
+editor_only = false
+
+[node name="FrameInnerBorder" type="ReferenceRect" parent="Menu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 48.0
+offset_right = -24.0
+offset_bottom = -24.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 1.0
+editor_only = false
+
+; --- 中央容器(标题 + 4 按钮) ---
+[node name="CenterContainer" type="VBoxContainer" parent="Menu"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -240.0
-offset_top = -120.0
-offset_right = 240.0
-offset_bottom = 120.0
-theme_override_constants/separation = 16
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+theme_override_constants/separation = 24
 alignment = 1
 
-[node name="Title" type="Label" parent="Menu/Container"]
-text = "⚔ BattleBlitz"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 32
-
-[node name="Subtitle" type="Label" parent="Menu/Container"]
-text = "Godot 客户端 · M2 联机版本"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 16
-
-[node name="ButtonRow" type="HBoxContainer" parent="Menu/Container"]
+; --- 标题区 ---
+[node name="TitleBlock" type="VBoxContainer" parent="Menu/CenterContainer"]
 alignment = 1
-theme_override_constants/separation = 16
+theme_override_constants/separation = 4
 
-[node name="FreePlayButton" type="Button" parent="Menu/Container/ButtonRow"]
-text = "🎮 自由模式 (AI 对手)"
-custom_minimum_size = Vector2(220, 48)
+[node name="TitleLine1" type="Label" parent="Menu/CenterContainer/TitleBlock"]
+text = "⚔  BATTLEBLITZ  ⚔"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 56
 
-[node name="ExitButton" type="Button" parent="Menu/Container/ButtonRow"]
-text = "❌ 退出"
-custom_minimum_size = Vector2(120, 48)
+[node name="TitleLine2" type="Label" parent="Menu/CenterContainer/TitleBlock"]
+text = "「 战 棋 · 轮 回 」"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 20
+
+[node name="Spacer1" type="Control" parent="Menu/CenterContainer"]
+custom_minimum_size = Vector2(0, 12)
+
+; --- 按钮区(4 个按钮垂直排) ---
+[node name="ButtonCol" type="VBoxContainer" parent="Menu/CenterContainer"]
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="FreePlayButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "🎮  自由对局 (AI 对手)"
+custom_minimum_size = Vector2(320, 52)
+
+[node name="LobbyButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "🛡  联机大厅 (M3 待开)"
+custom_minimum_size = Vector2(320, 52)
+disabled = true
+
+[node name="SettingsButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "⚙  设置"
+custom_minimum_size = Vector2(320, 52)
+disabled = true
+
+[node name="ExitButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "❌  退出"
+custom_minimum_size = Vector2(320, 52)
+
+; --- 底部 footer ---
+[node name="Footer" type="HBoxContainer" parent="Menu"]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = -28.0
+offset_right = -32.0
+offset_bottom = -16.0
+alignment = 1
+
+[node name="FooterLabel" type="Label" parent="Menu/Footer"]
+text = "v0.2.0-M2.5  ·  GBA FE 风  ·  © 2026  BattleBlitz"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
 
 ; ============================================================
-; Connecting view — shown while create+join+add-ai+start are in flight
+; Connecting 视图 — 复古"等待连接"画面
 ; ============================================================
 [node name="Connecting" type="Control" parent="."]
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="ConnectingLabel" type="Label" parent="Connecting"]
+[node name="ConnectingFrame" type="ColorRect" parent="Connecting"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -80.0
+offset_right = 260.0
+offset_bottom = 80.0
+color = Color(0.059, 0.122, 0.094, 1)
+mouse_filter = 2
+
+[node name="ConnectingBorder" type="ReferenceRect" parent="Connecting"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -80.0
+offset_right = 260.0
+offset_bottom = 80.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 4.0
+editor_only = false
+
+[node name="ConnectingInner" type="VBoxContainer" parent="Connecting"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -240.0
-offset_top = -24.0
+offset_top = -64.0
 offset_right = 240.0
-offset_bottom = 24.0
+offset_bottom = 64.0
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="ConnectingTitle" type="Label" parent="Connecting/ConnectingInner"]
+text = "⚔  战 场 调 度 中  ⚔"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+
+[node name="ConnectingLabel" type="Label" parent="Connecting/ConnectingInner"]
 text = "正在连接..."
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 16
 
-[node name="ReconnectButton" type="Button" parent="Connecting"]
-anchor_left = 0.5
-anchor_top = 0.6
-anchor_right = 0.5
-anchor_bottom = 0.6
-offset_left = -80.0
-offset_top = 0.0
-offset_right = 80.0
-offset_bottom = 32.0
-text = "重连"
+[node name="ReconnectButton" type="Button" parent="Connecting/ConnectingInner"]
+text = "重 连"
+custom_minimum_size = Vector2(160, 40)
 
 ; ============================================================
-; Game view — board + HUD
+; Game 视图 — 棋盘 + HUD(M2.5 既有)
 ; ============================================================
 [node name="GameView" type="Control" parent="."]
 visible = false
@@ -99,13 +205,13 @@ anchor_bottom = 1.0
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
-; HUD container
+; HUD 容器
 [node name="HUD" type="Control" parent="GameView"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-; Top status bar (turn / phase / end-turn / gold / CO)
+; 顶部状态栏
 [node name="Top" type="HBoxContainer" parent="GameView/HUD"]
 anchor_right = 1.0
 offset_left = 8.0
@@ -163,7 +269,7 @@ text = "结束回合 →"
 custom_minimum_size = Vector2(120, 32)
 disabled = true
 
-; Bottom-left: action log + unit info
+; 底部:战报 + 单位信息
 [node name="Bottom" type="HBoxContainer" parent="GameView/HUD"]
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -186,7 +292,7 @@ size_flags_horizontal = 3
 bbcode_enabled = true
 text = "[i]点击单位查看详情[/i]"
 
-; Right side: players list
+; 右侧:玩家列表
 [node name="Right2" type="VBoxContainer" parent="GameView/HUD"]
 anchor_left = 1.0
 anchor_right = 1.0
@@ -205,7 +311,7 @@ size_flags_vertical = 3
 bbcode_enabled = true
 text = "等待 state.snapshot..."
 
-; Turn banner (centred, big text)
+; 回合横幅
 [node name="TurnBanner" type="Label" parent="GameView"]
 visible = false
 anchor_left = 0.5

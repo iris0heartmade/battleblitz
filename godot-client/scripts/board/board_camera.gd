@@ -16,6 +16,11 @@ func _ready() -> void:
 func apply_metrics(metrics) -> void:
 	_metrics = metrics
 	_refresh_from_metrics()
+	# Only switch the camera on once we have real map metrics —
+	# otherwise its anchor_mode=DRAG_CENTER drags the canvas origin
+	# to viewport_size/2, which clips the main menu UI into the
+	# bottom-right quadrant.
+	enabled = true
 
 
 func _on_viewport_size_changed() -> void:
