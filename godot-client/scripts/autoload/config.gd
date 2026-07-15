@@ -77,7 +77,7 @@ const FE8_TERRAINS: Array[String] = [
 ]
 const FE8_ATLAS_SIZE := Vector2i(512, 512)    # master tilemap dimensions
 const FE8_TILE_SIZE := Vector2i(16, 16)       # sub-tile dimensions in the master
-const FE8_ATLAS_PATH := "res://assets/tiles_fe8/overworld_fe8.png"
+const FE8_ATLAS_PATH := "res://FE8/OverworldRegular.png"
 
 # 4×4 autotile block origins in the FE8 master tilemap. Each block
 # holds 16 16×16 sub-tiles (one per bitmask state) following the
