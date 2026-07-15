@@ -99,7 +99,7 @@ limit_bottom = int(ceil(viewport_size.y))
 | 第 1 轮 | 主菜单 GBA 风视觉 | `main.tscn`, `menu_theme.gd`, `main.gd` | ✅ |
 | 第 2 轮 | HUD 4 角极小角标(回合/阶段/金/CO) + 战报按钮 + 信息/战报浮层骨架 | `main.tscn`, `main.gd`, `board_camera.gd` | ✅ |
 | 第 3 轮 | 左侧 30% 信息区(蓝底 + 选中单位详情) + BoardCamera zoom 适配 | `main.tscn`, `board_camera.gd`, `game_screenshot.gd` | ✅ |
-| 第 4 轮 | 行动气泡(5 按钮:移动/攻击/技能/待命/占领) | `main.tscn`, 新 `action_bubble.gd` | ⏳ |
+| 第 4 轮 | 行动气泡(5 按钮:移动/攻击/技能/待命/占领) + 浮在选中单位右侧 | `main.tscn`, `main.gd` | ✅ |
 | 第 5 轮 | 战报按钮唤起浮动面板 + 日志内容 | `main.tscn`, `action_log` 改造 | ⏳ |
 | 第 6 轮 | 设置面板 + 暂停菜单 + 玩家色板/字号切换 | 新 `settings_menu.gd` | ⏳ |
 | 第 7 轮 | 对话框 / 教程气泡 / 战斗结算面板 | 新 `dialog.gd` | ⏳ |
