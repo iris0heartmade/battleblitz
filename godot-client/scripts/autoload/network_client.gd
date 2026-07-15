@@ -53,6 +53,12 @@ var _is_ws_connected: bool = false
 var _ws_poll_timer: Timer = null
 var _ws_heartbeat_timer: Timer = null
 
+# Request queue: HTTPRequest is a single connection, so we serialise.
+# Each entry is [method, path, body, callback]. New requests get
+# pushed; when one completes we pop the next one and dispatch it.
+var _req_busy: bool = false
+var _req_queue: Array = []
+
 # High-level connection state (M2.1)
 var _target_game_id: int = 0
 var _target_player_id: int = 0
@@ -76,6 +82,21 @@ func _ready() -> void:
 ## `body` is a Dictionary that will be serialised to JSON (omit for GET).
 ## `callback` is an optional Callable `func(body: Dictionary, code: int)`.
 func request(method: String, path: String, body: Dictionary = {}, callback: Callable = Callable()) -> void:
+	# Serialise via queue (HTTPRequest is single-connection).
+	_req_queue.append([method, path, body, callback])
+	_drain_queue()
+
+
+func _drain_queue() -> void:
+	if _req_busy:
+		return
+	if _req_queue.is_empty():
+		return
+	var entry: Array = _req_queue.pop_front()
+	var method: String = entry[0]
+	var path: String = entry[1]
+	var body: Dictionary = entry[2]
+	var callback: Callable = entry[3]
 	var url := _resolve_url(path)
 	var headers := PackedStringArray(["Content-Type: application/json", "Accept: application/json"])
 	var data: Variant = JSON.stringify(body) if not body.is_empty() else ""
@@ -86,7 +107,10 @@ func request(method: String, path: String, body: Dictionary = {}, callback: Call
 		api_error.emit(method, path, msg, 0)
 		if callback.is_valid():
 			callback.call({"error": msg}, 0)
+		# Try the next one even on error.
+		_drain_queue()
 		return
+	_req_busy = true
 	_http.set_meta("pending_method", method)
 	_http.set_meta("pending_path", path)
 	_http.set_meta("pending_callback", callback)
@@ -108,11 +132,13 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 	var method: String = _http.get_meta("pending_method", "")
 	var path: String = _http.get_meta("pending_path", "")
 	var callback: Callable = _http.get_meta("pending_callback", Callable())
+	_req_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS:
 		var msg := "HTTP result %d" % result
 		api_error.emit(method, path, msg, response_code)
 		if callback.is_valid():
 			callback.call({"error": msg}, response_code)
+		_drain_queue()
 		return
 	var text := body.get_string_from_utf8()
 	var parsed: Variant = JSON.parse_string(text) if text.length() > 0 else {}
@@ -126,6 +152,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		api_error.emit(method, path, "HTTP %d" % response_code, response_code)
 		if callback.is_valid():
 			callback.call(parsed, response_code)
+	# Free the slot and dispatch the next queued request.
+	_drain_queue()
 
 
 # ============================================================
