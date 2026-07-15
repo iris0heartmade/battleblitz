@@ -103,6 +103,22 @@ func _ready() -> void:
 	if bubble != null:
 		bubble.visible = true
 		bubble.position = Vector2(550, 280)
+	# V2 第 5 轮:WarReportPanel 假可见(屏幕中央,带战报日志)
+	var war_panel: Panel = main.find_child("WarReportPanel", true, false)
+	if war_panel != null:
+		war_panel.visible = true
+		var log: RichTextLabel = war_panel.find_child("ActionLog", true, false)
+		if log != null:
+			log.bbcode_enabled = true
+			log.text = "[color=#f0c75e]═══ 第 3 回合 ═══[/color]\n\n" \
+				+ "[color=#e85a6a]⚔ #12 → #8: 14 dmg (暴击!)[/color]\n" \
+				+ "[color=#f4e8c1]🚶 #5 从 (3,4) 移动到 (5,6), 消耗 3 MP[/color]\n" \
+				+ "[color=#c63a3a]💀 #8 被击杀[/color]\n" \
+				+ "[color=#f4e8c1]👑 #3 占领 城堡 → 红方 +50g[/color]\n" \
+				+ "[color=#a89878]🔮 玩家 #7 释放 治疗术, #3 HP +12[/color]\n" \
+				+ "[color=#f0c75e]⚔ #11 → #9: 9 dmg[/color]\n" \
+				+ "[color=#f4e8c1]💤 #1 进入待命状态[/color]\n" \
+				+ "[color=#a89878]⚡ 红方 CO 能量 +8 → 43/100[/color]\n"
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()
