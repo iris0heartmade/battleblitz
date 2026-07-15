@@ -22,4 +22,5 @@ script = ExtResource("2_highlights")
 
 [node name="BoardCamera" type="Camera2D" parent="."]
 script = ExtResource("3_board_camera")
+enabled = false
 position_smoothing_enabled = true
