@@ -1,0 +1,338 @@
+{
+  "id": "433_a4fef0",
+  "name": "433",
+  "size": {
+    "width": 21,
+    "height": 15
+  },
+  "biome": "snow",
+  "layout": [
+    "PPPPPPPRRRPPPPPPPPPPP",
+    "PPPPPPPRRRPPPPPPCPPPP",
+    "PPPCPPPRRRPPPPPPPPPPP",
+    "PPPPPPPRRRFFFPPPPPPPP",
+    "PPPPPPPPRRFFFPPPPPPPP",
+    "PPPPPPPPRFFFFPbPPPPPP",
+    "PPPPPPPPRRFFFPPPPPPPP",
+    "PPPPPPPPRRFFFPPPPPPPP",
+    "PPPPPbPPPRRFFPPPPPPPP",
+    "PPPPPPPPPPRRPPbPPPPPP",
+    "PbPPCPPPPPRRRPPPPPPPP",
+    "PPPPPPPPPPPRRPPPPPPPP",
+    "PPPPPPPPPPPPRRPPPPPCP",
+    "PPPPPPPPPPPPRRPPPPPPP",
+    "PPPPPPPPPPPPRRPPPPPPP"
+  ],
+  "initial_units": [
+    {
+      "x": 16,
+      "y": 6,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 16,
+      "y": 7,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 8,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 8,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 7,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 7,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 6,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 6,
+      "type": "swordsman",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 7,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "type": "archer",
+      "color": "red",
+      "level": 1
+    },
+    {
+      "x": 2,
+      "y": 7,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 9,
+      "y": 12,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 13,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 9,
+      "y": 13,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 8,
+      "y": 13,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 8,
+      "y": 12,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 12,
+      "type": "archer",
+      "color": "blue",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 13,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 14,
+      "y": 12,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 15,
+      "y": 11,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 15,
+      "y": 12,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 16,
+      "y": 13,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 16,
+      "y": 12,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 16,
+      "y": 11,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 12,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 13,
+      "type": "archer",
+      "color": "green",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 12,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 1,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 2,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 1,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 2,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 11,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 16,
+      "y": 10,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 17,
+      "y": 10,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 19,
+      "y": 10,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 11,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    },
+    {
+      "x": 18,
+      "y": 10,
+      "type": "archer",
+      "color": "yellow",
+      "level": 1
+    }
+  ],
+  "created_at": 1783961397.8940885,
+  "updated_at": 1783961406.9809387
+}

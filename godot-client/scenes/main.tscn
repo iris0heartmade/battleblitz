@@ -6,13 +6,216 @@
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 
-[node name="Board" parent="." instance=ExtResource("2_board")]
-
-[node name="UI" type="CanvasLayer" parent="."]
-
-[node name="StatusLabel" type="Label" parent="UI"]
-offset_left = 16.0
-offset_top = 16.0
+; ============================================================
+; Status label (top, always visible)
+; ============================================================
+[node name="StatusLabel" type="Label" parent="."]
+offset_left = 8.0
+offset_top = 4.0
 offset_right = 1264.0
-offset_bottom = 48.0
-text = "Loading map…"
+offset_bottom = 24.0
+text = "BattleBlitz Godot Client"
+
+; ============================================================
+; Menu view — main menu (default visible)
+; ============================================================
+[node name="Menu" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Container" type="VBoxContainer" parent="Menu"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = -120.0
+offset_right = 240.0
+offset_bottom = 120.0
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="Title" type="Label" parent="Menu/Container"]
+text = "⚔ BattleBlitz"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 32
+
+[node name="Subtitle" type="Label" parent="Menu/Container"]
+text = "Godot 客户端 · M2 联机版本"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+
+[node name="ButtonRow" type="HBoxContainer" parent="Menu/Container"]
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="FreePlayButton" type="Button" parent="Menu/Container/ButtonRow"]
+text = "🎮 自由模式 (AI 对手)"
+custom_minimum_size = Vector2(220, 48)
+
+[node name="ExitButton" type="Button" parent="Menu/Container/ButtonRow"]
+text = "❌ 退出"
+custom_minimum_size = Vector2(120, 48)
+
+; ============================================================
+; Connecting view — shown while create+join+add-ai+start are in flight
+; ============================================================
+[node name="Connecting" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ConnectingLabel" type="Label" parent="Connecting"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = -24.0
+offset_right = 240.0
+offset_bottom = 24.0
+text = "正在连接..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+
+[node name="ReconnectButton" type="Button" parent="Connecting"]
+anchor_left = 0.5
+anchor_top = 0.6
+anchor_right = 0.5
+anchor_bottom = 0.6
+offset_left = -80.0
+offset_top = 0.0
+offset_right = 80.0
+offset_bottom = 32.0
+text = "重连"
+
+; ============================================================
+; Game view — board + HUD
+; ============================================================
+[node name="GameView" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Board" parent="GameView" instance=ExtResource("2_board")]
+
+; HUD container
+[node name="HUD" type="Control" parent="GameView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+; Top status bar (turn / phase / end-turn / gold / CO)
+[node name="Top" type="HBoxContainer" parent="GameView/HUD"]
+anchor_right = 1.0
+offset_left = 8.0
+offset_top = 28.0
+offset_right = -8.0
+offset_bottom = 64.0
+theme_override_constants/separation = 12
+alignment = 2
+
+[node name="Left" type="HBoxContainer" parent="GameView/HUD/Top"]
+theme_override_constants/separation = 12
+
+[node name="GoldLabel" type="Label" parent="GameView/HUD/Top/Left"]
+text = "💰 —"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="COBar" type="ProgressBar" parent="GameView/HUD/Top/Left"]
+custom_minimum_size = Vector2(160, 18)
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="Right" type="HBoxContainer" parent="GameView/HUD/Top"]
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="TurnBadge" type="Label" parent="GameView/HUD/Top/Right"]
+text = "回合 1"
+custom_minimum_size = Vector2(80, 28)
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="PhaseBadge" type="Label" parent="GameView/HUD/Top/Right"]
+text = "阶段:—"
+custom_minimum_size = Vector2(140, 28)
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="CurrentPlayerBadge" type="Label" parent="GameView/HUD/Top/Right"]
+text = "→ —"
+custom_minimum_size = Vector2(120, 28)
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="AIThinking" type="Label" parent="GameView/HUD/Top/Right"]
+text = "🤖 AI 思考中..."
+visible = false
+custom_minimum_size = Vector2(120, 28)
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="EndTurnButton" type="Button" parent="GameView/HUD/Top/Right"]
+text = "结束回合 →"
+custom_minimum_size = Vector2(120, 32)
+disabled = true
+
+; Bottom-left: action log + unit info
+[node name="Bottom" type="HBoxContainer" parent="GameView/HUD"]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -160.0
+offset_right = -200.0
+offset_bottom = -8.0
+theme_override_constants/separation = 12
+
+[node name="ActionLog" type="RichTextLabel" parent="GameView/HUD/Bottom"]
+custom_minimum_size = Vector2(400, 144)
+size_flags_horizontal = 3
+bbcode_enabled = true
+text = "[i]战报 / 日志[/i]"
+scroll_following = true
+
+[node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/Bottom"]
+custom_minimum_size = Vector2(200, 144)
+size_flags_horizontal = 3
+bbcode_enabled = true
+text = "[i]点击单位查看详情[/i]"
+
+; Right side: players list
+[node name="Right2" type="VBoxContainer" parent="GameView/HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -192.0
+offset_top = 80.0
+offset_right = -8.0
+offset_bottom = -8.0
+theme_override_constants/separation = 8
+
+[node name="PlayersListLabel" type="Label" parent="GameView/HUD/Right2"]
+text = "👥 参战玩家"
+
+[node name="PlayersList" type="RichTextLabel" parent="GameView/HUD/Right2"]
+size_flags_vertical = 3
+bbcode_enabled = true
+text = "等待 state.snapshot..."
+
+; Turn banner (centred, big text)
+[node name="TurnBanner" type="Label" parent="GameView"]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.4
+anchor_right = 0.5
+anchor_bottom = 0.4
+offset_left = -240.0
+offset_top = -24.0
+offset_right = 240.0
+offset_bottom = 24.0
+text = "回合切换"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 28

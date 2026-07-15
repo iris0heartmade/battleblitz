@@ -54,8 +54,8 @@ func _ready() -> void:
 	# Mirror to res:// so it shows up in the editor.
 	img.save_png("res://screenshot.png")
 	# Debug: count how many cells were actually set on the TileMapLayers.
-	var terrain_layer: TileMapLayer = board.terrain_layer
-	var castle_layer: TileMapLayer = board.castle_layer
+	var terrain_layer: TileMapLayer = board.ground_layer
+	var castle_layer: TileMapLayer = board.structure_layer
 	var set_count := 0
 	var seen_coords: Dictionary = {}
 	for y in 30:
