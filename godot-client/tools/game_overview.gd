@@ -99,6 +99,13 @@ func _ready() -> void:
 		# Right side of board, mid-height — doesn't overlap InfoPanel
 		# or WarReportPanel area.
 		bubble.position = Vector2(560, 280)
+	# V2 第 6 轮:显示 PausePanel(截图游戏暂停状态)
+	var pause_overlay_node: ColorRect = main.find_child("PauseOverlay", true, false)
+	if pause_overlay_node != null:
+		pause_overlay_node.visible = true
+	var pause_panel_node: Panel = main.find_child("PausePanel", true, false)
+	if pause_panel_node != null:
+		pause_panel_node.visible = true
 	# Make end turn enabled for visual completeness.
 	var end_btn: Button = main.find_child("EndTurnButton", true, false)
 	if end_btn != null:
