@@ -514,3 +514,188 @@ offset_bottom = 24.0
 text = "回合切换"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 28
+
+; ============================================================
+; V2 第 6 轮:设置面板 + 暂停面板
+; ============================================================
+
+; --- 设置面板(中央浮层) ---
+[node name="SettingsPanel" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -230.0
+offset_right = 260.0
+offset_bottom = 230.0
+mouse_filter = 0
+
+[node name="Header" type="Label" parent="GameView/HUD/SettingsPanel"]
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -44.0
+offset_bottom = 40.0
+text = "⚙ 设置"
+theme_override_font_sizes/font_size = 20
+
+[node name="CloseBtn" type="Button" parent="GameView/HUD/SettingsPanel"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -40.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 38.0
+text = "✕"
+custom_minimum_size = Vector2(28, 26)
+
+[node name="SettingsList" type="VBoxContainer" parent="GameView/HUD/SettingsPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 56.0
+offset_right = -16.0
+offset_bottom = -64.0
+theme_override_constants/separation = 16
+
+[node name="NameRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+theme_override_constants/separation = 12
+
+[node name="NameLabel" type="Label" parent="GameView/HUD/SettingsPanel/SettingsList/NameRow"]
+text = "玩家名:"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="NameInput" type="LineEdit" parent="GameView/HUD/SettingsPanel/SettingsList/NameRow"]
+text = "学妹喵"
+custom_minimum_size = Vector2(280, 32)
+placeholder_text = "请输入玩家名"
+
+[node name="FontRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+theme_override_constants/separation = 12
+
+[node name="FontLabel" type="Label" parent="GameView/HUD/SettingsPanel/SettingsList/FontRow"]
+text = "字号:"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="FontSmallBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/FontRow"]
+text = "小 (12)"
+custom_minimum_size = Vector2(80, 32)
+
+[node name="FontMedBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/FontRow"]
+text = "中 (14)"
+custom_minimum_size = Vector2(80, 32)
+
+[node name="FontBigBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/FontRow"]
+text = "大 (16)"
+custom_minimum_size = Vector2(80, 32)
+
+[node name="ColorRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+theme_override_constants/separation = 12
+
+[node name="ColorLabel" type="Label" parent="GameView/HUD/SettingsPanel/SettingsList/ColorRow"]
+text = "阵营颜色:"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="RedBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ColorRow"]
+text = "● 🔴"
+custom_minimum_size = Vector2(72, 32)
+
+[node name="BlueBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ColorRow"]
+text = "● 🔵"
+custom_minimum_size = Vector2(72, 32)
+
+[node name="GreenBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ColorRow"]
+text = "● 🟢"
+custom_minimum_size = Vector2(72, 32)
+
+[node name="YellowBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ColorRow"]
+text = "● 🟡"
+custom_minimum_size = Vector2(72, 32)
+
+[node name="ThemeRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+theme_override_constants/separation = 12
+
+[node name="ThemeLabel" type="Label" parent="GameView/HUD/SettingsPanel/SettingsList/ThemeRow"]
+text = "主题:"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="ThemeDropdown" type="OptionButton" parent="GameView/HUD/SettingsPanel/SettingsList/ThemeRow"]
+custom_minimum_size = Vector2(280, 32)
+item_count = 1
+selected = 0
+popup/item_0/text = "GBA 火纹风 (默认)"
+popup/item_0/id = 0
+
+[node name="ButtonRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="ApplyBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ButtonRow"]
+text = "✅  应用"
+custom_minimum_size = Vector2(120, 36)
+
+[node name="CancelBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ButtonRow"]
+text = "❌  取消"
+custom_minimum_size = Vector2(120, 36)
+
+; --- 暂停面板(全屏半透蒙层 + 中央浮层) ---
+[node name="PauseOverlay" type="ColorRect" parent="GameView/HUD"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.7)
+mouse_filter = 0
+
+[node name="PausePanel" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -160.0
+offset_right = 180.0
+offset_bottom = 160.0
+mouse_filter = 0
+
+[node name="Header" type="Label" parent="GameView/HUD/PausePanel"]
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 48.0
+text = "⚔ 暂停"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 24
+
+[node name="PauseList" type="VBoxContainer" parent="GameView/HUD/PausePanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 64.0
+offset_right = -24.0
+offset_bottom = -24.0
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="ResumeBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
+text = "▶  继续游戏"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="SettingsBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
+text = "⚙  设置"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="MainMenuBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
+text = "↩  返回主菜单"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="QuitBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
+text = "❌  退出游戏"
+custom_minimum_size = Vector2(0, 44)

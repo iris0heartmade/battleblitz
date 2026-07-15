@@ -49,6 +49,19 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
 
+# V2 第 6 轮:设置 + 暂停面板
+@onready var settings_panel: Panel = $GameView/HUD/SettingsPanel
+@onready var settings_close_btn: Button = $GameView/HUD/SettingsPanel/CloseBtn
+@onready var settings_name_input: LineEdit = $GameView/HUD/SettingsPanel/SettingsList/NameRow/NameInput
+@onready var settings_apply_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ButtonRow/ApplyBtn
+@onready var settings_cancel_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ButtonRow/CancelBtn
+@onready var pause_overlay: ColorRect = $GameView/HUD/PauseOverlay
+@onready var pause_panel: Panel = $GameView/HUD/PausePanel
+@onready var pause_resume_btn: Button = $GameView/HUD/PausePanel/PauseList/ResumeBtn
+@onready var pause_settings_btn: Button = $GameView/HUD/PausePanel/PauseList/SettingsBtn
+@onready var pause_main_menu_btn: Button = $GameView/HUD/PausePanel/PauseList/MainMenuBtn
+@onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
+
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
 @onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
@@ -115,6 +128,14 @@ func _ready() -> void:
 	skill_btn.pressed.connect(_on_skill_pressed)
 	wait_btn.pressed.connect(_on_wait_pressed)
 	claim_btn.pressed.connect(_on_claim_pressed)
+	# V2 第 6 轮:设置 + 暂停面板
+	settings_close_btn.pressed.connect(_on_settings_close_pressed)
+	settings_apply_btn.pressed.connect(_on_settings_apply_pressed)
+	settings_cancel_btn.pressed.connect(_on_settings_cancel_pressed)
+	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
+	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
+	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
+	pause_quit_btn.pressed.connect(_on_pause_quit_pressed)
 
 	# Wire NetworkClient → GameState. The autoload `GameState._ready`
 	# does this too, but routing through main makes the dependency
@@ -175,6 +196,14 @@ func _ready() -> void:
 			await get_tree().create_timer(quit_sec).timeout
 			_update_status("DEV auto-quit 触发,退出")
 			get_tree().quit(0)
+	# V2 第 6 轮:游戏视图下启用菜单"设置"按钮(直接打开 SettingsPanel)
+	if settings_button != null and is_instance_valid(settings_button):
+		settings_button.disabled = false
+		# settings_button.pressed 已经连接到 _on_settings_pressed (M3 stub)
+		# 替换:让它在游戏视图下打开 SettingsPanel,菜单视图下保留原提示
+		if settings_button.pressed.is_connected(_on_settings_pressed):
+			settings_button.pressed.disconnect(_on_settings_pressed)
+		settings_button.pressed.connect(_on_settings_open_pressed)
 
 
 # ============================================================
@@ -543,6 +572,101 @@ func _update_status(text: String) -> void:
 
 
 # ============================================================
+# V2 第 6 轮:设置 + 暂停面板 — 输入 + handlers
+# ============================================================
+
+func _unhandled_input(event: InputEvent) -> void:
+	# ESC 键暂停 / 关闭上层面板(只在 game view)
+	if event.is_action_pressed("pause"):
+		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
+		if settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible:
+			_hide_settings_panel()
+			get_viewport().set_input_as_handled()
+			return
+		if game_view != null and is_instance_valid(game_view) and game_view.visible:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
+
+
+func _toggle_pause() -> void:
+	var open: bool = not (pause_panel != null and is_instance_valid(pause_panel) and pause_panel.visible)
+	if open:
+		pause_overlay.visible = true
+		pause_panel.visible = true
+		# 暂停时关闭行动气泡 + 战报面板
+		if action_bubble != null and is_instance_valid(action_bubble):
+			action_bubble.visible = false
+		if war_report_panel != null and is_instance_valid(war_report_panel):
+			war_report_panel.visible = false
+		get_tree().paused = true
+	else:
+		_hide_pause_panel()
+
+
+func _hide_pause_panel() -> void:
+	pause_overlay.visible = false
+	pause_panel.visible = false
+	get_tree().paused = false
+
+
+func _show_settings_panel() -> void:
+	if settings_panel == null or not is_instance_valid(settings_panel):
+		return
+	# 同步当前玩家名到 input
+	if settings_name_input != null and is_instance_valid(settings_name_input):
+		settings_name_input.text = _user_name
+	settings_panel.visible = true
+
+
+func _hide_settings_panel() -> void:
+	if settings_panel != null and is_instance_valid(settings_panel):
+		settings_panel.visible = false
+
+
+func _on_settings_open_pressed() -> void:
+	# 主菜单的"设置"按钮 → 打开 SettingsPanel (主菜单状态下也能调字号/玩家名)
+	_show_settings_panel()
+
+
+func _on_settings_close_pressed() -> void:
+	_hide_settings_panel()
+
+
+func _on_settings_apply_pressed() -> void:
+	if settings_name_input != null and is_instance_valid(settings_name_input):
+		var new_name: String = settings_name_input.text.strip_edges()
+		if new_name != "":
+			_user_name = new_name
+			UserSettings.set_value("settings.v1.player_name", _user_name)
+	_update_status("设置已应用 (玩家名: %s)" % _user_name)
+	_hide_settings_panel()
+
+
+func _on_settings_cancel_pressed() -> void:
+	_hide_settings_panel()
+
+
+func _on_pause_resume_pressed() -> void:
+	_hide_pause_panel()
+
+
+func _on_pause_settings_pressed() -> void:
+	_hide_pause_panel()
+	_show_settings_panel()
+
+
+func _on_pause_main_menu_pressed() -> void:
+	# M3+ TODO: 清理 game state + reset 到主菜单
+	_update_status("返回主菜单 (M3 实装)")
+	_hide_pause_panel()
+	_show_view("menu")
+
+
+func _on_pause_quit_pressed() -> void:
+	get_tree().quit()
+
+
+# ============================================================
 # GBA 火纹风主题注入(UI V2 第 1 轮)
 # ============================================================
 
@@ -703,6 +827,55 @@ func _apply_hud_theme() -> void:
 	if action_log != null and is_instance_valid(action_log):
 		action_log.add_theme_font_size_override("normal_font_size", 14)
 		action_log.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# V2 第 6 轮:设置 + 暂停面板主题
+	var sb_popup2 := StyleBoxFlat.new()
+	sb_popup2.bg_color = MenuTheme.C_BG_PANEL
+	sb_popup2.border_color = MenuTheme.C_GOLD
+	sb_popup2.set_border_width_all(2)
+	sb_popup2.set_corner_radius_all(3)
+	sb_popup2.content_margin_left = MenuTheme.PAD
+	sb_popup2.content_margin_right = MenuTheme.PAD
+	sb_popup2.content_margin_top = MenuTheme.PAD
+	sb_popup2.content_margin_bottom = MenuTheme.PAD
+	if settings_panel != null and is_instance_valid(settings_panel):
+		settings_panel.add_theme_stylebox_override("panel", sb_popup2)
+	if pause_panel != null and is_instance_valid(pause_panel):
+		pause_panel.add_theme_stylebox_override("panel", sb_popup2)
+	# Settings Header
+	var settings_header: Label = settings_panel.find_child("Header", true, false)
+	if settings_header != null:
+		settings_header.add_theme_font_size_override("font_size", 20)
+		settings_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	# Settings row labels
+	for lbl in settings_panel.find_children("NameLabel", "", false, false):
+		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	for lbl in settings_panel.find_children("FontLabel", "", false, false):
+		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	for lbl in settings_panel.find_children("ColorLabel", "", false, false):
+		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	for lbl in settings_panel.find_children("ThemeLabel", "", false, false):
+		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	# Settings buttons
+	for btn_name in ["CloseBtn", "FontSmallBtn", "FontMedBtn", "FontBigBtn",
+			"RedBtn", "BlueBtn", "GreenBtn", "YellowBtn",
+			"ApplyBtn", "CancelBtn"]:
+		var btn: Button = settings_panel.find_child(btn_name, true, false)
+		if btn != null and is_instance_valid(btn):
+			MenuTheme.apply_button_theme(btn, 16)
+	# NameInput style
+	if settings_name_input != null and is_instance_valid(settings_name_input):
+		settings_name_input.add_theme_font_size_override("font_size", 16)
+		settings_name_input.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	# Pause Header
+	var pause_header: Label = pause_panel.find_child("Header", true, false)
+	if pause_header != null:
+		pause_header.add_theme_font_size_override("font_size", 24)
+		pause_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	# Pause buttons
+	for btn_name in ["ResumeBtn", "SettingsBtn", "MainMenuBtn", "QuitBtn"]:
+		var btn: Button = pause_panel.find_child(btn_name, true, false)
+		if btn != null and is_instance_valid(btn):
+			MenuTheme.apply_button_theme(btn, 18)
 
 
 # ============================================================
