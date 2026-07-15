@@ -37,6 +37,7 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var co_meter: ProgressBar = $GameView/HUD/BottomLeft/COBar
 @onready var war_report_button: Button = $GameView/HUD/BottomRight/WarReportButton
 @onready var war_report_panel: Panel = $GameView/HUD/WarReportPanel
+@onready var war_report_close_btn: Button = $GameView/HUD/WarReportPanel/CloseBtn
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
@@ -103,6 +104,7 @@ func _ready() -> void:
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
+	war_report_close_btn.pressed.connect(_on_war_report_close_pressed)
 
 	# V2 第 4 轮:行动气泡 5 按钮
 	for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
@@ -680,6 +682,27 @@ func _apply_hud_theme() -> void:
 		sb_bubble.content_margin_top = 6
 		sb_bubble.content_margin_bottom = 6
 		action_bubble.add_theme_stylebox_override("panel", sb_bubble)
+	# V2 第 5 轮:战报浮层主题(深绿底 + 烫金粗边 + Header/Close 烫金)
+	var sb_war := StyleBoxFlat.new()
+	sb_war.bg_color = MenuTheme.C_BG_PANEL
+	sb_war.border_color = MenuTheme.C_GOLD
+	sb_war.set_border_width_all(2)
+	sb_war.set_corner_radius_all(3)
+	sb_war.content_margin_left = MenuTheme.PAD
+	sb_war.content_margin_right = MenuTheme.PAD
+	sb_war.content_margin_top = MenuTheme.PAD
+	sb_war.content_margin_bottom = MenuTheme.PAD
+	if war_report_panel != null and is_instance_valid(war_report_panel):
+		war_report_panel.add_theme_stylebox_override("panel", sb_war)
+	var war_header: Label = war_report_panel.find_child("Header", true, false)
+	if war_header != null:
+		war_header.add_theme_font_size_override("font_size", 16)
+		war_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if war_report_close_btn != null and is_instance_valid(war_report_close_btn):
+		MenuTheme.apply_button_theme(war_report_close_btn, 16)
+	if action_log != null and is_instance_valid(action_log):
+		action_log.add_theme_font_size_override("normal_font_size", 14)
+		action_log.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
 # ============================================================
@@ -702,6 +725,11 @@ func _on_war_report_pressed() -> void:
 		war_report_button.text = "📜 关闭战报"
 	else:
 		war_report_button.text = "📜 战报"
+
+
+func _on_war_report_close_pressed() -> void:
+	war_report_panel.visible = false
+	war_report_button.text = "📜 战报"
 
 
 # ============================================================
