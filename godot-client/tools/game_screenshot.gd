@@ -67,6 +67,28 @@ func _ready() -> void:
 	var ai_panel: Node = main.find_child("AIThinking", true, false)
 	if ai_panel != null:
 		ai_panel.visible = true
+	# V2 第 3 轮:InfoPanel 假内容(选中单位 + 玩家列表)
+	var unit_info_node: RichTextLabel = main.find_child("UnitInfo", true, false)
+	if unit_info_node != null:
+		var u: RichTextLabel = unit_info_node
+		u.bbcode_enabled = true
+		# Avoid nested [color] — Godot BBCode doesn't support it.
+		# Use single-span tags per word group.
+		u.text = "[color=#c9a14a][b]Lv.3 剑士 (Swordsman)[/b][/color]\n" \
+			+ "[color=#5fa8e8]阵营:蓝方  ·  AI 友军[/color]\n\n" \
+			+ "[color=#f4e8c1]HP[/color]  [color=#c63a3a]25 / 30[/color]\n" \
+			+ "[color=#f4e8c1]MP[/color]  [color=#c9a14a]████████[/color][color=#5a4426]░░[/color]  [color=#f4e8c1]6/8[/color]\n" \
+			+ "[color=#f4e8c1]ATK[/color] [color=#f0c75e]12[/color]    [color=#f4e8c1]DEF[/color] [color=#f0c75e]8[/color]\n" \
+			+ "[color=#f4e8c1]MOV[/color] [color=#f0c75e]5[/color]     [color=#f4e8c1]RNG[/color] [color=#f0c75e]1[/color]\n\n" \
+			+ "[color=#a89878]技能: 冲刺(攻击后移动 2 格)\n" \
+			+ "状态: 正常\n" \
+			+ "位置: (3, 5)[/color]"
+	var players_node: RichTextLabel = main.find_child("PlayersList", true, false)
+	if players_node != null:
+		var p: RichTextLabel = players_node
+		p.text = "[color=#e85a6a]🔴 学长[/color] — 3 单位 · 💰 500 · 🟢 行动中\n" \
+			+ "[color=#5fa8e8]🔵 AI 蓝方[/color] — 3 单位 · 💰 450 · ⏳ 已结束回合\n" \
+			+ "[color=#7ec97e]🟢 AI 绿方[/color] — 2 单位 · 💰 380 · 💀 已淘汰"
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()

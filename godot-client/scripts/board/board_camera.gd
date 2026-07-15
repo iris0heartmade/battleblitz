@@ -3,6 +3,10 @@ class_name BoardCamera
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const _FIT_MARGIN := 16.0
+# UI V2 第 3 轮:棋盘 fit 中央剩余空间,留出左侧 30% 给 info panel
+# + 右侧 22% 给 HUD 留白。
+const _UI_LEFT_FRACTION := 0.30
+const _UI_RIGHT_FRACTION := 0.10
 
 var _metrics = null
 
@@ -35,8 +39,6 @@ func _refresh_from_metrics() -> void:
 	if board_rect.size.x <= 0.0 or board_rect.size.y <= 0.0:
 		return
 
-	position = _board_center_for(_metrics, board_rect)
-
 	var viewport := get_viewport()
 	if viewport == null:
 		return
@@ -44,8 +46,17 @@ func _refresh_from_metrics() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	var zoom_x: float = min(1.0, max(0.01, (viewport_size.x - _FIT_MARGIN) / board_rect.size.x))
-	var zoom_y: float = min(1.0, max(0.01, (viewport_size.y - _FIT_MARGIN) / board_rect.size.y))
+	# V2 第 3 轮:棋盘 fit 中央剩余空间(减去左 30% info panel + 右 22% HUD 留白)
+	var usable_w: float = viewport_size.x * (1.0 - _UI_LEFT_FRACTION - _UI_RIGHT_FRACTION)
+	var usable_h: float = viewport_size.y
+	# Board 实际可视区中心 = viewport 中心 + 偏移(因为棋盘偏向 viewport 右侧)
+	var ui_left_px: float = viewport_size.x * _UI_LEFT_FRACTION
+	var center_offset_x: float = (ui_left_px + usable_w * 0.5) - viewport_size.x * 0.5
+	var board_center := _board_center_for(_metrics, board_rect)
+	position = Vector2(board_center.x + center_offset_x, board_center.y)
+
+	var zoom_x: float = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
+	var zoom_y: float = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)
 	var fit_zoom: float = min(zoom_x, zoom_y)
 	zoom = Vector2(fit_zoom, fit_zoom)
 

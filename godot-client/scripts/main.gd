@@ -38,9 +38,11 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var war_report_button: Button = $GameView/HUD/BottomRight/WarReportButton
 @onready var war_report_panel: Panel = $GameView/HUD/WarReportPanel
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
-@onready var unit_info_panel: Panel = $GameView/HUD/UnitInfoPanel
-@onready var unit_info: RichTextLabel = $GameView/HUD/UnitInfoPanel/UnitInfo
-@onready var players_list: RichTextLabel = $GameView/HUD/PlayersList
+# V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
+@onready var info_panel: Panel = $GameView/HUD/InfoPanel
+@onready var info_panel_title: Label = $GameView/HUD/InfoPanel/InfoPanelTitle
+@onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
+@onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
 # Main menu widgets (GBA 风 V2)
 @onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
@@ -510,7 +512,7 @@ func _apply_gba_theme() -> void:
 	sb_popup.content_margin_top = MenuTheme.PAD
 	sb_popup.content_margin_bottom = MenuTheme.PAD
 	war_report_panel.add_theme_stylebox_override("panel", sb_popup)
-	unit_info_panel.add_theme_stylebox_override("panel", sb_popup)
+	info_panel.add_theme_stylebox_override("panel", sb_popup)
 
 
 func _apply_hud_theme() -> void:
@@ -569,6 +571,16 @@ func _apply_hud_theme() -> void:
 		sb_fg.set_border_width_all(1)
 		co_meter.add_theme_stylebox_override("background", sb_bg)
 		co_meter.add_theme_stylebox_override("fill", sb_fg)
+	# V2 第 3 轮:InfoPanel 主题(单位详情 + 玩家列表)
+	if info_panel_title != null and is_instance_valid(info_panel_title):
+		info_panel_title.add_theme_font_size_override("font_size", 16)
+		info_panel_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if players_list != null and is_instance_valid(players_list):
+		players_list.add_theme_font_size_override("normal_font_size", 13)
+		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	if unit_info != null and is_instance_valid(unit_info):
+		unit_info.add_theme_font_size_override("normal_font_size", 13)
+		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
 # ============================================================
