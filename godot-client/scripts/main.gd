@@ -192,11 +192,11 @@ func _ready() -> void:
 	)
 	NetworkClient.api_response.connect(func(method, path, body, code):
 		# New games created / joined surface their IDs in the API reply.
-		if path == "/games" and code == 200:
+		if path == "/games" and (code == 200 or code == 201):
 			_on_create_game_response(body)
-		elif path.ends_with("/join") and code == 200:
+		elif path.ends_with("/join") and (code == 200 or code == 201):
 			_on_join_game_response(body)
-		elif path.ends_with("/start") and code == 200:
+		elif path.ends_with("/start") and (code == 200 or code == 201):
 			_on_start_game_response(body)
 	)
 
@@ -267,10 +267,13 @@ func _on_create_game_response(body: Dictionary) -> void:
 
 
 func _on_join_game_response(body: Dictionary) -> void:
-	# The join response returns {game_id, player_id, ...}
-	_player_id = int(body.get("player_id", 0))
+	# The join response returns the Player dict directly
+	# (top-level `id` is the player_id). Some FastAPI shapes wrap
+	# under `player` or include `player_id` — check both.
+	_player_id = int(body.get("id", 0))
 	if _player_id <= 0:
-		# Fallback: pull from `player.id` if shape differs.
+		_player_id = int(body.get("player_id", 0))
+	if _player_id <= 0:
 		var p: Variant = body.get("player", {})
 		if p is Dictionary:
 			_player_id = int(p.get("id", 0))
@@ -358,8 +361,10 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 			var subtype: String = ""
 			for t in GameState.tiles:
 				if int(t.get("x", -1)) == x and int(t.get("y", -1)) == y:
-					terrain = String(t.get("terrain", "P"))
-					subtype = String(t.get("subtype", ""))
+					var terrain_v: Variant = t.get("terrain", "P")
+					var subtype_v: Variant = t.get("subtype", "")
+					terrain = str(terrain_v) if terrain_v != null else "P"
+					subtype = str(subtype_v) if subtype_v != null else ""
 					break
 			if subtype != "":
 				row += terrain[0] if terrain.length() > 0 else "C"
