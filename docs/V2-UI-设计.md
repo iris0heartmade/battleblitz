@@ -72,32 +72,37 @@ godot-client/
 
 ## 关键 bug 修复(顺手做的)
 
-`scripts/board/board_camera.gd` 在主菜单状态下 `enabled = true` 默认启用,导致 Camera2D 的 `anchor_mode = DRAG_CENTER` 把 canvas transform origin 拖到 viewport 中心,所有 Control 都被画到右下四分之一。修复:
+### Bug 1:BoardCamera 在主菜单画布偏移(第 1 轮抓到)
+
+`scripts/board/board_camera.gd` 在主菜单状态下 `enabled = true` 默认启用,Camera2D 的 `anchor_mode = DRAG_CENTER` 把 canvas transform origin 拖到 viewport 中心,所有 Control 都被画到右下四分之一。
+
+修复: `board.tscn` 设 `enabled = false`, `board_camera.gd` 的 `apply_metrics()` 末尾再 `enabled = true`。
+
+### Bug 2:BoardCamera `limit_*` 把 Control 推到 viewport 中央(第 2 轮抓到)
+
+游戏视图下,Camera2D 的 `limit_right = 720, limit_bottom = 720`(只覆盖棋盘范围)导致 **canvas_transform origin 被推到 (288, 8)**,viewport 渲染被限制到中央 720×720 子区域。**Control 节点也跟着 canvas_transform 走**,所以 HUD 4 角 pill 全被推到 viewport 中央,左 280px 是 clear color 灰,右 280px 是 Backdrop 深绿。
+
+修复: `board_camera.gd` 的 `_refresh_from_metrics()` 把 `limit_*` 设为整个 viewport size:
 
 ```gdscript
-# board.tscn
-[node name="BoardCamera" type="Camera2D" parent="."]
-enabled = false  # 仅在 load_map 后打开
-```
-
-```gdscript
-# board_camera.gd
-func apply_metrics(metrics) -> void:
-    _metrics = metrics
-    _refresh_from_metrics()
-    enabled = true  # 等到有真实 map metrics 才开
+# M3+ TODO: 把 HUD 移到独立 CanvasLayer 后,这里改回 board_rect
+limit_left = 0
+limit_top = 0
+limit_right = int(ceil(viewport_size.x))
+limit_bottom = int(ceil(viewport_size.y))
 ```
 
 ## 下一步迭代计划
 
-| 轮次 | 内容 | 改动文件 |
-|---|---|---|
-| 第 2 轮 | HUD 4 角极小角标(回合/阶段/金/CO) | `main.tscn`, `main.gd` |
-| 第 3 轮 | 左侧 30% 信息区(蓝底 + 选中单位详情) | `main.tscn`, 新 `unit_info_panel.gd` |
-| 第 4 轮 | 行动气泡(5 按钮:移动/攻击/技能/待命/占领) | `main.tscn`, 新 `action_bubble.gd` |
-| 第 5 轮 | 战报按钮唤起浮动面板 | `main.tscn`, `action_log` 改造 |
-| 第 6 轮 | 设置面板 + 暂停菜单 + 玩家色板/字号切换 | 新 `settings_menu.gd` |
-| 第 7 轮 | 对话框 / 教程气泡 / 战斗结算面板 | 新 `dialog.gd` |
+| 轮次 | 内容 | 改动文件 | 状态 |
+|---|---|---|---|
+| 第 1 轮 | 主菜单 GBA 风视觉 | `main.tscn`, `menu_theme.gd`, `main.gd` | ✅ |
+| 第 2 轮 | HUD 4 角极小角标(回合/阶段/金/CO) + 战报按钮 + 信息/战报浮层骨架 | `main.tscn`, `main.gd`, `board_camera.gd` | ✅ |
+| 第 3 轮 | 左侧 30% 信息区(蓝底 + 选中单位详情) | `main.tscn`, 新 `unit_info_panel.gd` | ⏳ |
+| 第 4 轮 | 行动气泡(5 按钮:移动/攻击/技能/待命/占领) | `main.tscn`, 新 `action_bubble.gd` | ⏳ |
+| 第 5 轮 | 战报按钮唤起浮动面板 + 日志内容 | `main.tscn`, `action_log` 改造 | ⏳ |
+| 第 6 轮 | 设置面板 + 暂停菜单 + 玩家色板/字号切换 | 新 `settings_menu.gd` | ⏳ |
+| 第 7 轮 | 对话框 / 教程气泡 / 战斗结算面板 | 新 `dialog.gd` | ⏳ |
 
 ## 反馈调整记录
 

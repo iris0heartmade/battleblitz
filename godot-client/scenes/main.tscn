@@ -205,109 +205,188 @@ anchor_bottom = 1.0
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
-; HUD 容器
+; HUD 容器(4 角极小 pill,中间让给棋盘)
 [node name="HUD" type="Control" parent="GameView"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-; 顶部状态栏
-[node name="Top" type="HBoxContainer" parent="GameView/HUD"]
-anchor_right = 1.0
+; --- 左上:回合 + 阶段 pill ---
+[node name="TopLeft" type="HBoxContainer" parent="GameView/HUD"]
 offset_left = 8.0
-offset_top = 28.0
+offset_top = 30.0
+offset_right = 360.0
+offset_bottom = 62.0
+theme_override_constants/separation = 6
+
+[node name="TurnBadge" type="ColorRect" parent="GameView/HUD/TopLeft"]
+custom_minimum_size = Vector2(80, 28)
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="Label" type="Label" parent="GameView/HUD/TopLeft/TurnBadge"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "回合 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="PhaseBadge" type="ColorRect" parent="GameView/HUD/TopLeft"]
+custom_minimum_size = Vector2(140, 28)
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="Label" type="Label" parent="GameView/HUD/TopLeft/PhaseBadge"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "🟢 玩家阶段"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+; --- 右上:当前玩家 + 结束回合 ---
+[node name="TopRight" type="HBoxContainer" parent="GameView/HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -360.0
+offset_top = 30.0
 offset_right = -8.0
-offset_bottom = 64.0
-theme_override_constants/separation = 12
+offset_bottom = 62.0
+theme_override_constants/separation = 6
 alignment = 2
 
-[node name="Left" type="HBoxContainer" parent="GameView/HUD/Top"]
-theme_override_constants/separation = 12
+[node name="CurrentPlayerBadge" type="ColorRect" parent="GameView/HUD/TopRight"]
+custom_minimum_size = Vector2(140, 28)
+color = Color(0.02, 0.04, 0.03, 0.92)
 
-[node name="GoldLabel" type="Label" parent="GameView/HUD/Top/Left"]
-text = "💰 —"
-custom_minimum_size = Vector2(80, 28)
+[node name="Label" type="Label" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "→ —"
+horizontal_alignment = 1
 vertical_alignment = 1
+mouse_filter = 2
 
-[node name="COBar" type="ProgressBar" parent="GameView/HUD/Top/Left"]
-custom_minimum_size = Vector2(160, 18)
+[node name="EndTurnButton" type="Button" parent="GameView/HUD/TopRight"]
+text = "结束回合 →"
+custom_minimum_size = Vector2(120, 28)
+disabled = true
+
+; --- 左下:金币 + CO meter ---
+[node name="BottomLeft" type="HBoxContainer" parent="GameView/HUD"]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -56.0
+offset_right = 360.0
+offset_bottom = -8.0
+theme_override_constants/separation = 6
+
+[node name="GoldPanel" type="ColorRect" parent="GameView/HUD/BottomLeft"]
+custom_minimum_size = Vector2(90, 28)
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="GoldLabel" type="Label" parent="GameView/HUD/BottomLeft/GoldPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "💰 —"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="COBar" type="ProgressBar" parent="GameView/HUD/BottomLeft"]
+custom_minimum_size = Vector2(200, 22)
 max_value = 100.0
 value = 0.0
 show_percentage = false
 
-[node name="Right" type="HBoxContainer" parent="GameView/HUD/Top"]
-theme_override_constants/separation = 8
+; --- 右下:AI 思考中 + 战报按钮 ---
+[node name="BottomRight" type="HBoxContainer" parent="GameView/HUD"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_top = -56.0
+offset_right = -8.0
+offset_bottom = -8.0
+theme_override_constants/separation = 6
 alignment = 2
 
-[node name="TurnBadge" type="Label" parent="GameView/HUD/Top/Right"]
-text = "回合 1"
-custom_minimum_size = Vector2(80, 28)
-horizontal_alignment = 2
-vertical_alignment = 1
-
-[node name="PhaseBadge" type="Label" parent="GameView/HUD/Top/Right"]
-text = "阶段:—"
-custom_minimum_size = Vector2(140, 28)
-horizontal_alignment = 2
-vertical_alignment = 1
-
-[node name="CurrentPlayerBadge" type="Label" parent="GameView/HUD/Top/Right"]
-text = "→ —"
-custom_minimum_size = Vector2(120, 28)
-horizontal_alignment = 2
-vertical_alignment = 1
-
-[node name="AIThinking" type="Label" parent="GameView/HUD/Top/Right"]
-text = "🤖 AI 思考中..."
+[node name="AIThinking" type="ColorRect" parent="GameView/HUD/BottomRight"]
 visible = false
-custom_minimum_size = Vector2(120, 28)
-horizontal_alignment = 2
+custom_minimum_size = Vector2(150, 28)
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="Label" type="Label" parent="GameView/HUD/BottomRight/AIThinking"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "🤖 AI 思考中..."
+horizontal_alignment = 1
 vertical_alignment = 1
+mouse_filter = 2
 
-[node name="EndTurnButton" type="Button" parent="GameView/HUD/Top/Right"]
-text = "结束回合 →"
-custom_minimum_size = Vector2(120, 32)
-disabled = true
+[node name="WarReportButton" type="Button" parent="GameView/HUD/BottomRight"]
+text = "📜 战报"
+custom_minimum_size = Vector2(100, 28)
 
-; 底部:战报 + 单位信息
-[node name="Bottom" type="HBoxContainer" parent="GameView/HUD"]
+; --- 战报浮层(第 5 轮接,先做骨架) ---
+[node name="WarReportPanel" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 1.0
 anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -480.0
+offset_top = -320.0
+offset_right = -8.0
+offset_bottom = -60.0
+mouse_filter = 0
+
+[node name="ActionLog" type="RichTextLabel" parent="GameView/HUD/WarReportPanel"]
+anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 8.0
-offset_top = -160.0
-offset_right = -200.0
+offset_top = 8.0
+offset_right = -8.0
 offset_bottom = -8.0
-theme_override_constants/separation = 12
-
-[node name="ActionLog" type="RichTextLabel" parent="GameView/HUD/Bottom"]
-custom_minimum_size = Vector2(400, 144)
-size_flags_horizontal = 3
 bbcode_enabled = true
 text = "[i]战报 / 日志[/i]"
 scroll_following = true
 
-[node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/Bottom"]
-custom_minimum_size = Vector2(200, 144)
-size_flags_horizontal = 3
+; --- 单位信息浮层(第 3 轮接,先做骨架) ---
+[node name="UnitInfoPanel" type="Panel" parent="GameView/HUD"]
+visible = false
+offset_left = 8.0
+offset_top = 70.0
+offset_right = 280.0
+offset_bottom = 280.0
+mouse_filter = 0
+
+[node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/UnitInfoPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
 bbcode_enabled = true
 text = "[i]点击单位查看详情[/i]"
 
-; 右侧:玩家列表
-[node name="Right2" type="VBoxContainer" parent="GameView/HUD"]
-anchor_left = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -192.0
-offset_top = 80.0
-offset_right = -8.0
-offset_bottom = -8.0
-theme_override_constants/separation = 8
-
-[node name="PlayersListLabel" type="Label" parent="GameView/HUD/Right2"]
+; --- 玩家列表(挂在单位信息浮层下面,第 3 轮接) ---
+[node name="PlayersListLabel" type="Label" parent="GameView/HUD"]
+visible = false
+offset_left = 8.0
+offset_top = 290.0
+offset_right = 280.0
+offset_bottom = 314.0
 text = "👥 参战玩家"
 
-[node name="PlayersList" type="RichTextLabel" parent="GameView/HUD/Right2"]
-size_flags_vertical = 3
+[node name="PlayersList" type="RichTextLabel" parent="GameView/HUD"]
+visible = false
+offset_left = 8.0
+offset_top = 318.0
+offset_right = 280.0
+offset_bottom = 568.0
 bbcode_enabled = true
 text = "等待 state.snapshot..."
 

@@ -49,10 +49,16 @@ func _refresh_from_metrics() -> void:
 	var fit_zoom: float = min(zoom_x, zoom_y)
 	zoom = Vector2(fit_zoom, fit_zoom)
 
-	limit_left = int(floor(board_rect.position.x))
-	limit_top = int(floor(board_rect.position.y))
-	limit_right = int(ceil(board_rect.end.x))
-	limit_bottom = int(ceil(board_rect.end.y))
+	# M3+ TODO: tighten the limits back to board_rect once the HUD is
+	# hosted on a dedicated CanvasLayer that lives ABOVE the camera
+	# transform. Right now every Control (HUD pills, war-report panel)
+	# rides the same canvas_transform, so clamping limits to board_rect
+	# pushes them into a 720×720 sub-rectangle of the viewport. Leaving
+	# limits at the full viewport keeps the UI where we put it in .tscn.
+	limit_left = 0
+	limit_top = 0
+	limit_right = int(ceil(viewport_size.x))
+	limit_bottom = int(ceil(viewport_size.y))
 
 
 func _board_rect_for(metrics) -> Rect2:
