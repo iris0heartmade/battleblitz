@@ -340,19 +340,59 @@ offset_right = 384.0
 offset_bottom = -60.0
 mouse_filter = 0
 
-[node name="InfoPanelTitle" type="Label" parent="GameView/HUD/InfoPanel"]
+[node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
 offset_left = 12.0
 offset_top = 8.0
 offset_right = -12.0
 offset_bottom = 32.0
-text = "⚔ 选中单位"
+text = "⚔ 当前指挥官"
 theme_override_font_sizes/font_size = 16
+
+[node name="CommanderName" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 36.0
+offset_right = -12.0
+offset_bottom = 64.0
+bbcode_enabled = true
+fit_content_height = true
+scroll_active = false
+text = "—"
+
+[node name="CommanderCOBar" type="ProgressBar" parent="GameView/HUD/InfoPanel"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 68.0
+offset_right = -12.0
+offset_bottom = 96.0
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="CommanderDivider" type="ReferenceRect" parent="GameView/HUD/InfoPanel"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 102.0
+offset_right = -12.0
+offset_bottom = 104.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 1.0
+editor_only = false
+
+[node name="UnitInfoTitle" type="Label" parent="GameView/HUD/InfoPanel"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 108.0
+offset_right = -12.0
+offset_bottom = 132.0
+text = "⚔ 选中单位"
+theme_override_font_sizes/font_size = 14
 
 [node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 12.0
-offset_top = 36.0
+offset_top = 136.0
 offset_right = -12.0
 offset_bottom = -260.0
 bbcode_enabled = true

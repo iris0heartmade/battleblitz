@@ -89,6 +89,15 @@ func _ready() -> void:
 		p.text = "[color=#e85a6a]🔴 学长[/color] — 3 单位 · 💰 500 · 🟢 行动中\n" \
 			+ "[color=#5fa8e8]🔵 AI 蓝方[/color] — 3 单位 · 💰 450 · ⏳ 已结束回合\n" \
 			+ "[color=#7ec97e]🟢 AI 绿方[/color] — 2 单位 · 💰 380 · 💀 已淘汰"
+	# V2 第 3 轮补丁:Commander section 假数据(当前指挥官)
+	var commander_name_node: RichTextLabel = main.find_child("CommanderName", true, false)
+	if commander_name_node != null:
+		commander_name_node.bbcode_enabled = true
+		commander_name_node.text = "🔴 [color=#e85a6a][b]学长[/b][/color]  ·  3 单位 · 💰 500"
+	var commander_co_node: ProgressBar = main.find_child("CommanderCOBar", true, false)
+	if commander_co_node != null:
+		commander_co_node.value = 35.0
+		commander_co_node.tooltip_text = "CO 能量: 35 / 100"
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()
