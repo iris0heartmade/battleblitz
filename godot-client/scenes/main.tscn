@@ -699,3 +699,174 @@ custom_minimum_size = Vector2(0, 44)
 [node name="QuitBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "❌  退出游戏"
 custom_minimum_size = Vector2(0, 44)
+
+; ============================================================
+; V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
+; ============================================================
+
+; --- 对话框(底部浮层)---
+[node name="DialogPanel" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -210.0
+offset_right = 400.0
+offset_bottom = -20.0
+mouse_filter = 0
+
+[node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = 36.0
+text = "👤 指挥官 Eirika"
+theme_override_font_sizes/font_size = 18
+
+[node name="DialogBody" type="HBoxContainer" parent="GameView/HUD/DialogPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 44.0
+offset_right = -16.0
+offset_bottom = -56.0
+theme_override_constants/separation = 16
+
+[node name="Portrait" type="Panel" parent="GameView/HUD/DialogPanel/DialogBody"]
+custom_minimum_size = Vector2(120, 110)
+
+[node name="PortraitLabel" type="Label" parent="GameView/HUD/DialogPanel/DialogBody/Portrait"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "👤"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 64
+
+[node name="DialogText" type="RichTextLabel" parent="GameView/HUD/DialogPanel/DialogBody"]
+size_flags_horizontal = 3
+bbcode_enabled = true
+text = "「这片土地饱受战火蹂躏,我们必须夺回城堡!」"
+fit_content_height = true
+scroll_active = false
+
+[node name="ContinueBtn" type="Button" parent="GameView/HUD/DialogPanel"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -120.0
+offset_top = -44.0
+offset_right = -16.0
+offset_bottom = -12.0
+text = "继续 ▶"
+custom_minimum_size = Vector2(100, 32)
+
+; --- 教程气泡(浮在右下角)---
+[node name="TutorialBubble" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -180.0
+offset_right = -16.0
+offset_bottom = -72.0
+mouse_filter = 0
+
+[node name="Header" type="Label" parent="GameView/HUD/TutorialBubble"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -12.0
+offset_bottom = 32.0
+text = "💡 教程"
+theme_override_font_sizes/font_size = 16
+
+[node name="TutorialText" type="RichTextLabel" parent="GameView/HUD/TutorialBubble"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 36.0
+offset_right = -12.0
+offset_bottom = -48.0
+bbcode_enabled = true
+text = "[color=#f4e8c1]• 点击己方单位查看详情[/color]\n[color=#f4e8c1]• 点击空白格移动[/color]\n[color=#f4e8c1]• 点击敌对单位攻击[/color]\n[color=#f4e8c1]• [color=#f0c75e][b]空格键[/b][/color] 结束回合[/color]\n[color=#f4e8c1]• [color=#f0c75e][b]ESC[/b][/color] 暂停/设置[/color]"
+
+[node name="GotItBtn" type="Button" parent="GameView/HUD/TutorialBubble"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -40.0
+offset_right = -12.0
+offset_bottom = -10.0
+text = "知道了"
+custom_minimum_size = Vector2(80, 30)
+
+; --- 战斗结算面板(中央浮层)---
+[node name="BattleResultPanel" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+mouse_filter = 0
+
+[node name="Header" type="Label" parent="GameView/HUD/BattleResultPanel"]
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 52.0
+text = "🏆 战 斗 结 束"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+
+[node name="WinnerBanner" type="Label" parent="GameView/HUD/BattleResultPanel"]
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 64.0
+offset_right = -16.0
+offset_bottom = 100.0
+text = "🎉 学长 获胜!"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+
+[node name="StatsList" type="RichTextLabel" parent="GameView/HUD/BattleResultPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 116.0
+offset_right = -24.0
+offset_bottom = -64.0
+bbcode_enabled = true
+text = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n[color=#f4e8c1]击杀:[/color] [color=#f0c75e]5[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]2[/color]\n[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]3[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]87/100[/color]\n[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]18[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]4[/color]\n\n[color=#a89878]胜利原因: 击溃所有敌人[/color]"
+
+[node name="ResultBtnRow" type="HBoxContainer" parent="GameView/HUD/BattleResultPanel"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -52.0
+offset_right = 150.0
+offset_bottom = -12.0
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="DetailBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
+text = "📜 详细战报"
+custom_minimum_size = Vector2(140, 36)
+
+[node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
+text = "↩ 返回主菜单"
+custom_minimum_size = Vector2(140, 36)

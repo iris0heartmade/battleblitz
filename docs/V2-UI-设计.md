@@ -102,7 +102,7 @@ limit_bottom = int(ceil(viewport_size.y))
 | 第 4 轮 | 行动气泡(5 按钮:移动/攻击/技能/待命/占领) + 浮在选中单位右侧 | `main.tscn`, `main.gd` | ✅ |
 | 第 5 轮 | 战报按钮唤起浮动面板(中央 520×360 + Header + ✕ Close + 8 条彩色日志) | `main.tscn`, `main.gd` | ✅ |
 | 第 6 轮 | 设置面板(玩家名/字号/阵营颜色/主题) + 暂停面板(继续/设置/返回/退出) + ESC 监听 | `main.tscn`, `main.gd`, `project.godot`, `settings_screenshot.gd` | ✅ |
-| 第 7 轮 | 对话框 / 教程气泡 / 战斗结算面板 | 新 `dialog.gd` | ⏳ |
+| 第 7 轮 | 对话框(底部 + 立绘) + 教程气泡(右下 + 5 条提示) + 战斗结算(中央 + 战报统计 + 返回主菜单) | `main.tscn`, `main.gd`, `story_screenshot.gd` | ✅ |
 
 ## 反馈调整记录
 
