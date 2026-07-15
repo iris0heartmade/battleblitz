@@ -62,6 +62,20 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var pause_main_menu_btn: Button = $GameView/HUD/PausePanel/PauseList/MainMenuBtn
 @onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
 
+# V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
+@onready var dialog_panel: Panel = $GameView/HUD/DialogPanel
+@onready var dialog_name: Label = $GameView/HUD/DialogPanel/CharacterName
+@onready var dialog_text: RichTextLabel = $GameView/HUD/DialogPanel/DialogBody/DialogText
+@onready var dialog_continue_btn: Button = $GameView/HUD/DialogPanel/ContinueBtn
+@onready var tutorial_bubble: Panel = $GameView/HUD/TutorialBubble
+@onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
+@onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
+@onready var battle_result_panel: Panel = $GameView/HUD/BattleResultPanel
+@onready var battle_result_winner: Label = $GameView/HUD/BattleResultPanel/WinnerBanner
+@onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
+@onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
+@onready var battle_back_menu_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackMenuBtn
+
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
 @onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
@@ -136,6 +150,11 @@ func _ready() -> void:
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
 	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
 	pause_quit_btn.pressed.connect(_on_pause_quit_pressed)
+	# V2 第 7 轮:对话 + 教程 + 战斗结算
+	dialog_continue_btn.pressed.connect(_on_dialog_continue_pressed)
+	tutorial_got_it_btn.pressed.connect(_on_tutorial_got_it_pressed)
+	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
+	battle_back_menu_btn.pressed.connect(_on_battle_back_menu_pressed)
 
 	# Wire NetworkClient → GameState. The autoload `GameState._ready`
 	# does this too, but routing through main makes the dependency
@@ -667,6 +686,76 @@ func _on_pause_quit_pressed() -> void:
 
 
 # ============================================================
+# V2 第 7 轮:对话 + 教程 + 战斗结算
+# ============================================================
+
+func show_dialog(character: String, text_bbcode: String) -> void:
+	if dialog_panel == null or not is_instance_valid(dialog_panel):
+		return
+	dialog_name.text = character
+	dialog_text.bbcode_enabled = true
+	dialog_text.text = text_bbcode
+	dialog_panel.visible = true
+
+
+func hide_dialog() -> void:
+	if dialog_panel != null and is_instance_valid(dialog_panel):
+		dialog_panel.visible = false
+
+
+func show_tutorial() -> void:
+	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		tutorial_bubble.visible = true
+
+
+func hide_tutorial() -> void:
+	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		tutorial_bubble.visible = false
+
+
+func show_battle_result(winner_name: String, winner_color: String, stats: Dictionary) -> void:
+	if battle_result_panel == null or not is_instance_valid(battle_result_panel):
+		return
+	var color_godot: String = _color_name_to_godot(winner_color)
+	battle_result_winner.bbcode_enabled = true
+	battle_result_winner.text = "🎉 [color=%s][b]%s[/b][/color] 获胜!" % [color_godot, winner_name]
+	var stats_text: String = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n" \
+		+ "[color=#f4e8c1]击杀:[/color] [color=#f0c75e]%d[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]%d[/color]\n" % [int(stats.get("kills", 0)), int(stats.get("deaths", 0))] \
+		+ "[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]%d[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]%d/100[/color]\n" % [int(stats.get("captures", 0)), int(stats.get("co_peak", 0))] \
+		+ "[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]%d[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]%d[/color]\n\n" % [int(stats.get("turns", 0)), int(stats.get("skills", 0))] \
+		+ "[color=#a89878]胜利原因: %s[/color]" % String(stats.get("reason", "—"))
+	battle_result_stats.bbcode_enabled = true
+	battle_result_stats.text = stats_text
+	battle_result_panel.visible = true
+
+
+func hide_battle_result() -> void:
+	if battle_result_panel != null and is_instance_valid(battle_result_panel):
+		battle_result_panel.visible = false
+
+
+func _on_dialog_continue_pressed() -> void:
+	hide_dialog()
+	# M3+ TODO: 推进到下一句对话;这里是骨架,只有单句
+
+
+func _on_tutorial_got_it_pressed() -> void:
+	hide_tutorial()
+	UserSettings.set_value("settings.v1.tutorial_seen", true)
+
+
+func _on_battle_detail_pressed() -> void:
+	# 直接弹出战报面板(复用)
+	if war_report_panel != null and is_instance_valid(war_report_panel):
+		war_report_panel.visible = true
+
+
+func _on_battle_back_menu_pressed() -> void:
+	hide_battle_result()
+	_show_view("menu")
+
+
+# ============================================================
 # GBA 火纹风主题注入(UI V2 第 1 轮)
 # ============================================================
 
@@ -876,6 +965,60 @@ func _apply_hud_theme() -> void:
 		var btn: Button = pause_panel.find_child(btn_name, true, false)
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, 18)
+	# V2 第 7 轮:对话 + 教程 + 战斗结算主题
+	var sb_dlg := StyleBoxFlat.new()
+	sb_dlg.bg_color = MenuTheme.C_BG_PANEL
+	sb_dlg.border_color = MenuTheme.C_GOLD
+	sb_dlg.set_border_width_all(2)
+	sb_dlg.set_corner_radius_all(3)
+	sb_dlg.content_margin_left = MenuTheme.PAD
+	sb_dlg.content_margin_right = MenuTheme.PAD
+	sb_dlg.content_margin_top = MenuTheme.PAD
+	sb_dlg.content_margin_bottom = MenuTheme.PAD
+	if dialog_panel != null and is_instance_valid(dialog_panel):
+		dialog_panel.add_theme_stylebox_override("panel", sb_dlg)
+	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		tutorial_bubble.add_theme_stylebox_override("panel", sb_dlg)
+	if battle_result_panel != null and is_instance_valid(battle_result_panel):
+		battle_result_panel.add_theme_stylebox_override("panel", sb_dlg)
+	# Dialog portrait frame
+	var portrait_panel: Panel = dialog_panel.find_child("Portrait", true, false)
+	if portrait_panel != null:
+		var sb_portrait := StyleBoxFlat.new()
+		sb_portrait.bg_color = MenuTheme.C_BG_DEEP
+		sb_portrait.border_color = MenuTheme.C_GOLD
+		sb_portrait.set_border_width_all(2)
+		sb_portrait.set_corner_radius_all(3)
+		portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
+	# Dialog name
+	if dialog_name != null and is_instance_valid(dialog_name):
+		dialog_name.add_theme_font_size_override("font_size", 18)
+		dialog_name.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if dialog_text != null and is_instance_valid(dialog_text):
+		dialog_text.add_theme_font_size_override("normal_font_size", 16)
+		dialog_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# Tutorial header
+	var tut_header: Label = tutorial_bubble.find_child("Header", true, false)
+	if tut_header != null:
+		tut_header.add_theme_font_size_override("font_size", 16)
+		tut_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if tutorial_text != null and is_instance_valid(tutorial_text):
+		tutorial_text.add_theme_font_size_override("normal_font_size", 14)
+		tutorial_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# Dialog/Tutorial/Battle buttons
+	for btn in [dialog_continue_btn, tutorial_got_it_btn, battle_detail_btn, battle_back_menu_btn]:
+		if btn != null and is_instance_valid(btn):
+			MenuTheme.apply_button_theme(btn, 16)
+	# Battle result header + winner
+	var res_header: Label = battle_result_panel.find_child("Header", true, false)
+	if res_header != null:
+		res_header.add_theme_font_size_override("font_size", 22)
+		res_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if battle_result_winner != null and is_instance_valid(battle_result_winner):
+		battle_result_winner.add_theme_font_size_override("font_size", 18)
+	if battle_result_stats != null and is_instance_valid(battle_result_stats):
+		battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
+		battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
 # ============================================================
