@@ -40,7 +40,10 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
-@onready var info_panel_title: Label = $GameView/HUD/InfoPanel/InfoPanelTitle
+@onready var commander_title: Label = $GameView/HUD/InfoPanel/CommanderTitle
+@onready var commander_name: RichTextLabel = $GameView/HUD/InfoPanel/CommanderName
+@onready var commander_co_bar: ProgressBar = $GameView/HUD/InfoPanel/CommanderCOBar
+@onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
@@ -372,6 +375,8 @@ func _refresh_hud_from_state() -> void:
 
 	# Players list (right column)
 	_rewrite_players_list()
+	# V2 第 3 轮补丁:左上 InfoPanel 当前指挥官
+	_refresh_commander_section()
 
 
 func _rewrite_players_list() -> void:
@@ -415,6 +420,45 @@ func _on_log_received(action: Dictionary) -> void:
 		"critical": color = "#e85a6a"
 		"important": color = "#f0c75e"
 	action_log.append_text("[color=%s]%s[/color]\n" % [color, desc])
+
+
+func _refresh_commander_section() -> void:
+	# 当前轮到谁的回合 → 显示该玩家的指挥官信息 + CO 能量条
+	if commander_name == null or not is_instance_valid(commander_name):
+		return
+	var cur_pid = GameState.current_player_id
+	if cur_pid == null:
+		commander_name.text = "—"
+		if commander_co_bar != null and is_instance_valid(commander_co_bar):
+			commander_co_bar.value = 0.0
+		return
+	var cp: Dictionary = GameState.get_player(cur_pid)
+	var name: String = String(cp.get("user_name", "—"))
+	var color: String = String(cp.get("color", "?"))
+	var units: int = (cp.get("units", []) as Array).size()
+	var gold: int = int(cp.get("gold", 0))
+	var color_godot: String = _color_name_to_godot(color)
+	var emoji: String = "👤"
+	match color:
+		"red": emoji = "🔴"
+		"blue": emoji = "🔵"
+		"green": emoji = "🟢"
+		"yellow": emoji = "🟡"
+	commander_name.text = "%s [color=%s][b]%s[/b][/color]  ·  %d 单位 · 💰 %d" % [
+		emoji, color_godot, name, units, gold
+	]
+	# CO meter from co_states array
+	var meter: int = 0
+	var threshold: int = 100
+	for c in GameState.co_states:
+		if c is Dictionary and int(c.get("player_id", -1)) == int(cur_pid):
+			meter = int(c.get("meter", 0))
+			threshold = max(1, int(c.get("threshold", 100)))
+			break
+	var pct: float = float(meter) / float(threshold) * 100.0
+	if commander_co_bar != null and is_instance_valid(commander_co_bar):
+		commander_co_bar.value = pct
+		commander_co_bar.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
 
 
 func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int, _cost: int) -> void:
@@ -571,10 +615,31 @@ func _apply_hud_theme() -> void:
 		sb_fg.set_border_width_all(1)
 		co_meter.add_theme_stylebox_override("background", sb_bg)
 		co_meter.add_theme_stylebox_override("fill", sb_fg)
-	# V2 第 3 轮:InfoPanel 主题(单位详情 + 玩家列表)
-	if info_panel_title != null and is_instance_valid(info_panel_title):
-		info_panel_title.add_theme_font_size_override("font_size", 16)
-		info_panel_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	# V2 第 3 轮:InfoPanel 主题(当前指挥官 + 单位详情 + 玩家列表)
+	if commander_title != null and is_instance_valid(commander_title):
+		commander_title.add_theme_font_size_override("font_size", 16)
+		commander_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if unit_info_title != null and is_instance_valid(unit_info_title):
+		unit_info_title.add_theme_font_size_override("font_size", 14)
+		unit_info_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if commander_name != null and is_instance_valid(commander_name):
+		commander_name.add_theme_font_size_override("normal_font_size", 13)
+		commander_name.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	if commander_co_bar != null and is_instance_valid(commander_co_bar):
+		var sb_bg := StyleBoxFlat.new()
+		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)
+		sb_bg.border_color = MenuTheme.C_GOLD
+		sb_bg.set_border_width_all(1)
+		sb_bg.content_margin_left = 4
+		sb_bg.content_margin_right = 4
+		sb_bg.content_margin_top = 3
+		sb_bg.content_margin_bottom = 3
+		var sb_fg := StyleBoxFlat.new()
+		sb_fg.bg_color = MenuTheme.C_GOLD
+		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
+		sb_fg.set_border_width_all(1)
+		commander_co_bar.add_theme_stylebox_override("background", sb_bg)
+		commander_co_bar.add_theme_stylebox_override("fill", sb_fg)
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
