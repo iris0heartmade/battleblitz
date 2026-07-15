@@ -329,6 +329,56 @@ mouse_filter = 2
 text = "📜 战报"
 custom_minimum_size = Vector2(100, 28)
 
+; --- 左侧 30% 信息区(选中单位详情 + 玩家列表) ---
+; 横向: anchor_left=0, offset_right = 384 (30% of 1280)
+; 纵向: anchor_top=0, anchor_bottom=1, offset_top=70 (避开左上 pill), offset_bottom=-60 (避开左下 pill)
+[node name="InfoPanel" type="Panel" parent="GameView/HUD"]
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 70.0
+offset_right = 384.0
+offset_bottom = -60.0
+mouse_filter = 0
+
+[node name="InfoPanelTitle" type="Label" parent="GameView/HUD/InfoPanel"]
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -12.0
+offset_bottom = 32.0
+text = "⚔ 选中单位"
+theme_override_font_sizes/font_size = 16
+
+[node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 36.0
+offset_right = -12.0
+offset_bottom = -260.0
+bbcode_enabled = true
+text = "[i]点击单位查看详情[/i]"
+
+[node name="PlayersListLabel" type="Label" parent="GameView/HUD/InfoPanel"]
+anchor_top = 1.0
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = -252.0
+offset_right = -12.0
+offset_bottom = -228.0
+text = "👥 参战玩家"
+theme_override_font_sizes/font_size = 14
+
+[node name="PlayersList" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -220.0
+offset_right = -12.0
+offset_bottom = -12.0
+bbcode_enabled = true
+text = "等待 state.snapshot..."
+
 ; --- 战报浮层(第 5 轮接,先做骨架) ---
 [node name="WarReportPanel" type="Panel" parent="GameView/HUD"]
 visible = false
@@ -352,43 +402,6 @@ offset_bottom = -8.0
 bbcode_enabled = true
 text = "[i]战报 / 日志[/i]"
 scroll_following = true
-
-; --- 单位信息浮层(第 3 轮接,先做骨架) ---
-[node name="UnitInfoPanel" type="Panel" parent="GameView/HUD"]
-visible = false
-offset_left = 8.0
-offset_top = 70.0
-offset_right = 280.0
-offset_bottom = 280.0
-mouse_filter = 0
-
-[node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/UnitInfoPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = -8.0
-bbcode_enabled = true
-text = "[i]点击单位查看详情[/i]"
-
-; --- 玩家列表(挂在单位信息浮层下面,第 3 轮接) ---
-[node name="PlayersListLabel" type="Label" parent="GameView/HUD"]
-visible = false
-offset_left = 8.0
-offset_top = 290.0
-offset_right = 280.0
-offset_bottom = 314.0
-text = "👥 参战玩家"
-
-[node name="PlayersList" type="RichTextLabel" parent="GameView/HUD"]
-visible = false
-offset_left = 8.0
-offset_top = 318.0
-offset_right = 280.0
-offset_bottom = 568.0
-bbcode_enabled = true
-text = "等待 state.snapshot..."
 
 ; 回合横幅
 [node name="TurnBanner" type="Label" parent="GameView"]
