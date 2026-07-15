@@ -47,6 +47,18 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
+
+# V2 第 4 轮:行动气泡(5 按钮)
+@onready var action_bubble: Panel = $GameView/HUD/ActionBubble
+@onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
+@onready var attack_btn: Button = $GameView/HUD/ActionBubble/ActionList/AttackBtn
+@onready var skill_btn: Button = $GameView/HUD/ActionBubble/ActionList/SkillBtn
+@onready var wait_btn: Button = $GameView/HUD/ActionBubble/ActionList/WaitBtn
+@onready var claim_btn: Button = $GameView/HUD/ActionBubble/ActionList/ClaimBtn
+
+# 当前选中单位 + 待操作 action
+var _selected_unit_id: int = -1
+var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 # Main menu widgets (GBA 风 V2)
 @onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
@@ -91,6 +103,16 @@ func _ready() -> void:
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
+
+	# V2 第 4 轮:行动气泡 5 按钮
+	for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
+		if btn != null and is_instance_valid(btn):
+			MenuTheme.apply_button_theme(btn, 16)
+	move_btn.pressed.connect(_on_move_pressed)
+	attack_btn.pressed.connect(_on_attack_pressed)
+	skill_btn.pressed.connect(_on_skill_pressed)
+	wait_btn.pressed.connect(_on_wait_pressed)
+	claim_btn.pressed.connect(_on_claim_pressed)
 
 	# Wire NetworkClient → GameState. The autoload `GameState._ready`
 	# does this too, but routing through main makes the dependency
@@ -646,6 +668,18 @@ func _apply_hud_theme() -> void:
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.add_theme_font_size_override("normal_font_size", 13)
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# V2 第 4 轮:行动气泡主题(深绿底 + 烫金粗边)
+	if action_bubble != null and is_instance_valid(action_bubble):
+		var sb_bubble := StyleBoxFlat.new()
+		sb_bubble.bg_color = MenuTheme.C_BG_PANEL
+		sb_bubble.border_color = MenuTheme.C_GOLD
+		sb_bubble.set_border_width_all(2)
+		sb_bubble.set_corner_radius_all(3)
+		sb_bubble.content_margin_left = 6
+		sb_bubble.content_margin_right = 6
+		sb_bubble.content_margin_top = 6
+		sb_bubble.content_margin_bottom = 6
+		action_bubble.add_theme_stylebox_override("panel", sb_bubble)
 
 
 # ============================================================
@@ -668,6 +702,61 @@ func _on_war_report_pressed() -> void:
 		war_report_button.text = "📜 关闭战报"
 	else:
 		war_report_button.text = "📜 战报"
+
+
+# ============================================================
+# V2 第 4 轮:行动气泡 — 显示/隐藏 + 5 个 action
+# ============================================================
+
+func _show_action_bubble(unit_id: int, viewport_pos: Vector2) -> void:
+	_selected_unit_id = unit_id
+	# 浮在选中单位右侧(若空间不够则左侧)
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var bubble_size: Vector2 = action_bubble.size
+	var pos: Vector2 = viewport_pos + Vector2(48, -bubble_size.y * 0.5)
+	if pos.x + bubble_size.x > vp_size.x - 16.0:
+		pos.x = viewport_pos.x - bubble_size.x - 48
+	if pos.y + bubble_size.y > vp_size.y - 16.0:
+		pos.y = vp_size.y - bubble_size.y - 16.0
+	if pos.y < 32.0:
+		pos.y = 32.0
+	action_bubble.position = pos
+	action_bubble.visible = true
+
+
+func _hide_action_bubble() -> void:
+	action_bubble.visible = false
+	_selected_unit_id = -1
+
+
+func _on_move_pressed() -> void:
+	_update_status("移动: 等待点击目标格...")
+	_hide_action_bubble()
+	# M3+ TODO: 进入"移动模式",点击地图格子触发 POST /actions/move
+
+
+func _on_attack_pressed() -> void:
+	_update_status("攻击: 等待点击目标单位...")
+	_hide_action_bubble()
+	# M3+ TODO: 进入"攻击模式",点击敌人单位触发 POST /actions/attack
+
+
+func _on_skill_pressed() -> void:
+	_update_status("技能: M3+ 实装")
+	_hide_action_bubble()
+
+
+func _on_wait_pressed() -> void:
+	if _selected_unit_id > 0 and _game_id > 0 and _player_id > 0:
+		NetworkClient.action_wait(_game_id, _player_id, _selected_unit_id)
+	_update_status("单位 #%d 待命" % _selected_unit_id)
+	_hide_action_bubble()
+
+
+func _on_claim_pressed() -> void:
+	_update_status("占领: 等待点击中立建筑...")
+	_hide_action_bubble()
+	# M3+ TODO: 进入"占领模式",点击中立建筑触发 POST /actions/claim
 
 
 func _random_suffix() -> float:

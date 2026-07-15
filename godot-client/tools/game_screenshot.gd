@@ -98,6 +98,11 @@ func _ready() -> void:
 	if commander_co_node != null:
 		commander_co_node.value = 35.0
 		commander_co_node.tooltip_text = "CO 能量: 35 / 100"
+	# V2 第 4 轮:ActionBubble 假可见(浮在棋盘中央右侧,模拟选中单位)
+	var bubble: Panel = main.find_child("ActionBubble", true, false)
+	if bubble != null:
+		bubble.visible = true
+		bubble.position = Vector2(550, 280)
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()
