@@ -21,17 +21,26 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var status_label: Label = $StatusLabel
 @onready var board: Board = $GameView/Board
 
-# HUD widgets (M2.5)
-@onready var turn_badge: Label = $GameView/HUD/Top/Right/TurnBadge
-@onready var phase_badge: Label = $GameView/HUD/Top/Right/PhaseBadge
-@onready var current_player_badge: Label = $GameView/HUD/Top/Right/CurrentPlayerBadge
-@onready var ai_thinking_label: Label = $GameView/HUD/Top/Right/AIThinking
-@onready var end_turn_button: Button = $GameView/HUD/Top/Right/EndTurnButton
-@onready var gold_label: Label = $GameView/HUD/Top/Left/GoldLabel
-@onready var co_meter: ProgressBar = $GameView/HUD/Top/Left/COBar
-@onready var action_log: RichTextLabel = $GameView/HUD/Bottom/ActionLog
-@onready var unit_info: RichTextLabel = $GameView/HUD/Bottom/UnitInfo
-@onready var players_list: RichTextLabel = $GameView/HUD/Right2/PlayersList
+# HUD widgets (V2 第 2 轮:4 角极小 pill + 战报/信息浮层)
+# Pills are ColorRect containers (Panel has display issues in headless);
+# the Label child still drives text content.
+@onready var turn_badge: ColorRect = $GameView/HUD/TopLeft/TurnBadge
+@onready var turn_badge_label: Label = $GameView/HUD/TopLeft/TurnBadge/Label
+@onready var phase_badge: ColorRect = $GameView/HUD/TopLeft/PhaseBadge
+@onready var phase_badge_label: Label = $GameView/HUD/TopLeft/PhaseBadge/Label
+@onready var current_player_badge: ColorRect = $GameView/HUD/TopRight/CurrentPlayerBadge
+@onready var current_player_label: Label = $GameView/HUD/TopRight/CurrentPlayerBadge/Label
+@onready var ai_thinking_label: ColorRect = $GameView/HUD/BottomRight/AIThinking
+@onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
+@onready var gold_panel: ColorRect = $GameView/HUD/BottomLeft/GoldPanel
+@onready var gold_label: Label = $GameView/HUD/BottomLeft/GoldPanel/GoldLabel
+@onready var co_meter: ProgressBar = $GameView/HUD/BottomLeft/COBar
+@onready var war_report_button: Button = $GameView/HUD/BottomRight/WarReportButton
+@onready var war_report_panel: Panel = $GameView/HUD/WarReportPanel
+@onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
+@onready var unit_info_panel: Panel = $GameView/HUD/UnitInfoPanel
+@onready var unit_info: RichTextLabel = $GameView/HUD/UnitInfoPanel/UnitInfo
+@onready var players_list: RichTextLabel = $GameView/HUD/PlayersList
 @onready var turn_banner: Label = $GameView/TurnBanner
 # Main menu widgets (GBA 风 V2)
 @onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
@@ -66,7 +75,7 @@ func _ready() -> void:
 		_user_name = "学妹喵" if _random_suffix() > 0.5 else "学长"
 		UserSettings.set_value("settings.v1.player_name", _user_name)
 
-	# === GBA 火纹风主题注入(UI V2 第 1 轮) ===
+	# === GBA 火纹风主题注入(V2 第 1+2 轮:主菜单 + HUD 4 角) ===
 	_apply_gba_theme()
 
 	_show_view("menu")
@@ -76,6 +85,7 @@ func _ready() -> void:
 	exit_button.pressed.connect(_on_exit_pressed)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
+	war_report_button.pressed.connect(_on_war_report_pressed)
 
 	# Wire NetworkClient → GameState. The autoload `GameState._ready`
 	# does this too, but routing through main makes the dependency
@@ -321,23 +331,23 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 
 func _refresh_hud_from_state() -> void:
 	var summary: Dictionary = GameState.game_summary
-	turn_badge.text = "回合 %d" % int(summary.get("turn_number", 1))
+	turn_badge_label.text = "回合 %d" % int(summary.get("turn_number", 1))
 	var phase_text: String = String(summary.get("phase", "player"))
 	match phase_text:
-		"player": phase_badge.text = "🟢 你的阶段"
-		"ai": phase_badge.text = "🤖 AI 阶段"
-		"animating": phase_badge.text = "✨ 动画中"
-		"spectator": phase_badge.text = "👀 观战"
-		_: phase_badge.text = "阶段:%s" % phase_text
+		"player": phase_badge_label.text = "🟢 你的阶段"
+		"ai": phase_badge_label.text = "🤖 AI 阶段"
+		"animating": phase_badge_label.text = "✨ 动画中"
+		"spectator": phase_badge_label.text = "👀 观战"
+		_: phase_badge_label.text = "阶段:%s" % phase_text
 
 	# Current player name
 	var cur_pid = GameState.current_player_id
 	if cur_pid != null:
 		var cp: Dictionary = GameState.get_player(cur_pid)
 		var name: String = String(cp.get("user_name", "—"))
-		current_player_badge.text = "→ %s" % name
+		current_player_label.text = "→ %s" % name
 	else:
-		current_player_badge.text = "→ —"
+		current_player_label.text = "→ —"
 
 	# End-turn button only enabled when it's the local player's turn
 	# AND the phase is "player".
@@ -472,16 +482,93 @@ func _apply_gba_theme() -> void:
 	# 2) 边框由 ReferenceRect 画,这里只调整颜色变量(已硬编码在 .tscn)
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
-	# 4) 主菜单 4 按钮统一灌主题
-	for btn in [menu_button, lobby_button, settings_button, exit_button, reconnect_button, end_turn_button]:
+	# 4) 主菜单 + 游戏内按钮统一灌主题
+	for btn in [menu_button, lobby_button, settings_button, exit_button,
+				reconnect_button, end_turn_button, war_report_button]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
+	# end_turn 和 war_report 用小一号字号(4 角极小 pill)
+	if end_turn_button != null and is_instance_valid(end_turn_button):
+		MenuTheme.apply_button_theme(end_turn_button, 14)
+	if war_report_button != null and is_instance_valid(war_report_button):
+		MenuTheme.apply_button_theme(war_report_button, 14)
 	# 5) 标题/副标题/footer 文字色
 	MenuTheme.apply_label_theme(menu_title, MenuTheme.FS_HERO, MenuTheme.C_GOLD)
 	MenuTheme.apply_label_theme(menu_subtitle, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
 	MenuTheme.apply_label_theme(menu_footer, MenuTheme.FS_FOOT, MenuTheme.C_TEXT_DIM)
 	MenuTheme.apply_label_theme(connecting_title, 22, MenuTheme.C_GOLD)
 	MenuTheme.apply_label_theme(connecting_label, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
+	# === V2 第 2 轮:HUD 4 角 pill 主题 ===
+	_apply_hud_theme()
+	# 战报/信息浮层(深绿底 + 烫金边)
+	var sb_popup := StyleBoxFlat.new()
+	sb_popup.bg_color = MenuTheme.C_BG_PANEL
+	sb_popup.border_color = MenuTheme.C_GOLD
+	sb_popup.set_border_width_all(2)
+	sb_popup.content_margin_left = MenuTheme.PAD
+	sb_popup.content_margin_right = MenuTheme.PAD
+	sb_popup.content_margin_top = MenuTheme.PAD
+	sb_popup.content_margin_bottom = MenuTheme.PAD
+	war_report_panel.add_theme_stylebox_override("panel", sb_popup)
+	unit_info_panel.add_theme_stylebox_override("panel", sb_popup)
+
+
+func _apply_hud_theme() -> void:
+	# Pills are ColorRect containers with ReferenceRect borders added
+	# in _ready. We only need to set font sizes / colors on inner Labels.
+	var pill_size := 14
+	# Add a gold ReferenceRect border around each pill ColorRect.
+	for p in [turn_badge, phase_badge, current_player_badge, gold_panel, ai_thinking_label]:
+		if p == null or not is_instance_valid(p):
+			continue
+		var border := ReferenceRect.new()
+		border.anchor_right = 1.0
+		border.anchor_bottom = 1.0
+		border.offset_left = 0
+		border.offset_top = 0
+		border.offset_right = 0
+		border.offset_bottom = 0
+		border.border_color = MenuTheme.C_GOLD
+		border.border_width = 2.0
+		border.editor_only = false
+		border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_child(border)
+	for lbl in [turn_badge_label, phase_badge_label, current_player_label, gold_label]:
+		if lbl != null and is_instance_valid(lbl):
+			lbl.add_theme_font_size_override("font_size", pill_size)
+			lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	# CO meter styling (unchanged from before)
+	if co_meter != null and is_instance_valid(co_meter):
+		var sb_bg := StyleBoxFlat.new()
+		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)
+		sb_bg.border_color = MenuTheme.C_GOLD
+		sb_bg.set_border_width_all(1)
+		sb_bg.content_margin_left = 2
+		sb_bg.content_margin_right = 2
+		sb_bg.content_margin_top = 2
+		sb_bg.content_margin_bottom = 2
+		var sb_fg := StyleBoxFlat.new()
+		sb_fg.bg_color = MenuTheme.C_GOLD
+		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
+		sb_fg.set_border_width_all(1)
+		co_meter.add_theme_stylebox_override("background", sb_bg)
+		co_meter.add_theme_stylebox_override("fill", sb_fg)
+	# CO meter:用烫金 progress 色
+	if co_meter != null and is_instance_valid(co_meter):
+		var sb_bg := StyleBoxFlat.new()
+		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)   # 深棕,确保 fill 0% 时也有底色
+		sb_bg.border_color = MenuTheme.C_GOLD
+		sb_bg.set_border_width_all(1)
+		sb_bg.content_margin_left = 2
+		sb_bg.content_margin_right = 2
+		sb_bg.content_margin_top = 2
+		sb_bg.content_margin_bottom = 2
+		var sb_fg := StyleBoxFlat.new()
+		sb_fg.bg_color = MenuTheme.C_GOLD
+		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
+		sb_fg.set_border_width_all(1)
+		co_meter.add_theme_stylebox_override("background", sb_bg)
+		co_meter.add_theme_stylebox_override("fill", sb_fg)
 
 
 # ============================================================
@@ -495,6 +582,15 @@ func _on_lobby_pressed() -> void:
 
 func _on_settings_pressed() -> void:
 	_update_status("设置面板将在下一轮实现喵~")
+
+
+func _on_war_report_pressed() -> void:
+	# 第 5 轮接,先 toggle 显示/隐藏战报浮层
+	war_report_panel.visible = not war_report_panel.visible
+	if war_report_panel.visible:
+		war_report_button.text = "📜 关闭战报"
+	else:
+		war_report_button.text = "📜 战报"
 
 
 func _random_suffix() -> float:
