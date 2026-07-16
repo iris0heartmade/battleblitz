@@ -149,6 +149,8 @@ func _ready() -> void:
 		"NetworkClient should expose player_id based rejoin")
 	_assert_true("NetworkClient rejoin_game_by_name method", NetworkClient.has_method("rejoin_game_by_name"),
 		"NetworkClient should expose user_name based rejoin")
+	_assert_true("NetworkClient get_game_state method", NetworkClient.has_method("get_game_state"),
+		"NetworkClient should expose GET /games/{id}/state for refreshes")
 	_assert_gte("NetworkClient action_recruit argument count", _method_arg_count(NetworkClient, "action_recruit"), 6,
 		"action_recruit should accept game_id, player_id, tile, unit_type, callback")
 	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
@@ -243,6 +245,24 @@ func _ready() -> void:
 			"mainline button should render backend battle_count")
 		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
 			"mainline button tooltip should use backend synopsis")
+
+	main_check.set("_user_name", "Alice")
+	main_check.call("_on_mainline_start_response", {
+		"game_id": 123,
+		"player_id": 456,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 0,
+		"total_battles": 2,
+		"state": "battle",
+	}, 200)
+	_assert_eq("Mainline start stores game id", int(main_check.get("_game_id")), 123,
+		"mainline start should store spawned game id")
+	_assert_eq("Mainline start stores player id", int(main_check.get("_player_id")), 456,
+		"mainline start should store human player id")
+	_assert_true("Mainline start switches to game view", (main_check.get_node("GameView") as Control).visible,
+		"mainline start should enter game view")
+	_assert_true("Mainline start status includes progress", main_status_label.text.contains("1/2"),
+		"mainline start should show battle progress")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

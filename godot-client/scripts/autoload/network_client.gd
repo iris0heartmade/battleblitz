@@ -436,6 +436,10 @@ func create_game(name: String, map_preset: String, map_biome: String, win_condit
 	}, callback)
 
 
+func get_game_state(game_id: int, callback: Callable = Callable()) -> void:
+	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/state", {}, callback)
+
+
 func join_game(game_id: int, user_name: String, color: String = "", team: String = "", role: String = "", callback: Callable = Callable()) -> void:
 	var body := {"user_name": user_name, "color": color}
 	if team != "":
