@@ -34,6 +34,10 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 # M4.1 移动模式状态机
 var _move_mode_unit_id: int = -1
 var _move_reachable_set: Dictionary = {}
+# M4.2 攻击模式状态机
+var _attack_mode_unit_id: int = -1
+# 攻击候选目标: {target_unit_id: {x,y,forecast}}
+var _attack_targets: Dictionary = {}
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
 @onready var gold_panel: ColorRect = $GameView/HUD/BottomLeft/GoldPanel
 @onready var gold_label: Label = $GameView/HUD/BottomLeft/GoldPanel/GoldLabel
@@ -709,12 +713,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if unit_id > 0:
 			board.emit_unit_clicked(unit_id)
 		else:
-			# 点击非单位区域 → 落点 / 清除选择
+			# 点击非单位区域 → 落点 / 取消行动模式
 			if _move_mode_unit_id > 0:
 				# 移动模式下:把屏幕坐标转成 tile 再 emit
 				board.emit_tile_clicked(event.global_position)
+			elif _attack_mode_unit_id > 0:
+				# 攻击模式:空地点击 → 取消
+				_cancel_action_mode()
 			else:
-				# 非移动模式:清高亮
+				# 非任何模式:清高亮
 				board.clear_selection_marks()
 				_hide_action_bubble()
 		get_viewport().set_input_as_handled()
@@ -722,6 +729,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_board_unit_clicked(unit_id: int) -> void:
 	# 来自 board.emit_unit_clicked — 单位已经被选中
+	# 攻击模式下点单位 → 用作 attack target
+	if _attack_mode_unit_id > 0:
+		if _attack_targets.has(unit_id):
+			_attack_unit_to(_attack_mode_unit_id, unit_id)
+		else:
+			# 点错目标(不是敌方有效目标)→ 取消
+			_update_status("目标无效,取消攻击")
+			_attack_mode_unit_id = -1
+			_attack_targets = {}
+			if board != null:
+				board.clear_selection_marks()
+		return
+	# 否则:正常选中流程
 	_handle_unit_click(unit_id, Vector2.ZERO)
 
 
@@ -1336,9 +1356,129 @@ func _on_move_pressed() -> void:
 
 
 func _on_attack_pressed() -> void:
-	_update_status("攻击: 等待点击目标单位...")
+	# M4.2:进入"攻击模式" — 红色 attack range outline + 落点是敌方单位
+	if _selected_unit_id <= 0:
+		_update_status("攻击: 请先选中单位")
+		return
+	var ud: Dictionary = GameState.get_unit(_selected_unit_id) if GameState != null else {}
+	if ud.is_empty():
+		_update_status("攻击: 找不到单位 #%d" % _selected_unit_id)
+		return
+	# 计算可攻击目标(只算范围内 + LoS 通的敌方单位)
+	var targets: Dictionary = _compute_attack_targets(ud)
+	if targets.is_empty():
+		_update_status("攻击: 范围内没有敌人")
+		return
+	_attack_mode_unit_id = _selected_unit_id
+	_attack_targets = targets
+	# 红色 outline 整个攻击范围(用户能直观看到)
+	var range_tiles: Array = _get_attack_range_tiles(ud)
+	if range_tiles.size() > 0 and board != null:
+		board.show_attack_marks(range_tiles)
+	_update_status("攻击: 点击红色高亮范围内的敌方单位 (可选 %d)" % targets.size())
 	_hide_action_bubble()
-	# M3+ TODO: 进入"攻击模式",点击敌人单位触发 POST /actions/attack
+
+
+# 取消移动/攻击模式的统一接口
+func _cancel_action_mode() -> void:
+	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0:
+		_move_mode_unit_id = -1
+		_move_reachable_set = {}
+		_attack_mode_unit_id = -1
+		_attack_targets = {}
+		if board != null:
+			board.clear_selection_marks()
+		_update_status("已取消行动模式")
+
+
+# 计算攻击范围内所有可攻击的目标(敌方单位所在格 — 需在范围内 + LoS 通)
+#
+# 重要原则:client 端**不重复**伤害计算 — server (calculate_damage)
+# 是唯一公式来源。这里只算"哪几个敌方单位在范围内且被本单位的
+# attack_range + LoS 覆盖",对应 game/app/web/app.js:2183 canUnitAttack。
+# 真正的伤害值在 server 推 unit_attacked 事件时由服务端返回的
+# (damage, is_crit, is_kill) 决定。
+func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
+	# 范围
+	var range_tiles: Array = _get_attack_range_tiles(attacker)
+	if range_tiles.is_empty():
+		return {}
+	var size_v: int = 15
+	if board != null and board.map_size.x > 0:
+		size_v = board.map_size.x
+	# blocked 字典(只看地形 passable,不拦人 — 自己可站)
+	var blocked: Dictionary = {}
+	for other in GameState.players:
+		if not other is Dictionary: continue
+		for u in other.get("units", []):
+			if u is Dictionary:
+				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+				blocked[k] = true
+	var me_pid: int = int(_player_id)
+	var out: Dictionary = {}
+	for rt in range_tiles:
+		var rt_v := Vector2i(int(rt.x), int(rt.y))
+		# 看这个格是否有敌方单位
+		for u in GameState.players:
+			if not u is Dictionary: continue
+			if int(u.get("id", -1)) == me_pid:
+				continue
+			for uu in u.get("units", []):
+				if not uu is Dictionary: continue
+				if int(uu.get("x", -1)) != rt_v.x or int(uu.get("y", -1)) != rt_v.y:
+					continue
+				# LoS 校验(远距离攻击需要通视)
+				var attacker_pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
+				var d: int = abs(attacker_pos.x - rt_v.x) + abs(attacker_pos.y - rt_v.y)
+				if d > 1:
+					var los_ok: bool = MapLogic.has_line_of_sight(
+						attacker_pos, rt_v, blocked, size_v
+					)
+					if not los_ok:
+						continue
+				out[int(uu.get("id", -1))] = {
+					"x": rt_v.x,
+					"y": rt_v.y,
+					"defender_name": String(uu.get("name", uu.get("unit_type", "?"))),
+					# 不预测,只显示攻击者/目标基本信息。真实伤害由
+					# server 决定。
+				}
+	return out
+
+
+# (删)旧 _forecast_attack_simple 已移除 — 客户端不抄伤害公式,
+# server calculate_damage 单一来源。真要展示预测数字时,
+# 走 GET /games/{id}/forecast-attack 端点(M4+ TODO)
+
+
+# 拿 attack_range(含 snipe 技能 +1),然后用 MapLogic.attack_range_tiles 求出范围
+func _get_attack_range_tiles(attacker: Dictionary) -> Array:
+	var max_range: int = int(attacker.get("attack_range", 1))
+	if (attacker.get("skills", []) as Array).has("snipe"):
+		max_range += 1
+	var min_range: int = int(attacker.get("min_attack_range", 0))
+	var pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
+	var size_v: int = 15
+	if board != null and board.map_size.x > 0:
+		size_v = board.map_size.x
+	return MapLogic.attack_range_tiles(pos, max_range, min_range, size_v)
+
+
+# M4.2:发 POST /games/{id}/attack
+func _attack_unit_to(attacker_id: int, target_id: int) -> void:
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	var info: Dictionary = _attack_targets.get(target_id, {})
+	var tgt_name: String = String(info.get("defender_name", "单位 #%d" % target_id))
+	_update_status("正在攻击 %s (单位 #%d → #%d)..." % [tgt_name, attacker_id, target_id])
+	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
+	# 客户端不预测伤害 - server 推 unit_attacked 事件后,从 signal args
+	# 拿到 (damage, is_crit, is_kill) 直接显示。
+	_attack_mode_unit_id = -1
+	_attack_targets = {}
+	if board != null:
+		board.clear_selection_marks()
+	_hide_action_bubble()
 
 
 func _on_skill_pressed() -> void:
