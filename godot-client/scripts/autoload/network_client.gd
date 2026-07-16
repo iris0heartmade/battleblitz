@@ -467,24 +467,28 @@ func list_mainlines(callback: Callable = Callable()) -> void:
 	request("GET", "/mainlines", {}, callback)
 
 
-func get_mainline_detail(mainline_id: int, callback: Callable = Callable()) -> void:
-	request("GET", "/mainlines/%d" % mainline_id, {}, callback)
+func get_mainline_detail(mainline_id: String, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/%s" % mainline_id.uri_encode(), {}, callback)
 
 
-func start_mainline(mainline_id: int, commander: String, save_slot: int = 1, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%d/start" % mainline_id, {"commander": commander, "save_slot": save_slot}, callback)
+func fetch_mainline_dialogue(path: String, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/dialogue?path=%s" % path.uri_encode(), {}, callback)
 
 
-func advance_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%d/advance" % mainline_id, {}, callback)
+func start_mainline(mainline_id: String, user_name: String, skip_intro: bool = false, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/start" % mainline_id.uri_encode(), {"user_name": user_name, "skip_intro": skip_intro}, callback)
 
 
-func next_battle_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%d/next-battle" % mainline_id, {}, callback)
+func advance_mainline(mainline_id: String, user_name: String, game_id: int, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/advance" % mainline_id.uri_encode(), {"user_name": user_name, "game_id": game_id}, callback)
 
 
-func abandon_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%d/abandon" % mainline_id, {}, callback)
+func next_battle_mainline(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/next-battle" % mainline_id.uri_encode(), {"user_name": user_name}, callback)
+
+
+func abandon_mainline(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/abandon" % mainline_id.uri_encode(), {"user_name": user_name}, callback)
 
 
 # T:94 — 拉战斗 BGM 列表
