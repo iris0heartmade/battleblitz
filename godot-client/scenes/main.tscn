@@ -266,7 +266,7 @@ theme_override_font_sizes/font_size = 16
 offset_left = 28.0
 offset_top = 118.0
 offset_right = 402.0
-offset_bottom = 226.0
+offset_bottom = 208.0
 bbcode_enabled = true
 text = "Loading..."
 fit_content = false
@@ -274,22 +274,28 @@ scroll_following = true
 
 [node name="RoomSelectOption" type="OptionButton" parent="Lobby/LobbyFrame"]
 offset_left = 28.0
-offset_top = 234.0
+offset_top = 216.0
 offset_right = 402.0
-offset_bottom = 270.0
+offset_bottom = 250.0
+
+[node name="JoinModeOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+offset_left = 28.0
+offset_top = 258.0
+offset_right = 402.0
+offset_bottom = 292.0
 
 [node name="RefreshRoomsBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 28.0
-offset_top = 278.0
+offset_top = 300.0
 offset_right = 202.0
-offset_bottom = 314.0
+offset_bottom = 334.0
 text = "Refresh"
 
 [node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 220.0
-offset_top = 278.0
+offset_top = 300.0
 offset_right = 402.0
-offset_bottom = 314.0
+offset_bottom = 334.0
 text = "Join selected"
 disabled = true
 
@@ -314,11 +320,17 @@ offset_top = 170.0
 offset_right = 820.0
 offset_bottom = 206.0
 
+[node name="TeamOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+offset_left = 458.0
+offset_top = 218.0
+offset_right = 820.0
+offset_bottom = 254.0
+
 [node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 458.0
-offset_top = 220.0
+offset_top = 270.0
 offset_right = 820.0
-offset_bottom = 256.0
+offset_bottom = 306.0
 text = "Create and join"
 
 [node name="LobbyList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
