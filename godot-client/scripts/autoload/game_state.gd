@@ -230,6 +230,14 @@ func _on_event_delta(event: Dictionary) -> void:
 				int(context.get("tile_y", -1)),
 				int(context.get("new_owner_id", -1))
 			)
+		"recruit":
+			unit_recruited.emit(
+				int(context.get("new_unit_id", actor_unit_id)),
+				String(context.get("unit_type", "")),
+				int(context.get("tile_x", -1)),
+				int(context.get("tile_y", -1)),
+				int(context.get("cost", 0))
+			)
 		"turn_end":
 			turn_ended.emit(int(context.get("next_player_id", -1)), turn)
 		"round_end":

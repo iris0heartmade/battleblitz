@@ -14,6 +14,7 @@ const TEST_MAP_IDS := [
 
 var _failed: int = 0
 var _passed: int = 0
+var _last_recruit_event: Array = []
 
 
 func _ready() -> void:
@@ -195,6 +196,24 @@ func _ready() -> void:
 	_assert_true("Attack confirm text includes distance", confirm_text.contains("距离 3"),
 		"attack confirm text should include Manhattan distance")
 
+	_last_recruit_event = []
+	GameState.unit_recruited.connect(_capture_recruit_event, CONNECT_ONE_SHOT)
+	GameState.ingest_event({
+		"event_type": "recruit",
+		"actor_unit_id": 44,
+		"context": {
+			"new_unit_id": 44,
+			"unit_type": "archer",
+			"tile_x": 5,
+			"tile_y": 6,
+			"cost": 250,
+		},
+	})
+	_assert_eq("GameState emits recruit unit id", int(_last_recruit_event[0]) if _last_recruit_event.size() > 0 else -1, 44,
+		"recruit event should emit the new unit id")
+	_assert_eq("GameState emits recruit unit type", str(_last_recruit_event[1]) if _last_recruit_event.size() > 1 else "", "archer",
+		"recruit event should emit the unit type")
+
 	main_check.call("_on_recruit_response", {
 		"new_unit_type": "archer",
 		"cost": 250,
@@ -331,6 +350,10 @@ func _method_arg_count(target: Object, method_name: String) -> int:
 			var args: Array = item.get("args", [])
 			return args.size()
 	return -1
+
+
+func _capture_recruit_event(new_unit_id: int, unit_type: String, tile_x: int, tile_y: int, cost: int) -> void:
+	_last_recruit_event = [new_unit_id, unit_type, tile_x, tile_y, cost]
 
 
 func _fail(msg: String) -> void:

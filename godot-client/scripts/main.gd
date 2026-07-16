@@ -352,6 +352,8 @@ func _ready() -> void:
 		GameState.unit_attacked.connect(_on_unit_attacked)
 	if not GameState.unit_killed.is_connected(_on_unit_killed):
 		GameState.unit_killed.connect(_on_unit_killed)
+	if not GameState.unit_recruited.is_connected(_on_unit_recruited):
+		GameState.unit_recruited.connect(_on_unit_recruited)
 	if not GameState.turn_ended.is_connected(_on_turn_ended):
 		GameState.turn_ended.connect(_on_turn_ended)
 	if not GameState.match_ended.is_connected(_on_match_ended):
@@ -1101,6 +1103,16 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 		if not u.is_empty():
 			var cell := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 			board.spawn_floating_text_at_cell(cell, "💀击杀", "#c63a3a", "kill")
+
+
+func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y: int, cost: int) -> void:
+	if action_log != null and is_instance_valid(action_log):
+		action_log.append_text("[color=#c9a14a]💰 招募 %s #%d @ (%d,%d) -%d[/color]\n" % [
+			unit_type, new_unit_id, tile_x, tile_y, cost
+		])
+	_update_status("招募事件: %s #%d" % [unit_type, new_unit_id])
+	if board != null:
+		board.spawn_floating_text_at_cell(Vector2i(tile_x, tile_y), "+%s" % unit_type, "#c9a14a", "gold")
 
 
 # M5.1 CO Roster — 顶部全玩家头像 + 名字 + CO 能量条 + Power 按钮
