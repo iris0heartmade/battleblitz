@@ -68,6 +68,7 @@ claude --resume *.txt
 *.png
 !game/app/web/assets/tiles/**/*.png
 !game/app/web/assets/**/*.png
+!godot-client/assets/**/*.png
 
 # ===== Todolist ==========
 *todo*.md
