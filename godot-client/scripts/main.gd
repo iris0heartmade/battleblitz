@@ -2387,8 +2387,14 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 func _on_lobby_add_ai_pressed() -> void:
 	if _game_id <= 0: return
 	# POST /games/{id}/add-ai(走 NetworkClient.request)
-	NetworkClient.request("POST", "/games/%d/add-ai" % _game_id, {})
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Adding AI..."
+	NetworkClient.add_ai_player(_game_id, "normal", "rules", "balanced", Callable(self, "_on_lobby_add_ai_response"))
+
+
+func _on_lobby_add_ai_response(_body: Variant, _code: int = 0) -> void:
 	_refresh_lobby_view()
+	_refresh_room_list()
 
 
 func _on_lobby_start_pressed() -> void:
