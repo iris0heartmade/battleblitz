@@ -10,7 +10,7 @@ The Godot client is no longer just a map-rendering prototype. Recent commits add
 
 - Map rendering with 48px `TileMapLayer` layers, highlights, units, and camera bounds.
 - Online room list, room selection, create-and-join, join selected, and lobby polling.
-- Lobby controls for join role, team selection, team update, add AI, remove AI, AI difficulty/backend/personality, BGM selection, and host commander selection.
+- Lobby controls for join role, team selection, team update, add AI, remove AI, AI difficulty/backend/personality, AI commander preset, BGM selection, and host commander selection.
 - Save management with open/mainline grouping, resume, delete, and refresh.
 - Battle HUD with turn/player/gold panels, action bubble, action log, war report, attack confirmation, recruit modal/feedback, CO roster, CO meter, and CO Power trigger.
 - Mainline list, pre/post dialogue fetch, start, advance, next battle, abandon, and pre-start commander selection.
@@ -20,7 +20,7 @@ The Godot client is no longer just a map-rendering prototype. Recent commits add
 Latest verified smoke result during the recent development run:
 
 ```text
-Passed: 139   Failed: 0
+Passed: 142   Failed: 0
 ```
 
 ## Remaining Gaps
@@ -41,30 +41,27 @@ Passed: 139   Failed: 0
 4. **Host row-level lobby controls are incomplete.**
    WebUI lets the host edit other players' teams inline and remove AI from player rows. Godot currently supports self team update plus an AI selector/removal button, but not full row-level host controls.
 
-5. **Per-AI commander assignment is missing.**
-   The backend supports `battle_config.ai_commanders`; WebUI-oriented design expected AI commander choices. Godot only exposes the human host commander for created rooms.
-
-6. **Room list interaction is functional but not rich.**
+5. **Room list interaction is functional but not rich.**
    Godot uses a dropdown and a text marker. WebUI has richer room cards/actions. A future Godot pass should make room rows selectable/clickable with clearer status, capacity, map, and host information.
 
-7. **Mainline commander selection lacks card-level context.**
+6. **Mainline commander selection lacks card-level context.**
    Godot exposes the unlocked commander dropdown and apply button. WebUI shows card-style choices, current status, lock reasons, and disabled reasons.
 
-8. **Create-room advanced options are still narrower than WebUI.**
+7. **Create-room advanced options are still narrower than WebUI.**
    Godot exposes map preset, commander, BGM, team, and room name. It does not yet expose every older WebUI option or explanatory metadata block, such as detailed BGM notes and map designer notes.
 
 ### P2 - Quality/Production Work
 
-9. **Localization/encoding cleanup.**
+8. **Localization/encoding cleanup.**
    Several existing Godot and WebUI strings show mojibake in source views. The UI may still render acceptably in places, but the source should be normalized before larger localization work.
 
-10. **Touch/mobile and export work remains.**
+9. **Touch/mobile and export work remains.**
     Android/iOS input remap, gesture camera, and export-specific QA are still open.
 
-11. **Backend deploy/Web export remains.**
+10. **Backend deploy/Web export remains.**
     Public WSS configuration, HTML5 export validation, and deployment docs are still future work.
 
-12. **Automated visual QA is limited.**
+11. **Automated visual QA is limited.**
     The repository has screenshot tools, but the current parity gate is mostly smoke assertions. Add screenshot checks for lobby, mainline, battle HUD, save manager, and BGM/commander controls.
 
 ## Suggested Next Development Order
@@ -72,9 +69,8 @@ Passed: 139   Failed: 0
 1. Build a minimal Godot map editor shell: editor entry point, map load/save list, board canvas reuse, and terrain paint mode.
 2. Add live backend e2e for create/join/start/action/resume so regressions are caught outside mocked response handlers.
 3. Expand spectator UX to match WebUI's convert/add-spectator choices.
-4. Add per-AI commander assignment in the lobby creation controls.
-5. Upgrade room list rows from dropdown selection to clickable Godot controls.
-6. Do an encoding/localization cleanup pass once the feature surface settles.
+4. Upgrade room list rows from dropdown selection to clickable Godot controls.
+5. Do an encoding/localization cleanup pass once the feature surface settles.
 
 ## Files To Watch
 

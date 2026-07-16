@@ -181,6 +181,7 @@ var _selected_save_id: int = 0
 @onready var ai_difficulty_option: OptionButton = $Lobby/LobbyFrame/AiDifficultyOption
 @onready var ai_kind_option: OptionButton = $Lobby/LobbyFrame/AiKindOption
 @onready var ai_personality_option: OptionButton = $Lobby/LobbyFrame/AiPersonalityOption
+@onready var ai_commander_option: OptionButton = $Lobby/LobbyFrame/AiCommanderOption
 @onready var ai_player_option: OptionButton = $Lobby/LobbyFrame/AiPlayerOption
 @onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/LobbyAddAiBtn
 @onready var lobby_remove_ai_btn: Button = $Lobby/LobbyFrame/LobbyRemoveAiBtn
@@ -205,6 +206,7 @@ var _selected_room_id: int = 0
 var _selected_ai_player_id: int = 0
 var _preset_options: Array = []
 var _lobby_commander_ids: Array[String] = [""]
+var _lobby_ai_commander_ids: Array[String] = [""]
 var _lobby_bgm_track_ids: Array[String] = [""]
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
@@ -2413,6 +2415,7 @@ func _on_lobby_pressed() -> void:
 		"rout",
 		"",
 		"",
+		{},
 		Callable(self, "_on_lobby_create_response")
 	)
 	lobby_status_label.text = "创建房间中..."
@@ -2484,19 +2487,29 @@ func _selected_join_team() -> String:
 
 func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 	_lobby_commander_ids = [""]
+	_lobby_ai_commander_ids = [""]
 	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 		lobby_commander_option.clear()
 		lobby_commander_option.add_item("No commander")
+	if ai_commander_option != null and is_instance_valid(ai_commander_option):
+		ai_commander_option.clear()
+		ai_commander_option.add_item("AI auto commander")
 	for item in unlocked:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
 			continue
 		_lobby_commander_ids.append(commander_id)
+		_lobby_ai_commander_ids.append(commander_id)
 		if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 			lobby_commander_option.add_item(_commander_label(commander_id))
+		if ai_commander_option != null and is_instance_valid(ai_commander_option):
+			ai_commander_option.add_item("AI: %s" % _commander_label(commander_id))
 	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 		lobby_commander_option.select(0)
 		lobby_commander_option.disabled = _lobby_commander_ids.size() <= 1
+	if ai_commander_option != null and is_instance_valid(ai_commander_option):
+		ai_commander_option.select(0)
+		ai_commander_option.disabled = _lobby_ai_commander_ids.size() <= 1
 
 
 func _selected_lobby_commander() -> String:
@@ -2506,6 +2519,22 @@ func _selected_lobby_commander() -> String:
 	if index < 0 or index >= _lobby_commander_ids.size():
 		return ""
 	return _lobby_commander_ids[index]
+
+
+func _selected_lobby_ai_commander() -> String:
+	if ai_commander_option == null or not is_instance_valid(ai_commander_option):
+		return ""
+	var index := ai_commander_option.selected
+	if index < 0 or index >= _lobby_ai_commander_ids.size():
+		return ""
+	return _lobby_ai_commander_ids[index]
+
+
+func _selected_lobby_ai_commanders() -> Dictionary:
+	var commander_id := _selected_lobby_ai_commander()
+	if commander_id == "":
+		return {}
+	return {2: commander_id}
 
 
 func _setup_lobby_bgm_options(tracks: Array = []) -> void:
@@ -2734,7 +2763,15 @@ func _on_create_room_pressed() -> void:
 		biome = String(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Creating room..."
-	NetworkClient.create_game(room_name, preset_id, biome, "rout", _selected_lobby_commander(), _selected_lobby_bgm_track())
+	NetworkClient.create_game(
+		room_name,
+		preset_id,
+		biome,
+		"rout",
+		_selected_lobby_commander(),
+		_selected_lobby_bgm_track(),
+		_selected_lobby_ai_commanders()
+	)
 
 
 func _on_join_selected_pressed() -> void:

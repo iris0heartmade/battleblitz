@@ -403,7 +403,17 @@ anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -160.0
 offset_top = -104.0
-offset_right = -16.0
+offset_right = -32.0
+offset_bottom = -68.0
+
+[node name="AiCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -24.0
+offset_top = -104.0
+offset_right = 120.0
 offset_bottom = -68.0
 
 [node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame"]
@@ -411,9 +421,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 16.0
+offset_left = 128.0
 offset_top = -104.0
-offset_right = 160.0
+offset_right = 248.0
 offset_bottom = -68.0
 text = "🤖 添加 AI"
 
@@ -422,9 +432,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 168.0
+offset_left = 256.0
 offset_top = -104.0
-offset_right = 320.0
+offset_right = 368.0
 offset_bottom = -68.0
 
 [node name="LobbyRemoveAiBtn" type="Button" parent="Lobby/LobbyFrame"]
@@ -432,7 +442,7 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 328.0
+offset_left = 376.0
 offset_top = -104.0
 offset_right = 424.0
 offset_bottom = -68.0
