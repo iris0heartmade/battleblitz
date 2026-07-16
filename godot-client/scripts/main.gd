@@ -213,6 +213,8 @@ var _tutorial_shown: bool = false
 var _game_id: int = 0
 var _player_id: int = 0
 var _user_name: String = "Player"
+var _active_mainline_id: String = ""
+var _mainline_battle_game_id: int = 0
 
 
 func _ready() -> void:
@@ -1344,6 +1346,9 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 			detail_lines = detail_lines.slice(detail_lines.size() - MAX_DETAIL)
 	stats["detail_lines"] = detail_lines
 	show_battle_result(winner_name, winner_color, stats)
+	if _active_mainline_id != "" and _mainline_battle_game_id == _game_id and winner_id == _player_id:
+		_update_status("主线战斗胜利,推进章节...")
+		NetworkClient.advance_mainline(_active_mainline_id, _user_name, _game_id, Callable(self, "_on_mainline_advance_response"))
 
 
 ## M4.17:slide-down banner from above + auto-hide.
@@ -2829,7 +2834,9 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	GameState.local_player_id = _player_id
 	UserSettings.set_value("session.v1.last_game_id", _game_id)
 	UserSettings.set_value("session.v1.last_player_id", _player_id)
-	UserSettings.set_value("session.v1.mainline_id", str(body.get("mainline_id", "")))
+	_active_mainline_id = str(body.get("mainline_id", ""))
+	_mainline_battle_game_id = _game_id
+	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
 	UserSettings.set_value("session.v1.mainline_game_id", _game_id)
 	UserSettings.set_value("session.v1.mainline_player_id", _player_id)
 	var battle_index: int = int(body.get("battle_index", 0)) + 1
@@ -2851,6 +2858,34 @@ func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
 		var text := str(entry.get("text", ""))
 		if text != "":
 			show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, text])
+
+
+func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "主线推进失败"
+		if body is Dictionary:
+			msg = "主线推进失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		return
+	var state := str(body.get("state", "battle"))
+	var battle_index: int = int(body.get("battle_index", 0)) + 1
+	var total_battles: int = int(body.get("total_battles", 1))
+	var dialogue_path := str(body.get("post_battle_dialogue_url", ""))
+	if dialogue_path != "":
+		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
+	if state == "victory":
+		var rewards: Dictionary = body.get("rewards", {}) if body.get("rewards", {}) is Dictionary else {}
+		var reward_bits: Array[String] = []
+		if int(rewards.get("gold", 0)) > 0:
+			reward_bits.append("+%d 金币" % int(rewards.get("gold", 0)))
+		if str(rewards.get("unlock_class", "")) != "":
+			reward_bits.append("解锁 %s" % str(rewards.get("unlock_class", "")))
+		_active_mainline_id = ""
+		_mainline_battle_game_id = 0
+		UserSettings.set_value("session.v1.mainline_id", "")
+		_update_status("主线通关%s" % (": " + ", ".join(reward_bits) if reward_bits.size() > 0 else ""))
+	else:
+		_update_status("主线推进到战斗 %d/%d" % [battle_index, total_battles])
 
 
 func _on_ml_back_pressed() -> void:
