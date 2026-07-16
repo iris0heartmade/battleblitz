@@ -318,6 +318,9 @@ func _ready() -> void:
 		editor_save_btn.pressed.connect(_on_editor_save_pressed)
 	if editor_back_btn != null and is_instance_valid(editor_back_btn):
 		editor_back_btn.pressed.connect(_on_editor_back_pressed)
+	if editor_board != null and is_instance_valid(editor_board):
+		if not editor_board.tile_clicked.is_connected(_on_editor_tile_clicked):
+			editor_board.tile_clicked.connect(_on_editor_tile_clicked)
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
 	# T:8 启动时应用上次的字号偏好
@@ -2471,6 +2474,15 @@ func _selected_editor_biome() -> String:
 			return "grass"
 
 
+func _selected_editor_terrain_char() -> String:
+	if editor_terrain_option == null or not is_instance_valid(editor_terrain_option):
+		return "P"
+	var index := editor_terrain_option.selected
+	if index < 0 or index >= _editor_terrain_chars.size():
+		return "P"
+	return _editor_terrain_chars[index]
+
+
 func _build_blank_editor_map() -> Dictionary:
 	var rows: Array[String] = []
 	for _y in range(15):
@@ -2495,6 +2507,32 @@ func _render_editor_map() -> void:
 	if _editor_map.is_empty():
 		return
 	editor_board.load_map(_editor_map)
+
+
+func _paint_editor_tile(tile: Vector2i) -> void:
+	if _editor_map.is_empty():
+		_editor_map = _build_blank_editor_map()
+	var size: Dictionary = _editor_map.get("size", {})
+	var width := int(size.get("width", 0))
+	var height := int(size.get("height", 0))
+	if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
+		return
+	var layout: Array = _editor_map.get("layout", [])
+	if tile.y >= layout.size():
+		return
+	var row := str(layout[tile.y])
+	if tile.x >= row.length():
+		return
+	var terrain_char := _selected_editor_terrain_char()
+	layout[tile.y] = row.substr(0, tile.x) + terrain_char + row.substr(tile.x + 1)
+	_editor_map["layout"] = layout
+	_render_editor_map()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Painted %s at %d,%d" % [terrain_char, tile.x, tile.y]
+
+
+func _on_editor_tile_clicked(tile: Vector2i) -> void:
+	_paint_editor_tile(tile)
 
 
 func _on_editor_new_pressed() -> void:

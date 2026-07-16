@@ -351,6 +351,12 @@ func _ready() -> void:
 	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
 	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
 		"terrain selector should expose the initial paint brushes")
+	editor_terrain_option.select(1)
+	main_check.call("_paint_editor_tile", Vector2i(1, 1))
+	var editor_map: Dictionary = main_check.get("_editor_map")
+	var editor_layout: Array = editor_map.get("layout", [])
+	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
+		"painting with the forest brush should mutate the editor layout")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_mainline_start_response", {
