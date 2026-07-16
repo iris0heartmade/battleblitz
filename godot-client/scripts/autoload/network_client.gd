@@ -72,6 +72,28 @@ func _ready() -> void:
 	add_child(_http)
 	_http.timeout = _REQ_TIMEOUT_SEC
 	_http.request_completed.connect(_on_http_completed)
+	# Wire GameState's handlers to our typed WS signals. NetworkClient is an
+	# autoload that loads AFTER GameState, so /root/GameState already exists
+	# here - doing the wiring from this side avoids the autoload-ordering
+	# trap where GameState._ready runs before NetworkClient is in the tree.
+	_wire_to_game_state()
+
+
+func _wire_to_game_state() -> void:
+	var gs := get_node_or_null("/root/GameState")
+	if gs == null:
+		push_warning("NetworkClient: GameState autoload not found; WS signals not wired")
+		return
+	if state_snapshot_received.is_connected(gs._on_state_snapshot):
+		return  # Already wired (defensive)
+	state_snapshot_received.connect(gs._on_state_snapshot)
+	event_delta_received.connect(gs._on_event_delta)
+	server_hello_received.connect(gs._on_server_hello)
+	# Use set() so the compiler resolves `is_connected` as GameState's
+	# property, not Object's built-in is_connected() method (gs is typed
+	# Node here, so a direct `gs.is_connected = ...` is a parse error).
+	ws_connected.connect(func(): gs.set("is_connected", true))
+	ws_disconnected.connect(func(_r): gs.set("is_connected", false))
 
 
 # ============================================================

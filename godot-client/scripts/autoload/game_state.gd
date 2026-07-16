@@ -76,19 +76,12 @@ var is_connected: bool = false:
 
 
 func _ready() -> void:
-	# Wire to NetworkClient's typed signals.
-	var nc := get_node_or_null("/root/NetworkClient")
-	if nc == null:
-		nc = Engine.get_singleton("NetworkClient") if Engine.has_singleton("NetworkClient") else null
-	# In Godot 4 autoloads aren't on Engine singleton; resolve by absolute path.
-	if nc == null:
-		nc = get_node("/root/NetworkClient")
-	if nc != null:
-		nc.state_snapshot_received.connect(_on_state_snapshot)
-		nc.event_delta_received.connect(_on_event_delta)
-		nc.server_hello_received.connect(_on_server_hello)
-		nc.ws_connected.connect(func(): is_connected = true)
-		nc.ws_disconnected.connect(func(_r): is_connected = false)
+	# NOTE: NetworkClient is an autoload that loads AFTER GameState
+	# (order: Config, UserSettings, GameState, InputState, NetworkClient,
+	# AudioManager), so it is NOT in the tree yet here. The actual signal
+	# wiring is done from NetworkClient._ready (which runs after GameState
+	# is in the tree) - see network_client.gd::_wire_to_game_state().
+	pass
 
 
 # ============================================================
