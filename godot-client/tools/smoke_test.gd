@@ -264,6 +264,25 @@ func _ready() -> void:
 	_assert_true("Mainline start status includes progress", main_status_label.text.contains("1/2"),
 		"mainline start should show battle progress")
 
+	main_check.call("_on_mainline_advance_response", {
+		"state": "dialogue",
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 1,
+		"total_battles": 2,
+		"post_battle_dialogue_url": "dialogue/chapter_01/post_01.json",
+	}, 200)
+	_assert_true("Mainline advance status includes next progress", main_status_label.text.contains("2/2"),
+		"mainline advance should show the next battle progress")
+	main_check.call("_on_mainline_advance_response", {
+		"state": "victory",
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 2,
+		"total_battles": 2,
+		"rewards": {"gold": 100},
+	}, 200)
+	_assert_true("Mainline victory status is shown", main_status_label.text.contains("通关"),
+		"mainline victory should show completion status")
+
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])
 	if _failed > 0:
