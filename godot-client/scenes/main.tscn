@@ -337,18 +337,24 @@ offset_right = 820.0
 offset_bottom = 254.0
 text = "Apply team"
 
+[node name="LobbyCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+offset_left = 458.0
+offset_top = 266.0
+offset_right = 820.0
+offset_bottom = 302.0
+
 [node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 458.0
-offset_top = 270.0
+offset_top = 314.0
 offset_right = 820.0
-offset_bottom = 306.0
+offset_bottom = 350.0
 text = "Create and join"
 
 [node name="LobbyList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 310.0
+offset_top = 360.0
 offset_right = -24.0
 offset_bottom = -120.0
 bbcode_enabled = true

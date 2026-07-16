@@ -196,12 +196,14 @@ var _selected_save_id: int = 0
 @onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/MapPresetOption
 @onready var team_option: OptionButton = $Lobby/LobbyFrame/TeamOption
 @onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyApplyTeamBtn
+@onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyCommanderOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
 var _entry_flow: String = "free"
 var _lobby_rooms: Array = []
 var _selected_room_id: int = 0
 var _selected_ai_player_id: int = 0
 var _preset_options: Array = []
+var _lobby_commander_ids: Array[String] = [""]
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
@@ -2391,6 +2393,8 @@ func _on_lobby_pressed() -> void:
 		create_name_input.text = "%s room" % _user_name
 	_setup_lobby_join_options()
 	_setup_lobby_ai_options()
+	_setup_lobby_commander_options()
+	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	_load_lobby_presets()
 	_refresh_room_list()
 	return
@@ -2403,6 +2407,7 @@ func _on_lobby_pressed() -> void:
 		"balanced_2p_15",
 		"grass",
 		"rout",
+		"",
 		Callable(self, "_on_lobby_create_response")
 	)
 	lobby_status_label.text = "创建房间中..."
@@ -2470,6 +2475,32 @@ func _selected_join_team() -> String:
 			return "yellow"
 		_:
 			return ""
+
+
+func _setup_lobby_commander_options(unlocked: Array = []) -> void:
+	_lobby_commander_ids = [""]
+	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
+		lobby_commander_option.clear()
+		lobby_commander_option.add_item("No commander")
+	for item in unlocked:
+		var commander_id := str(item)
+		if commander_id == "" or _lobby_commander_ids.has(commander_id):
+			continue
+		_lobby_commander_ids.append(commander_id)
+		if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
+			lobby_commander_option.add_item(_commander_label(commander_id))
+	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
+		lobby_commander_option.select(0)
+		lobby_commander_option.disabled = _lobby_commander_ids.size() <= 1
+
+
+func _selected_lobby_commander() -> String:
+	if lobby_commander_option == null or not is_instance_valid(lobby_commander_option):
+		return ""
+	var index := lobby_commander_option.selected
+	if index < 0 or index >= _lobby_commander_ids.size():
+		return ""
+	return _lobby_commander_ids[index]
 
 
 func _setup_lobby_ai_options() -> void:
@@ -2654,7 +2685,7 @@ func _on_create_room_pressed() -> void:
 		biome = String(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Creating room..."
-	NetworkClient.create_game(room_name, preset_id, biome, "rout")
+	NetworkClient.create_game(room_name, preset_id, biome, "rout", _selected_lobby_commander())
 
 
 func _on_join_selected_pressed() -> void:
@@ -2901,11 +2932,13 @@ func _on_commanders_response(body: Variant, code: int = 0) -> void:
 		if ml_commander_status != null and is_instance_valid(ml_commander_status):
 			ml_commander_status.text = "Commander: unavailable"
 		_setup_mainline_commander_options()
+		_setup_lobby_commander_options()
 		return
 	var unlocked: Array = body.get("unlocked_commanders", []) if body.get("unlocked_commanders", []) is Array else []
 	var mainline_choices: Dictionary = body.get("mainline_commanders", {}) if body.get("mainline_commanders", {}) is Dictionary else {}
 	var current := str(mainline_choices.get(_selected_mainline_id, ""))
 	_setup_mainline_commander_options(unlocked, current)
+	_setup_lobby_commander_options(unlocked)
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
 		ml_commander_status.text = "Commander: %s" % (current if current != "" else "none")
 

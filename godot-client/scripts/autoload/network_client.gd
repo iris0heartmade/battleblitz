@@ -427,13 +427,16 @@ func delete_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}), {}, callback)
 
 
-func create_game(name: String, map_preset: String, map_biome: String, win_condition: String, callback: Callable = Callable()) -> void:
-	request("POST", "/games", {
+func create_game(name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", callback: Callable = Callable()) -> void:
+	var body := {
 		"name": name,
 		"map_preset": map_preset,
 		"map_biome": map_biome,
 		"win_condition": win_condition,
-	}, callback)
+	}
+	if commander_id != "":
+		body["battle_config"] = {"commander": commander_id}
+	request("POST", "/games", body, callback)
 
 
 func get_game_state(game_id: int, callback: Callable = Callable()) -> void:
