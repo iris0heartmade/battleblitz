@@ -292,11 +292,17 @@ theme_override_font_sizes/font_size = 13
 [node name="EditorModeOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 260.0
-offset_right = 156.0
+offset_right = 120.0
+offset_bottom = 296.0
+
+[node name="EditorUnitToolOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 128.0
+offset_top = 260.0
+offset_right = 212.0
 offset_bottom = 296.0
 
 [node name="EditorUnitOption" type="OptionButton" parent="EditorView/EditorPanel"]
-offset_left = 164.0
+offset_left = 220.0
 offset_top = 260.0
 offset_right = 320.0
 offset_bottom = 296.0
