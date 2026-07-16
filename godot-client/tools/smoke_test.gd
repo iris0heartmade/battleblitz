@@ -129,6 +129,14 @@ func _ready() -> void:
 		"map editor should expose a map name input")
 	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorTerrainOption") != null,
 		"map editor should expose a terrain brush selector")
+	_assert_true("EditorView has EditorModeOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorModeOption") != null,
+		"map editor should expose terrain/unit edit modes")
+	_assert_true("EditorView has EditorUnitOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitOption") != null,
+		"map editor should expose a unit type selector")
+	_assert_true("EditorView has EditorUnitColorOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitColorOption") != null,
+		"map editor should expose a unit color selector")
+	_assert_true("EditorView has EditorUnitLevelOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitLevelOption") != null,
+		"map editor should expose a unit level selector")
 	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
 		"map editor should expose a save action")
 	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
@@ -355,6 +363,14 @@ func _ready() -> void:
 	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
 	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
 		"terrain selector should expose the initial paint brushes")
+	var editor_mode_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorModeOption")
+	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitOption")
+	var editor_unit_color_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitColorOption")
+	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitLevelOption")
+	_assert_gte("Editor mode selector lists modes", editor_mode_option.item_count, 2,
+		"editor mode selector should include terrain and unit placement")
+	_assert_gte("Editor unit selector lists unit types", editor_unit_option.item_count, 5,
+		"editor unit selector should include deployable unit types")
 	main_check.call("_on_editor_maps_response", [
 		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
 		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
@@ -383,7 +399,23 @@ func _ready() -> void:
 	main_check.call("_on_editor_delete_response", {}, 204)
 	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
 		"successful delete should clear the selected map id")
+	editor_mode_option.select(1)
+	editor_unit_option.select(1)
+	editor_unit_color_option.select(1)
+	editor_unit_level_option.select(2)
+	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	var unit_editor_map: Dictionary = main_check.get("_editor_map")
+	var editor_units: Array = unit_editor_map.get("initial_units", [])
+	_assert_eq("Editor unit mode places one unit", editor_units.size(), 1,
+		"unit mode should add an initial unit at the clicked tile")
+	_assert_eq("Editor unit mode stores selected unit type", str((editor_units[0] as Dictionary).get("type", "")), "archer",
+		"unit placement should use the selected unit type")
+	_assert_eq("Editor unit mode stores selected color", str((editor_units[0] as Dictionary).get("color", "")), "blue",
+		"unit placement should use the selected color")
+	_assert_eq("Editor unit mode stores selected level", int((editor_units[0] as Dictionary).get("level", 0)), 3,
+		"unit placement should use the selected level")
 	editor_terrain_option.select(1)
+	editor_mode_option.select(0)
 	main_check.call("_paint_editor_tile", Vector2i(1, 1))
 	var editor_map: Dictionary = main_check.get("_editor_map")
 	var editor_layout: Array = editor_map.get("layout", [])

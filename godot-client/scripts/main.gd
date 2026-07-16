@@ -182,6 +182,10 @@ var _selected_save_id: int = 0
 @onready var editor_terrain_option: OptionButton = $EditorView/EditorPanel/EditorTerrainOption
 @onready var editor_map_select_option: OptionButton = $EditorView/EditorPanel/EditorMapSelectOption
 @onready var editor_load_btn: Button = $EditorView/EditorPanel/EditorLoadBtn
+@onready var editor_mode_option: OptionButton = $EditorView/EditorPanel/EditorModeOption
+@onready var editor_unit_option: OptionButton = $EditorView/EditorPanel/EditorUnitOption
+@onready var editor_unit_color_option: OptionButton = $EditorView/EditorPanel/EditorUnitColorOption
+@onready var editor_unit_level_option: OptionButton = $EditorView/EditorPanel/EditorUnitLevelOption
 @onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
 @onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
 @onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
@@ -191,6 +195,8 @@ var _editor_map: Dictionary = {}
 var _editor_map_ids: Array[String] = []
 var _selected_editor_map_id: String = ""
 var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "C", "v", "b", "r", "g", "S"]
+var _editor_unit_types: Array[String] = ["swordsman", "archer", "knight", "healer", "warlock"]
+var _editor_unit_colors: Array[String] = ["red", "blue", "green", "yellow"]
 
 @onready var lobby_view: Control = $Lobby
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyStatus
@@ -2441,6 +2447,26 @@ func _setup_editor_options() -> void:
 		for terrain_char in _editor_terrain_chars:
 			editor_terrain_option.add_item(_editor_terrain_label(terrain_char))
 		editor_terrain_option.select(0)
+	if editor_mode_option != null and is_instance_valid(editor_mode_option):
+		editor_mode_option.clear()
+		editor_mode_option.add_item("Terrain")
+		editor_mode_option.add_item("Unit")
+		editor_mode_option.select(0)
+	if editor_unit_option != null and is_instance_valid(editor_unit_option):
+		editor_unit_option.clear()
+		for unit_type in _editor_unit_types:
+			editor_unit_option.add_item(unit_type.capitalize())
+		editor_unit_option.select(0)
+	if editor_unit_color_option != null and is_instance_valid(editor_unit_color_option):
+		editor_unit_color_option.clear()
+		for color in _editor_unit_colors:
+			editor_unit_color_option.add_item(color.capitalize())
+		editor_unit_color_option.select(0)
+	if editor_unit_level_option != null and is_instance_valid(editor_unit_level_option):
+		editor_unit_level_option.clear()
+		for level in range(1, 11):
+			editor_unit_level_option.add_item("Lv %d" % level)
+		editor_unit_level_option.select(0)
 	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
 		if editor_map_name_input.text.strip_edges() == "":
 			editor_map_name_input.text = "Godot custom map"
@@ -2493,6 +2519,34 @@ func _selected_editor_terrain_char() -> String:
 	return _editor_terrain_chars[index]
 
 
+func _is_editor_unit_mode() -> bool:
+	return editor_mode_option != null and is_instance_valid(editor_mode_option) and editor_mode_option.selected == 1
+
+
+func _selected_editor_unit_type() -> String:
+	if editor_unit_option == null or not is_instance_valid(editor_unit_option):
+		return "swordsman"
+	var index := editor_unit_option.selected
+	if index < 0 or index >= _editor_unit_types.size():
+		return "swordsman"
+	return _editor_unit_types[index]
+
+
+func _selected_editor_unit_color() -> String:
+	if editor_unit_color_option == null or not is_instance_valid(editor_unit_color_option):
+		return "red"
+	var index := editor_unit_color_option.selected
+	if index < 0 or index >= _editor_unit_colors.size():
+		return "red"
+	return _editor_unit_colors[index]
+
+
+func _selected_editor_unit_level() -> int:
+	if editor_unit_level_option == null or not is_instance_valid(editor_unit_level_option):
+		return 1
+	return clampi(editor_unit_level_option.selected + 1, 1, 10)
+
+
 func _build_blank_editor_map() -> Dictionary:
 	var rows: Array[String] = []
 	for _y in range(15):
@@ -2542,7 +2596,39 @@ func _paint_editor_tile(tile: Vector2i) -> void:
 
 
 func _on_editor_tile_clicked(tile: Vector2i) -> void:
+	if _is_editor_unit_mode():
+		_place_editor_unit(tile)
+		return
 	_paint_editor_tile(tile)
+
+
+func _place_editor_unit(tile: Vector2i) -> void:
+	if _editor_map.is_empty():
+		_editor_map = _build_blank_editor_map()
+	var size: Dictionary = _editor_map.get("size", {})
+	var width := int(size.get("width", 0))
+	var height := int(size.get("height", 0))
+	if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
+		return
+	var units: Array = _editor_map.get("initial_units", [])
+	var next_units: Array = []
+	for unit in units:
+		if not unit is Dictionary:
+			continue
+		if int(unit.get("x", -1)) == tile.x and int(unit.get("y", -1)) == tile.y:
+			continue
+		next_units.append(unit)
+	next_units.append({
+		"x": tile.x,
+		"y": tile.y,
+		"type": _selected_editor_unit_type(),
+		"color": _selected_editor_unit_color(),
+		"level": _selected_editor_unit_level(),
+	})
+	_editor_map["initial_units"] = next_units
+	_render_editor_map()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Placed %s at %d,%d" % [_selected_editor_unit_type(), tile.x, tile.y]
 
 
 func _on_editor_new_pressed() -> void:

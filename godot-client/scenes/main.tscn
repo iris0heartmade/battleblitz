@@ -289,32 +289,56 @@ offset_bottom = 256.0
 text = "Ready"
 theme_override_font_sizes/font_size = 13
 
+[node name="EditorModeOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 260.0
+offset_right = 156.0
+offset_bottom = 296.0
+
+[node name="EditorUnitOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 164.0
+offset_top = 260.0
+offset_right = 320.0
+offset_bottom = 296.0
+
+[node name="EditorUnitColorOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 304.0
+offset_right = 156.0
+offset_bottom = 340.0
+
+[node name="EditorUnitLevelOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 164.0
+offset_top = 304.0
+offset_right = 320.0
+offset_bottom = 340.0
+
 [node name="EditorNewBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
-offset_top = 276.0
+offset_top = 356.0
 offset_right = 156.0
-offset_bottom = 312.0
+offset_bottom = 392.0
 text = "New 15x15"
 
 [node name="EditorSaveBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
-offset_top = 276.0
+offset_top = 356.0
 offset_right = 320.0
-offset_bottom = 312.0
+offset_bottom = 392.0
 text = "Save map"
 
 [node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
-offset_top = 372.0
+offset_top = 452.0
 offset_right = 320.0
-offset_bottom = 408.0
+offset_bottom = 488.0
 text = "Back to menu"
 
 [node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
-offset_top = 324.0
+offset_top = 404.0
 offset_right = 320.0
-offset_bottom = 360.0
+offset_bottom = 440.0
 text = "Delete map"
 disabled = true
 
