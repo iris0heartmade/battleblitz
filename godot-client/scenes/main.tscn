@@ -122,6 +122,10 @@ custom_minimum_size = Vector2(320, 52)
 visible = false
 disabled = true
 
+[node name="SavesButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "📁  存档管理"
+custom_minimum_size = Vector2(320, 52)
+
 ; T:96 主线章节按钮
 [node name="MainlineButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
 text = "📖  主线章节"
@@ -425,6 +429,119 @@ text = "对局 #? · 创建中..."
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 modulate = Color(0.65, 0.6, 0.45, 1)
+
+; ============================================================
+; SavesView — 存档管理(开房 / 主线分组 + 继续 / 删除)
+; ============================================================
+[node name="SavesView" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="SaveFrame" type="ColorRect" parent="SavesView"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -430.0
+offset_top = -280.0
+offset_right = 430.0
+offset_bottom = 280.0
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="SaveBorder" type="ReferenceRect" parent="SavesView/SaveFrame"]
+editor_only = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 4
+
+[node name="SaveTitle" type="Label" parent="SavesView/SaveFrame"]
+anchor_right = 1.0
+offset_top = 12.0
+offset_bottom = 44.0
+text = "📁  存 档 管 理"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+
+[node name="SaveStatus" type="Label" parent="SavesView/SaveFrame"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 48.0
+offset_right = -24.0
+offset_bottom = 72.0
+text = "加载中..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.65, 0.6, 0.45, 1)
+
+[node name="OpenTitle" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 32.0
+offset_top = 86.0
+offset_right = 396.0
+offset_bottom = 112.0
+text = "开房模式存档"
+theme_override_font_sizes/font_size = 16
+
+[node name="MainlineTitle" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 464.0
+offset_top = 86.0
+offset_right = 828.0
+offset_bottom = 112.0
+text = "主线模式存档"
+theme_override_font_sizes/font_size = 16
+
+[node name="SaveOpenList" type="RichTextLabel" parent="SavesView/SaveFrame"]
+offset_left = 32.0
+offset_top = 118.0
+offset_right = 408.0
+offset_bottom = 380.0
+bbcode_enabled = true
+fit_content = false
+scroll_active = true
+
+[node name="SaveMainlineList" type="RichTextLabel" parent="SavesView/SaveFrame"]
+offset_left = 464.0
+offset_top = 118.0
+offset_right = 828.0
+offset_bottom = 380.0
+bbcode_enabled = true
+fit_content = false
+scroll_active = true
+
+[node name="SaveSelectOption" type="OptionButton" parent="SavesView/SaveFrame"]
+offset_left = 32.0
+offset_top = 406.0
+offset_right = 536.0
+offset_bottom = 442.0
+
+[node name="SaveResumeBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 552.0
+offset_top = 406.0
+offset_right = 672.0
+offset_bottom = 442.0
+text = "继续"
+
+[node name="SaveDeleteBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 688.0
+offset_top = 406.0
+offset_right = 808.0
+offset_bottom = 442.0
+text = "删除"
+
+[node name="SaveRefreshBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 252.0
+offset_top = 492.0
+offset_right = 392.0
+offset_bottom = 528.0
+text = "刷新"
+
+[node name="SaveBackBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 468.0
+offset_top = 492.0
+offset_right = 608.0
+offset_bottom = 528.0
+text = "返回"
 
 ; ============================================================
 ; T:96 MainlineView — 章节列表 + 详情 + 对话

@@ -141,6 +141,7 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var ml_list_container: VBoxContainer = $MainlineView/MLFrame/MLListContainer
 @onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
+@onready var saves_button: Button = $Menu/CenterContainer/ButtonCol/SavesButton
 @onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
 @onready var exit_button: Button = $Menu/CenterContainer/ButtonCol/ExitButton
 
@@ -148,6 +149,18 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var resume_button: Button = $Menu/CenterContainer/ButtonCol/ResumeButton
 var _resume_game_id: int = 0
 var _resume_player_id: int = 0
+
+@onready var saves_view: Control = $SavesView
+@onready var save_status: Label = $SavesView/SaveFrame/SaveStatus
+@onready var save_open_list: RichTextLabel = $SavesView/SaveFrame/SaveOpenList
+@onready var save_mainline_list: RichTextLabel = $SavesView/SaveFrame/SaveMainlineList
+@onready var save_select_option: OptionButton = $SavesView/SaveFrame/SaveSelectOption
+@onready var save_resume_btn: Button = $SavesView/SaveFrame/SaveResumeBtn
+@onready var save_delete_btn: Button = $SavesView/SaveFrame/SaveDeleteBtn
+@onready var save_refresh_btn: Button = $SavesView/SaveFrame/SaveRefreshBtn
+@onready var save_back_btn: Button = $SavesView/SaveFrame/SaveBackBtn
+var _save_records: Array = []
+var _selected_save_id: int = 0
 
 # T:3 基础大厅视图
 @onready var lobby_view: Control = $Lobby
@@ -212,6 +225,8 @@ func _ready() -> void:
 	menu_button.pressed.connect(_on_free_play_pressed)
 	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	if saves_button != null and is_instance_valid(saves_button):
+		saves_button.pressed.connect(_on_saves_pressed)
 	# T:96 Mainline
 	if ml_back_btn != null and is_instance_valid(ml_back_btn):
 		ml_back_btn.pressed.connect(_on_ml_back_pressed)
@@ -236,6 +251,16 @@ func _ready() -> void:
 	exit_button.pressed.connect(_on_exit_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
 		resume_button.pressed.connect(_on_resume_pressed)
+	if save_select_option != null and is_instance_valid(save_select_option):
+		save_select_option.item_selected.connect(_on_save_selected)
+	if save_resume_btn != null and is_instance_valid(save_resume_btn):
+		save_resume_btn.pressed.connect(_on_save_resume_pressed)
+	if save_delete_btn != null and is_instance_valid(save_delete_btn):
+		save_delete_btn.pressed.connect(_on_save_delete_pressed)
+	if save_refresh_btn != null and is_instance_valid(save_refresh_btn):
+		save_refresh_btn.pressed.connect(_refresh_saves)
+	if save_back_btn != null and is_instance_valid(save_back_btn):
+		save_back_btn.pressed.connect(_on_save_back_pressed)
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
 	# T:8 启动时应用上次的字号偏好
@@ -388,6 +413,7 @@ func _show_view(name: String) -> void:
 	game_view.visible = (name == "game")
 	lobby_view.visible = (name == "lobby")
 	mainline_view.visible = (name == "mainline")
+	saves_view.visible = (name == "saves")
 
 
 func _on_free_play_pressed() -> void:
@@ -563,6 +589,141 @@ func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
 		UserSettings.set_value("session.v1.last_game_id", _game_id)
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
+
+
+func _on_saves_pressed() -> void:
+	_show_view("saves")
+	_refresh_saves()
+
+
+func _refresh_saves() -> void:
+	_selected_save_id = 0
+	_save_records.clear()
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "加载存档..."
+	if save_open_list != null and is_instance_valid(save_open_list):
+		save_open_list.text = "[color=#a69a73]加载中...[/color]"
+	if save_mainline_list != null and is_instance_valid(save_mainline_list):
+		save_mainline_list.text = "[color=#a69a73]加载中...[/color]"
+	if save_select_option != null and is_instance_valid(save_select_option):
+		save_select_option.clear()
+	var user_filter := _user_name if _user_name != "" and _user_name != "Player" else ""
+	NetworkClient.list_games(Callable(self, "_on_saves_response"), user_filter)
+
+
+func _on_saves_response(body: Variant, _code: int = 0) -> void:
+	var games: Array = body if body is Array else []
+	_save_records = []
+	var open_lines: Array[String] = []
+	var mainline_lines: Array[String] = []
+	if save_select_option != null and is_instance_valid(save_select_option):
+		save_select_option.clear()
+	for g in games:
+		if not (g is Dictionary):
+			continue
+		var save_id: int = int(g.get("id", 0))
+		if save_id <= 0:
+			continue
+		_save_records.append(g)
+		var line := _format_save_line(g)
+		var name := str(g.get("name", ""))
+		if name.begins_with("mainline:"):
+			mainline_lines.append(line)
+		else:
+			open_lines.append(line)
+		if save_select_option != null and is_instance_valid(save_select_option):
+			save_select_option.add_item("#%d  %s" % [save_id, _format_save_name(name)], save_id)
+	if open_lines.is_empty():
+		open_lines.append("[color=#a69a73]暂无开房模式存档[/color]")
+	if mainline_lines.is_empty():
+		mainline_lines.append("[color=#a69a73]暂无主线模式存档[/color]")
+	if save_open_list != null and is_instance_valid(save_open_list):
+		save_open_list.text = "\n".join(open_lines)
+	if save_mainline_list != null and is_instance_valid(save_mainline_list):
+		save_mainline_list.text = "\n".join(mainline_lines)
+	if save_select_option != null and is_instance_valid(save_select_option) and save_select_option.item_count > 0:
+		save_select_option.select(0)
+		_on_save_selected(0)
+	else:
+		_selected_save_id = 0
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "共 %d 个存档" % _save_records.size()
+
+
+func _format_save_line(g: Dictionary) -> String:
+	var save_id: int = int(g.get("id", 0))
+	var name := _format_save_name(str(g.get("name", "未命名存档")))
+	var status := _format_save_status(str(g.get("status", "?")))
+	var turn := int(g.get("turn_number", 0))
+	var seed := str(g.get("map_seed", g.get("seed", "?")))
+	return "[b]%s[/b] [color=#a69a73]#%d[/color]\n[color=#d8c48a]%s · 回合 %d · 种子 %s[/color]" % [
+		name, save_id, status, turn, seed
+	]
+
+
+func _format_save_name(raw_name: String) -> String:
+	if raw_name.begins_with("mainline:"):
+		var parts := raw_name.split(":")
+		if parts.size() >= 3:
+			return "%s · %s" % [parts[1], parts[2]]
+		if parts.size() >= 2:
+			return parts[1]
+	return raw_name if raw_name != "" else "未命名存档"
+
+
+func _format_save_status(status: String) -> String:
+	match status:
+		"waiting":
+			return "等待中"
+		"playing":
+			return "进行中"
+		"finished":
+			return "已结束"
+		_:
+			return status
+
+
+func _on_save_selected(index: int) -> void:
+	if save_select_option == null or not is_instance_valid(save_select_option):
+		return
+	if index < 0 or index >= save_select_option.item_count:
+		_selected_save_id = 0
+		return
+	_selected_save_id = save_select_option.get_item_id(index)
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "已选择存档 #%d" % _selected_save_id
+
+
+func _on_save_resume_pressed() -> void:
+	if _selected_save_id <= 0:
+		return
+	_resume_game_id = _selected_save_id
+	var last_game_id: int = int(UserSettings.get_value("session.v1.last_game_id", 0))
+	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
+	_resume_player_id = last_player_id if _resume_game_id == last_game_id else 0
+	_on_resume_pressed()
+
+
+func _on_save_delete_pressed() -> void:
+	if _selected_save_id <= 0:
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "删除存档 #%d..." % _selected_save_id
+	NetworkClient.delete_game(_selected_save_id, Callable(self, "_on_save_delete_response").bind(_selected_save_id))
+
+
+func _on_save_delete_response(_body: Variant, code: int, save_id: int) -> void:
+	if code >= 200 and code < 300:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "已删除存档 #%d" % save_id
+		_refresh_saves()
+	else:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "删除失败 #%d" % save_id
+
+
+func _on_save_back_pressed() -> void:
+	_show_view("menu")
 
 
 # ============================================================
@@ -1899,8 +2060,9 @@ func _apply_gba_theme() -> void:
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
-	for btn in [menu_button, lobby_button, settings_button, exit_button,
-				reconnect_button, end_turn_button, war_report_button]:
+	for btn in [menu_button, lobby_button, saves_button, settings_button, exit_button,
+				reconnect_button, end_turn_button, war_report_button,
+				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
 	# end_turn 和 war_report 用小一号字号(4 角极小 pill)

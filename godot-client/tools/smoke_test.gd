@@ -104,6 +104,12 @@ func _ready() -> void:
 		"lobby hub should expose AI backend selection")
 	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
 		"lobby hub should expose AI personality selection")
+	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/SavesButton") != null,
+		"main menu should expose save management")
+	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
+		"save management should expose selectable saves")
+	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
+		"save management should expose delete action")
 	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
 	var room_list: RichTextLabel = main_check.get_node("Lobby/LobbyFrame/RoomList")
 	main_check.call("_on_room_list_response", [
@@ -154,6 +160,20 @@ func _ready() -> void:
 	var resume_btn: Button = main_check.get_node("Menu/CenterContainer/ButtonCol/ResumeButton")
 	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
 		"resume button should appear when a filtered playable save exists")
+
+	main_check.call("_on_saves_response", [
+		{"id": 88, "name": "Free Save", "status": "playing", "turn_number": 3, "map_seed": 77},
+		{"id": 99, "name": "mainline:chapter_01_steel_rebellion:battle_01", "status": "waiting", "turn_number": 1},
+	], 200)
+	var save_open_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveOpenList")
+	var save_ml_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveMainlineList")
+	var save_select: OptionButton = main_check.get_node("SavesView/SaveFrame/SaveSelectOption")
+	_assert_true("Save manager renders open save", save_open_list.text.contains("Free Save"),
+		"open-mode saves should render in the open save list")
+	_assert_true("Save manager renders mainline save", save_ml_list.text.contains("chapter_01_steel_rebellion"),
+		"mainline saves should render in the mainline save list")
+	_assert_gte("Save manager populates select options", save_select.item_count, 2,
+		"save manager should populate operation selector")
 
 	main_check.call("_on_ml_list_response", [
 		{
