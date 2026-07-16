@@ -158,6 +158,7 @@ var _resume_game_id: int = 0
 @onready var lobby_back_btn: Button = $Lobby/LobbyFrame/LobbyBackBtn
 @onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyGameIdLabel
 @onready var room_list: RichTextLabel = $Lobby/LobbyFrame/RoomList
+@onready var room_select_option: OptionButton = $Lobby/LobbyFrame/RoomSelectOption
 @onready var refresh_rooms_btn: Button = $Lobby/LobbyFrame/RefreshRoomsBtn
 @onready var join_selected_btn: Button = $Lobby/LobbyFrame/JoinSelectedBtn
 @onready var create_name_input: LineEdit = $Lobby/LobbyFrame/CreateNameInput
@@ -215,6 +216,8 @@ func _ready() -> void:
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
+	if room_select_option != null and is_instance_valid(room_select_option):
+		room_select_option.item_selected.connect(_on_room_selected)
 	if refresh_rooms_btn != null and is_instance_valid(refresh_rooms_btn):
 		refresh_rooms_btn.pressed.connect(_refresh_room_list)
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
@@ -2225,6 +2228,10 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 func _refresh_room_list() -> void:
 	if room_list != null and is_instance_valid(room_list):
 		room_list.text = "Loading rooms..."
+	if room_select_option != null and is_instance_valid(room_select_option):
+		room_select_option.clear()
+		room_select_option.add_item("Loading rooms...")
+		room_select_option.disabled = true
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.disabled = true
 	NetworkClient.list_games(Callable(self, "_on_room_list_response"))
@@ -2243,10 +2250,17 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 	if _lobby_rooms.is_empty():
 		if room_list != null and is_instance_valid(room_list):
 			room_list.text = "(No waiting rooms. Create one on the right.)"
+		if room_select_option != null and is_instance_valid(room_select_option):
+			room_select_option.clear()
+			room_select_option.add_item("No waiting rooms")
+			room_select_option.disabled = true
 		if join_selected_btn != null and is_instance_valid(join_selected_btn):
 			join_selected_btn.disabled = true
 		return
 	var lines: Array = []
+	if room_select_option != null and is_instance_valid(room_select_option):
+		room_select_option.clear()
+		room_select_option.disabled = false
 	for i in range(_lobby_rooms.size()):
 		var g: Dictionary = _lobby_rooms[i]
 		var id: int = int(g.get("id", 0))
@@ -2257,8 +2271,20 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 		var preset := String(g.get("map_preset", "?"))
 		var cap := int(g.get("capacity", 0))
 		lines.append("%s #%d  %s  [%s]  cap:%d" % [marker, id, name, preset, cap])
+		if room_select_option != null and is_instance_valid(room_select_option):
+			room_select_option.add_item("#%d  %s" % [id, name])
 	if room_list != null and is_instance_valid(room_list):
 		room_list.text = "\n".join(lines)
+	if join_selected_btn != null and is_instance_valid(join_selected_btn):
+		join_selected_btn.disabled = _selected_room_id <= 0
+
+
+func _on_room_selected(index: int) -> void:
+	if index < 0 or index >= _lobby_rooms.size():
+		_selected_room_id = 0
+	else:
+		var g: Dictionary = _lobby_rooms[index]
+		_selected_room_id = int(g.get("id", 0))
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.disabled = _selected_room_id <= 0
 

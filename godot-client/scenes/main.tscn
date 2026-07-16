@@ -266,24 +266,30 @@ theme_override_font_sizes/font_size = 16
 offset_left = 28.0
 offset_top = 118.0
 offset_right = 402.0
-offset_bottom = 252.0
+offset_bottom = 226.0
 bbcode_enabled = true
 text = "Loading..."
 fit_content = false
 scroll_following = true
 
+[node name="RoomSelectOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+offset_left = 28.0
+offset_top = 234.0
+offset_right = 402.0
+offset_bottom = 270.0
+
 [node name="RefreshRoomsBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 28.0
-offset_top = 260.0
+offset_top = 278.0
 offset_right = 202.0
-offset_bottom = 296.0
+offset_bottom = 314.0
 text = "Refresh"
 
 [node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 220.0
-offset_top = 260.0
+offset_top = 278.0
 offset_right = 402.0
-offset_bottom = 296.0
+offset_bottom = 314.0
 text = "Join selected"
 disabled = true
 
