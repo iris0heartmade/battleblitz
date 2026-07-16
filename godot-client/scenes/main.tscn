@@ -1339,15 +1339,20 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -150.0
+offset_left = -225.0
 offset_top = -52.0
-offset_right = 150.0
+offset_right = 225.0
 offset_bottom = -12.0
 alignment = 1
 theme_override_constants/separation = 16
 
 [node name="DetailBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "📜 详细战报"
+custom_minimum_size = Vector2(140, 36)
+
+[node name="MainlineNextBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
+visible = false
+text = "▶ 下一战"
 custom_minimum_size = Vector2(140, 36)
 
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]

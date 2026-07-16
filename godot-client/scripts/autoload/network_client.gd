@@ -209,7 +209,7 @@ func _open_ws() -> void:
 	_ws_url = url
 	ws_connecting.emit()
 	if _ws != null:
-		_ws.disconnect_from_host()
+		_ws.close()
 	_ws = WebSocketPeer.new()
 	var err := _ws.connect_to_url(url)
 	if err != OK:
