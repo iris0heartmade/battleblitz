@@ -3101,8 +3101,29 @@ func _on_skill_pressed() -> void:
 func _recruit_unit_to(tile_x: int, tile_y: int, unit_type: String) -> void:
 	if _game_id <= 0 or _player_id <= 0: return
 	_update_status("正在招募 %s 到 (%d, %d)..." % [unit_type, tile_x, tile_y])
-	NetworkClient.action_recruit(_game_id, _player_id, tile_x, tile_y, unit_type)
+	NetworkClient.action_recruit(_game_id, _player_id, tile_x, tile_y, unit_type, Callable(self, "_on_recruit_response"))
 	_hide_action_bubble()
+
+
+func _on_recruit_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		var msg := "招募失败"
+		if body is Dictionary:
+			msg = "招募失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		return
+	if not (body is Dictionary):
+		_update_status("招募完成")
+		return
+	var unit_type := str(body.get("new_unit_type", "unit"))
+	var cost := int(body.get("cost", 0))
+	var gold_remaining := int(body.get("gold_remaining", -1))
+	if gold_remaining >= 0:
+		_update_status("招募成功: %s · -%d 金币 · 剩余 %d" % [unit_type, cost, gold_remaining])
+	else:
+		_update_status("招募成功: %s · -%d 金币" % [unit_type, cost])
+	if _game_id > 0:
+		NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_response"))
 
 
 # S:4 适配 — 在 _unhandled_input 的空地点击分支里,加 empty-my-barracks → 招募入口

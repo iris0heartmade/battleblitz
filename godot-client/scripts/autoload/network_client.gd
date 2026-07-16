@@ -393,9 +393,9 @@ func action_claim(game_id: int, player_id: int, unit_id: int) -> void:
 		{"player_id": player_id, "unit_id": unit_id})
 
 
-func action_recruit(game_id: int, player_id: int, tile_x: int, tile_y: int, unit_type: String) -> void:
+func action_recruit(game_id: int, player_id: int, tile_x: int, tile_y: int, unit_type: String, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/recruit",
-		{"player_id": player_id, "tile_x": tile_x, "tile_y": tile_y, "unit_type": unit_type})
+		{"player_id": player_id, "tile_x": tile_x, "tile_y": tile_y, "unit_type": unit_type}, callback)
 
 
 func action_end_turn(game_id: int, player_id: int) -> void:
