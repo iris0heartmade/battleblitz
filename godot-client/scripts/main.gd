@@ -2182,7 +2182,7 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 	lobby_game_id_label.text = "对局 #%d · 等待中" % _game_id
 	# 自动 join
 	NetworkClient.join_game(_game_id, _user_name, "red",
-		Callable(self, "_on_lobby_join_response"))
+		"", "", Callable(self, "_on_lobby_join_response"))
 
 
 func _on_lobby_join_response(_body: Dictionary, _code: int = 0) -> void:

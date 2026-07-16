@@ -106,6 +106,8 @@ func _ready() -> void:
 		"NetworkClient autoload not registered")
 	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
 		"NetworkClient should expose a typed add-ai wrapper for the lobby")
+	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
+		"join_game should accept game_id, user_name, color, team, role, callback")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
 
@@ -207,6 +209,14 @@ func _assert_true(label: String, cond: bool, msg: String) -> void:
 	else:
 		_failed += 1
 		print("  FAIL  %s: %s" % [label, msg])
+
+
+func _method_arg_count(target: Object, method_name: String) -> int:
+	for item in target.get_method_list():
+		if String(item.get("name", "")) == method_name:
+			var args: Array = item.get("args", [])
+			return args.size()
+	return -1
 
 
 func _fail(msg: String) -> void:
