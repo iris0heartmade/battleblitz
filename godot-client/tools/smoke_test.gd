@@ -115,6 +115,8 @@ func _ready() -> void:
 		"attack flow should expose a confirm panel before POSTing")
 	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
 		"attack confirm panel should expose a confirm action")
+	_assert_true("BattleResult has MainlineNextBtn", main_check.get_node_or_null("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn") != null,
+		"mainline results should expose a next-battle action")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
 	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
@@ -273,6 +275,19 @@ func _ready() -> void:
 	}, 200)
 	_assert_true("Mainline advance status includes next progress", main_status_label.text.contains("2/2"),
 		"mainline advance should show the next battle progress")
+	var ml_next_btn: Button = main_check.get_node("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn")
+	_assert_true("Mainline advance shows next battle button", ml_next_btn.visible,
+		"non-victory advance should reveal the next-battle button")
+	main_check.call("_on_mainline_next_battle_response", {
+		"game_id": 321,
+		"player_id": 654,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 1,
+		"total_battles": 2,
+		"state": "battle",
+	}, 201)
+	_assert_eq("Mainline next stores game id", int(main_check.get("_game_id")), 321,
+		"next battle should store the spawned game id")
 	main_check.call("_on_mainline_advance_response", {
 		"state": "victory",
 		"mainline_id": "chapter_01_steel_rebellion",
@@ -282,6 +297,8 @@ func _ready() -> void:
 	}, 200)
 	_assert_true("Mainline victory status is shown", main_status_label.text.contains("通关"),
 		"mainline victory should show completion status")
+	_assert_true("Mainline victory hides next battle button", not ml_next_btn.visible,
+		"mainline victory should hide the next-battle button")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

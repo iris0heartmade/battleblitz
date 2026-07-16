@@ -120,6 +120,7 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var battle_result_winner: Label = $GameView/HUD/BattleResultPanel/WinnerBanner
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
+@onready var battle_mainline_next_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn
 @onready var battle_back_menu_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackMenuBtn
 
 # V2 第 4 轮:行动气泡(5 按钮)
@@ -330,6 +331,8 @@ func _ready() -> void:
 	dialog_continue_btn.pressed.connect(_on_dialog_continue_pressed)
 	tutorial_got_it_btn.pressed.connect(_on_tutorial_got_it_pressed)
 	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
+	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+		battle_mainline_next_btn.pressed.connect(_on_mainline_next_battle_pressed)
 	battle_back_menu_btn.pressed.connect(_on_battle_back_menu_pressed)
 	# T:4 招募 modal — CloseBtn
 	if recruit_close_btn != null and is_instance_valid(recruit_close_btn):
@@ -2038,6 +2041,8 @@ func hide_tutorial() -> void:
 func show_battle_result(winner_name: String, winner_color: String, stats: Dictionary) -> void:
 	if battle_result_panel == null or not is_instance_valid(battle_result_panel):
 		return
+	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+		battle_mainline_next_btn.visible = false
 	var color_godot: String = _color_name_to_godot(winner_color)
 	battle_result_winner.bbcode_enabled = true
 	battle_result_winner.text = "🎉 [color=%s][b]%s[/b][/color] 获胜!" % [color_godot, winner_name]
@@ -2330,7 +2335,7 @@ func _apply_hud_theme() -> void:
 		tutorial_text.add_theme_font_size_override("normal_font_size", 14)
 		tutorial_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	# Dialog/Tutorial/Battle buttons
-	for btn in [dialog_continue_btn, tutorial_got_it_btn, battle_detail_btn, battle_back_menu_btn]:
+	for btn in [dialog_continue_btn, tutorial_got_it_btn, battle_detail_btn, battle_mainline_next_btn, battle_back_menu_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, 16)
 	# Battle result header + winner
@@ -2846,6 +2851,8 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	if dialogue_path != "":
 		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
 	_show_view("game")
+	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+		battle_mainline_next_btn.visible = false
 	NetworkClient.connect_to_game(_game_id, _player_id)
 
 
@@ -2883,9 +2890,25 @@ func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
 		_active_mainline_id = ""
 		_mainline_battle_game_id = 0
 		UserSettings.set_value("session.v1.mainline_id", "")
+		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+			battle_mainline_next_btn.visible = false
 		_update_status("主线通关%s" % (": " + ", ".join(reward_bits) if reward_bits.size() > 0 else ""))
 	else:
 		_update_status("主线推进到战斗 %d/%d" % [battle_index, total_battles])
+		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+			battle_mainline_next_btn.visible = true
+
+
+func _on_mainline_next_battle_pressed() -> void:
+	if _active_mainline_id == "":
+		_update_status("没有可继续的主线")
+		return
+	_update_status("主线: 创建下一战...")
+	NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, Callable(self, "_on_mainline_next_battle_response"))
+
+
+func _on_mainline_next_battle_response(body: Variant, code: int = 0) -> void:
+	_on_mainline_start_response(body, code)
 
 
 func _on_ml_back_pressed() -> void:
