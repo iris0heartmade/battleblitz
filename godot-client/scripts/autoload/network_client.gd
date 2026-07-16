@@ -429,8 +429,12 @@ func create_game(name: String, map_preset: String, map_biome: String, win_condit
 	}, callback)
 
 
-func join_game(game_id: int, user_name: String, color: String = "", callback: Callable = Callable()) -> void:
+func join_game(game_id: int, user_name: String, color: String = "", team: String = "", role: String = "", callback: Callable = Callable()) -> void:
 	var body := {"user_name": user_name, "color": color}
+	if team != "":
+		body["team"] = team
+	if role != "":
+		body["role"] = role
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/join", body, callback)
 
 
