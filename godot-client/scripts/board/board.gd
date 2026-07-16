@@ -6,6 +6,9 @@ class_name Board
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const UNIT_NODE_SCRIPT := preload("res://scripts/board/unit_node.gd")
 
+# M4.11:FLIP 动画 — unit 位置变化时从旧坐标平滑插值到新坐标
+const _FLIP_DURATION := 0.32
+
 signal map_loaded(width: int, height: int, biome: String)
 signal unit_clicked(unit_id: int)
 signal tile_clicked(tile: Vector2i)
@@ -47,6 +50,7 @@ func _ready() -> void:
 
 # M4.7:由 GameState.units_changed 触发。把已存在的 markers 用新数据重画
 # (HP/MP/士气条/已行动 overlay),位置不变。新 ID → 走 _add_unit_node。
+# M4.11:已有 uid 位置变化时 FLIP 动画(从旧坐标 tween 到新坐标)。
 func _on_units_changed(units_data: Array) -> void:
 	if metrics == null:
 		return
@@ -60,12 +64,21 @@ func _on_units_changed(units_data: Array) -> void:
 		seen_ids[uid] = true
 		var existing: Node = _unit_nodes_by_id.get(uid)
 		if existing != null and is_instance_valid(existing):
-			# 增量:update data + 位置(单位可能移动过)
+			# 增量:update data + FLIP 动画(如果位置变化)。
 			existing.setup(unit_data, Config.player_color(String(unit_data.get("color", "red"))))
-			var cell := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
-			existing.position = metrics.cell_to_local(cell)
+			var new_cell := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
+			var new_pos: Vector2 = metrics.cell_to_local(new_cell)
+			var prev_pos: Vector2 = existing.position  # 截图前一帧位置
+			if prev_pos != new_pos:
+				# 位置变化 — 用 Tween 0.32s 插值(FLIP 等价)
+				var t: Tween = create_tween()
+				t.set_trans(Tween.TRANS_CUBIC)
+				t.set_ease(Tween.EASE_OUT)
+				# FIX: tween 从 prev_pos → new_pos。
+				existing.position = prev_pos
+				t.tween_property(existing, "position", new_pos, _FLIP_DURATION)
 			continue
-		# 新单位:完整插入
+		# 新单位:完整插入(无动画,瞬时出现)
 		_add_unit_node(unit_data)
 	# 清理掉已不存在的
 	for uid in _unit_nodes_by_id.keys():
@@ -142,6 +155,41 @@ func show_attack_marks(range_tiles: Array) -> void:
 	highlights.clear()
 	if range_tiles.size() > 0:
 		highlights.show_outline(Highlights.Mode.ATTACK, range_tiles)
+
+
+# M4.12:在指定 board-local 位置弹出浮动文字(damage/heal/kill/crit)。
+# 颜色按 kind 选:damage 红 / crit 烫金 / heal 绿 / kill 烫红
+# / levelup 蓝 — 由调用方传 color 字符串(#rrggbb)即可。
+func spawn_floating_text(local_pos: Vector2, text: String, color_hex: String = "#e85a6a", kind: String = "damage") -> void:
+	if effects == null:
+		return
+	var label := Label.new()
+	label.text = text
+	label.add_theme_color_override("font_color", Color(color_hex))
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	label.add_theme_font_size_override("font_size", 22)
+	# 居中
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sz := Vector2(80, 28)
+	label.size = sz
+	label.position = local_pos - sz * 0.5
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	effects.add_child(label)
+	# Tween 上浮 60px + 0.8s 后 fade out。
+	var t: Tween = create_tween()
+	t.set_parallel(true)
+	t.tween_property(label, "position:y", local_pos.y - 60, 0.8).set_trans(Tween.TRANS_CUBIC)
+	t.tween_property(label, "modulate:a", 0.0, 0.8).set_trans(Tween.TRANS_LINEAR)
+	t.set_parallel(false)
+	t.tween_callback(label.queue_free)
+
+
+# helper:把 cell 转 local,然后 spawn floating text。
+func spawn_floating_text_at_cell(cell: Vector2i, text: String, color_hex: String = "#e85a6a", kind: String = "damage") -> void:
+	if metrics == null: return
+	spawn_floating_text(metrics.cell_to_local(cell), text, color_hex, kind)
 
 
 # M4.10:让 main 主动 emit unit_clicked 信号 — 在 _unhandled_input 中

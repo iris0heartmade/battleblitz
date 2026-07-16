@@ -107,8 +107,14 @@ text = "🎮  自由对局 (AI 对手)"
 custom_minimum_size = Vector2(320, 52)
 
 [node name="LobbyButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "🛡  联机大厅 (M3 待开)"
+text = "🛡  联机大厅"
 custom_minimum_size = Vector2(320, 52)
+
+; T:5 单槽存档 — 主菜单 Resume button(默认隐藏,有存档时显示)
+[node name="ResumeButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "▶  继续上次对局"
+custom_minimum_size = Vector2(320, 52)
+visible = false
 disabled = true
 
 [node name="SettingsButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
@@ -194,6 +200,112 @@ theme_override_font_sizes/font_size = 16
 [node name="ReconnectButton" type="Button" parent="Connecting/ConnectingInner"]
 text = "重 连"
 custom_minimum_size = Vector2(160, 40)
+
+; ============================================================
+; T:3 基础大厅(联机厅)— 显示房间玩家列表 + Start 按钮
+; 简化版:不展开 team / spectator 完整编辑,只支持查看 + Start。
+; ============================================================
+[node name="Lobby" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="LobbyFrame" type="ColorRect" parent="Lobby"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -220.0
+offset_right = 300.0
+offset_bottom = 220.0
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="LobbyBorder" type="ReferenceRect" parent="Lobby/LobbyFrame"]
+editor_only = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 4
+
+[node name="LobbyTitle" type="Label" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_top = 12.0
+offset_bottom = 44.0
+text = "🛡   联 机 大 厅   🛡"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+
+[node name="LobbyStatus" type="Label" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_top = 56.0
+offset_bottom = 76.0
+text = "等待玩家加入... (0 / --)"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="LobbyList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 88.0
+offset_right = -24.0
+offset_bottom = -120.0
+bbcode_enabled = true
+text = ""
+fit_content = true
+scroll_following = true
+
+[node name="LobbyWinBanner" type="Label" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_top = 220.0
+offset_bottom = 244.0
+text = "🏁 胜利条件: 消灭所有敌方单位,或占领对方 HQ"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+
+[node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -104.0
+offset_right = -16.0
+offset_bottom = -68.0
+text = "🤖 添加 AI"
+
+[node name="LobbyStartBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -104.0
+offset_right = 160.0
+offset_bottom = -68.0
+text = "▶ 启 动 游 戏"
+disabled = true
+
+[node name="LobbyBackBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -56.0
+offset_right = 100.0
+offset_bottom = -20.0
+text = "↩ 返回主菜单"
+
+[node name="LobbyGameIdLabel" type="Label" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_top = 32.0
+offset_bottom = 48.0
+text = "对局 #? · 创建中..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+modulate = Color(0.65, 0.6, 0.45, 1)
 
 ; ============================================================
 ; Game 视图 — 棋盘 + HUD(M2.5 既有)
@@ -885,3 +997,54 @@ custom_minimum_size = Vector2(140, 36)
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "↩ 返回主菜单"
 custom_minimum_size = Vector2(140, 36)
+
+; ============================================================
+; T:4 RecruitPanel — 点击空佣兵站(我方 owner + 无单位)时显示
+;  5 类单位 list + 金币门槛 + 类型 buttons
+; ============================================================
+[node name="RecruitPanel" type="Panel" parent="GameView/HUD"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = -180.0
+offset_right = 240.0
+offset_bottom = 180.0
+visible = false
+
+[node name="Header" type="Label" parent="GameView/HUD/RecruitPanel"]
+anchor_right = 1.0
+offset_top = 8.0
+offset_bottom = 36.0
+text = "🛡 招 募 单 位"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 20
+
+[node name="RecruitStatusLabel" type="Label" parent="GameView/HUD/RecruitPanel"]
+anchor_right = 1.0
+offset_top = 40.0
+offset_bottom = 60.0
+text = "佣兵站 (?, ?) · 当前金币 💰 0"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="RecruitList" type="VBoxContainer" parent="GameView/HUD/RecruitPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 72.0
+offset_right = -24.0
+offset_bottom = -64.0
+theme_override_constants/separation = 8
+
+[node name="CloseBtn" type="Button" parent="GameView/HUD/RecruitPanel"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -80.0
+offset_top = -52.0
+offset_right = 80.0
+offset_bottom = -16.0
+text = "关 闭"

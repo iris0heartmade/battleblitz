@@ -442,6 +442,14 @@ func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 
 
+# T:5 重新加入房间(POST /games/{id}/rejoin)
+# 详见 game/app/routes/game.py:839 rejoin_game
+# body: {user_name: str} — 后端按 (game_id, user_name) 找 Player 行
+func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/rejoin",
+		{"user_name": user_name}, callback)
+
+
 # ============================================================
 # Helpers
 # ============================================================
