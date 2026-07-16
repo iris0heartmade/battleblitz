@@ -135,6 +135,15 @@ func show_path_marks(path_tiles: Array, reachable_tiles: Array) -> void:
 		highlights.show_path(path_tiles)
 
 
+# M4.2:进入攻击模式 — 红色 outline(Highlights.Mode.ATTACK)
+func show_attack_marks(range_tiles: Array) -> void:
+	if highlights == null:
+		return
+	highlights.clear()
+	if range_tiles.size() > 0:
+		highlights.show_outline(Highlights.Mode.ATTACK, range_tiles)
+
+
 # M4.10:让 main 主动 emit unit_clicked 信号 — 在 _unhandled_input 中
 # 调 pick_unit_at_screen 取到 id 后调用本函数,main 那边订阅即可。
 func emit_unit_clicked(unit_id: int) -> void:
