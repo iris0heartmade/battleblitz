@@ -23,7 +23,7 @@ extends Node
 ## defaults). The full REST/WS surface lives in
 ## `../docs/路线/Godot移植方案.md` §5.6.
 
-signal api_response(method: String, path: String, body: Dictionary, http_code: int)
+signal api_response(method: String, path: String, body: Variant, http_code: int)
 signal api_error(method: String, path: String, error: String, http_code: int)
 
 signal ws_connecting()
@@ -142,7 +142,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 	var text := body.get_string_from_utf8()
 	var parsed: Variant = JSON.parse_string(text) if text.length() > 0 else {}
-	if not parsed is Dictionary:
+	if parsed == null:
 		parsed = {"_raw": text}
 	if response_code >= 200 and response_code < 300:
 		api_response.emit(method, path, parsed, response_code)
