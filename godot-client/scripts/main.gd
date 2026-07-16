@@ -31,6 +31,9 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var current_player_badge: ColorRect = $GameView/HUD/TopRight/CurrentPlayerBadge
 @onready var current_player_label: Label = $GameView/HUD/TopRight/CurrentPlayerBadge/Label
 @onready var ai_thinking_label: ColorRect = $GameView/HUD/BottomRight/AIThinking
+# M4.1 移动模式状态机
+var _move_mode_unit_id: int = -1
+var _move_reachable_set: Dictionary = {}
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
 @onready var gold_panel: ColorRect = $GameView/HUD/BottomLeft/GoldPanel
 @onready var gold_label: Label = $GameView/HUD/BottomLeft/GoldPanel/GoldLabel
@@ -189,6 +192,10 @@ func _ready() -> void:
 	if board != null and is_instance_valid(board) \
 			and not board.unit_clicked.is_connected(_on_board_unit_clicked):
 		board.unit_clicked.connect(_on_board_unit_clicked)
+	# M4.1:Board tile 点击 → 移动模式落子
+	if board != null and is_instance_valid(board) \
+			and not board.tile_clicked.is_connected(_on_board_tile_clicked):
+		board.tile_clicked.connect(_on_board_tile_clicked)
 
 	# NetworkClient status
 	NetworkClient.ws_connected.connect(func():
@@ -556,9 +563,17 @@ func _refresh_commander_section() -> void:
 
 
 func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int, _cost: int) -> void:
-	# Update local view: the Board repaints on state_updated, so we
-	# just bump a turn-advance marker.
-	pass
+	# M4.1:实际上 unit_node 位置更新已经在 units_changed 里走完。
+	# 这里加战报 log + status 更新 + highlight 清理。
+	if action_log != null and is_instance_valid(action_log):
+		action_log.append_text("[color=#5fa8e8]🚶 #%d 移动 (%d,%d) → (%d,%d) 耗能 %d[/color]\n" % [
+			unit_id, from_x, from_y, to_x, to_y, _cost
+		])
+	_update_status("单位 #%d 已移动到 (%d,%d)" % [unit_id, to_x, to_y])
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	if board != null:
+		board.clear_selection_marks()
 
 
 func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
@@ -694,15 +709,60 @@ func _unhandled_input(event: InputEvent) -> void:
 		if unit_id > 0:
 			board.emit_unit_clicked(unit_id)
 		else:
-			# 点击非单位区域 → 清除选择
-			board.clear_selection_marks()
-			_hide_action_bubble()
+			# 点击非单位区域 → 落点 / 清除选择
+			if _move_mode_unit_id > 0:
+				# 移动模式下:把屏幕坐标转成 tile 再 emit
+				board.emit_tile_clicked(event.global_position)
+			else:
+				# 非移动模式:清高亮
+				board.clear_selection_marks()
+				_hide_action_bubble()
 		get_viewport().set_input_as_handled()
 
 
 func _on_board_unit_clicked(unit_id: int) -> void:
 	# 来自 board.emit_unit_clicked — 单位已经被选中
 	_handle_unit_click(unit_id, Vector2.ZERO)
+
+
+# M4.1:点击地图格子(空白区 / 落点)→ 处理
+func _on_board_tile_clicked(tile: Vector2i) -> void:
+	# 不在移动模式 → 忽略
+	if _move_mode_unit_id <= 0:
+		return
+	if tile.x < 0 or tile.y < 0:
+		_cancel_move_mode()
+		return
+	# 必须落在 reachable set 内
+	if not _move_reachable_set.has(tile):
+		# 落点无效 → 取消移动模式
+		_cancel_move_mode()
+		return
+	# 提交动作
+	_move_unit_to(_move_mode_unit_id, tile.x, tile.y)
+
+
+# M4.1:取消移动模式
+func _cancel_move_mode() -> void:
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	if board != null:
+		board.clear_selection_marks()
+	_update_status("已取消移动")
+
+
+# M4.1:发 POST /games/{id}/move
+func _move_unit_to(unit_id: int, to_x: int, to_y: int) -> void:
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	_update_status("正在移动单位 #%d → (%d, %d)..." % [unit_id, to_x, to_y])
+	NetworkClient.action_move(_game_id, _player_id, unit_id, to_x, to_y)
+	# 清掉移动模式 + highlights
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	if board != null:
+		board.clear_selection_marks()
+	_hide_action_bubble()
 
 
 func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
@@ -715,16 +775,52 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
 	_show_action_bubble(unit_id, marker_pos)
-	var owner_pid: int = int(ud.get("owner_id", -1))
+	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
 	var cur_pid: int = int(GameState.current_player_id) if GameState.current_player_id != null else -1
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	# M4.10:如果是己方单位,展示 reachable tiles(蓝色 outline)
+	# M4.10:如果是己方单位,展示 reachable tiles(蓝色 outline)+ 缓存到 _move_reachable_set
 	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
-		var reach := _compute_reachable_tiles(ud)
-		if reach.size() > 0 and board != null:
-			board.show_path_marks([], reach)
+		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
+		var tiles: Array = reach_dict.keys()
+		# 用带成本映射的 Dict 作 set 校验(防止 Vector2i key 在 GDScript 里行为怪)
+		_move_reachable_set = reach_dict
+		if tiles.size() > 0 and board != null:
+			board.show_path_marks([], tiles)
 	elif board != null:
 		board.clear_selection_marks()
+		_move_reachable_set = {}
+
+
+# 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
+func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
+	var mp: int = int(unit_data.get("mov", int(unit_data.get("move_points", int(unit_data.get("mp", 5))))))
+	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
+	var size_v: int = 15
+	if board != null and board.map_size.x > 0:
+		size_v = board.map_size.x
+	var blocked: Dictionary = {}
+	for other in GameState.players:
+		if not other is Dictionary: continue
+		for u in other.get("units", []):
+			if u is Dictionary:
+				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+				blocked[k] = true
+	var terrain: Dictionary = {}
+	var owners: Dictionary = {}
+	if board != null and board.tile_lookup != null:
+		for k in board.tile_lookup.keys():
+			var t: Dictionary = board.tile_lookup[k]
+			terrain[k] = String(t.get("terrain", "plain"))
+			owners[k] = int(t.get("owner_id", 0))
+	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
+	print("DEBUG reachable: mp=%s pos=%s terrain_keys=%d size=%s owner=%s blocked_keys=%d" % [
+		mp, str(unit_pos), terrain.size(), size_v, owner, blocked.size()
+	])
+	var result: Dictionary = MapLogic.compute_reachable(
+		unit_pos, terrain, owners, mp, owner, blocked, size_v
+	)
+	print("DEBUG reachable: result_size=%s" % result.size())
+	return result
 
 
 func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
@@ -1226,9 +1322,17 @@ func _hide_action_bubble() -> void:
 
 
 func _on_move_pressed() -> void:
-	_update_status("移动: 等待点击目标格...")
+	# M4.1 进入"移动模式":单位已经在 _move_reachable_set 里,
+	# 等用户点击 board emit_tile_clicked → _on_board_tile_clicked
+	if _selected_unit_id <= 0:
+		_update_status("移动: 请先选中单位")
+		return
+	if _move_reachable_set.is_empty() or _move_reachable_set.size() <= 1:
+		_update_status("移动: 该单位没有可达格")
+		return
+	_move_mode_unit_id = _selected_unit_id
+	_update_status("移动: 点击蓝色高亮的格子 (右键/空白取消)")
 	_hide_action_bubble()
-	# M3+ TODO: 进入"移动模式",点击地图格子触发 POST /actions/move
 
 
 func _on_attack_pressed() -> void:
