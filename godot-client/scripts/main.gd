@@ -394,7 +394,7 @@ func _check_resume_session() -> void:
 	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"))
 
 
-func _on_list_games_for_resume(body: Variant) -> void:
+func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 	# /games 返回 List[GameSummaryOut] 或错误 dict
 	var games: Array = (body as Array) if body is Array else []
 	for g in games:
@@ -422,12 +422,11 @@ func _on_resume_pressed() -> void:
 		Callable(self, "_on_resume_rejoin_response"))
 
 
-func _on_resume_rejoin_response(body: Variant) -> void:
+func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
 	if not (body is Dictionary):
 		_update_status("重连失败: 响应异常")
 		_show_view("menu")
 		return
-	# 取回 _game_id / _player_id(后端 rejoin 返回自己的 player_id)
 	var p_dict: Dictionary = body.get("player", body)
 	var resp_game_id: int = int(body.get("game_id", _resume_game_id))
 	var resp_player_id: int = int(p_dict.get("id", _player_id))
@@ -1611,7 +1610,7 @@ func _on_lobby_pressed() -> void:
 	lobby_game_id_label.text = "对局 #? · 创建中..."
 
 
-func _on_lobby_create_response(body: Dictionary) -> void:
+func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 	_game_id = int(body.get("id", 0))
 	if _game_id <= 0:
 		lobby_status_label.text = "创建失败"
@@ -1623,7 +1622,7 @@ func _on_lobby_create_response(body: Dictionary) -> void:
 		Callable(self, "_on_lobby_join_response"))
 
 
-func _on_lobby_join_response(_body: Dictionary) -> void:
+func _on_lobby_join_response(_body: Dictionary, _code: int = 0) -> void:
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
 
@@ -1649,7 +1648,7 @@ func _refresh_lobby_view() -> void:
 	NetworkClient.get_lobby(_game_id, Callable(self, "_on_lobby_state"))
 
 
-func _on_lobby_state(body: Dictionary) -> void:
+func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	if not (body is Dictionary): return
 	var players: Array = (body.get("players", []) as Array)
 	var is_waiting: bool = String(body.get("status", "waiting")) == "waiting"
@@ -1690,7 +1689,7 @@ func _on_lobby_start_pressed() -> void:
 	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
 
 
-func _on_lobby_start_response(_body: Dictionary) -> void:
+func _on_lobby_start_response(_body: Dictionary, _code: int = 0) -> void:
 	# 启动游戏 — 切到 game 视图,接 WS
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)

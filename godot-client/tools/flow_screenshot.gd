@@ -130,31 +130,41 @@ func _ready() -> void:
 		print("[v0.3 demo] frame 5 skipped: no attack targets (force range too small)")
 
 	# Frame 6:Inspect bubble — 选中敌方(已 action)单位
-	var t_layer: Node2D = main_app.get("board").get_node_or_null("UnitLayer") if main_app.get("board") != null else None
-	if t_layer != null:
-		var enemy: Node2D = null
-		for c in t_layer.get_children():
-			if c == null or not c.has_method("get"): continue
-			var ud2: Dictionary = c.get("unit_data") if c.get("unit_data") != null else {}
-			if int(ud2.get("player_id", -1)) != player_id:
-				enemy = c
-				break
-		if enemy != null:
-			board.emit_unit_clicked(int(enemy.unit_data.get("id", -1)))
-			await get_tree().create_timer(_STEP_DELAY).timeout
-			for i in 2: await RenderingServer.frame_post_draw
-			_save(main_app, "flow_v0_3_d6_inspect.png")
-			print("[v0.3 demo] frame 6 saved: inspect enemy unit — InfoPanel filled")
+	var board2: Node = main_app.get("board") if main_app.get("board") != null else main_app.find_child("Board", true, false)
+	if board2 != null:
+		var t_layer: Node2D = board2.get_node_or_null("UnitLayer")
+		if t_layer != null and t_layer.get_child_count() > 0:
+			var enemy: Node2D = null
+			for c in t_layer.get_children():
+				if c == null or not c.has_method("get"): continue
+				var ud2: Dictionary = c.get("unit_data") if c.get("unit_data") != null else {}
+				if int(ud2.get("player_id", -1)) != player_id:
+					enemy = c
+					break
+			if enemy != null:
+				board2.emit_unit_clicked(int(enemy.unit_data.get("id", -1)))
+				await get_tree().create_timer(_STEP_DELAY).timeout
+				for i in 2: await RenderingServer.frame_post_draw
+				_save(main_app, "flow_v0_3_d6_inspect.png")
+				print("[v0.3 demo] frame 6 saved: inspect enemy unit — InfoPanel filled")
+			else:
+				print("[v0.3 demo] frame 6 skipped: no enemy found")
+		else:
+			print("[v0.3 demo] frame 6 skipped: UnitLayer empty or null")
+	else:
+		print("[v0.3 demo] frame 6 skipped: no board")
 
-	# Frame 7:打开战斗结算 panel(模拟)— 用真值触发太慢,这里 skip:
-	# 视频用 pick 真实分支走(ai_thinking + end_turn 循环即可)。
-	# 直接 demo end-turn 后 1 帧。
-	if end_turn_button := (main_app.get_node_or_null("GameView/HUD/TopRight/EndTurnButton") as Button):
+	# Frame 7:end_turn after action
+	var end_turn_button_path: String = "GameView/HUD/TopRight/EndTurnButton"
+	var end_turn_button: Button = main_app.get_node_or_null(end_turn_button_path) as Button
+	if end_turn_button != null and is_instance_valid(end_turn_button):
 		end_turn_button.pressed.emit()
 		await get_tree().create_timer(_WAIT_ACTION_SEC).timeout
 		for i in 2: await RenderingServer.frame_post_draw
 		_save(main_app, "flow_v0_3_d7_after_endturn.png")
 		print("[v0.3 demo] frame 7 saved: after end-turn (AI thinking phase)")
+	else:
+		print("[v0.3 demo] frame 7 skipped: no EndTurnButton")
 
 	print("[v0.3 demo] done — 6 frames in res://  &  user://")
 	get_tree().quit(0)
