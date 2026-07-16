@@ -271,8 +271,15 @@ offset_bottom = 148.0
 [node name="EditorMapSelectOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 164.0
+offset_right = 204.0
+offset_bottom = 200.0
+
+[node name="EditorLoadBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 212.0
+offset_top = 164.0
 offset_right = 320.0
 offset_bottom = 200.0
+text = "Load"
 
 [node name="EditorStatus" type="Label" parent="EditorView/EditorPanel"]
 offset_left = 16.0

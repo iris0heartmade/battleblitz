@@ -131,6 +131,8 @@ func _ready() -> void:
 		"map editor should expose a terrain brush selector")
 	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
 		"map editor should expose a save action")
+	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
+		"map editor should expose a load-selected action")
 	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
@@ -351,6 +353,28 @@ func _ready() -> void:
 	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
 	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
 		"terrain selector should expose the initial paint brushes")
+	main_check.call("_on_editor_maps_response", [
+		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
+		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
+	], 200)
+	var editor_map_select: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorMapSelectOption")
+	_assert_eq("Editor map selector stores backend list", editor_map_select.item_count, 2,
+		"editor map response should populate saved maps")
+	editor_map_select.select(1)
+	main_check.call("_on_editor_map_selected", 1)
+	_assert_eq("Editor selected map id updates", str(main_check.get("_selected_editor_map_id")), "map_beta",
+		"selecting a saved map should store its id")
+	main_check.call("_on_editor_load_response", {
+		"id": "map_beta",
+		"name": "Beta",
+		"size": {"width": 15, "height": 15},
+		"biome": "snow",
+		"layout": ["S".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
+		"initial_units": [],
+	}, 200)
+	var loaded_editor_map: Dictionary = main_check.get("_editor_map")
+	_assert_eq("Editor load response replaces current map", str(loaded_editor_map.get("id", "")), "map_beta",
+		"loading a saved map should replace the editor map")
 	editor_terrain_option.select(1)
 	main_check.call("_paint_editor_tile", Vector2i(1, 1))
 	var editor_map: Dictionary = main_check.get("_editor_map")
