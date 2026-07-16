@@ -110,6 +110,12 @@ func _ready() -> void:
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
 		"save management should expose delete action")
+	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
+		"attack flow should expose a confirm panel before POSTing")
+	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
+		"attack confirm panel should expose a confirm action")
+	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
+		"attack confirm text should be testable without posting an action")
 	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
 	var room_list: RichTextLabel = main_check.get_node("Lobby/LobbyFrame/RoomList")
 	main_check.call("_on_room_list_response", [
@@ -174,6 +180,18 @@ func _ready() -> void:
 		"mainline saves should render in the mainline save list")
 	_assert_gte("Save manager populates select options", save_select.item_count, 2,
 		"save manager should populate operation selector")
+
+	var confirm_text: String = main_check.call("_build_attack_confirm_text", {
+		"name": "Knight", "x": 1, "y": 1, "hp": 10
+	}, {
+		"defender_name": "Bandit", "x": 3, "y": 2, "hp": 7
+	})
+	_assert_true("Attack confirm text includes attacker", confirm_text.contains("Knight"),
+		"attack confirm text should name the attacker")
+	_assert_true("Attack confirm text includes target", confirm_text.contains("Bandit"),
+		"attack confirm text should name the target")
+	_assert_true("Attack confirm text includes distance", confirm_text.contains("距离 3"),
+		"attack confirm text should include Manhattan distance")
 
 	main_check.call("_on_ml_list_response", [
 		{

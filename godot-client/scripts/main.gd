@@ -38,6 +38,8 @@ var _move_reachable_set: Dictionary = {}
 var _attack_mode_unit_id: int = -1
 # 攻击候选目标: {target_unit_id: {x,y,forecast}}
 var _attack_targets: Dictionary = {}
+var _pending_attack_attacker_id: int = -1
+var _pending_attack_target_id: int = -1
 # M4.3 治疗模式状态机
 var _heal_mode_unit_id: int = -1
 var _heal_targets: Dictionary = {}
@@ -127,6 +129,10 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var skill_btn: Button = $GameView/HUD/ActionBubble/ActionList/SkillBtn
 @onready var wait_btn: Button = $GameView/HUD/ActionBubble/ActionList/WaitBtn
 @onready var claim_btn: Button = $GameView/HUD/ActionBubble/ActionList/ClaimBtn
+@onready var attack_confirm_panel: Panel = $GameView/HUD/AttackConfirmPanel
+@onready var attack_confirm_body: RichTextLabel = $GameView/HUD/AttackConfirmPanel/Body
+@onready var attack_confirm_btn: Button = $GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn
+@onready var attack_cancel_btn: Button = $GameView/HUD/AttackConfirmPanel/ButtonRow/CancelBtn
 
 # 当前选中单位 + 待操作 action
 var _selected_unit_id: int = -1
@@ -285,6 +291,10 @@ func _ready() -> void:
 	skill_btn.pressed.connect(_on_skill_pressed)
 	wait_btn.pressed.connect(_on_wait_pressed)
 	claim_btn.pressed.connect(_on_claim_pressed)
+	if attack_confirm_btn != null and is_instance_valid(attack_confirm_btn):
+		attack_confirm_btn.pressed.connect(_on_attack_confirm_pressed)
+	if attack_cancel_btn != null and is_instance_valid(attack_cancel_btn):
+		attack_cancel_btn.pressed.connect(_on_attack_cancel_pressed)
 	# V2 第 6 轮:设置 + 暂停面板
 	settings_close_btn.pressed.connect(_on_settings_close_pressed)
 	settings_apply_btn.pressed.connect(_on_settings_apply_pressed)
@@ -1531,7 +1541,7 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 	# 攻击模式下点单位 → 用作 attack target
 	if _attack_mode_unit_id > 0:
 		if _attack_targets.has(unit_id):
-			_attack_unit_to(_attack_mode_unit_id, unit_id)
+			_show_attack_confirm(_attack_mode_unit_id, unit_id)
 		else:
 			# 点错目标(不是敌方有效目标)→ 取消
 			_update_status("目标无效,取消攻击")
@@ -1613,6 +1623,7 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		_move_reachable_set = {}
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
+		_hide_attack_confirm()
 		_heal_mode_unit_id = -1
 		_heal_targets = {}
 		if board != null:
@@ -2062,7 +2073,8 @@ func _apply_gba_theme() -> void:
 	# 4) 主菜单 + 游戏内按钮统一灌主题
 	for btn in [menu_button, lobby_button, saves_button, settings_button, exit_button,
 				reconnect_button, end_turn_button, war_report_button,
-				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn]:
+				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
+				attack_confirm_btn, attack_cancel_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
 	# end_turn 和 war_report 用小一号字号(4 角极小 pill)
@@ -2935,6 +2947,7 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 					"x": rt_v.x,
 					"y": rt_v.y,
 					"defender_name": String(uu.get("name", uu.get("unit_type", "?"))),
+					"hp": int(uu.get("hp", 0)),
 					# 不预测,只显示攻击者/目标基本信息。真实伤害由
 					# server 决定。
 				}
@@ -2963,6 +2976,59 @@ func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	return MapLogic.attack_range_tiles(pos, max_range, min_range, size_v)
 
 
+func _show_attack_confirm(attacker_id: int, target_id: int) -> void:
+	var attacker: Dictionary = GameState.get_unit(attacker_id) if GameState != null else {}
+	var info: Dictionary = _attack_targets.get(target_id, {})
+	if attacker.is_empty() or info.is_empty():
+		_update_status("攻击确认失败: 缺少单位信息")
+		return
+	_pending_attack_attacker_id = attacker_id
+	_pending_attack_target_id = target_id
+	if attack_confirm_body != null and is_instance_valid(attack_confirm_body):
+		attack_confirm_body.text = _build_attack_confirm_text(attacker, info)
+	if attack_confirm_panel != null and is_instance_valid(attack_confirm_panel):
+		attack_confirm_panel.visible = true
+	_update_status("确认攻击目标 #%d" % target_id)
+
+
+func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -> String:
+	var attacker_name := str(attacker.get("name", attacker.get("unit_type", "单位")))
+	var target_name := str(target_info.get("defender_name", target_info.get("name", "目标")))
+	var ax := int(attacker.get("x", 0))
+	var ay := int(attacker.get("y", 0))
+	var tx := int(target_info.get("x", 0))
+	var ty := int(target_info.get("y", 0))
+	var dist: int = abs(ax - tx) + abs(ay - ty)
+	var hp_text: String = ""
+	if target_info.has("hp"):
+		hp_text = " · HP %d" % int(target_info.get("hp", 0))
+	return "[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]\n距离 %d%s\n确认后将提交攻击指令。" % [
+		attacker_name, target_name, dist, hp_text
+	]
+
+
+func _hide_attack_confirm() -> void:
+	_pending_attack_attacker_id = -1
+	_pending_attack_target_id = -1
+	if attack_confirm_panel != null and is_instance_valid(attack_confirm_panel):
+		attack_confirm_panel.visible = false
+
+
+func _on_attack_confirm_pressed() -> void:
+	if _pending_attack_attacker_id <= 0 or _pending_attack_target_id <= 0:
+		_hide_attack_confirm()
+		return
+	var attacker_id := _pending_attack_attacker_id
+	var target_id := _pending_attack_target_id
+	_hide_attack_confirm()
+	_attack_unit_to(attacker_id, target_id)
+
+
+func _on_attack_cancel_pressed() -> void:
+	_hide_attack_confirm()
+	_cancel_action_mode()
+
+
 # M4.2:发 POST /games/{id}/attack
 func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 	if _game_id <= 0 or _player_id <= 0:
@@ -2975,6 +3041,7 @@ func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 	# 拿到 (damage, is_crit, is_kill) 直接显示。
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
+	_hide_attack_confirm()
 	if board != null:
 		board.clear_selection_marks()
 	_hide_action_bubble()
