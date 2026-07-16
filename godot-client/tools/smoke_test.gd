@@ -82,6 +82,8 @@ func _ready() -> void:
 	add_child(main_check)
 	_assert_true("Lobby has RoomList", main_check.get_node_or_null("Lobby/LobbyFrame/RoomList") != null,
 		"lobby hub should expose a waiting-room list")
+	_assert_true("Lobby has RoomSelectOption", main_check.get_node_or_null("Lobby/LobbyFrame/RoomSelectOption") != null,
+		"lobby hub should expose a selectable room dropdown")
 	_assert_true("Lobby has RefreshRoomsBtn", main_check.get_node_or_null("Lobby/LobbyFrame/RefreshRoomsBtn") != null,
 		"lobby hub should expose a room refresh button")
 	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null("Lobby/LobbyFrame/JoinSelectedBtn") != null,
