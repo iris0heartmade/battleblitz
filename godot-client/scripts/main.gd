@@ -38,6 +38,18 @@ var _move_reachable_set: Dictionary = {}
 var _attack_mode_unit_id: int = -1
 # 攻击候选目标: {target_unit_id: {x,y,forecast}}
 var _attack_targets: Dictionary = {}
+# M4.3 治疗模式状态机
+var _heal_mode_unit_id: int = -1
+var _heal_targets: Dictionary = {}
+# M4.5 招募状态机(unit_type → name 也在用)
+const _RECRUIT_OPTIONS := [
+	{"type": "swordsman", "name": "剑士",   "cost": 200},
+	{"type": "archer",    "name": "弓箭手", "cost": 250},
+	{"type": "warlock",   "name": "术士",   "cost": 300},
+	{"type": "healer",    "name": "治疗师", "cost": 350},
+	{"type": "knight",    "name": "骑士",   "cost": 400},
+]
+var _recruit_mode_unit_id: int = -1
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
 @onready var gold_panel: ColorRect = $GameView/HUD/BottomLeft/GoldPanel
 @onready var gold_label: Label = $GameView/HUD/BottomLeft/GoldPanel/GoldLabel
@@ -611,6 +623,42 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 	_show_turn_banner("🏆 [color=#f0c75e]玩家 #%s[/color] 获胜! 原因: %s" % [
 		str(winner_player_id), win_reason
 	], 8.0)
+	# S:4:弹 BattleResultPanel — 展示 winner + 战斗统计
+	var winner_id: int = int(winner_player_id) if winner_player_id != null else -1
+	var winner_p: Dictionary = GameState.get_player(winner_id) if winner_id > 0 else {}
+	var winner_name: String = String(winner_p.get("user_name", "—"))
+	var winner_color: String = String(winner_p.get("color", "red"))
+	# 统计:从 GameState.game_summary + logs 抽
+	var summary: Dictionary = GameState.game_summary if GameState != null else {}
+	var stats: Dictionary = {
+		"kills": 0,
+		"deaths": 0,
+		"captures": 0,
+		"co_peak": int(winner_p.get("co_meter", 0)),
+		"turns": int(summary.get("turn_number", 0)),
+		"skills": 0,
+		"reason": win_reason,
+	}
+	# 计算 kills / deaths / skills 从 logs(action_log 一致)。
+	# ActionLogOut 字段名是 action_type / description (game/app/schemas.py:215)。
+	if GameState != null:
+		for log in GameState.logs:
+			if not (log is Dictionary): continue
+			var action_type: String = String(log.get("action_type", ""))
+			var actor_pid_v: Variant = log.get("player_id", -1)
+			var actor_pid: int = -1 if actor_pid_v == null else int(actor_pid_v)
+			if action_type == "kill":
+				if actor_pid == winner_id:
+					stats["kills"] = int(stats.get("kills", 0)) + 1
+				elif winner_id > 0 and actor_pid > 0:
+					stats["deaths"] = int(stats.get("deaths", 0)) + 1
+			elif action_type == "claim_complete":
+				if actor_pid == winner_id:
+					stats["captures"] = int(stats.get("captures", 0)) + 1
+			elif action_type == "skill":
+				if actor_pid == winner_id:
+					stats["skills"] = int(stats.get("skills", 0)) + 1
+	show_battle_result(winner_name, winner_color, stats)
 
 
 ## M4.17:slide-down banner from above + auto-hide.
@@ -720,11 +768,75 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _attack_mode_unit_id > 0:
 				# 攻击模式:空地点击 → 取消
 				_cancel_action_mode()
+			elif _heal_mode_unit_id > 0:
+				# 治疗模式:空地点击 → 取消
+				_cancel_action_mode()
 			else:
-				# 非任何模式:清高亮
-				board.clear_selection_marks()
-				_hide_action_bubble()
+				# 走 web 的"空佣兵站(我方 owner)+ 没单位驻守"→ 招募入口
+				# (game/app/web/app.js:3015-3024)。
+				var batt: Dictionary = _pick_empty_my_barracks(event.global_position)
+				if not batt.is_empty():
+					_show_recruit_at(batt)
+				else:
+					board.clear_selection_marks()
+					_hide_action_bubble()
 		get_viewport().set_input_as_handled()
+
+
+# 把屏幕坐标转 tile,看是不是"我方 owner + 空 barracks + 是我的回合"。
+# 是 → {x, y, gold};否 → {}。
+func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
+	if board == null or GameState == null:
+		return {}
+	if not GameState.is_local_turn:
+		return {}
+	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
+	if layer == null:
+		return {}
+	var local: Vector2 = layer.to_local(global_pos)
+	var cell: Vector2i = layer.local_to_map(local)
+	var terrain: Dictionary = board.tile_lookup if board.tile_lookup != null else {}
+	for k in terrain.keys():
+		var t: Dictionary = terrain[k]
+		if Vector2i(int(t.get("x", k.x)), int(t.get("y", k.y))) != cell:
+			continue
+		if String(t.get("terrain", "")) != "barracks":
+			return {}
+		if int(t.get("owner_id", -1)) != _player_id:
+			return {}
+		# 该 tile 上是否有单位(occupied → 不能招募)
+		for uu in _all_units_including_self():
+			if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
+				return {}
+		var me: Dictionary = GameState.get_player(_player_id)
+		return {
+			"x": cell.x,
+			"y": cell.y,
+			"gold": int(me.get("gold", 0)),
+		}
+	return {}
+
+
+# S:4:招募的"迷你 modal" — 显示 5 类单位,默认第 1 项。
+# 真正的 5 类点选 modal 是后续 modal/HUD 工作。当前给玩家一个能走的入口。
+func _show_recruit_at(info: Dictionary) -> void:
+	var tx: int = int(info.get("x", -1))
+	var ty: int = int(info.get("y", -1))
+	# 直接走 status 文字显示 5 类 + 当前金币 + 服务器是 source of truth
+	var lines: Array = []
+	for o in _RECRUIT_OPTIONS:
+		var ok: bool = int(info.get("gold", 0)) >= int(o.get("cost", 0))
+		lines.append("  %s [%s] 💰%d%s" % [
+			String(o.get("name", "?")),
+			String(o.get("type", "?")),
+			int(o.get("cost", 0)),
+			"" if ok else " (金币不够)"
+		])
+	_update_status("🛡 招募选择 (%d, %d) · 金币 %d:\n%s\n(后续接 modal — 当前按 Enter 选第 1 项)" % [
+		tx, ty, int(info.get("gold", 0)), "\n".join(lines)
+	])
+	# 默认 chip — 当前是占位,不直接 POST(避免误点)
+	# 等 modal 形式就能选择 5 个 button 发 POST。
 
 
 func _on_board_unit_clicked(unit_id: int) -> void:
@@ -738,6 +850,17 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 			_update_status("目标无效,取消攻击")
 			_attack_mode_unit_id = -1
 			_attack_targets = {}
+			if board != null:
+				board.clear_selection_marks()
+		return
+	# 治疗模式下点单位 → 用作 heal target
+	if _heal_mode_unit_id > 0:
+		if _heal_targets.has(unit_id):
+			_heal_unit_to(_heal_mode_unit_id, unit_id)
+		else:
+			_update_status("目标无效,取消治疗")
+			_heal_mode_unit_id = -1
+			_heal_targets = {}
 			if board != null:
 				board.clear_selection_marks()
 		return
@@ -1381,11 +1504,13 @@ func _on_attack_pressed() -> void:
 
 # 取消移动/攻击模式的统一接口
 func _cancel_action_mode() -> void:
-	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0:
+	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _heal_mode_unit_id > 0:
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
+		_heal_mode_unit_id = -1
+		_heal_targets = {}
 		if board != null:
 			board.clear_selection_marks()
 		_update_status("已取消行动模式")
@@ -1486,7 +1611,93 @@ func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 
 
 func _on_skill_pressed() -> void:
-	_update_status("技能: M3+ 实装")
+	# M4.3:进入治疗模式 — 用 healer 唯一默认技能 "heal"
+	if _selected_unit_id <= 0:
+		_update_status("技能: 请先选中单位")
+		return
+	var ud: Dictionary = GameState.get_unit(_selected_unit_id) if GameState != null else {}
+	if ud.is_empty():
+		_update_status("技能: 找不到单位")
+		return
+	# 仅 healer 默认技能 — 检查 skills 数组
+	var skills: Array = (ud.get("skills", []) as Array)
+	if not skills.has("heal"):
+		_update_status("技能: 该单位不会治疗")
+		return
+	# 计算 8-邻接范围内 HP<max_hp 的友军
+	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var me_pid2: int = int(_player_id)
+	var out: Dictionary = {}
+	for uu in _all_units_including_self():
+		var dx: int = abs(int(uu.get("x", 0)) - pos_h.x)
+		var dy: int = abs(int(uu.get("y", 0)) - pos_h.y)
+		var cheb: int = max(dx, dy)
+		if cheb != 1: continue
+		if int(uu.get("player_id", -1)) != me_pid2: continue
+		var hp_i: int = int(uu.get("hp", 0))
+		var max_hp_i: int = int(uu.get("max_hp", hp_i + 1))
+		if hp_i >= max_hp_i: continue
+		out[int(uu.get("id", -1))] = {
+			"x": int(uu.get("x", 0)),
+			"y": int(uu.get("y", 0)),
+			"name": String(uu.get("name", uu.get("unit_type", "?"))),
+			"hp": hp_i,
+			"max_hp": max_hp_i,
+		}
+	if out.is_empty():
+		_update_status("治疗: 8-邻内无伤兵")
+		return
+	_heal_mode_unit_id = _selected_unit_id
+	_heal_targets = out
+	if board != null:
+		var tiles: Array = []
+		for k in out.keys():
+			tiles.append(Vector2i(int(out[k].get("x", 0)), int(out[k].get("y", 0))))
+		board.show_attack_marks(tiles)
+	_update_status("治疗: 点击蓝框内伤兵 (可选 %d)" % out.size())
+	_hide_action_bubble()
+
+
+# M4.5:发 POST /games/{id}/recruit
+# 客户端不该"校验"foreign / occupied — server 是 source of truth
+# (game/app/routes/actions.py:recruit_unit)。这里只发。
+func _recruit_unit_to(tile_x: int, tile_y: int, unit_type: String) -> void:
+	if _game_id <= 0 or _player_id <= 0: return
+	_update_status("正在招募 %s 到 (%d, %d)..." % [unit_type, tile_x, tile_y])
+	NetworkClient.action_recruit(_game_id, _player_id, tile_x, tile_y, unit_type)
+	_hide_action_bubble()
+
+
+# S:4 适配 — 在 _unhandled_input 的空地点击分支里,加 empty-my-barracks → 招募入口
+# 对应 web 行为(见 game/app/web/app.js:3012-3024):
+#   !occupant && isMyTurn + tile.terrain == "barracks" && tile.owner_id == me_pid
+#   → showRecruitModal 弹 5 类单位的列表
+#
+# 完整 modal 是后续工作;目前 status 显示可以招募的单位集合,
+# 用户输 unit_type 字符串就 POST(简版)。
+
+
+# 辅助:GameState.players 摊平所有 unit(含本方玩家)
+func _all_units_including_self() -> Array:
+	var out: Array = []
+	if GameState == null: return out
+	for p in GameState.players:
+		if not p is Dictionary: continue
+		for u in p.get("units", []):
+			if u is Dictionary:
+				out.append(u)
+	return out
+
+
+func _heal_unit_to(healer_id: int, target_id: int) -> void:
+	if _game_id <= 0 or _player_id <= 0: return
+	var info: Dictionary = _heal_targets.get(target_id, {})
+	var name: String = String(info.get("name", "单位 #%d" % target_id))
+	_update_status("治疗 #%d → #%d (%s)..." % [healer_id, target_id, name])
+	NetworkClient.action_skill(_game_id, _player_id, healer_id, "heal", target_id)
+	_heal_mode_unit_id = -1
+	_heal_targets = {}
+	if board != null: board.clear_selection_marks()
 	_hide_action_bubble()
 
 
@@ -1498,9 +1709,16 @@ func _on_wait_pressed() -> void:
 
 
 func _on_claim_pressed() -> void:
-	_update_status("占领: 等待点击中立建筑...")
+	# M4.4:占领 — 服务端自己校验 unit 站在中立/敌方建筑 tile 上方,
+	# 客户端只发 POST。2 回合后占领完成(详情 game/app/config.py:CLAIM_TURNS_REQUIRED)。
+	if _selected_unit_id <= 0:
+		_update_status("占领: 请先选中单位")
+		return
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	_update_status("正在占领(#%d)..." % _selected_unit_id)
+	NetworkClient.action_claim(_game_id, _player_id, _selected_unit_id)
 	_hide_action_bubble()
-	# M3+ TODO: 进入"占领模式",点击中立建筑触发 POST /actions/claim
 
 
 func _random_suffix() -> float:
