@@ -503,6 +503,17 @@ func fetch_mainline_dialogue(path: String, callback: Callable = Callable()) -> v
 	request("GET", "/mainlines/dialogue?path=%s" % path.uri_encode(), {}, callback)
 
 
+func get_unlocked_commanders(user_name: String, callback: Callable = Callable()) -> void:
+	request("GET", "/players/me/commanders?user_name=%s" % user_name.uri_encode(), {}, callback)
+
+
+func select_mainline_commander(mainline_id: String, user_name: String, commander_id: String = "", callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/select-commander" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"commander_id": commander_id if commander_id != "" else null,
+	}, callback)
+
+
 func start_mainline(mainline_id: String, user_name: String, skip_intro: bool = false, callback: Callable = Callable()) -> void:
 	request("POST", "/mainlines/%s/start" % mainline_id.uri_encode(), {"user_name": user_name, "skip_intro": skip_intro}, callback)
 

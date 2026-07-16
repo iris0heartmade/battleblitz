@@ -146,6 +146,9 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var mainline_view: Control = $MainlineView
 @onready var ml_title: Label = $MainlineView/MLFrame/MLTitle
 @onready var ml_list_container: VBoxContainer = $MainlineView/MLFrame/MLListContainer
+@onready var ml_commander_status: Label = $MainlineView/MLFrame/CommanderStatus
+@onready var ml_commander_option: OptionButton = $MainlineView/MLFrame/CommanderOption
+@onready var ml_apply_commander_btn: Button = $MainlineView/MLFrame/ApplyCommanderBtn
 @onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
 @onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
@@ -221,6 +224,8 @@ var _player_id: int = 0
 var _user_name: String = "Player"
 var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
+var _selected_mainline_id: String = "chapter_01_steel_rebellion"
+var _mainline_commander_ids: Array[String] = [""]
 
 
 func _ready() -> void:
@@ -246,6 +251,8 @@ func _ready() -> void:
 		ml_back_btn.pressed.connect(_on_ml_back_pressed)
 	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
 		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
+	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
+		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
 	# T:3 大厅按钮 — 接 add-ai / start / back
 	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
 		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
@@ -2107,7 +2114,7 @@ func _apply_gba_theme() -> void:
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
 	for btn in [menu_button, lobby_button, saves_button, mainline_button, settings_button, exit_button,
-				ml_back_btn, ml_abandon_btn,
+				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
@@ -2850,11 +2857,93 @@ func _apply_lobby_theme() -> void:
 		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
+func _setup_mainline_commander_options(unlocked: Array = [], current: String = "") -> void:
+	_mainline_commander_ids = [""]
+	if ml_commander_option != null and is_instance_valid(ml_commander_option):
+		ml_commander_option.clear()
+		ml_commander_option.add_item("No commander")
+	for item in unlocked:
+		var commander_id := str(item)
+		if commander_id == "" or _mainline_commander_ids.has(commander_id):
+			continue
+		_mainline_commander_ids.append(commander_id)
+		if ml_commander_option != null and is_instance_valid(ml_commander_option):
+			ml_commander_option.add_item(_commander_label(commander_id))
+	var selected_index := _mainline_commander_ids.find(current)
+	if selected_index < 0:
+		selected_index = 0
+	if ml_commander_option != null and is_instance_valid(ml_commander_option):
+		ml_commander_option.select(selected_index)
+		ml_commander_option.disabled = _mainline_commander_ids.size() <= 1
+
+
+func _commander_label(commander_id: String) -> String:
+	match commander_id:
+		"yun":
+			return "Yun"
+		"anna":
+			return "Anna"
+		_:
+			return commander_id
+
+
+func _selected_mainline_commander() -> String:
+	if ml_commander_option == null or not is_instance_valid(ml_commander_option):
+		return ""
+	var index := ml_commander_option.selected
+	if index < 0 or index >= _mainline_commander_ids.size():
+		return ""
+	return _mainline_commander_ids[index]
+
+
+func _on_commanders_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		if ml_commander_status != null and is_instance_valid(ml_commander_status):
+			ml_commander_status.text = "Commander: unavailable"
+		_setup_mainline_commander_options()
+		return
+	var unlocked: Array = body.get("unlocked_commanders", []) if body.get("unlocked_commanders", []) is Array else []
+	var mainline_choices: Dictionary = body.get("mainline_commanders", {}) if body.get("mainline_commanders", {}) is Dictionary else {}
+	var current := str(mainline_choices.get(_selected_mainline_id, ""))
+	_setup_mainline_commander_options(unlocked, current)
+	if ml_commander_status != null and is_instance_valid(ml_commander_status):
+		ml_commander_status.text = "Commander: %s" % (current if current != "" else "none")
+
+
+func _on_apply_mainline_commander_pressed() -> void:
+	if _selected_mainline_id == "":
+		if ml_commander_status != null and is_instance_valid(ml_commander_status):
+			ml_commander_status.text = "Commander: choose a chapter first"
+		return
+	var commander_id := _selected_mainline_commander()
+	if ml_commander_status != null and is_instance_valid(ml_commander_status):
+		ml_commander_status.text = "Commander: applying..."
+	NetworkClient.select_mainline_commander(_selected_mainline_id, _user_name, commander_id, Callable(self, "_on_select_mainline_commander_response"))
+
+
+func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "Commander: apply failed"
+		if body is Dictionary:
+			msg = "Commander: %s" % str(body.get("detail", body.get("message", "apply failed")))
+		if ml_commander_status != null and is_instance_valid(ml_commander_status):
+			ml_commander_status.text = msg
+		return
+	var commander_id := str(body.get("commander_id", ""))
+	_setup_mainline_commander_options(_mainline_commander_ids.slice(1), commander_id)
+	if ml_commander_status != null and is_instance_valid(ml_commander_status):
+		ml_commander_status.text = "Commander: %s" % (commander_id if commander_id != "" else "none")
+
+
 # T:96 — MainlineView 章节列表 + 入口
 func _on_mainline_pressed() -> void:
 	_show_view("mainline")
 	ml_title.text = "📖 主线章节 · 加载中..."
 	ml_list_container.text = ""
+	_setup_mainline_commander_options()
+	if ml_commander_status != null and is_instance_valid(ml_commander_status):
+		ml_commander_status.text = "Commander: loading..."
+	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"))
 
 
@@ -2874,6 +2963,8 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 		if not ml is Dictionary: continue
 		var id: String = String(ml.get("id", ""))
 		if id == "": continue
+		if _selected_mainline_id == "":
+			_selected_mainline_id = id
 		var title: String = String(ml.get("title", "?"))
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
 		var desc: String = String(ml.get("synopsis", ml.get("description", "")))
@@ -2886,6 +2977,7 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 
 
 func _on_ml_card_pressed(mainline_id: String) -> void:
+	_selected_mainline_id = mainline_id
 	# 拉详情 → show_dialog（pre-battle dialogue）→ start
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
 
