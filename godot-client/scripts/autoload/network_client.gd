@@ -416,8 +416,15 @@ func list_presets(callback: Callable = Callable()) -> void:
 	request("GET", "/games/presets", {}, callback)
 
 
-func list_games(callback: Callable = Callable()) -> void:
-	request("GET", "/games", {}, callback)
+func list_games(callback: Callable = Callable(), user_name: String = "") -> void:
+	var path := "/games"
+	if user_name != "":
+		path += "?user_name=%s" % user_name.uri_encode()
+	request("GET", path, {}, callback)
+
+
+func delete_game(game_id: int, callback: Callable = Callable()) -> void:
+	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}), {}, callback)
 
 
 func create_game(name: String, map_preset: String, map_biome: String, win_condition: String, callback: Callable = Callable()) -> void:
@@ -454,12 +461,18 @@ func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 
 
-# T:5 重新加入房间(POST /games/{id}/rejoin)
-# 详见 game/app/routes/game.py:839 rejoin_game
-# body: {user_name: str} — 后端按 (game_id, user_name) 找 Player 行
-func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable()) -> void:
+func rejoin_game_by_player_id(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/rejoin",
+		{"player_id": player_id}, callback)
+
+
+func rejoin_game_by_name(game_id: int, user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/rejoin_by_name",
 		{"user_name": user_name}, callback)
+
+
+func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable()) -> void:
+	rejoin_game_by_name(game_id, user_name, callback)
 
 
 # T:96 — Mainline 章节 API

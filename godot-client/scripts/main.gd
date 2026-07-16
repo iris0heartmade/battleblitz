@@ -147,6 +147,7 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 # T:5 单槽存档
 @onready var resume_button: Button = $Menu/CenterContainer/ButtonCol/ResumeButton
 var _resume_game_id: int = 0
+var _resume_player_id: int = 0
 
 # T:3 基础大厅视图
 @onready var lobby_view: Control = $Lobby
@@ -510,26 +511,25 @@ func _on_exit_pressed() -> void:
 func _check_resume_session() -> void:
 	if _user_name == "" or _user_name == "Player":
 		return
-	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"))
+	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"), _user_name)
 
 
 func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
-	# /games 返回 List[GameSummaryOut] 或错误 dict
+	# /games?user_name= 返回该用户可继续的 GameSummaryOut 列表,不带 players。
 	var games: Array = (body as Array) if body is Array else []
+	var last_game_id: int = int(UserSettings.get_value("session.v1.last_game_id", 0))
+	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
 	for g in games:
 		if not g is Dictionary: continue
-		if String(g.get("status", "")) != "playing":
+		var status := String(g.get("status", ""))
+		if status != "playing" and status != "waiting":
 			continue
-		# 检查 players 内有没有自己
-		var players: Array = (g.get("players", []) as Array)
-		for p in players:
-			if not p is Dictionary: continue
-			if String(p.get("user_name", "")) == _user_name:
-				_resume_game_id = int(g.get("id", 0))
-				if resume_button != null and is_instance_valid(resume_button):
-					resume_button.text = "▶ 继续对局 #%d" % _resume_game_id
-					resume_button.visible = true
-				return
+		_resume_game_id = int(g.get("id", 0))
+		_resume_player_id = last_player_id if _resume_game_id == last_game_id else 0
+		if resume_button != null and is_instance_valid(resume_button):
+			resume_button.text = "▶ 继续对局 #%d" % _resume_game_id
+			resume_button.visible = _resume_game_id > 0
+		return
 
 
 func _on_resume_pressed() -> void:
@@ -537,8 +537,12 @@ func _on_resume_pressed() -> void:
 		return
 	_show_view("connecting")
 	connecting_label.text = "正在重连对局 #%d..." % _resume_game_id
-	NetworkClient.rejoin_game(_resume_game_id, _user_name,
-		Callable(self, "_on_resume_rejoin_response"))
+	if _resume_player_id > 0:
+		NetworkClient.rejoin_game_by_player_id(_resume_game_id, _resume_player_id,
+			Callable(self, "_on_resume_rejoin_response"))
+	else:
+		NetworkClient.rejoin_game_by_name(_resume_game_id, _user_name,
+			Callable(self, "_on_resume_rejoin_response"))
 
 
 func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
@@ -554,6 +558,9 @@ func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
 	if resp_player_id > 0:
 		_player_id = resp_player_id
 		GameState.local_player_id = _player_id
+		UserSettings.set_value("session.v1.last_player_id", _player_id)
+	if _game_id > 0:
+		UserSettings.set_value("session.v1.last_game_id", _game_id)
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
 
