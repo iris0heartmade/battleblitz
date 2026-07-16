@@ -183,6 +183,7 @@ var _selected_save_id: int = 0
 @onready var editor_map_select_option: OptionButton = $EditorView/EditorPanel/EditorMapSelectOption
 @onready var editor_load_btn: Button = $EditorView/EditorPanel/EditorLoadBtn
 @onready var editor_mode_option: OptionButton = $EditorView/EditorPanel/EditorModeOption
+@onready var editor_unit_tool_option: OptionButton = $EditorView/EditorPanel/EditorUnitToolOption
 @onready var editor_unit_option: OptionButton = $EditorView/EditorPanel/EditorUnitOption
 @onready var editor_unit_color_option: OptionButton = $EditorView/EditorPanel/EditorUnitColorOption
 @onready var editor_unit_level_option: OptionButton = $EditorView/EditorPanel/EditorUnitLevelOption
@@ -2452,6 +2453,11 @@ func _setup_editor_options() -> void:
 		editor_mode_option.add_item("Terrain")
 		editor_mode_option.add_item("Unit")
 		editor_mode_option.select(0)
+	if editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option):
+		editor_unit_tool_option.clear()
+		editor_unit_tool_option.add_item("Place")
+		editor_unit_tool_option.add_item("Erase")
+		editor_unit_tool_option.select(0)
 	if editor_unit_option != null and is_instance_valid(editor_unit_option):
 		editor_unit_option.clear()
 		for unit_type in _editor_unit_types:
@@ -2547,6 +2553,10 @@ func _selected_editor_unit_level() -> int:
 	return clampi(editor_unit_level_option.selected + 1, 1, 10)
 
 
+func _is_editor_unit_erase_mode() -> bool:
+	return editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option) and editor_unit_tool_option.selected == 1
+
+
 func _build_blank_editor_map() -> Dictionary:
 	var rows: Array[String] = []
 	for _y in range(15):
@@ -2597,9 +2607,32 @@ func _paint_editor_tile(tile: Vector2i) -> void:
 
 func _on_editor_tile_clicked(tile: Vector2i) -> void:
 	if _is_editor_unit_mode():
+		if _is_editor_unit_erase_mode():
+			_erase_editor_unit(tile)
+			return
 		_place_editor_unit(tile)
 		return
 	_paint_editor_tile(tile)
+
+
+func _erase_editor_unit(tile: Vector2i) -> void:
+	if _editor_map.is_empty():
+		return
+	var units: Array = _editor_map.get("initial_units", [])
+	var next_units: Array = []
+	var removed := false
+	for unit in units:
+		if not unit is Dictionary:
+			continue
+		if int(unit.get("x", -1)) == tile.x and int(unit.get("y", -1)) == tile.y:
+			removed = true
+			continue
+		next_units.append(unit)
+	_editor_map["initial_units"] = next_units
+	if removed:
+		_render_editor_map()
+		if editor_status != null and is_instance_valid(editor_status):
+			editor_status.text = "Removed unit at %d,%d" % [tile.x, tile.y]
 
 
 func _place_editor_unit(tile: Vector2i) -> void:
