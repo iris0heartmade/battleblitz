@@ -98,6 +98,12 @@ func _ready() -> void:
 		"lobby hub should expose a map preset dropdown")
 	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null("Lobby/LobbyFrame/CreateRoomBtn") != null,
 		"lobby hub should expose a create room button")
+	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiDifficultyOption") != null,
+		"lobby hub should expose AI difficulty selection")
+	_assert_true("Lobby has AiKindOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiKindOption") != null,
+		"lobby hub should expose AI backend selection")
+	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
+		"lobby hub should expose AI personality selection")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",

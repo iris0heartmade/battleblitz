@@ -153,6 +153,9 @@ var _resume_game_id: int = 0
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyStatus
 @onready var lobby_list: RichTextLabel = $Lobby/LobbyFrame/LobbyList
 @onready var lobby_win_banner: Label = $Lobby/LobbyFrame/LobbyWinBanner
+@onready var ai_difficulty_option: OptionButton = $Lobby/LobbyFrame/AiDifficultyOption
+@onready var ai_kind_option: OptionButton = $Lobby/LobbyFrame/AiKindOption
+@onready var ai_personality_option: OptionButton = $Lobby/LobbyFrame/AiPersonalityOption
 @onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/LobbyAddAiBtn
 @onready var lobby_start_btn: Button = $Lobby/LobbyFrame/LobbyStartBtn
 @onready var lobby_back_btn: Button = $Lobby/LobbyFrame/LobbyBackBtn
@@ -2163,6 +2166,7 @@ func _on_lobby_pressed() -> void:
 	if create_name_input != null and is_instance_valid(create_name_input):
 		create_name_input.text = "%s room" % _user_name
 	_setup_lobby_join_options()
+	_setup_lobby_ai_options()
 	_load_lobby_presets()
 	_refresh_room_list()
 	return
@@ -2242,6 +2246,56 @@ func _selected_join_team() -> String:
 			return "yellow"
 		_:
 			return ""
+
+
+func _setup_lobby_ai_options() -> void:
+	if ai_difficulty_option != null and is_instance_valid(ai_difficulty_option):
+		ai_difficulty_option.clear()
+		ai_difficulty_option.add_item("AI normal")
+		ai_difficulty_option.add_item("AI easy")
+		ai_difficulty_option.add_item("AI hard")
+		ai_difficulty_option.select(0)
+	if ai_kind_option != null and is_instance_valid(ai_kind_option):
+		ai_kind_option.clear()
+		ai_kind_option.add_item("Rules")
+		ai_kind_option.add_item("LLM")
+		ai_kind_option.select(0)
+	if ai_personality_option != null and is_instance_valid(ai_personality_option):
+		ai_personality_option.clear()
+		ai_personality_option.add_item("Balanced")
+		ai_personality_option.add_item("Aggressive")
+		ai_personality_option.add_item("Conservative")
+		ai_personality_option.select(0)
+
+
+func _selected_ai_difficulty() -> String:
+	if ai_difficulty_option == null or not is_instance_valid(ai_difficulty_option):
+		return "normal"
+	match ai_difficulty_option.selected:
+		1:
+			return "easy"
+		2:
+			return "hard"
+		_:
+			return "normal"
+
+
+func _selected_ai_kind() -> String:
+	if ai_kind_option != null and is_instance_valid(ai_kind_option) and ai_kind_option.selected == 1:
+		return "llm"
+	return "rules"
+
+
+func _selected_ai_personality() -> String:
+	if ai_personality_option == null or not is_instance_valid(ai_personality_option):
+		return "balanced"
+	match ai_personality_option.selected:
+		1:
+			return "aggressive"
+		2:
+			return "conservative"
+		_:
+			return "balanced"
 
 
 func _load_lobby_presets() -> void:
@@ -2443,7 +2497,13 @@ func _on_lobby_add_ai_pressed() -> void:
 	# POST /games/{id}/add-ai(走 NetworkClient.request)
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Adding AI..."
-	NetworkClient.add_ai_player(_game_id, "normal", "rules", "balanced", Callable(self, "_on_lobby_add_ai_response"))
+	NetworkClient.add_ai_player(
+		_game_id,
+		_selected_ai_difficulty(),
+		_selected_ai_kind(),
+		_selected_ai_personality(),
+		Callable(self, "_on_lobby_add_ai_response")
+	)
 
 
 func _on_lobby_add_ai_response(_body: Variant, _code: int = 0) -> void:

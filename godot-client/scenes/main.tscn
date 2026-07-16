@@ -353,7 +353,27 @@ text = "🏁 胜利条件: 消灭所有敌方单位,或占领对方 HQ"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 
-[node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame"]
+[node name="AiDifficultyOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -392.0
+offset_top = -104.0
+offset_right = -264.0
+offset_bottom = -68.0
+
+[node name="AiKindOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -256.0
+offset_top = -104.0
+offset_right = -168.0
+offset_bottom = -68.0
+
+[node name="AiPersonalityOption" type="OptionButton" parent="Lobby/LobbyFrame"]
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
@@ -362,9 +382,8 @@ offset_left = -160.0
 offset_top = -104.0
 offset_right = -16.0
 offset_bottom = -68.0
-text = "🤖 添加 AI"
 
-[node name="LobbyStartBtn" type="Button" parent="Lobby/LobbyFrame"]
+[node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame"]
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
@@ -372,6 +391,17 @@ anchor_bottom = 1.0
 offset_left = 16.0
 offset_top = -104.0
 offset_right = 160.0
+offset_bottom = -68.0
+text = "🤖 添加 AI"
+
+[node name="LobbyStartBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 176.0
+offset_top = -104.0
+offset_right = 320.0
 offset_bottom = -68.0
 text = "▶ 启 动 游 戏"
 disabled = true
