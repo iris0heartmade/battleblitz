@@ -99,6 +99,8 @@ func _ready() -> void:
 		"lobby hub should expose a room name input")
 	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null("Lobby/LobbyFrame/MapPresetOption") != null,
 		"lobby hub should expose a map preset dropdown")
+	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyCommanderOption") != null,
+		"lobby hub should expose commander selection for room creation")
 	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null("Lobby/LobbyFrame/CreateRoomBtn") != null,
 		"lobby hub should expose a create room button")
 	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiDifficultyOption") != null,
@@ -175,6 +177,8 @@ func _ready() -> void:
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
 		"join_game should accept game_id, user_name, color, team, role, callback")
+	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 6,
+		"create_game should accept an optional commander id before callback")
 	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
 		"NetworkClient should expose DELETE /games/{id}")
 	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
@@ -287,9 +291,12 @@ func _ready() -> void:
 		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
 	}, 200)
 	var commander_option: OptionButton = main_check.get_node("MainlineView/MLFrame/CommanderOption")
+	var lobby_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyCommanderOption")
 	var commander_status: Label = main_check.get_node("MainlineView/MLFrame/CommanderStatus")
 	_assert_gte("Mainline commander selector lists unlocked choices", commander_option.item_count, 3,
 		"commander selector should include none plus unlocked commanders")
+	_assert_gte("Lobby commander selector lists unlocked choices", lobby_commander_option.item_count, 3,
+		"lobby commander selector should include none plus unlocked commanders")
 	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("yun"),
 		"commander response should show the selected commander")
 	main_check.call("_on_select_mainline_commander_response", {
