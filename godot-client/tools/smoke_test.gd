@@ -148,6 +148,8 @@ func _ready() -> void:
 		"NetworkClient should expose player_id based rejoin")
 	_assert_true("NetworkClient rejoin_game_by_name method", NetworkClient.has_method("rejoin_game_by_name"),
 		"NetworkClient should expose user_name based rejoin")
+	_assert_gte("NetworkClient action_recruit argument count", _method_arg_count(NetworkClient, "action_recruit"), 6,
+		"action_recruit should accept game_id, player_id, tile, unit_type, callback")
 	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
 		"start_mainline should accept mainline_id, user_name, skip_intro, callback")
 	_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(NetworkClient, "advance_mainline"), 4,
@@ -192,6 +194,18 @@ func _ready() -> void:
 		"attack confirm text should name the target")
 	_assert_true("Attack confirm text includes distance", confirm_text.contains("距离 3"),
 		"attack confirm text should include Manhattan distance")
+
+	main_check.call("_on_recruit_response", {
+		"new_unit_type": "archer",
+		"cost": 250,
+		"gold_remaining": 150,
+		"description": "Alice 招募了弓箭手",
+	}, 200)
+	var main_status_label: Label = main_check.get_node("StatusLabel")
+	_assert_true("Recruit response status names unit", main_status_label.text.contains("archer"),
+		"recruit success status should include the recruited unit type")
+	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
+		"recruit success status should include remaining gold")
 
 	main_check.call("_on_ml_list_response", [
 		{
