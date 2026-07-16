@@ -141,6 +141,7 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 # Main menu widgets (GBA 风 V2)
 @onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
 @onready var mainline_button: Button = $Menu/CenterContainer/ButtonCol/MainlineButton
+@onready var editor_button: Button = $Menu/CenterContainer/ButtonCol/EditorButton
 
 # T:96 MainlineView
 @onready var mainline_view: Control = $MainlineView
@@ -174,6 +175,19 @@ var _save_records: Array = []
 var _selected_save_id: int = 0
 
 # T:3 基础大厅视图
+@onready var editor_view: Control = $EditorView
+@onready var editor_board: Board = $EditorView/EditorBoard
+@onready var editor_map_name_input: LineEdit = $EditorView/EditorPanel/EditorMapNameInput
+@onready var editor_biome_option: OptionButton = $EditorView/EditorPanel/EditorBiomeOption
+@onready var editor_terrain_option: OptionButton = $EditorView/EditorPanel/EditorTerrainOption
+@onready var editor_map_select_option: OptionButton = $EditorView/EditorPanel/EditorMapSelectOption
+@onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
+@onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
+@onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
+@onready var editor_back_btn: Button = $EditorView/EditorPanel/EditorBackBtn
+var _editor_map: Dictionary = {}
+var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "C", "v", "b", "r", "g", "S"]
+
 @onready var lobby_view: Control = $Lobby
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyStatus
 @onready var lobby_list: RichTextLabel = $Lobby/LobbyFrame/LobbyList
@@ -250,6 +264,8 @@ func _ready() -> void:
 	menu_button.pressed.connect(_on_free_play_pressed)
 	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	if editor_button != null and is_instance_valid(editor_button):
+		editor_button.pressed.connect(_on_editor_pressed)
 	if saves_button != null and is_instance_valid(saves_button):
 		saves_button.pressed.connect(_on_saves_pressed)
 	# T:96 Mainline
@@ -296,6 +312,12 @@ func _ready() -> void:
 		save_refresh_btn.pressed.connect(_refresh_saves)
 	if save_back_btn != null and is_instance_valid(save_back_btn):
 		save_back_btn.pressed.connect(_on_save_back_pressed)
+	if editor_new_btn != null and is_instance_valid(editor_new_btn):
+		editor_new_btn.pressed.connect(_on_editor_new_pressed)
+	if editor_save_btn != null and is_instance_valid(editor_save_btn):
+		editor_save_btn.pressed.connect(_on_editor_save_pressed)
+	if editor_back_btn != null and is_instance_valid(editor_back_btn):
+		editor_back_btn.pressed.connect(_on_editor_back_pressed)
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
 	# T:8 启动时应用上次的字号偏好
@@ -457,6 +479,7 @@ func _show_view(name: String) -> void:
 	lobby_view.visible = (name == "lobby")
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
+	editor_view.visible = (name == "editor")
 
 
 func _on_free_play_pressed() -> void:
@@ -2119,10 +2142,11 @@ func _apply_gba_theme() -> void:
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
-	for btn in [menu_button, lobby_button, saves_button, mainline_button, settings_button, exit_button,
+	for btn in [menu_button, lobby_button, saves_button, mainline_button, editor_button, settings_button, exit_button,
 				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
+				editor_new_btn, editor_save_btn, editor_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
@@ -2380,6 +2404,156 @@ func _apply_hud_theme() -> void:
 # ============================================================
 # 主菜单新增按钮 handler
 # ============================================================
+
+func _on_editor_pressed() -> void:
+	_entry_flow = "editor"
+	_show_view("editor")
+	_setup_editor_options()
+	if _editor_map.is_empty():
+		_editor_map = _build_blank_editor_map()
+	_render_editor_map()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Map editor ready."
+	NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
+
+
+func _setup_editor_options() -> void:
+	if editor_biome_option != null and is_instance_valid(editor_biome_option):
+		editor_biome_option.clear()
+		for biome in ["grass", "snow", "desert"]:
+			editor_biome_option.add_item(biome)
+		editor_biome_option.select(0)
+	if editor_terrain_option != null and is_instance_valid(editor_terrain_option):
+		editor_terrain_option.clear()
+		for terrain_char in _editor_terrain_chars:
+			editor_terrain_option.add_item(_editor_terrain_label(terrain_char))
+		editor_terrain_option.select(0)
+	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
+		if editor_map_name_input.text.strip_edges() == "":
+			editor_map_name_input.text = "Godot custom map"
+
+
+func _editor_terrain_label(terrain_char: String) -> String:
+	match terrain_char:
+		"P":
+			return "Plain"
+		"F":
+			return "Forest"
+		"M":
+			return "Mountain"
+		"R":
+			return "River"
+		"C":
+			return "Castle"
+		"v":
+			return "Village"
+		"b":
+			return "Barracks"
+		"r":
+			return "Road"
+		"g":
+			return "Gate"
+		"S":
+			return "Snow peak"
+		_:
+			return terrain_char
+
+
+func _selected_editor_biome() -> String:
+	if editor_biome_option == null or not is_instance_valid(editor_biome_option):
+		return "grass"
+	match editor_biome_option.selected:
+		1:
+			return "snow"
+		2:
+			return "desert"
+		_:
+			return "grass"
+
+
+func _build_blank_editor_map() -> Dictionary:
+	var rows: Array[String] = []
+	for _y in range(15):
+		rows.append("P".repeat(15))
+	var name := "Godot custom map"
+	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
+		var typed := editor_map_name_input.text.strip_edges()
+		if typed != "":
+			name = typed
+	return {
+		"name": name,
+		"size": {"width": 15, "height": 15},
+		"biome": _selected_editor_biome(),
+		"layout": rows,
+		"initial_units": [],
+	}
+
+
+func _render_editor_map() -> void:
+	if editor_board == null or not is_instance_valid(editor_board):
+		return
+	if _editor_map.is_empty():
+		return
+	editor_board.load_map(_editor_map)
+
+
+func _on_editor_new_pressed() -> void:
+	_editor_map = _build_blank_editor_map()
+	_render_editor_map()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "New 15x15 map."
+
+
+func _on_editor_save_pressed() -> void:
+	if _editor_map.is_empty():
+		_editor_map = _build_blank_editor_map()
+	var name := str(_editor_map.get("name", "Godot custom map"))
+	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
+		var typed := editor_map_name_input.text.strip_edges()
+		if typed != "":
+			name = typed
+	_editor_map["name"] = name
+	_editor_map["biome"] = _selected_editor_biome()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Saving map..."
+	NetworkClient.save_editor_map(_editor_map, Callable(self, "_on_editor_save_response"))
+
+
+func _on_editor_back_pressed() -> void:
+	_show_view("menu")
+
+
+func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
+	if editor_map_select_option == null or not is_instance_valid(editor_map_select_option):
+		return
+	editor_map_select_option.clear()
+	if code < 200 or code >= 300 or not (body is Array):
+		editor_map_select_option.add_item("No saved maps")
+		return
+	var maps: Array = body
+	if maps.is_empty():
+		editor_map_select_option.add_item("No saved maps")
+		return
+	for item in maps:
+		if not item is Dictionary:
+			continue
+		var map_id := str(item.get("id", ""))
+		var name := str(item.get("name", map_id))
+		if map_id != "":
+			editor_map_select_option.add_item("%s (%s)" % [name, map_id])
+
+
+func _on_editor_save_response(body: Variant, code: int = 0) -> void:
+	if code >= 200 and code < 300 and body is Dictionary:
+		_editor_map = body
+		_render_editor_map()
+		if editor_status != null and is_instance_valid(editor_status):
+			editor_status.text = "Saved: %s" % str(body.get("id", "custom map"))
+		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
+		return
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Save failed"
+
 
 func _on_lobby_pressed() -> void:
 	_entry_flow = "lobby"

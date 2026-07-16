@@ -33,6 +33,13 @@ sys.path.insert(0, str(_HERE.parent))
 class TestEditorAcceptsUnitsOnCastle(unittest.TestCase):
     """Pydantic-level: editor save accepts a unit whose (x, y) is a 'C' tile."""
 
+    def test_snow_peak_tiles_pass_layout_validation(self):
+        from app.routes.editor import _validate_layout
+
+        layout = ["S" * 15 for _ in range(15)]
+
+        _validate_layout(layout, 15, 15)
+
     def test_units_on_castle_tiles_pass_validation(self):
         from app.routes.editor import CustomMapSave, MapSize, InitialUnit
         # Editor's MapSize requires width/height ≥ 15.

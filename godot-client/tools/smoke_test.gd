@@ -119,6 +119,18 @@ func _ready() -> void:
 		"lobby hub should expose AI removal")
 	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/SavesButton") != null,
 		"main menu should expose save management")
+	_assert_true("Menu has EditorButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/EditorButton") != null,
+		"main menu should expose the map editor")
+	_assert_true("EditorView exists", main_check.get_node_or_null("EditorView") != null,
+		"map editor should have a dedicated Godot view")
+	_assert_true("EditorView has EditorBoard", main_check.get_node_or_null("EditorView/EditorBoard") != null,
+		"map editor should reuse the board renderer for preview/editing")
+	_assert_true("EditorView has EditorMapNameInput", main_check.get_node_or_null("EditorView/EditorPanel/EditorMapNameInput") != null,
+		"map editor should expose a map name input")
+	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorTerrainOption") != null,
+		"map editor should expose a terrain brush selector")
+	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
+		"map editor should expose a save action")
 	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
@@ -203,6 +215,14 @@ func _ready() -> void:
 		"NetworkClient should expose GET /players/me/commanders")
 	_assert_true("NetworkClient select_mainline_commander method", NetworkClient.has_method("select_mainline_commander"),
 		"NetworkClient should expose POST /mainlines/{id}/select-commander")
+	_assert_true("NetworkClient list_editor_maps method", NetworkClient.has_method("list_editor_maps"),
+		"NetworkClient should expose GET /editor/maps")
+	_assert_true("NetworkClient load_editor_map method", NetworkClient.has_method("load_editor_map"),
+		"NetworkClient should expose GET /editor/maps/{map_id}")
+	_assert_true("NetworkClient save_editor_map method", NetworkClient.has_method("save_editor_map"),
+		"NetworkClient should expose POST /editor/maps")
+	_assert_true("NetworkClient delete_editor_map method", NetworkClient.has_method("delete_editor_map"),
+		"NetworkClient should expose DELETE /editor/maps/{map_id}")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
 
@@ -324,6 +344,13 @@ func _ready() -> void:
 	var lobby_bgm_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyBgmOption")
 	_assert_gte("Lobby BGM selector lists tracks", lobby_bgm_option.item_count, 2,
 		"BGM selector should include none plus backend tracks")
+	main_check.call("_on_editor_pressed")
+	var editor_view: Control = main_check.get_node("EditorView")
+	_assert_true("Editor button switches to editor view", editor_view.visible,
+		"pressing the editor button should show the map editor")
+	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
+	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
+		"terrain selector should expose the initial paint brushes")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_mainline_start_response", {

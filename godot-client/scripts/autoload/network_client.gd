@@ -416,6 +416,22 @@ func list_presets(callback: Callable = Callable()) -> void:
 	request("GET", "/games/presets", {}, callback)
 
 
+func list_editor_maps(callback: Callable = Callable()) -> void:
+	request("GET", "/editor/maps", {}, callback)
+
+
+func load_editor_map(map_id: String, callback: Callable = Callable()) -> void:
+	request("GET", "/editor/maps/%s" % map_id.uri_encode(), {}, callback)
+
+
+func save_editor_map(map_data: Dictionary, callback: Callable = Callable()) -> void:
+	request("POST", "/editor/maps", map_data, callback)
+
+
+func delete_editor_map(map_id: String, callback: Callable = Callable()) -> void:
+	request("DELETE", "/editor/maps/%s" % map_id.uri_encode(), {}, callback)
+
+
 func list_games(callback: Callable = Callable(), user_name: String = "") -> void:
 	var path := "/games"
 	if user_name != "":
