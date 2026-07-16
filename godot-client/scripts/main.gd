@@ -47,7 +47,10 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
-@onready var turn_banner: Label = $GameView/TurnBanner
+@onready var turn_banner: ColorRect = $GameView/TurnBannerFrame
+@onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
+var _turn_banner_tween: Tween = null
+var _ai_pulse_tween: Tween = null
 
 # V2 第 6 轮:设置 + 暂停面板
 @onready var settings_panel: Panel = $GameView/HUD/SettingsPanel
@@ -181,6 +184,11 @@ func _ready() -> void:
 		GameState.match_ended.connect(_on_match_ended)
 	if not GameState.ai_thinking.is_connected(_on_ai_thinking):
 		GameState.ai_thinking.connect(_on_ai_thinking)
+
+	# M4.10:Board 单位点击 → _show_action_bubble + 可达范围显示
+	if board != null and is_instance_valid(board) \
+			and not board.unit_clicked.is_connected(_on_board_unit_clicked):
+		board.unit_clicked.connect(_on_board_unit_clicked)
 
 	# NetworkClient status
 	NetworkClient.ws_connected.connect(func():
@@ -481,6 +489,15 @@ func _color_name_to_godot(c: String) -> String:
 		_: return "#cccccc"
 
 
+func _color_emoji(c: String) -> String:
+	match c:
+		"red": return "🔴"
+		"blue": return "🔵"
+		"green": return "🟢"
+		"yellow": return "🟡"
+		_: return "⚪"
+
+
 # ============================================================
 # Event-delta handlers
 # ============================================================
@@ -557,19 +574,70 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 
 
 func _on_turn_ended(next_player_id, turn_number: int) -> void:
-	turn_banner.text = "回合 %d → 玩家 #%s" % [turn_number, str(next_player_id)]
-	turn_banner.visible = true
-	await get_tree().create_timer(1.5).timeout
-	turn_banner.visible = false
+	# M4.17:turn banner slide-down + 玩家色 + emoji
+	var pid_str := str(next_player_id)
+	var cp: Dictionary = GameState.get_player(int(next_player_id)) if next_player_id != null else {}
+	var name: String = String(cp.get("user_name", "—"))
+	var color_name: String = String(cp.get("color", "red"))
+	var color_hex: String = _color_name_to_godot(color_name)
+	var emoji: String = _color_emoji(color_name)
+	var is_local: bool = (int(next_player_id) == _player_id) if next_player_id != null else false
+	var suffix: String = "  →  你的回合" if is_local else ""
+	_show_turn_banner("回合 %d  ·  %s [color=%s]%s[/color]%s" % [
+		turn_number, emoji, color_hex, name, suffix
+	], 3.0)
 
 
 func _on_match_ended(winner_player_id, win_reason: String) -> void:
-	turn_banner.text = "🏆 玩家 #%s 获胜! 原因: %s" % [str(winner_player_id), win_reason]
+	_show_turn_banner("🏆 [color=#f0c75e]玩家 #%s[/color] 获胜! 原因: %s" % [
+		str(winner_player_id), win_reason
+	], 8.0)
+
+
+## M4.17:slide-down banner from above + auto-hide.
+func _show_turn_banner(bbcode: String, duration: float = 3.0) -> void:
+	if turn_banner == null or not is_instance_valid(turn_banner):
+		return
+	# Stop any in-flight tween.
+	if _turn_banner_tween != null and _turn_banner_tween.is_running():
+		_turn_banner_tween.kill()
+	turn_banner_label.text = bbcode
+	# Start 60px above its resting position + invisible.
+	var start_pos: Vector2 = turn_banner.position + Vector2(0, -60)
+	turn_banner.modulate.a = 0.0
+	turn_banner.position = start_pos
 	turn_banner.visible = true
+	# Tween to resting pos + opacity 1.
+	_turn_banner_tween = create_tween()
+	_turn_banner_tween.set_trans(Tween.TRANS_CUBIC)
+	_turn_banner_tween.set_ease(Tween.EASE_OUT)
+	_turn_banner_tween.set_parallel(true)
+	_turn_banner_tween.tween_property(turn_banner, "position", start_pos + Vector2(0, 60), 0.45)
+	_turn_banner_tween.tween_property(turn_banner, "modulate:a", 1.0, 0.45)
+	# Wait, then fade out and hide.
+	_turn_banner_tween.set_parallel(false)
+	_turn_banner_tween.tween_interval(duration)
+	_turn_banner_tween.tween_property(turn_banner, "modulate:a", 0.0, 0.6)
+	_turn_banner_tween.tween_callback(func(): turn_banner.visible = false)
 
 
 func _on_ai_thinking(thinking: bool) -> void:
-	ai_thinking_label.visible = thinking
+	# M4.18:pulse 动效 — 颜色 alpha 0.4 ↔ 1.0,每 0.8s 一个循环
+	if ai_thinking_label == null or not is_instance_valid(ai_thinking_label):
+		return
+	if _ai_pulse_tween != null and _ai_pulse_tween.is_running():
+		_ai_pulse_tween.kill()
+		_ai_pulse_tween = null
+	if not thinking:
+		ai_thinking_label.visible = false
+		ai_thinking_label.modulate.a = 1.0
+		return
+	ai_thinking_label.visible = true
+	ai_thinking_label.modulate.a = 1.0
+	_ai_pulse_tween = create_tween().set_loops()
+	_ai_pulse_tween.set_trans(Tween.TRANS_SINE)
+	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 0.4, 0.8)
+	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 1.0, 0.8)
 
 
 # ============================================================
@@ -610,6 +678,85 @@ func _unhandled_input(event: InputEvent) -> void:
 		if game_view != null and is_instance_valid(game_view) and game_view.visible:
 			_toggle_pause()
 			get_viewport().set_input_as_handled()
+		return
+	# M4.10:鼠标左键 → 选中单位 / 行动目标
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if game_view == null or not game_view.visible:
+			return
+		if board == null:
+			return
+		# 关 pause/settings 后再处理
+		if (settings_panel != null and settings_panel.visible) \
+				or (pause_panel != null and pause_panel.visible) \
+				or (war_report_panel != null and war_report_panel.visible):
+			return
+		var unit_id: int = board.pick_unit_at_screen(event.global_position)
+		if unit_id > 0:
+			board.emit_unit_clicked(unit_id)
+		else:
+			# 点击非单位区域 → 清除选择
+			board.clear_selection_marks()
+			_hide_action_bubble()
+		get_viewport().set_input_as_handled()
+
+
+func _on_board_unit_clicked(unit_id: int) -> void:
+	# 来自 board.emit_unit_clicked — 单位已经被选中
+	_handle_unit_click(unit_id, Vector2.ZERO)
+
+
+func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
+	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+	if ud.is_empty():
+		return
+	# 弹出 5 按钮气泡(所有人)
+	_selected_unit_id = unit_id
+	# 用 marker 中心屏幕坐标估算气泡位置
+	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
+	_show_action_bubble(unit_id, marker_pos)
+	var owner_pid: int = int(ud.get("owner_id", -1))
+	var cur_pid: int = int(GameState.current_player_id) if GameState.current_player_id != null else -1
+	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
+	# M4.10:如果是己方单位,展示 reachable tiles(蓝色 outline)
+	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
+		var reach := _compute_reachable_tiles(ud)
+		if reach.size() > 0 and board != null:
+			board.show_path_marks([], reach)
+	elif board != null:
+		board.clear_selection_marks()
+
+
+func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
+	var mp: int = int(unit_data.get("move_points", int(unit_data.get("mp", 5))))
+	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
+	var size_v: int = 15
+	if board != null and board.map_size.x > 0:
+		size_v = board.map_size.x
+	var blocked: Dictionary = {}
+	for other in GameState.players:
+		if not other is Dictionary: continue
+		for u in other.get("units", []):
+			if u is Dictionary:
+				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+				blocked[k] = true
+	# terrain: tile (Vector2i) → terrain_name(String);owner 编码另外从
+	# tile_lookup_inverse 或 Players 推,这里先用 0 当占位
+	var terrain: Dictionary = {}
+	var owners: Dictionary = {}
+	if board != null and board.tile_lookup != null:
+		for k in board.tile_lookup.keys():
+			var t: Dictionary = board.tile_lookup[k]
+			terrain[k] = String(t.get("terrain", "plain"))
+			owners[k] = int(t.get("owner_id", 0))
+	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
+	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, size)
+	var result: Dictionary = MapLogic.compute_reachable(
+		unit_pos, terrain, owners, mp, owner, blocked, size_v
+	)
+	# 移除起点(不要把自身高亮成可达)
+	result.erase(unit_pos)
+	return result.keys()
 
 
 func _toggle_pause() -> void:
