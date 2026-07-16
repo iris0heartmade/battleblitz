@@ -139,6 +139,12 @@ func _ready() -> void:
 		"map editor should expose a unit color selector")
 	_assert_true("EditorView has EditorUnitLevelOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitLevelOption") != null,
 		"map editor should expose a unit level selector")
+	_assert_true("EditorView has EditorWidthOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorWidthOption") != null,
+		"map editor should expose a width selector")
+	_assert_true("EditorView has EditorHeightOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorHeightOption") != null,
+		"map editor should expose a height selector")
+	_assert_true("EditorView has EditorResizeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorResizeBtn") != null,
+		"map editor should expose a resize action")
 	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
 		"map editor should expose a save action")
 	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
@@ -370,12 +376,18 @@ func _ready() -> void:
 	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitOption")
 	var editor_unit_color_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitColorOption")
 	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitLevelOption")
+	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorWidthOption")
+	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorHeightOption")
 	_assert_gte("Editor mode selector lists modes", editor_mode_option.item_count, 2,
 		"editor mode selector should include terrain and unit placement")
 	_assert_gte("Editor unit selector lists unit types", editor_unit_option.item_count, 5,
 		"editor unit selector should include deployable unit types")
 	_assert_gte("Editor unit tool selector lists tools", editor_unit_tool_option.item_count, 2,
 		"editor unit tool selector should include place and erase")
+	_assert_gte("Editor width selector lists sizes", editor_width_option.item_count, 4,
+		"editor width selector should expose common map sizes")
+	_assert_gte("Editor height selector lists sizes", editor_height_option.item_count, 4,
+		"editor height selector should expose common map sizes")
 	main_check.call("_on_editor_maps_response", [
 		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
 		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
@@ -426,6 +438,18 @@ func _ready() -> void:
 	_assert_eq("Editor unit erase removes unit", editor_units.size(), 0,
 		"unit erase mode should remove the unit at the clicked tile")
 	editor_unit_tool_option.select(0)
+	editor_width_option.select(1)
+	editor_height_option.select(0)
+	main_check.call("_on_editor_resize_pressed")
+	unit_editor_map = main_check.get("_editor_map")
+	var editor_size: Dictionary = unit_editor_map.get("size", {})
+	var resized_layout: Array = unit_editor_map.get("layout", [])
+	_assert_eq("Editor resize updates width", int(editor_size.get("width", 0)), 20,
+		"resize should update the saved map width")
+	_assert_eq("Editor resize keeps selected height", int(editor_size.get("height", 0)), 15,
+		"resize should update the saved map height")
+	_assert_eq("Editor resize pads row width", str(resized_layout[0]).length(), 20,
+		"resize should pad layout rows to the selected width")
 	main_check.call("_on_editor_save_response", {
 		"id": "saved_alpha",
 		"name": "Saved Alpha",

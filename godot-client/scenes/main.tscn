@@ -333,18 +333,37 @@ offset_right = 320.0
 offset_bottom = 392.0
 text = "Save map"
 
+[node name="EditorWidthOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 404.0
+offset_right = 104.0
+offset_bottom = 440.0
+
+[node name="EditorHeightOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 112.0
+offset_top = 404.0
+offset_right = 200.0
+offset_bottom = 440.0
+
+[node name="EditorResizeBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 208.0
+offset_top = 404.0
+offset_right = 320.0
+offset_bottom = 440.0
+text = "Apply size"
+
 [node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
-offset_top = 452.0
+offset_top = 500.0
 offset_right = 320.0
-offset_bottom = 488.0
+offset_bottom = 536.0
 text = "Back to menu"
 
 [node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
-offset_top = 404.0
+offset_top = 452.0
 offset_right = 320.0
-offset_bottom = 440.0
+offset_bottom = 488.0
 text = "Delete map"
 disabled = true
 
