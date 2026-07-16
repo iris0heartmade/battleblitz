@@ -245,3 +245,151 @@ M6 (BGM/SFX/i18n/设置生效) → M4 (战斗) → M3 (大厅)
 - 路线 C(Mainline 优先):进 M5,从 5.4-5.10 入手
 
 你拍板喵~ 🛡⚔
+
+---
+
+# Phase 2 — v0.3 + v1.0 端到端可玩路线图
+
+> 日期:2026-07-16
+> 起点:godot-client 已经完成 UI V2(7 轮)+ WS 接入 + M4 第 1 刀
+> (16/17/7/10/18 + M4.1 移动 + M4.tiny 单位 sprite)。3 个 commit:
+> `ccb3455` (M4 4 项) / `a05cf95` (M4.1 移动) / `3c8120b` (单位 sprite)。
+> 完成度:⭐⭐⭐☆☆ — 视觉 70% / 端到端可玩 25%
+> 优先维度:**端到端"完整 1 局 vs AI"**
+> 目标跨度:**v0.3 ≈ 25 天 → v1.0 ≈ 60+ 天**
+
+## 0. 已完成(对照 Phase 1 减去已 ship)
+
+| 原 # | 工作 | Commit | 备注 |
+|---|---|---|---|
+| M4.7 | HP bar / MP badge / 士气星 | `ccb3455` | unit_node.gd 重写 |
+| M4.10 | path dots / reachable 高亮 | `ccb3455` | MapLogic.compute_reachable + Highlights.MOVE |
+| M4.16 | End-turn button enable/disable | `ccb3455` | M2.5 之前已接 |
+| M4.17 | Turn banner slide-down | `ccb3455` | Panel 烫金边 + 玩家色 emoji |
+| M4.18 | AI thinking pulse 动效 | `ccb3455` | alpha 0.4↔1.0 循环 Tween |
+| M4.1  | 移动模式 (POST /move 跑通) | `a05cf95` | UnitOut schema player_id 字段修正 |
+| M4.tiny| 单位 sprite 复用 web classic | `3c8120b` | 7 类 PNG + ImageTexture |
+
+加上 V2 收官的 ~10 个 commit,Phase 1 累计已 ship 13 个 commits。
+
+## 1. 当前状态总结(对比 web UI 实际行号)
+
+| 域 | web app.js 行号 | godot 实现度 | 备注 |
+|---|---|---|---|
+| 主菜单 | 332-407 | ✅ 90% | 已支持 4 按钮,只是多入口 disabled |
+| 创建/加入表单 | 522-739 | ❌ 0% | NetworkClient.create_game/join_game 已接,UI 表单缺 |
+| 大厅视图 | 937-1245 | ❌ 0% | 整个大厅场景未建 |
+| 房间列表 | 473-512 | ❌ 0% | 从主菜单进 |
+| 队伍+观战 | 1005-1115 | ❌ 0% | PATCH /players/{id}/team 封装已具备 |
+| 存档/Resume | 427-447 / 868-911 | ❌ 0% | GET /games?user_name + DELETE /games/{id} |
+| 棋盘渲染 | 1878-2091 | ⚠️ 30% | 静态 OK,HP/MP/路径做了,FLIP 动画缺 |
+| 移动/攻击模式 | 2787-2836 | ✅ 移动 100% / ❌ 攻击 0% | 进入+reachable+POST 已通;攻击模式缺 |
+| 治疗/占领/招募 | 3234-3325 | ❌ 0% | NetworkClient.action_skill/claim/recruit 已有 |
+| End-turn / AI / turn banner | 1338-1640 | ⚠️ 部分 | banner slide 已做;AI thinking 在动;turn skip 缺 |
+| CO meter / CO Power | 1468-1515 | ⚠️ 仅显示 | CO meter 在顶部 pill;FireCOPower 未接 |
+| 主线章节 | 4439-4833 | ❌ 0% | 整段未做 |
+| 对话系统 | 3771-4179 | ⚠️ 骨架 | DialogPanel 存在,typewriter/queue/choice 未接 |
+| 战斗结算 | 1583-1592 / 4780-4833 | ⚠️ 骨架 | BattleResultPanel 存在,mainline 联动缺 |
+| 战报 + commentary | 4920-4973 | ⚠️ 浮动面板 | ActionLog 已有;双栏+拖动分隔条 缺 |
+| 观战者 | 1146-1205 | ❌ 0% | role="spectator" 接到 join_game 但 UI 未区分 |
+| BGM/SFX | 136-260 (AudioManager) | ❌ 0% | 整体缺 |
+| 字号/主题实际生效 | 5118-5128 | ⚠️ stub | 设置面板存在,接 backend 缺 |
+| 地图编辑器 | 5260-5867 | ❌ 0% | 607 行 web 代码,工具要做 |
+| 玩家聊天/表情 | n/a | ❌ 0% | websocket chat 通道未建 |
+| 连接诊断 | n/a | ❌ 0% | 自做 ping/pong HUD |
+| 回放/Replay | n/a | ❌ 0% | 需 server-side 或者 cache 完整 event log |
+| 参考面板 | 3647-3651 | ❌ 0% | drawer 抽屉未做 |
+
+**总判断**:还差的功能里有 **20+ 项需要新建场景/页面**(大厅、创建游戏、加入、存档、章节列表、章节详情、参考面板 drawer、地图编辑器、聊天窗口),**30+ 项需要把已有的 NetworkClient 函数接到 UI handler**(attack/heal/claim/recruit/CO Power/team patch/etc),**15+ 项需要 BGM/SFX/特效**(AudioStreamPlayer + sprite anim + flip anim)。
+
+## 2. 路线图 — **端到端可玩优先**(从"1 局游戏"反推)
+
+我的策略:"完成 1 局 vs AI"是 v0.3 的里程碑 — 所有"无依赖可串起来的"打包发,**把大厅/CO/Mainline 全部推后到 v1.0**。
+
+### v0.3 — 端到端可玩 (≈ 25 天)
+
+| # | 包 | 内容 | 估时 | 依赖 |
+|---|---|---|---|---|
+| **3.1** | **战斗动作完成** | M4.2 攻击模式(攻击范围 + 战斗预测卡 + POST /attack)、M4.3 治疗、M4.4 占领、M4.5 招募 | 5 天 | NetworkClient 全套方法已有,只接 |
+| **3.2** | **战斗反馈动效** | FLIP 移动动画(4.11)、浮动 battle text(4.12)、棋盘 shake、Post-move / Post-attack bubble(4.13/14)、AI thinking pulse 已在,view feedback 完善 | 4 天 | 依赖 3.1 |
+| **3.3** | **Inspector + 完整 1 局** | 4.15 inspect bubble、4.16/17/18 已做 + 完整 1 局可玩 vs AI | 3 天 | 依赖 3.2 |
+| **3.4** | **基础大厅** | 3.1 联机大厅 enable、3.4 创建游戏表单(name+map_preset)、3.13 启动按钮、3.18 自动重连 | 5 天 | 弱依赖 3.1 |
+| **3.5** | **战斗结算完整闭环** | match_ended 检测 + BattleResultPanel + 详细战报 + 重新开局按钮 | 3 天 | 依赖 3.3 |
+| **3.6** | **基础设置生效** | 字号 / 静音 / 玩家名 接到 GameState | 2 天 | 弱依赖 |
+| **3.7** | **存档 / Resume (单槽)** | 3.15 / 3.17 + GET /games?user_name 简单实现 | 3 天 | 依赖 3.4 |
+| **3.8** | **路线集成验证** | "主菜单 → 自由对局 → vs AI 一局战 + 结束后存档" 端到端人工测试 + 截图 | 1 天 | 依赖 3.7 |
+
+**v0.3 演示场景**:用户点主菜单"自由对局" → 红色 + AI 蓝色 vs 战斗 15 回合 → 一方 HP/rout 触发 → 弹结算 → "再来一次/回主菜单"。
+
+### v1.0 — 大厅/CO/Mainline + 视听精修 (≈ 35 天)
+
+| # | 包 | 内容 | 估时 | 依赖 |
+|---|---|---|---|---|
+| **5.1** | CO meter 完整 + CO Power 激活 | 5.1/5.2 + 5.3 指挥官选择 | 5 天 | 弱依赖 |
+| **5.2** | 大厅功能完整 | 3.2/3.3/3.5-3.11/3.14 (玩家列表 + 队伍 chip + 观战席 + auto-poll + 移除 AI) | 4 天 | 依赖 3.4 |
+| **5.3** | Mainline 章节 | 5.4/5.5/5.6/5.7/5.8/5.9 (列表+详情+战前对话+战结算剧情) | 6 天 | 依赖 v0.3 |
+| **5.4** | 对话系统完整 | 5.10/5.11 (typewriter + choice + portrait + Esc skip) | 4 天 | 依赖 5.3 |
+| **5.5** | BGM + SFX | 6.1/6.2 + 6.3 静音生效 | 3 天 | 独立 |
+| **5.6** | 视觉精修 | 6.5 多主题 + 6.8 可拖分割条 + 6.9 commentary 双栏 + 6.10 Toast | 5 天 | 弱依赖 5.5 |
+| **5.7** | i18n 骨架 | 6.6 TranslationServer + POT 文件 + 抽取 strings | 3 天 | 独立 |
+| **5.8** | 参考面板 + Help | 6.7/6.13 参考面板 drawer + Help 静态指南 | 2 天 | 独立 |
+| **5.9** | 路线集成 | "主菜单 → 创建 → 大厅 → 加 AI → 启动 → 战斗 → 结算" 演示 | 3 天 | 依赖 5.6 |
+
+### v1.0+ — 高级工具(可选)
+
+| # | 包 | 内容 | 估时 | 备注 |
+|---|---|---|---|---|
+| 7.1 | 地图编辑器 | 完整 .tscn (Brush/Fill/Line/Undo 50 步/Save/Load) | 5 天 | 独立,但需 EditorMode 区分 |
+| 7.2 | 聊天 | WS chat + emoji picker | 3 天 | 独立 |
+| 7.3 | 连接诊断 | HUD 延迟/丢包统计 | 2 天 | 依赖 NetworkClient |
+| 7.4 | Replay | action log cache + 拖动 scrubber | 5 天 | 大件 |
+| 7.5 | 多人对战 | seed 同步 + 公平性 hash | 2 天 | 后端依赖 |
+| 7.6 | Hero asset | heroes/<id>.png 集成 + portrait 选择器 | 2 天 | 数据驱动 |
+| 7.7 | 导出 save | GET /games/{id}/export + .zip 下载 | 1 天 | 简单 |
+
+**总计 v1.0+**:约 15-20 天附加。
+
+## 3. 端到端优先的反向逻辑(为什么这样排)
+
+| 决策 | 反向选项 | 取舍 |
+|---|---|---|
+| 把 攻击/治疗/占领/招募 提前 | 全部 M3 大厅先 | 战斗函数已具备 wrapper,只需接 handler;大厅是 UI 工程但不带"实际玩"。学长的"端到端可玩"明确指这 |
+| FLIP animation / 浮动 text 优先 | BGM/SFX 优先 | 视觉特效先做能直接提升 demo 体验;音频等 BGM 资源还没准备 |
+| CO / Mainline 放 v1.0 | 提前 | CO 复杂(state model + UI);Mainline 章节需要对话系统先做 |
+| 大厅功能分两批 | 整批做 | v0.3 先做基础大厅(创建+加入+启动)v1.0 做完整(队伍/观战/AI) |
+| 主题/字号 留到 v1.0 | 先做 | v0.3 接字号够了,主题等 i18n 一起搞 |
+| 地图编辑器排最后 | 提前 | 大件(607 行 web 代码),只在 v1.0+;前面工作不阻塞 |
+
+## 4. Phase 2 立即可执行(5 步最近)
+
+```
+接下来(未来 1-2 周):
+D1: M4.2 攻击模式(可达成 MVP 核心循环)
+D2-3: M4.3 治疗 + M4.4 占领 + M4.5 招募(批量接 action_* wrapper)
+D4-5: 4.11 FLIP 移动动画 + 4.12 浮动 battle text
+D6-7: 4.13/14 Post-move / Post-attack bubble
+D8-9: 完整 1 局 vs AI 实战 + 截图
+```
+
+每个 D 单元独立 commit + screenshot,不打包。
+
+## 5. 风险与对策
+
+| 风险 | 应对 |
+|---|---|
+| PathFinder 计算慢(纯 BFS 25×25 还行,如果棋盘更大) | 抽离到 worker thread (Task API) |
+| WS 断线后 GameState 损坏 | 已有 GameState._on_state_snapshot 全量刷新,可断线后强制 pull /state |
+| BGM/SFX 资源没选 | 可先用 procedural AudioStreamWAV 临时占位 |
+| 网络抖动影响移动动画 | 用 server-driven 帧时间,client 不预测 |
+| 14 个不同作战动作(bubble 选项)在 Godot 排版 | 用 HBoxContainer + WrapContainer 自适应 |
+
+## 6. 验收标准(每阶段有 demo)
+
+- **v0.3 终**:📹 录一段 5 分钟视频(从主菜单到 1 局 vs AI 完成),展示 战斗实装 + 基础大厅 + 结算。
+- **v1.0 终**:📹 完整演示(多人 + Mainline + CO Power + 战斗反馈 + BGM + 设置生效)。
+
+## 7. Action — 等学长拍下一刀
+
+继续按 4. 顺序走 D1(攻击模式),还是先做别的 3.4 大厅基础?
+
+你拍板喵~(=^・ω・^=) 🛡⚔
