@@ -83,6 +83,15 @@ var _ai_pulse_tween: Tween = null
 @onready var settings_name_input: LineEdit = $GameView/HUD/SettingsPanel/SettingsList/NameRow/NameInput
 @onready var settings_apply_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ButtonRow/ApplyBtn
 @onready var settings_cancel_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ButtonRow/CancelBtn
+# T:93 — Settings 按钮节点(节点已建,只差 connect)
+@onready var settings_font_small_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/FontRow/FontSmallBtn
+@onready var settings_font_med_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/FontRow/FontMedBtn
+@onready var settings_font_big_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/FontRow/FontBigBtn
+@onready var settings_red_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/RedBtn
+@onready var settings_blue_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/BlueBtn
+@onready var settings_green_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/GreenBtn
+@onready var settings_yellow_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/YellowBtn
+@onready var settings_theme_dropdown: OptionButton = $GameView/HUD/SettingsPanel/SettingsList/ThemeRow/ThemeDropdown
 @onready var pause_overlay: ColorRect = $GameView/HUD/PauseOverlay
 @onready var pause_panel: Panel = $GameView/HUD/PausePanel
 @onready var pause_resume_btn: Button = $GameView/HUD/PausePanel/PauseList/ResumeBtn
@@ -156,7 +165,8 @@ var _lobby_poll_timer: Timer = null
 @onready var frame_inner_border: ReferenceRect = $Menu/FrameInnerBorder
 @onready var connecting_frame: ColorRect = $Connecting/ConnectingFrame
 
-# Local game state
+# T:97 — Tutorial 只弹一次(每次启动 client 不重复烦玩家)
+var _tutorial_shown: bool = false
 var _game_id: int = 0
 var _player_id: int = 0
 var _user_name: String = "Player"
@@ -216,6 +226,27 @@ func _ready() -> void:
 	settings_close_btn.pressed.connect(_on_settings_close_pressed)
 	settings_apply_btn.pressed.connect(_on_settings_apply_pressed)
 	settings_cancel_btn.pressed.connect(_on_settings_cancel_pressed)
+	# T:93 — Settings 按钮 (font × 3, color × 4, theme picker × 1)
+	if settings_font_small_btn != null and is_instance_valid(settings_font_small_btn):
+		settings_font_small_btn.pressed.connect(_on_font_small_pressed)
+	if settings_font_med_btn != null and is_instance_valid(settings_font_med_btn):
+		settings_font_med_btn.pressed.connect(_on_font_med_pressed)
+	if settings_font_big_btn != null and is_instance_valid(settings_font_big_btn):
+		settings_font_big_btn.pressed.connect(_on_font_big_pressed)
+	if settings_red_btn != null and is_instance_valid(settings_red_btn):
+		settings_red_btn.pressed.connect(_on_red_color_pressed)
+	if settings_blue_btn != null and is_instance_valid(settings_blue_btn):
+		settings_blue_btn.pressed.connect(_on_blue_color_pressed)
+	if settings_green_btn != null and is_instance_valid(settings_green_btn):
+		settings_green_btn.pressed.connect(_on_green_color_pressed)
+	if settings_yellow_btn != null and is_instance_valid(settings_yellow_btn):
+		settings_yellow_btn.pressed.connect(_on_yellow_color_pressed)
+	if settings_theme_dropdown != null and is_instance_valid(settings_theme_dropdown):
+		# 填充 3 主题(web CSS 主题)
+		settings_theme_dropdown.add_item("深绿 GBA", 0)
+		settings_theme_dropdown.add_item("金属银 silver", 1)
+		settings_theme_dropdown.add_item("极简 light", 2)
+		settings_theme_dropdown.item_selected.connect(_on_theme_dropdown_item_selected)
 	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
 	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
@@ -324,6 +355,8 @@ func _on_free_play_pressed() -> void:
 	_update_status("正在创建对局...")
 	_show_view("connecting")
 	connecting_label.text = "创建对局中..."
+	# T:97 — 每次启动重置,自由对局永远弹 tutorial
+	_tutorial_shown = false
 	# 1) Create a 2-player classic map. M3 will let the user pick.
 	NetworkClient.create_game(
 		"自由对局",
@@ -386,6 +419,33 @@ func _on_join_game_response(body: Dictionary) -> void:
 func _on_start_game_response(_body: Dictionary) -> void:
 	# 5) Open the WebSocket stream.
 	NetworkClient.connect_to_game(_game_id, _player_id)
+	# T:97 — 自由对局首次进入 game view 自动弹 tutorial
+	_trigger_first_tutorial()
+
+
+# T:97 — 触发 tutorial 弹窗(只在第一次进 game view 时)
+func _trigger_first_tutorial() -> void:
+	if _tutorial_shown:
+		return
+	_tutorial_shown = true
+	# 等 snapshot 进来再弹,延后一点点让玩家先看到棋盘
+	call_deferred("_show_first_tutorial_deferred")
+
+
+func _show_first_tutorial_deferred() -> void:
+	# 5 条核心玩法提示(参考 web app.js 5671)
+	if tutorial_text != null and is_instance_valid(tutorial_text):
+		tutorial_text.bbcode_enabled = true
+		tutorial_text.text = (
+			"[color=#f0c75e][b]📖 BattleBlitz · 玩法说明[/b][/color]\n\n"
+			+ "1. [color=#a8c9ff]点击己方单位[/color] → 浮出 5 按钮气泡\n"
+			+ "2. [color=#5fa8e8]蓝色高亮[/color]是可移动的范围\n"
+			+ "3. [color=#e85a6a]红色高亮[/color]是攻击的范围\n"
+			+ "4. 选单位后点 [b]移动[/b] / [b]攻击[/b] 按钮 → 在范围点格子\n"
+			+ "5. 行动完 → 点右上 [b]结束回合 →[/b] 进入 AI 回合\n\n"
+			+ "[color=#a89878]💡 提示:占领己方城堡/兵营可召唤新单位[/color]"
+		)
+	show_tutorial()
 
 
 func _on_reconnect_pressed() -> void:
@@ -458,6 +518,14 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
 	_refresh_co_roster()
+	# T:94 — battle_config.audio.bgm 触发 BGM 切换(server-authority)
+	var summary: Dictionary = GameState.game_summary if GameState != null else {}
+	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)
+	if battle_config != null and battle_config.has("audio"):
+		var audio_cfg: Dictionary = battle_config.get("audio", {})
+		var bgm: Dictionary = audio_cfg.get("bgm", {})
+		if AudioManager != null and bgm != null and bgm.has("track_id"):
+			AudioManager.apply_battle_bgm(bgm)
 
 
 func _repaint_board_from_state() -> void:
@@ -684,6 +752,65 @@ func _refresh_commander_section() -> void:
 
 
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
+# T:95 — 鼠标 hover 时用 MapLogic.pathfind 算路径并渲染
+var _path_hover_last: Vector2i = Vector2i(-1, -1)
+
+
+func _update_path_dots_on_hover(global_pos: Vector2) -> void:
+	if board == null or _move_reachable_set.is_empty():
+		return
+	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
+	if layer == null:
+		return
+	var local: Vector2 = layer.to_local(global_pos)
+	var target_cell: Vector2i = layer.local_to_map(local)
+	if target_cell == _path_hover_last:
+		return
+	_path_hover_last = target_cell
+	if not _move_reachable_set.has(target_cell):
+		# hover 离开 reachable → 保留 outline(没 path)
+		if board != null:
+			board.clear_selection_marks()
+			var reach_tiles: Array = _move_reachable_set.keys()
+			if reach_tiles.size() > 0:
+				board.show_path_marks([], reach_tiles)
+		return
+	var src_unit: Dictionary = GameState.get_unit(_move_mode_unit_id) if GameState != null else {}
+	if src_unit.is_empty():
+		return
+	var src_cell := Vector2i(int(src_unit.get("x", 0)), int(src_unit.get("y", 0)))
+	var size_v: int = 15
+	if board != null and board.map_size.x > 0:
+		size_v = board.map_size.x
+	var blocked: Dictionary = {}
+	for p in GameState.players:
+		if not p is Dictionary: continue
+		for u in p.get("units", []):
+			if u is Dictionary:
+				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+				blocked[k] = true
+	var owners: Dictionary = {}
+	if board.tile_lookup != null:
+		for k in board.tile_lookup.keys():
+			var t: Dictionary = board.tile_lookup[k]
+			owners[k] = int(t.get("owner_id", 0))
+	var terrain: Dictionary = {}
+	if board.tile_lookup != null:
+		for k in board.tile_lookup.keys():
+			var t: Dictionary = board.tile_lookup[k]
+			terrain[k] = String(t.get("terrain", "plain"))
+	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
+	var path: Array = MapLogic.pathfind(
+		src_cell, target_cell, terrain, owners, mov * 2, _player_id, blocked, size_v
+	)
+	var path_dots: Array = []
+	for p in path:
+		if Vector2i(p) != src_cell:
+			path_dots.append(Vector2i(p))
+	var reach_tiles: Array = _move_reachable_set.keys()
+	board.show_path_marks(path_dots, reach_tiles)
+
+
 # 简化:沿用现有 5-button action_bubble(移动/攻击/技能/待命/占领)
 # 由 can_move_after_action 决定可见动作。
 func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
@@ -1065,6 +1192,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_pause()
 			get_viewport().set_input_as_handled()
 		return
+	# T:95 — 鼠标移动 → 移动模式里画 path dots
+	if event is InputEventMouseMotion:
+		if _move_mode_unit_id > 0 and board != null:
+			_update_path_dots_on_hover(event.global_position)
+		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if game_view == null or not game_view.visible:
@@ -1301,17 +1433,17 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 			if u is Dictionary:
 				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 				blocked[k] = true
-	var terrain: Dictionary = {}
 	var owners: Dictionary = {}
+	if board.tile_lookup != null:
+		for k in board.tile_lookup.keys():
+			var t: Dictionary = board.tile_lookup[k]
+			owners[k] = int(t.get("owner_id", 0))
+	var terrain: Dictionary = {}
 	if board != null and board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
 			terrain[k] = String(t.get("terrain", "plain"))
-			owners[k] = int(t.get("owner_id", 0))
 	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
-	print("DEBUG reachable: mp=%s pos=%s terrain_keys=%d size=%s owner=%s blocked_keys=%d" % [
-		mp, str(unit_pos), terrain.size(), size_v, owner, blocked.size()
-	])
 	var result: Dictionary = MapLogic.compute_reachable(
 		unit_pos, terrain, owners, mp, owner, blocked, size_v
 	)
@@ -1403,6 +1535,43 @@ func _on_settings_apply_pressed() -> void:
 			UserSettings.set_value("settings.v1.player_name", _user_name)
 	_update_status("设置已应用 (玩家名: %s)" % _user_name)
 	_hide_settings_panel()
+
+
+# T:93 — Settings 按钮接线(字号 / 颜色 / 主题)
+func _on_font_small_pressed() -> void:
+	_apply_font_size(12)
+
+
+func _on_font_med_pressed() -> void:
+	_apply_font_size(14)
+
+
+func _on_font_big_pressed() -> void:
+	_apply_font_size(16)
+
+
+func _on_red_color_pressed() -> void:
+	_apply_preferred_color("red")
+
+
+func _on_blue_color_pressed() -> void:
+	_apply_preferred_color("blue")
+
+
+func _on_green_color_pressed() -> void:
+	_apply_preferred_color("green")
+
+
+func _on_yellow_color_pressed() -> void:
+	_apply_preferred_color("yellow")
+
+
+func _on_theme_dropdown_item_selected(idx: int) -> void:
+	var theme_name: String = "deep_gba"
+	match idx:
+		1: theme_name = "metal_silver"
+		2: theme_name = "minimal_light"
+	_on_theme_change(theme_name)
 
 
 # T:8 字号生效 — 设全局 default font_size + 重 apply HUD
