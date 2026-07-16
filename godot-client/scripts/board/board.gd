@@ -141,6 +141,15 @@ func emit_unit_clicked(unit_id: int) -> void:
 	unit_clicked.emit(unit_id)
 
 
+# M4.1:把屏幕坐标转成 tile,emit tile_clicked 信号
+func emit_tile_clicked(global_pos: Vector2) -> void:
+	if metrics == null or ground_layer == null:
+		tile_clicked.emit(Vector2i(-1, -1))
+		return
+	var local: Vector2 = ground_layer.to_local(global_pos)
+	tile_clicked.emit(ground_layer.local_to_map(local))
+
+
 func load_map(map_json: Dictionary) -> Dictionary:
 	var result := MapLoader.apply_to_board(self, map_json)
 	map_size = Vector2i(int(result["width"]), int(result["height"]))

@@ -182,8 +182,13 @@ func _on_event_delta(event: Dictionary) -> void:
 	log_received.emit(event)
 
 	var event_type: String = String(event.get("event_type", ""))
-	var actor_unit_id: int = int(event.get("actor_unit_id", -1))
-	var target_unit_id: int = int(event.get("target_unit_id", -1))
+	# M4.1 fix:server event 可能省略 actor_unit_id / target_unit_id
+	# (例如 turn.advance / match.ended)。用 Variant + null check,值是 null
+	# 时默认 -1。
+	var actor_v: Variant = event.get("actor_unit_id", -1)
+	var actor_unit_id: int = -1 if actor_v == null else int(actor_v)
+	var target_v: Variant = event.get("target_unit_id", -1)
+	var target_unit_id: int = -1 if target_v == null else int(target_v)
 	var context: Dictionary = event.get("context", {})
 	if not context is Dictionary:
 		context = {}
