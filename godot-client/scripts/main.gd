@@ -1366,16 +1366,16 @@ func _on_attack_pressed() -> void:
 		return
 	# 计算可攻击目标(只算范围内 + LoS 通的敌方单位)
 	var targets: Dictionary = _compute_attack_targets(ud)
-	if targets.is_empty():
-		_update_status("攻击: 范围内没有敌人")
-		return
 	_attack_mode_unit_id = _selected_unit_id
 	_attack_targets = targets
-	# 红色 outline 整个攻击范围(用户能直观看到)
+	# 即使没目标也显示红色范围 outline — 让用户能看到攻击射程
 	var range_tiles: Array = _get_attack_range_tiles(ud)
 	if range_tiles.size() > 0 and board != null:
 		board.show_attack_marks(range_tiles)
-	_update_status("攻击: 点击红色高亮范围内的敌方单位 (可选 %d)" % targets.size())
+	if targets.is_empty():
+		_update_status("攻击: 射程内无敌人(红框显示攻击范围 %d 格)" % range_tiles.size())
+	else:
+		_update_status("攻击: 点击红色高亮范围内的敌方单位 (可选 %d)" % targets.size())
 	_hide_action_bubble()
 
 
@@ -1456,6 +1456,10 @@ func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	var max_range: int = int(attacker.get("attack_range", 1))
 	if (attacker.get("skills", []) as Array).has("snipe"):
 		max_range += 1
+	# 测试钩子 — `BB_ATTACK_FORCE_RANGE=N` 把范围设为 N,用于 e2e 截图
+	# 验证(spawn 太远的地图也能强制打到敌人)。**仅 dev/test 用**。
+	if OS.has_environment("BB_ATTACK_FORCE_RANGE"):
+		max_range = int(OS.get_environment("BB_ATTACK_FORCE_RANGE"))
 	var min_range: int = int(attacker.get("min_attack_range", 0))
 	var pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
 	var size_v: int = 15
