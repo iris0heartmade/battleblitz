@@ -465,6 +465,13 @@ func remove_player(game_id: int, player_id: int, callback: Callable = Callable()
 	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d" % player_id, {}, callback)
 
 
+func update_player_team(game_id: int, player_id: int, caller_player_id: int, team: String = "", callback: Callable = Callable()) -> void:
+	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/team" % player_id, {
+		"caller_player_id": caller_player_id,
+		"team": team,
+	}, callback)
+
+
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 

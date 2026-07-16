@@ -327,8 +327,15 @@ offset_bottom = 206.0
 [node name="TeamOption" type="OptionButton" parent="Lobby/LobbyFrame"]
 offset_left = 458.0
 offset_top = 218.0
+offset_right = 686.0
+offset_bottom = 254.0
+
+[node name="LobbyApplyTeamBtn" type="Button" parent="Lobby/LobbyFrame"]
+offset_left = 696.0
+offset_top = 218.0
 offset_right = 820.0
 offset_bottom = 254.0
+text = "Apply team"
 
 [node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 458.0
