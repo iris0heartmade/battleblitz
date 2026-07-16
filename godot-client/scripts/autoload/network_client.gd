@@ -438,6 +438,14 @@ func start_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/start", {}, callback)
 
 
+func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable()) -> void:
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", {
+		"difficulty": difficulty,
+		"agent_kind": agent_kind,
+		"personality": personality,
+	}, callback)
+
+
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 

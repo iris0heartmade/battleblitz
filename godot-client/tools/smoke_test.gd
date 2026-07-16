@@ -104,6 +104,8 @@ func _ready() -> void:
 		"InputState autoload not registered")
 	_assert_true("NetworkClient autoload", NetworkClient != null,
 		"NetworkClient autoload not registered")
+	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
+		"NetworkClient should expose a typed add-ai wrapper for the lobby")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
 
