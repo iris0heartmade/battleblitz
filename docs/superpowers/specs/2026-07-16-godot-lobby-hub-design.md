@@ -40,13 +40,23 @@ Entering the lobby no longer auto-creates a room. Instead it:
 
 1. Shows the lobby view.
 2. Loads presets with `NetworkClient.list_presets`.
-3. Loads room summaries with `NetworkClient.list_games`.
+3. Loads unlocked commanders with `NetworkClient.get_unlocked_commanders`.
+4. Loads BGM tracks with `NetworkClient.list_audio_tracks`.
+5. Loads room summaries with `NetworkClient.list_games`.
 
-Creating a room calls `NetworkClient.create_game(name, preset_id, biome, "rout")`, then `NetworkClient.join_game`. Joining a room calls `NetworkClient.join_game` for the selected game id. After joining, the existing lobby polling uses `NetworkClient.get_lobby`; Add AI and Start continue to use the existing endpoints.
+Creating a room calls `NetworkClient.create_game(name, preset_id, biome, "rout", commander_id, bgm_track_id)`, then `NetworkClient.join_game`. Joining a room calls `NetworkClient.join_game` for the selected game id. After joining, the existing lobby polling uses `NetworkClient.get_lobby`; Add AI, Remove AI, Team Update, and Start continue to use typed endpoint wrappers.
 
-## Non-Goals
+## Later Work
 
-This slice does not implement spectator join, team switching, AI personality selection, BGM selection, commander selection, deleting saves, or full clickable room rows. Those remain WebUI parity work for later.
+This original lobby slice has since been expanded. Godot now has spectator join mode, team switching, AI personality selection, BGM selection, commander selection, save deletion, and AI removal.
+
+Remaining lobby parity work is narrower:
+
+- Full clickable room rows instead of the current dropdown plus text marker.
+- Richer spectator conversion flow matching WebUI's "convert own seat vs add fresh spectator" modal.
+- Host row-level player controls for changing other players' teams.
+- Per-AI commander assignment before start.
+- More complete live backend e2e coverage for create/join/start and spectator cases.
 
 ## Acceptance
 
@@ -56,3 +66,4 @@ This slice does not implement spectator join, team switching, AI personality sel
 - Creating a room joins it and begins the current-room polling flow.
 - Joining the selected room joins it and begins the current-room polling flow.
 - Existing free-play auto-create flow remains available.
+- Current smoke coverage also checks commander/BGM selectors, AI removal controls, team update response feedback, and the typed NetworkClient wrappers.
