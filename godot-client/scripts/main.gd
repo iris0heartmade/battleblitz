@@ -89,6 +89,13 @@ var _ai_pulse_tween: Tween = null
 @onready var dialog_name: Label = $GameView/HUD/DialogPanel/CharacterName
 @onready var dialog_text: RichTextLabel = $GameView/HUD/DialogPanel/DialogBody/DialogText
 @onready var dialog_continue_btn: Button = $GameView/HUD/DialogPanel/ContinueBtn
+
+# T:4 RecruitPanel — 真 modal(替换 status 凑合)
+@onready var recruit_panel: Panel = $GameView/HUD/RecruitPanel
+@onready var recruit_status_label: Label = $GameView/HUD/RecruitPanel/RecruitStatusLabel
+@onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitList
+@onready var recruit_close_btn: Button = $GameView/HUD/RecruitPanel/CloseBtn
+var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var tutorial_bubble: Panel = $GameView/HUD/TutorialBubble
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
@@ -114,6 +121,22 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
 @onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
 @onready var exit_button: Button = $Menu/CenterContainer/ButtonCol/ExitButton
+
+# T:5 单槽存档
+@onready var resume_button: Button = $Menu/CenterContainer/ButtonCol/ResumeButton
+var _resume_game_id: int = 0
+
+# T:3 基础大厅视图
+@onready var lobby_view: Control = $Lobby
+@onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyStatus
+@onready var lobby_list: RichTextLabel = $Lobby/LobbyFrame/LobbyList
+@onready var lobby_win_banner: Label = $Lobby/LobbyFrame/LobbyWinBanner
+@onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/LobbyAddAiBtn
+@onready var lobby_start_btn: Button = $Lobby/LobbyFrame/LobbyStartBtn
+@onready var lobby_back_btn: Button = $Lobby/LobbyFrame/LobbyBackBtn
+@onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyGameIdLabel
+# 大厅轮询(2s)— 与 web app.js:918 一致
+var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
 @onready var menu_subtitle: Label = $Menu/CenterContainer/TitleBlock/TitleLine2
 @onready var menu_footer: Label = $Menu/Footer/FooterLabel
@@ -148,8 +171,19 @@ func _ready() -> void:
 	_show_view("menu")
 	menu_button.pressed.connect(_on_free_play_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	# T:3 大厅按钮 — 接 add-ai / start / back
+	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
+		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
+	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
+		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
+	if resume_button != null and is_instance_valid(resume_button):
+		resume_button.pressed.connect(_on_resume_pressed)
+	# T:5 主菜单 load 时尝试匹配存档
+	_check_resume_session()
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
@@ -177,6 +211,9 @@ func _ready() -> void:
 	tutorial_got_it_btn.pressed.connect(_on_tutorial_got_it_pressed)
 	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
 	battle_back_menu_btn.pressed.connect(_on_battle_back_menu_pressed)
+	# T:4 招募 modal — CloseBtn
+	if recruit_close_btn != null and is_instance_valid(recruit_close_btn):
+		recruit_close_btn.pressed.connect(_on_recruit_close_pressed)
 
 	# Wire NetworkClient → GameState. The autoload `GameState._ready`
 	# does this too, but routing through main makes the dependency
@@ -266,6 +303,7 @@ func _show_view(name: String) -> void:
 	menu_panel.visible = (name == "menu")
 	connecting_panel.visible = (name == "connecting")
 	game_view.visible = (name == "game")
+	lobby_view.visible = (name == "lobby")
 
 
 func _on_free_play_pressed() -> void:
@@ -343,6 +381,59 @@ func _on_reconnect_pressed() -> void:
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
+
+
+# T:5 单槽存档 / Resume — 主菜单可见按钮 + 一键 rejoin
+func _check_resume_session() -> void:
+	if _user_name == "" or _user_name == "Player":
+		return
+	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"))
+
+
+func _on_list_games_for_resume(body: Variant) -> void:
+	# /games 返回 List[GameSummaryOut] 或错误 dict
+	var games: Array = (body as Array) if body is Array else []
+	for g in games:
+		if not g is Dictionary: continue
+		if String(g.get("status", "")) != "playing":
+			continue
+		# 检查 players 内有没有自己
+		var players: Array = (g.get("players", []) as Array)
+		for p in players:
+			if not p is Dictionary: continue
+			if String(p.get("user_name", "")) == _user_name:
+				_resume_game_id = int(g.get("id", 0))
+				if resume_button != null and is_instance_valid(resume_button):
+					resume_button.text = "▶ 继续对局 #%d" % _resume_game_id
+					resume_button.visible = true
+				return
+
+
+func _on_resume_pressed() -> void:
+	if _resume_game_id <= 0:
+		return
+	_show_view("connecting")
+	connecting_label.text = "正在重连对局 #%d..." % _resume_game_id
+	NetworkClient.rejoin_game(_resume_game_id, _user_name,
+		Callable(self, "_on_resume_rejoin_response"))
+
+
+func _on_resume_rejoin_response(body: Variant) -> void:
+	if not (body is Dictionary):
+		_update_status("重连失败: 响应异常")
+		_show_view("menu")
+		return
+	# 取回 _game_id / _player_id(后端 rejoin 返回自己的 player_id)
+	var p_dict: Dictionary = body.get("player", body)
+	var resp_game_id: int = int(body.get("game_id", _resume_game_id))
+	var resp_player_id: int = int(p_dict.get("id", _player_id))
+	if resp_game_id > 0:
+		_game_id = resp_game_id
+	if resp_player_id > 0:
+		_player_id = resp_player_id
+		GameState.local_player_id = _player_id
+	_show_view("game")
+	NetworkClient.connect_to_game(_game_id, _player_id)
 
 
 # ============================================================
@@ -598,10 +689,26 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 		" (暴击!)" if is_crit else "",
 		" (击杀)" if is_kill else "",
 	])
+	# M4.12:浮动 battle text — 在 target 位置弹出 dmg 数字
+	if board != null:
+		var tgt: Dictionary = GameState.get_unit(target_id) if GameState != null else {}
+		if not tgt.is_empty():
+			var cell := Vector2i(int(tgt.get("x", 0)), int(tgt.get("y", 0)))
+			var text: String = ("💥%d" % damage) if not is_crit else ("⚡%d" % damage)
+			var color_hex: String = "#c9a14a" if is_crit else "#e85a6a"
+			if is_kill:
+				text = "💀%d" % damage
+				color_hex = "#c63a3a"
+			board.spawn_floating_text_at_cell(cell, text, color_hex, "damage")
 
 
 func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 	action_log.append_text("[color=#e85a6a]💀 #%d 被击杀[/color]\n" % unit_id)
+	if board != null:
+		var u: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+		if not u.is_empty():
+			var cell := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+			board.spawn_floating_text_at_cell(cell, "💀击杀", "#c63a3a", "kill")
 
 
 func _on_turn_ended(next_player_id, turn_number: int) -> void:
@@ -817,26 +924,45 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 	return {}
 
 
-# S:4:招募的"迷你 modal" — 显示 5 类单位,默认第 1 项。
-# 真正的 5 类点选 modal 是后续 modal/HUD 工作。当前给玩家一个能走的入口。
+# S:4 — T:4 RecruitPanel 真 modal(替换 status 凑合)。
+# 仿照 web 的 showRecruitModal(3276-3325):5 类单位列表 + 金币门槛 disable
+# + 类型 buttons — server 是 source of truth。
 func _show_recruit_at(info: Dictionary) -> void:
+	if recruit_panel == null or not is_instance_valid(recruit_panel):
+		return
 	var tx: int = int(info.get("x", -1))
 	var ty: int = int(info.get("y", -1))
-	# 直接走 status 文字显示 5 类 + 当前金币 + 服务器是 source of truth
-	var lines: Array = []
-	for o in _RECRUIT_OPTIONS:
-		var ok: bool = int(info.get("gold", 0)) >= int(o.get("cost", 0))
-		lines.append("  %s [%s] 💰%d%s" % [
-			String(o.get("name", "?")),
-			String(o.get("type", "?")),
-			int(o.get("cost", 0)),
-			"" if ok else " (金币不够)"
-		])
-	_update_status("🛡 招募选择 (%d, %d) · 金币 %d:\n%s\n(后续接 modal — 当前按 Enter 选第 1 项)" % [
-		tx, ty, int(info.get("gold", 0)), "\n".join(lines)
-	])
-	# 默认 chip — 当前是占位,不直接 POST(避免误点)
-	# 等 modal 形式就能选择 5 个 button 发 POST。
+	var gold_i: int = int(info.get("gold", 0))
+	_recruit_pending_tile = Vector2i(tx, ty)
+	recruit_status_label.text = "佣兵站 (%d, %d) · 当前金币 💰 %d" % [tx, ty, gold_i]
+	# 清空旧内容,生成 5 个按钮
+	for child in recruit_list.get_children():
+		child.queue_free()
+	for opt in _RECRUIT_OPTIONS:
+		var btn := Button.new()
+		var unit_type: String = String(opt.get("type", "?"))
+		var name: String = String(opt.get("name", "?"))
+		var cost: int = int(opt.get("cost", 0))
+		btn.text = "%s  💰 %d" % [name, cost]
+		btn.disabled = gold_i < cost
+		btn.pressed.connect(_on_recruit_button_pressed.bind(unit_type))
+		recruit_list.add_child(btn)
+	recruit_panel.visible = true
+
+
+func _on_recruit_button_pressed(unit_type: String) -> void:
+	if _recruit_pending_tile.x < 0:
+		return
+	_recruit_unit_to(_recruit_pending_tile.x, _recruit_pending_tile.y, unit_type)
+	# 关闭 modal
+	if recruit_panel != null and is_instance_valid(recruit_panel):
+		recruit_panel.visible = false
+
+
+func _on_recruit_close_pressed() -> void:
+	if recruit_panel != null and is_instance_valid(recruit_panel):
+		recruit_panel.visible = false
+	_recruit_pending_tile = Vector2i(-1, -1)
 
 
 func _on_board_unit_clicked(unit_id: int) -> void:
@@ -1417,8 +1543,127 @@ func _apply_hud_theme() -> void:
 # ============================================================
 
 func _on_lobby_pressed() -> void:
-	# M3 会实装:进入大厅/创建/加入。这里先给个提示,不破坏 V2 渐进节奏。
-	_update_status("联机大厅将在 M3 实装,目前先走自由对局喵~")
+	# T:3 进入基础大厅视图
+	_show_view("lobby")
+	_apply_lobby_theme()
+	# 还没 game_id — 帮玩家创建一个并自动 join
+	NetworkClient.create_game(
+		"联机对局",
+		"balanced_2p_15",
+		"grass",
+		"rout",
+		Callable(self, "_on_lobby_create_response")
+	)
+	lobby_status_label.text = "创建房间中..."
+	lobby_game_id_label.text = "对局 #? · 创建中..."
+
+
+func _on_lobby_create_response(body: Dictionary) -> void:
+	_game_id = int(body.get("id", 0))
+	if _game_id <= 0:
+		lobby_status_label.text = "创建失败"
+		return
+	UserSettings.set_value("session.v1.last_game_id", _game_id)
+	lobby_game_id_label.text = "对局 #%d · 等待中" % _game_id
+	# 自动 join
+	NetworkClient.join_game(_game_id, _user_name, "red",
+		Callable(self, "_on_lobby_join_response"))
+
+
+func _on_lobby_join_response(_body: Dictionary) -> void:
+	# 拉 lobby 启动轮询
+	_start_lobby_polling()
+
+
+func _start_lobby_polling() -> void:
+	if _lobby_poll_timer == null:
+		_lobby_poll_timer = Timer.new()
+		_lobby_poll_timer.wait_time = 2.0
+		_lobby_poll_timer.timeout.connect(_refresh_lobby_view)
+		add_child(_lobby_poll_timer)
+	_lobby_poll_timer.start()
+	_refresh_lobby_view()
+
+
+func _stop_lobby_polling() -> void:
+	if _lobby_poll_timer != null:
+		_lobby_poll_timer.stop()
+
+
+func _refresh_lobby_view() -> void:
+	if _game_id <= 0:
+		return
+	NetworkClient.get_lobby(_game_id, Callable(self, "_on_lobby_state"))
+
+
+func _on_lobby_state(body: Dictionary) -> void:
+	if not (body is Dictionary): return
+	var players: Array = (body.get("players", []) as Array)
+	var is_waiting: bool = String(body.get("status", "waiting")) == "waiting"
+	# 渲染列表 + 人头
+	var lines: Array = []
+	for p in players:
+		if not p is Dictionary: continue
+		var name: String = String(p.get("user_name", "—"))
+		var color: String = String(p.get("color", "red"))
+		var is_ai: bool = bool(p.get("is_ai", false))
+		var is_self: bool = int(p.get("id", -1)) == int(_player_id)
+		var emoji: String = _color_emoji(color)
+		var tag: String = ""
+		if is_self: tag = " (你)"
+		elif is_ai: tag = " 🤖"
+		lines.append("%s %s%s" % [emoji, name, tag])
+	lobby_list.text = "\n".join(lines) if lines.size() > 0 else "(等待加入)"
+	var real_count: int = 0
+	for p in players:
+		if p is Dictionary and not bool(p.get("is_ai", false)):
+			real_count += 1
+	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d)" % [
+		players.size(), real_count
+	]
+	# Start 按钮 — 只要 ≥1 玩家即可(简化,实际 ≥2)
+	lobby_start_btn.disabled = players.size() < 1
+
+
+func _on_lobby_add_ai_pressed() -> void:
+	if _game_id <= 0: return
+	# POST /games/{id}/add-ai(走 NetworkClient.request)
+	NetworkClient.request("POST", "/games/%d/add-ai" % _game_id, {})
+	_refresh_lobby_view()
+
+
+func _on_lobby_start_pressed() -> void:
+	if _game_id <= 0: return
+	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
+
+
+func _on_lobby_start_response(_body: Dictionary) -> void:
+	# 启动游戏 — 切到 game 视图,接 WS
+	_show_view("game")
+	NetworkClient.connect_to_game(_game_id, _player_id)
+	_stop_lobby_polling()
+
+
+func _on_lobby_back_pressed() -> void:
+	_stop_lobby_polling()
+	_show_view("menu")
+
+
+func _apply_lobby_theme() -> void:
+	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
+		MenuTheme.apply_button_theme(lobby_start_btn, 18)
+	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
+		MenuTheme.apply_button_theme(lobby_add_ai_btn, 14)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		MenuTheme.apply_button_theme(lobby_back_btn, 14)
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		MenuTheme.apply_label_theme(lobby_status_label, 14, MenuTheme.C_TEXT_WARM)
+	if lobby_win_banner != null and is_instance_valid(lobby_win_banner):
+		MenuTheme.apply_label_theme(lobby_win_banner, 12, MenuTheme.C_GOLD)
+	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
+		MenuTheme.apply_label_theme(lobby_game_id_label, 12, MenuTheme.C_TEXT_DIM)
+	if lobby_list != null and is_instance_valid(lobby_list):
+		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
 func _on_settings_pressed() -> void:
