@@ -88,6 +88,10 @@ func _ready() -> void:
 		"lobby hub should expose a room refresh button")
 	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null("Lobby/LobbyFrame/JoinSelectedBtn") != null,
 		"lobby hub should expose a join-selected button")
+	_assert_true("Lobby has JoinModeOption", main_check.get_node_or_null("Lobby/LobbyFrame/JoinModeOption") != null,
+		"lobby hub should expose player/spectator join mode")
+	_assert_true("Lobby has TeamOption", main_check.get_node_or_null("Lobby/LobbyFrame/TeamOption") != null,
+		"lobby hub should expose a team selection option")
 	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null("Lobby/LobbyFrame/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
 	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null("Lobby/LobbyFrame/MapPresetOption") != null,

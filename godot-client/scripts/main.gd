@@ -159,10 +159,12 @@ var _resume_game_id: int = 0
 @onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyGameIdLabel
 @onready var room_list: RichTextLabel = $Lobby/LobbyFrame/RoomList
 @onready var room_select_option: OptionButton = $Lobby/LobbyFrame/RoomSelectOption
+@onready var join_mode_option: OptionButton = $Lobby/LobbyFrame/JoinModeOption
 @onready var refresh_rooms_btn: Button = $Lobby/LobbyFrame/RefreshRoomsBtn
 @onready var join_selected_btn: Button = $Lobby/LobbyFrame/JoinSelectedBtn
 @onready var create_name_input: LineEdit = $Lobby/LobbyFrame/CreateNameInput
 @onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/MapPresetOption
+@onready var team_option: OptionButton = $Lobby/LobbyFrame/TeamOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
 var _entry_flow: String = "free"
 var _lobby_rooms: Array = []
@@ -218,6 +220,8 @@ func _ready() -> void:
 		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
 	if room_select_option != null and is_instance_valid(room_select_option):
 		room_select_option.item_selected.connect(_on_room_selected)
+	if join_mode_option != null and is_instance_valid(join_mode_option):
+		join_mode_option.item_selected.connect(_on_join_mode_changed)
 	if refresh_rooms_btn != null and is_instance_valid(refresh_rooms_btn):
 		refresh_rooms_btn.pressed.connect(_refresh_room_list)
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
@@ -411,7 +415,10 @@ func _on_create_game_response(body: Dictionary) -> void:
 	UserSettings.set_value("session.v1.last_game_id", _game_id)
 	connecting_label.text = "对局 #%d 已创建,加入中..." % _game_id
 	# 2) Join as the local player.
-	NetworkClient.join_game(_game_id, _user_name, "red")
+	if _entry_flow == "free":
+		NetworkClient.join_game(_game_id, _user_name, "red")
+	else:
+		NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role())
 
 
 func _on_join_game_response(body: Dictionary) -> void:
@@ -2155,6 +2162,7 @@ func _on_lobby_pressed() -> void:
 		lobby_list.text = "(Join or create a room to see players.)"
 	if create_name_input != null and is_instance_valid(create_name_input):
 		create_name_input.text = "%s room" % _user_name
+	_setup_lobby_join_options()
 	_load_lobby_presets()
 	_refresh_room_list()
 	return
@@ -2188,6 +2196,52 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 func _on_lobby_join_response(_body: Dictionary, _code: int = 0) -> void:
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
+
+
+func _setup_lobby_join_options() -> void:
+	if join_mode_option != null and is_instance_valid(join_mode_option):
+		join_mode_option.clear()
+		join_mode_option.add_item("Join as player")
+		join_mode_option.add_item("Join as spectator")
+		join_mode_option.select(0)
+	if team_option != null and is_instance_valid(team_option):
+		team_option.clear()
+		team_option.add_item("Auto team")
+		team_option.add_item("Team red")
+		team_option.add_item("Team blue")
+		team_option.add_item("Team green")
+		team_option.add_item("Team yellow")
+		team_option.select(0)
+	_on_join_mode_changed(0)
+
+
+func _selected_join_role() -> String:
+	if join_mode_option != null and is_instance_valid(join_mode_option) and join_mode_option.selected == 1:
+		return "spectator"
+	return "player"
+
+
+func _on_join_mode_changed(_index: int) -> void:
+	if team_option != null and is_instance_valid(team_option):
+		team_option.disabled = _selected_join_role() == "spectator"
+
+
+func _selected_join_team() -> String:
+	if team_option == null or not is_instance_valid(team_option):
+		return ""
+	if _selected_join_role() == "spectator":
+		return ""
+	match team_option.selected:
+		1:
+			return "red"
+		2:
+			return "blue"
+		3:
+			return "green"
+		4:
+			return "yellow"
+		_:
+			return ""
 
 
 func _load_lobby_presets() -> void:
@@ -2317,7 +2371,7 @@ func _on_join_selected_pressed() -> void:
 	_game_id = _selected_room_id
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Joining room #%d..." % _game_id
-	NetworkClient.join_game(_game_id, _user_name, "red")
+	NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role())
 
 
 func _start_lobby_polling() -> void:
