@@ -187,6 +187,9 @@ var _selected_save_id: int = 0
 @onready var editor_unit_option: OptionButton = $EditorView/EditorPanel/EditorUnitOption
 @onready var editor_unit_color_option: OptionButton = $EditorView/EditorPanel/EditorUnitColorOption
 @onready var editor_unit_level_option: OptionButton = $EditorView/EditorPanel/EditorUnitLevelOption
+@onready var editor_width_option: OptionButton = $EditorView/EditorPanel/EditorWidthOption
+@onready var editor_height_option: OptionButton = $EditorView/EditorPanel/EditorHeightOption
+@onready var editor_resize_btn: Button = $EditorView/EditorPanel/EditorResizeBtn
 @onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
 @onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
 @onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
@@ -198,6 +201,7 @@ var _selected_editor_map_id: String = ""
 var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "C", "v", "b", "r", "g", "S"]
 var _editor_unit_types: Array[String] = ["swordsman", "archer", "knight", "healer", "warlock"]
 var _editor_unit_colors: Array[String] = ["red", "blue", "green", "yellow"]
+var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 
 @onready var lobby_view: Control = $Lobby
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyStatus
@@ -331,6 +335,8 @@ func _ready() -> void:
 		editor_load_btn.pressed.connect(_on_editor_load_pressed)
 	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
 		editor_delete_btn.pressed.connect(_on_editor_delete_pressed)
+	if editor_resize_btn != null and is_instance_valid(editor_resize_btn):
+		editor_resize_btn.pressed.connect(_on_editor_resize_pressed)
 	if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
 		editor_map_select_option.item_selected.connect(_on_editor_map_selected)
 	if editor_back_btn != null and is_instance_valid(editor_back_btn):
@@ -2166,7 +2172,7 @@ func _apply_gba_theme() -> void:
 				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
-				editor_new_btn, editor_save_btn, editor_load_btn, editor_delete_btn, editor_back_btn,
+				editor_new_btn, editor_save_btn, editor_load_btn, editor_delete_btn, editor_resize_btn, editor_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
@@ -2473,6 +2479,16 @@ func _setup_editor_options() -> void:
 		for level in range(1, 11):
 			editor_unit_level_option.add_item("Lv %d" % level)
 		editor_unit_level_option.select(0)
+	if editor_width_option != null and is_instance_valid(editor_width_option):
+		editor_width_option.clear()
+		for size in _editor_size_choices:
+			editor_width_option.add_item("%d w" % size)
+		editor_width_option.select(0)
+	if editor_height_option != null and is_instance_valid(editor_height_option):
+		editor_height_option.clear()
+		for size in _editor_size_choices:
+			editor_height_option.add_item("%d h" % size)
+		editor_height_option.select(0)
 	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
 		if editor_map_name_input.text.strip_edges() == "":
 			editor_map_name_input.text = "Godot custom map"
@@ -2551,6 +2567,24 @@ func _selected_editor_unit_level() -> int:
 	if editor_unit_level_option == null or not is_instance_valid(editor_unit_level_option):
 		return 1
 	return clampi(editor_unit_level_option.selected + 1, 1, 10)
+
+
+func _selected_editor_size(option: OptionButton) -> int:
+	if option == null or not is_instance_valid(option):
+		return 15
+	var index := option.selected
+	if index < 0 or index >= _editor_size_choices.size():
+		return 15
+	return _editor_size_choices[index]
+
+
+func _select_editor_size_option(option: OptionButton, size: int) -> void:
+	if option == null or not is_instance_valid(option):
+		return
+	var index := _editor_size_choices.find(size)
+	if index < 0:
+		index = 0
+	option.select(index)
 
 
 func _is_editor_unit_erase_mode() -> bool:
@@ -2671,6 +2705,35 @@ func _on_editor_new_pressed() -> void:
 		editor_status.text = "New 15x15 map."
 
 
+func _on_editor_resize_pressed() -> void:
+	if _editor_map.is_empty():
+		_editor_map = _build_blank_editor_map()
+	var new_width := _selected_editor_size(editor_width_option)
+	var new_height := _selected_editor_size(editor_height_option)
+	var layout: Array = _editor_map.get("layout", [])
+	var new_layout: Array[String] = []
+	for y in range(new_height):
+		var row := ""
+		if y < layout.size():
+			row = str(layout[y])
+		if row.length() > new_width:
+			row = row.substr(0, new_width)
+		elif row.length() < new_width:
+			row += "P".repeat(new_width - row.length())
+		new_layout.append(row)
+	var units: Array = _editor_map.get("initial_units", [])
+	var kept_units: Array = []
+	for unit in units:
+		if unit is Dictionary and int(unit.get("x", -1)) < new_width and int(unit.get("y", -1)) < new_height:
+			kept_units.append(unit)
+	_editor_map["size"] = {"width": new_width, "height": new_height}
+	_editor_map["layout"] = new_layout
+	_editor_map["initial_units"] = kept_units
+	_render_editor_map()
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Resized to %dx%d" % [new_width, new_height]
+
+
 func _on_editor_load_pressed() -> void:
 	if _selected_editor_map_id == "":
 		if editor_status != null and is_instance_valid(editor_status):
@@ -2773,6 +2836,9 @@ func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 					editor_biome_option.select(2)
 				_:
 					editor_biome_option.select(0)
+		var size: Dictionary = body.get("size", {})
+		_select_editor_size_option(editor_width_option, int(size.get("width", 15)))
+		_select_editor_size_option(editor_height_option, int(size.get("height", 15)))
 		_render_editor_map()
 		if editor_status != null and is_instance_valid(editor_status):
 			editor_status.text = "Loaded: %s" % str(body.get("id", "custom map"))
