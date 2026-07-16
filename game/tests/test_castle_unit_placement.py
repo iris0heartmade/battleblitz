@@ -130,6 +130,27 @@ class TestEditorSaveHTTP(unittest.IsolatedAsyncioTestCase):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.delete(f"/editor/maps/{saved['id']}")
 
+    async def test_saved_map_appears_in_presets_as_custom_map(self):
+        from httpx import ASGITransport, AsyncClient
+        from app.main import app
+
+        body = {
+            "name": "HttpPresetVisibilityTest",
+            "size": {"width": 15, "height": 15},
+            "biome": "desert",
+            "layout": ["P" * 15 for _ in range(15)],
+            "initial_units": [],
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post("/editor/maps", json=body)
+            self.assertEqual(created.status_code, 201, msg=created.text)
+            saved = created.json()
+            presets = await client.get("/games/presets")
+            self.assertEqual(presets.status_code, 200, msg=presets.text)
+            preset_ids = {m["id"] for m in presets.json()["maps"]}
+            self.assertIn(f"custom:{saved['id']}", preset_ids)
+            await client.delete(f"/editor/maps/{saved['id']}")
+
 
 class TestEditorUnitFieldShapeMatchesBuiltin(unittest.TestCase):
     """Sanity: editor output uses the SAME 5-field unit schema as built-in maps.

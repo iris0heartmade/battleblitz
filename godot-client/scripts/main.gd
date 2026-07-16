@@ -2748,6 +2748,27 @@ func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 		editor_status.text = "Load failed"
 
 
+func _upsert_editor_map_as_lobby_preset(map_data: Dictionary) -> void:
+	var map_id := str(map_data.get("id", ""))
+	if map_id == "":
+		return
+	var preset_id := "custom:%s" % map_id
+	var biome := str(map_data.get("biome", "grass"))
+	var label := str(map_data.get("name", map_id))
+	if not label.begins_with("Custom: "):
+		label = "Custom: %s" % label
+	for i in range(_preset_options.size()):
+		var existing: Dictionary = _preset_options[i]
+		if str(existing.get("id", "")) == preset_id:
+			_preset_options[i] = {"id": preset_id, "biome": biome}
+			if map_preset_option != null and is_instance_valid(map_preset_option) and i < map_preset_option.item_count:
+				map_preset_option.set_item_text(i, label)
+			return
+	_preset_options.append({"id": preset_id, "biome": biome})
+	if map_preset_option != null and is_instance_valid(map_preset_option):
+		map_preset_option.add_item(label)
+
+
 func _on_editor_delete_response(_body: Variant, code: int = 0) -> void:
 	if code >= 200 and code < 300:
 		_selected_editor_map_id = ""
@@ -2771,6 +2792,7 @@ func _on_editor_save_response(body: Variant, code: int = 0) -> void:
 	if code >= 200 and code < 300 and body is Dictionary:
 		_editor_map = body
 		_render_editor_map()
+		_upsert_editor_map_as_lobby_preset(body)
 		if editor_status != null and is_instance_valid(editor_status):
 			editor_status.text = "Saved: %s" % str(body.get("id", "custom map"))
 		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))

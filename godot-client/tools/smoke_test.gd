@@ -414,6 +414,17 @@ func _ready() -> void:
 		"unit placement should use the selected color")
 	_assert_eq("Editor unit mode stores selected level", int((editor_units[0] as Dictionary).get("level", 0)), 3,
 		"unit placement should use the selected level")
+	main_check.call("_on_editor_save_response", {
+		"id": "saved_alpha",
+		"name": "Saved Alpha",
+		"size": {"width": 15, "height": 15},
+		"biome": "desert",
+		"layout": ["P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
+		"initial_units": [],
+	}, 201)
+	var preset_options_after_save: Array = main_check.get("_preset_options")
+	_assert_true("Editor save adds custom lobby preset", _preset_options_contain(preset_options_after_save, "custom:saved_alpha"),
+		"saving an editor map should immediately expose custom:{id} in lobby presets")
 	editor_terrain_option.select(1)
 	editor_mode_option.select(0)
 	main_check.call("_paint_editor_tile", Vector2i(1, 1))
@@ -542,6 +553,13 @@ func _test_one_map(map_id: String) -> void:
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()
+
+
+func _preset_options_contain(options: Array, preset_id: String) -> bool:
+	for option in options:
+		if option is Dictionary and str(option.get("id", "")) == preset_id:
+			return true
+	return false
 
 
 func _map_path_for_id(map_id: String) -> String:
