@@ -125,6 +125,10 @@ func _ready() -> void:
 		"mainline results should expose a next-battle action")
 	_assert_true("MainlineView has MLAbandonBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLAbandonBtn") != null,
 		"mainline view should expose an abandon action")
+	_assert_true("MainlineView has CommanderOption", main_check.get_node_or_null("MainlineView/MLFrame/CommanderOption") != null,
+		"mainline view should expose commander selection")
+	_assert_true("MainlineView has ApplyCommanderBtn", main_check.get_node_or_null("MainlineView/MLFrame/ApplyCommanderBtn") != null,
+		"mainline view should expose commander apply action")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
 	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
@@ -187,6 +191,10 @@ func _ready() -> void:
 		"advance_mainline should accept mainline_id, user_name, game_id, callback")
 	_assert_true("NetworkClient fetch_mainline_dialogue method", NetworkClient.has_method("fetch_mainline_dialogue"),
 		"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
+	_assert_true("NetworkClient get_unlocked_commanders method", NetworkClient.has_method("get_unlocked_commanders"),
+		"NetworkClient should expose GET /players/me/commanders")
+	_assert_true("NetworkClient select_mainline_commander method", NetworkClient.has_method("select_mainline_commander"),
+		"NetworkClient should expose POST /mainlines/{id}/select-commander")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
 
@@ -273,6 +281,23 @@ func _ready() -> void:
 			"mainline button should render backend battle_count")
 		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
 			"mainline button tooltip should use backend synopsis")
+	main_check.call("_on_commanders_response", {
+		"user_name": "Alice",
+		"unlocked_commanders": ["yun", "anna"],
+		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
+	}, 200)
+	var commander_option: OptionButton = main_check.get_node("MainlineView/MLFrame/CommanderOption")
+	var commander_status: Label = main_check.get_node("MainlineView/MLFrame/CommanderStatus")
+	_assert_gte("Mainline commander selector lists unlocked choices", commander_option.item_count, 3,
+		"commander selector should include none plus unlocked commanders")
+	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("yun"),
+		"commander response should show the selected commander")
+	main_check.call("_on_select_mainline_commander_response", {
+		"mainline_id": "chapter_01_steel_rebellion",
+		"commander_id": "anna",
+	}, 200)
+	_assert_true("Mainline commander select response updates status", commander_status.text.contains("anna"),
+		"commander select response should show the applied commander")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_mainline_start_response", {

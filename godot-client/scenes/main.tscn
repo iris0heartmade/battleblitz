@@ -612,9 +612,44 @@ anchor_bottom = 1.0
 offset_left = 24.0
 offset_top = 56.0
 offset_right = -24.0
-offset_bottom = -64.0
+offset_bottom = -142.0
 theme_override_constants/separation = 8
 scroll_following = true
+
+[node name="CommanderStatus" type="Label" parent="MainlineView/MLFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -340.0
+offset_top = -132.0
+offset_right = 340.0
+offset_bottom = -110.0
+text = "Commander: loading..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.65, 0.6, 0.45, 1)
+
+[node name="CommanderOption" type="OptionButton" parent="MainlineView/MLFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -340.0
+offset_top = -102.0
+offset_right = 116.0
+offset_bottom = -66.0
+
+[node name="ApplyCommanderBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 136.0
+offset_top = -102.0
+offset_right = 340.0
+offset_bottom = -66.0
+text = "Apply commander"
 
 [node name="MLBackBtn" type="Button" parent="MainlineView/MLFrame"]
 anchor_left = 0.5
