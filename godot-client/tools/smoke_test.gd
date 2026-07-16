@@ -105,6 +105,10 @@ func _ready() -> void:
 		"lobby hub should expose AI backend selection")
 	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
 		"lobby hub should expose AI personality selection")
+	_assert_true("Lobby has AiPlayerOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPlayerOption") != null,
+		"lobby hub should expose an AI player selector")
+	_assert_true("Lobby has LobbyRemoveAiBtn", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyRemoveAiBtn") != null,
+		"lobby hub should expose AI removal")
 	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/SavesButton") != null,
 		"main menu should expose save management")
 	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
@@ -129,6 +133,20 @@ func _ready() -> void:
 	main_check.call("_on_room_selected", 1)
 	_assert_true("Lobby room selection marker moves", room_list.text.contains("> #202"),
 		"selecting a different room should move the visible marker")
+	main_check.call("_on_lobby_state", {
+		"status": "waiting",
+		"player_count": 2,
+		"players": [
+			{"id": 1, "user_name": "Alice", "color": "red", "is_ai": false},
+			{"id": 9, "user_name": "Bot", "color": "blue", "is_ai": true},
+		],
+	}, 200)
+	var ai_player_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/AiPlayerOption")
+	var remove_ai_btn: Button = main_check.get_node("Lobby/LobbyFrame/LobbyRemoveAiBtn")
+	_assert_gte("Lobby AI selector lists AI", ai_player_option.item_count, 1,
+		"lobby state should populate removable AI players")
+	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
+		"remove-ai button should enable when there is a selected AI")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -141,6 +159,8 @@ func _ready() -> void:
 		"NetworkClient autoload not registered")
 	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
 		"NetworkClient should expose a typed add-ai wrapper for the lobby")
+	_assert_true("NetworkClient remove_player method", NetworkClient.has_method("remove_player"),
+		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
 	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,

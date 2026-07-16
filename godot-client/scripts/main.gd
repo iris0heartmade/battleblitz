@@ -177,7 +177,9 @@ var _selected_save_id: int = 0
 @onready var ai_difficulty_option: OptionButton = $Lobby/LobbyFrame/AiDifficultyOption
 @onready var ai_kind_option: OptionButton = $Lobby/LobbyFrame/AiKindOption
 @onready var ai_personality_option: OptionButton = $Lobby/LobbyFrame/AiPersonalityOption
+@onready var ai_player_option: OptionButton = $Lobby/LobbyFrame/AiPlayerOption
 @onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/LobbyAddAiBtn
+@onready var lobby_remove_ai_btn: Button = $Lobby/LobbyFrame/LobbyRemoveAiBtn
 @onready var lobby_start_btn: Button = $Lobby/LobbyFrame/LobbyStartBtn
 @onready var lobby_back_btn: Button = $Lobby/LobbyFrame/LobbyBackBtn
 @onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyGameIdLabel
@@ -193,6 +195,7 @@ var _selected_save_id: int = 0
 var _entry_flow: String = "free"
 var _lobby_rooms: Array = []
 var _selected_room_id: int = 0
+var _selected_ai_player_id: int = 0
 var _preset_options: Array = []
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
@@ -242,6 +245,10 @@ func _ready() -> void:
 	# T:3 大厅按钮 — 接 add-ai / start / back
 	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
 		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
+	if ai_player_option != null and is_instance_valid(ai_player_option):
+		ai_player_option.item_selected.connect(_on_ai_player_selected)
+	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
+		lobby_remove_ai_btn.pressed.connect(_on_lobby_remove_ai_pressed)
 	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
@@ -2700,6 +2707,7 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	for p in players:
 		if p is Dictionary and not bool(p.get("is_ai", false)):
 			real_count += 1
+	_render_lobby_ai_options(players)
 	if real_count == 0:
 		real_count = int(body.get("player_count", 0))
 	var shown_count: int = int(body.get("player_count", players.size()))
@@ -2708,6 +2716,37 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	]
 	# Start 按钮 — 只要 ≥1 玩家即可(简化,实际 ≥2)
 	lobby_start_btn.disabled = int(body.get("player_count", players.size())) < 1
+
+
+func _render_lobby_ai_options(players: Array) -> void:
+	_selected_ai_player_id = 0
+	if ai_player_option == null or not is_instance_valid(ai_player_option):
+		return
+	ai_player_option.clear()
+	for p in players:
+		if not (p is Dictionary):
+			continue
+		if not bool(p.get("is_ai", false)):
+			continue
+		var pid := int(p.get("id", 0))
+		var name := str(p.get("user_name", "AI"))
+		ai_player_option.add_item("#%d %s" % [pid, name], pid)
+	if ai_player_option.item_count > 0:
+		ai_player_option.select(0)
+		_selected_ai_player_id = ai_player_option.get_item_id(0)
+	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
+		lobby_remove_ai_btn.disabled = _selected_ai_player_id <= 0
+
+
+func _on_ai_player_selected(index: int) -> void:
+	if ai_player_option == null or not is_instance_valid(ai_player_option):
+		return
+	if index < 0 or index >= ai_player_option.item_count:
+		_selected_ai_player_id = 0
+	else:
+		_selected_ai_player_id = ai_player_option.get_item_id(index)
+	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
+		lobby_remove_ai_btn.disabled = _selected_ai_player_id <= 0
 
 
 func _on_lobby_add_ai_pressed() -> void:
@@ -2725,6 +2764,20 @@ func _on_lobby_add_ai_pressed() -> void:
 
 
 func _on_lobby_add_ai_response(_body: Variant, _code: int = 0) -> void:
+	_refresh_lobby_view()
+	_refresh_room_list()
+
+
+func _on_lobby_remove_ai_pressed() -> void:
+	if _game_id <= 0 or _selected_ai_player_id <= 0:
+		return
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Removing AI #%d..." % _selected_ai_player_id
+	NetworkClient.remove_player(_game_id, _selected_ai_player_id, Callable(self, "_on_lobby_remove_ai_response"))
+
+
+func _on_lobby_remove_ai_response(_body: Variant, _code: int = 0) -> void:
+	_selected_ai_player_id = 0
 	_refresh_lobby_view()
 	_refresh_room_list()
 
@@ -2751,6 +2804,8 @@ func _apply_lobby_theme() -> void:
 		MenuTheme.apply_button_theme(lobby_start_btn, 18)
 	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
 		MenuTheme.apply_button_theme(lobby_add_ai_btn, 14)
+	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
+		MenuTheme.apply_button_theme(lobby_remove_ai_btn, 14)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		MenuTheme.apply_button_theme(lobby_back_btn, 14)
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
