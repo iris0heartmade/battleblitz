@@ -104,6 +104,16 @@ func _ready() -> void:
 		"lobby hub should expose AI backend selection")
 	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
 		"lobby hub should expose AI personality selection")
+	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
+	var room_list: RichTextLabel = main_check.get_node("Lobby/LobbyFrame/RoomList")
+	main_check.call("_on_room_list_response", [
+		{"id": 101, "name": "Alpha", "status": "waiting", "map_preset": "balanced_2p_15", "capacity": 2},
+		{"id": 202, "name": "Beta", "status": "waiting", "map_preset": "balanced_3p_15", "capacity": 3},
+	], 200)
+	room_select.select(1)
+	main_check.call("_on_room_selected", 1)
+	_assert_true("Lobby room selection marker moves", room_list.text.contains("> #202"),
+		"selecting a different room should move the visible marker")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
