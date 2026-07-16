@@ -93,6 +93,8 @@ func _ready() -> void:
 		"lobby hub should expose player/spectator join mode")
 	_assert_true("Lobby has TeamOption", main_check.get_node_or_null("Lobby/LobbyFrame/TeamOption") != null,
 		"lobby hub should expose a team selection option")
+	_assert_true("Lobby has LobbyApplyTeamBtn", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyApplyTeamBtn") != null,
+		"lobby hub should expose a team update action")
 	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null("Lobby/LobbyFrame/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
 	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null("Lobby/LobbyFrame/MapPresetOption") != null,
@@ -163,6 +165,8 @@ func _ready() -> void:
 		"NetworkClient should expose a typed add-ai wrapper for the lobby")
 	_assert_true("NetworkClient remove_player method", NetworkClient.has_method("remove_player"),
 		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
+	_assert_true("NetworkClient update_player_team method", NetworkClient.has_method("update_player_team"),
+		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
 	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
@@ -331,6 +335,10 @@ func _ready() -> void:
 		"abandon should clear active mainline state")
 	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
 		"abandon should update status")
+	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
+	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyStatus")
+	_assert_true("Lobby team response updates status", lobby_status.text.contains("red"),
+		"team update response should show selected team")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

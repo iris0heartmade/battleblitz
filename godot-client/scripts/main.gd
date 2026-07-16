@@ -192,6 +192,7 @@ var _selected_save_id: int = 0
 @onready var create_name_input: LineEdit = $Lobby/LobbyFrame/CreateNameInput
 @onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/MapPresetOption
 @onready var team_option: OptionButton = $Lobby/LobbyFrame/TeamOption
+@onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyApplyTeamBtn
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
 var _entry_flow: String = "free"
 var _lobby_rooms: Array = []
@@ -266,6 +267,8 @@ func _ready() -> void:
 		join_selected_btn.pressed.connect(_on_join_selected_pressed)
 	if create_room_btn != null and is_instance_valid(create_room_btn):
 		create_room_btn.pressed.connect(_on_create_room_pressed)
+	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
+		lobby_apply_team_btn.pressed.connect(_on_lobby_apply_team_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
@@ -2786,6 +2789,29 @@ func _on_lobby_remove_ai_response(_body: Variant, _code: int = 0) -> void:
 	_refresh_room_list()
 
 
+func _on_lobby_apply_team_pressed() -> void:
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	var team := _selected_join_team()
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Updating team..."
+	NetworkClient.update_player_team(_game_id, _player_id, _player_id, team, Callable(self, "_on_lobby_team_response"))
+
+
+func _on_lobby_team_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "Team update failed"
+		if body is Dictionary:
+			msg = "Team update failed: %s" % str(body.get("detail", body.get("message", msg)))
+		if lobby_status_label != null and is_instance_valid(lobby_status_label):
+			lobby_status_label.text = msg
+		return
+	var team := str(body.get("team", ""))
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Team updated: %s" % (team if team != "" else "free")
+	_refresh_lobby_view()
+
+
 func _on_lobby_start_pressed() -> void:
 	if _game_id <= 0: return
 	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
@@ -2810,6 +2836,8 @@ func _apply_lobby_theme() -> void:
 		MenuTheme.apply_button_theme(lobby_add_ai_btn, 14)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
 		MenuTheme.apply_button_theme(lobby_remove_ai_btn, 14)
+	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
+		MenuTheme.apply_button_theme(lobby_apply_team_btn, 14)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		MenuTheme.apply_button_theme(lobby_back_btn, 14)
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
