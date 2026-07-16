@@ -184,6 +184,10 @@ func _ready() -> void:
 		resume_button.pressed.connect(_on_resume_pressed)
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
+	# T:8 启动时应用上次的字号偏好
+	var saved_fs: int = int(UserSettings.get_value("settings.v1.font_size", 14))
+	if saved_fs != 14:
+		_apply_font_size(saved_fs)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
@@ -735,7 +739,6 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 	var winner_p: Dictionary = GameState.get_player(winner_id) if winner_id > 0 else {}
 	var winner_name: String = String(winner_p.get("user_name", "—"))
 	var winner_color: String = String(winner_p.get("color", "red"))
-	# 统计:从 GameState.game_summary + logs 抽
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var stats: Dictionary = {
 		"kills": 0,
@@ -746,10 +749,11 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 		"skills": 0,
 		"reason": win_reason,
 	}
-	# 计算 kills / deaths / skills 从 logs(action_log 一致)。
-	# ActionLogOut 字段名是 action_type / description (game/app/schemas.py:215)。
+	# T:6 详细战报:从 logs 抽最近 N=12 条(按创建时间倒序)。
+	var detail_lines: Array = []
 	if GameState != null:
-		for log in GameState.logs:
+		var all_logs: Array = (GameState.logs as Array)
+		for log in all_logs:
 			if not (log is Dictionary): continue
 			var action_type: String = String(log.get("action_type", ""))
 			var actor_pid_v: Variant = log.get("player_id", -1)
@@ -765,6 +769,17 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 			elif action_type == "skill":
 				if actor_pid == winner_id:
 					stats["skills"] = int(stats.get("skills", 0)) + 1
+			# 战报行(全部):turn N · action_type · description
+			var turn_n: int = int(log.get("turn_number", 0))
+			var desc: String = String(log.get("description", ""))
+			detail_lines.append("[color=#a89878]回合 %d[/color]  [color=#c9a14a]%s[/color]  %s" % [
+				turn_n, action_type, desc
+			])
+		# 保留最近 N 条
+		var MAX_DETAIL := 12
+		if detail_lines.size() > MAX_DETAIL:
+			detail_lines = detail_lines.slice(detail_lines.size() - MAX_DETAIL)
+	stats["detail_lines"] = detail_lines
 	show_battle_result(winner_name, winner_color, stats)
 
 
@@ -1038,20 +1053,35 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
 	if ud.is_empty():
 		return
-	# 弹出 5 按钮气泡(所有人)
+	# T:7:不论是什么单位,先填 InfoPanel(对手 / 已行动 unit 也能看)
+	_refresh_unit_info(ud)
+	# T:7 inspect bubble:点击敌方 / 已行动 / 非己方单位 → 直接填 InfoPanel
+	# 不弹 action bubble,也不进入任何行动模式。
+	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
+	var cur_pid: int = int(GameState.current_player_id) if GameState.current_player_id != null else -1
+	var is_my_unit: bool = (owner_pid == _player_id)
+	var can_still_act: bool = not bool(ud.get("has_acted", false))
+	if not is_my_unit or not can_still_act:
+		# 不进入移动/攻击模式
+		_move_mode_unit_id = -1
+		_move_reachable_set = {}
+		_attack_mode_unit_id = -1
+		_attack_targets = {}
+		_heal_mode_unit_id = -1
+		_heal_targets = {}
+		if board != null:
+			board.clear_selection_marks()
+		_hide_action_bubble()
+		return
+	# 否则:可行动己方 unit → 弹气泡 + reachable 高亮
 	_selected_unit_id = unit_id
-	# 用 marker 中心屏幕坐标估算气泡位置
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
 	_show_action_bubble(unit_id, marker_pos)
-	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
-	var cur_pid: int = int(GameState.current_player_id) if GameState.current_player_id != null else -1
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	# M4.10:如果是己方单位,展示 reachable tiles(蓝色 outline)+ 缓存到 _move_reachable_set
 	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
-		# 用带成本映射的 Dict 作 set 校验(防止 Vector2i key 在 GDScript 里行为怪)
 		_move_reachable_set = reach_dict
 		if tiles.size() > 0 and board != null:
 			board.show_path_marks([], tiles)
@@ -1178,6 +1208,24 @@ func _on_settings_apply_pressed() -> void:
 	_hide_settings_panel()
 
 
+# T:8 字号生效 — 设全局 default font_size + 重 apply HUD
+func _apply_font_size(size: int) -> void:
+	UserSettings.set_value("settings.v1.font_size", size)
+	var theme: Theme = ThemeDB.get_project_theme()
+	if theme != null:
+		theme.default_font_size = size
+	# 重 apply HUD 让所有 Label/Btn 立即生效
+	if has_method("_apply_hud_theme"):
+		_apply_hud_theme()
+	_update_status("字号已设为 %d" % size)
+
+
+# T:8 阵营颜色生效 — 仅记 pref,新房间用
+func _apply_preferred_color(color_name: String) -> void:
+	UserSettings.set_value("settings.v1.color", color_name)
+	_update_status("下一局将使用 %s 方 (当前房间不变)" % color_name)
+
+
 func _on_settings_cancel_pressed() -> void:
 	_hide_settings_panel()
 
@@ -1236,11 +1284,16 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 	var color_godot: String = _color_name_to_godot(winner_color)
 	battle_result_winner.bbcode_enabled = true
 	battle_result_winner.text = "🎉 [color=%s][b]%s[/b][/color] 获胜!" % [color_godot, winner_name]
+	var detail_lines: Array = (stats.get("detail_lines", []) as Array)
+	var detail_text: String = ""
+	if detail_lines.size() > 0:
+		detail_text = "\n\n[color=#c9a14a]📜 最近战报[/color]\n" + "\n".join(detail_lines)
 	var stats_text: String = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n" \
 		+ "[color=#f4e8c1]击杀:[/color] [color=#f0c75e]%d[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]%d[/color]\n" % [int(stats.get("kills", 0)), int(stats.get("deaths", 0))] \
 		+ "[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]%d[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]%d/100[/color]\n" % [int(stats.get("captures", 0)), int(stats.get("co_peak", 0))] \
 		+ "[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]%d[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]%d[/color]\n\n" % [int(stats.get("turns", 0)), int(stats.get("skills", 0))] \
-		+ "[color=#a89878]胜利原因: %s[/color]" % String(stats.get("reason", "—"))
+		+ "[color=#a89878]胜利原因: %s[/color]" % String(stats.get("reason", "—")) \
+		+ detail_text
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
 	battle_result_panel.visible = true
@@ -1920,6 +1973,51 @@ func _recruit_unit_to(tile_x: int, tile_y: int, unit_type: String) -> void:
 #
 # 完整 modal 是后续工作;目前 status 显示可以招募的单位集合,
 # 用户输 unit_type 字符串就 POST(简版)。
+
+
+# T:7:把选中单位的属性填到 InfoPanel.UnitInfo(顶级 RichTextLabel)。
+# 字段取自 server UnitOut schema(godot 客户端不复制公式)。
+func _refresh_unit_info(ud: Dictionary) -> void:
+	if unit_info == null or not is_instance_valid(unit_info):
+		return
+	unit_info.bbcode_enabled = true
+	var name: String = String(ud.get("name", ud.get("unit_type", "?")))
+	var lvl: int = int(ud.get("level", 1))
+	var hp: int = int(ud.get("hp", 0))
+	var max_hp: int = max(1, int(ud.get("max_hp", 1)))
+	var mp: int = int(ud.get("mp", 0))
+	var max_mp: int = int(ud.get("max_mp", 0))
+	var mov: int = int(ud.get("mov", int(ud.get("move_points", 5))))
+	var atk: int = int(ud.get("atk", 0))
+	var def: int = int(ud.get("def_", 0))
+	var matk: int = int(ud.get("matk", 0))
+	var mdef: int = int(ud.get("mdef", 0))
+	var range_min: int = int(ud.get("min_attack_range", 0))
+	var range_max: int = int(ud.get("attack_range", 1))
+	var morale: int = int(ud.get("morale", 0))
+	var skills: Array = (ud.get("skills", []) as Array)
+	var pos := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
+	var color_name: String = String(ud.get("color", "red"))
+	var cur_pid_v: Variant = GameState.current_player_id if GameState != null else null
+	var cur_pid: int = -1 if cur_pid_v == null else int(cur_pid_v)
+	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
+	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
+	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
+	if unit_info_title != null and is_instance_valid(unit_info_title):
+		unit_info_title.text = "⚔ %s · Lv.%d" % [name, lvl]
+	var lines: Array = [
+		"[color=#a89878]⛓ 位置[/color]  (%d, %d)   %s" % [pos.x, pos.y, owner_str],
+		("[color=#f4e8c1]❤ HP[/color]  %d / %d   [color=#5fa8e8]⚡ MP[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ HP[/color]  %d / %d" % [hp, max_hp]),
+		"[color=#c9a14a]⚔ ATK[/color] %d  [color=#c9a14a]🛡 DEF[/color] %d  [color=#c9a14a]✨ MATK[/color] %d  [color=#c9a14a]🔮 MDEF[/color] %d" % [atk, def, matk, mdef],
+		"[color=#a89878]👣 MOV[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
+		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skills) if skills.size() > 0 else "—"],
+	]
+	if not is_mine:
+		lines.append("[color=#c63a3a]⚠ 敌方单位·无法操作[/color]")
+	elif not can_act:
+		lines.append("[color=#a89878]💤 已结束本回合行动[/color]")
+	unit_info.text = "\n".join(lines)
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)
