@@ -1437,10 +1437,61 @@ func _on_pause_settings_pressed() -> void:
 
 
 func _on_pause_main_menu_pressed() -> void:
-	# M3+ TODO: 清理 game state + reset 到主菜单
-	_update_status("返回主菜单 (M3 实装)")
+	# T:88 — 真清状态再返菜单(player 再 resume 时不会撞 WS 残留)
+	_reset_game_state_for_main_menu()
 	_hide_pause_panel()
 	_show_view("menu")
+	_update_status("已返主菜单")
+
+
+# M:98 — pause/quit → 主菜单的整体清理:close WS + 清 action 模式 +
+# 重置 GameState + 关掉所有浮层。
+func _reset_game_state_for_main_menu() -> void:
+	# 1) 关闭 WS 不让旧游戏的事件持续推送
+	if NetworkClient != null:
+		NetworkClient.ws_close()
+	# 2) 重置所有行动模式
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	_attack_mode_unit_id = -1
+	_attack_targets = {}
+	_heal_mode_unit_id = -1
+	_heal_targets = {}
+	# 3) 停 CO / 战斗反馈 tween
+	if _ai_pulse_tween != null and _ai_pulse_tween.is_running():
+		_ai_pulse_tween.kill()
+	if _turn_banner_tween != null and _turn_banner_tween.is_running():
+		_turn_banner_tween.kill()
+	# 4) 清 GameState(autoload,保留 autoload 实例但清数据)
+	if GameState != null:
+		GameState._on_state_snapshot({
+			"game": {},
+			"tiles": [],
+			"players": [],
+			"current_player_id": null,
+			"phase": "player",
+			"logs": [],
+			"co_states": [],
+			"pending_claims": [],
+		})
+	# 5) 关 game 视图一切浮层
+	_hide_action_bubble()
+	if action_bubble != null and is_instance_valid(action_bubble):
+		action_bubble.visible = false
+	if recruit_panel != null and is_instance_valid(recruit_panel):
+		recruit_panel.visible = false
+	if battle_result_panel != null and is_instance_valid(battle_result_panel):
+		battle_result_panel.visible = false
+	if dialog_panel != null and is_instance_valid(dialog_panel):
+		dialog_panel.visible = false
+	# 6) 关 board 高亮
+	if board != null:
+		board.clear_selection_marks()
+	# 7) 关 Resume "暂停" — game state 没了,但 Resume 按钮仍然是 enabled
+	# (它从 list_games 重新拉的)— 我们不动 _resume_game_id,下次进入
+	# resume 会再拉一次。
+	# 8) 注意:不调 UserSettings.set_value 清 last_game_id — 玩家
+	# 还可以用 Resume 按钮回到刚才那局。
 
 
 func _on_pause_quit_pressed() -> void:
