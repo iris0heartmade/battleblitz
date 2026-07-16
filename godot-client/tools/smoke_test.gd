@@ -126,8 +126,16 @@ func _ready() -> void:
 		"NetworkClient autoload not registered")
 	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
 		"NetworkClient should expose a typed add-ai wrapper for the lobby")
+	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
+		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
 		"join_game should accept game_id, user_name, color, team, role, callback")
+	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
+		"NetworkClient should expose DELETE /games/{id}")
+	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
+		"NetworkClient should expose player_id based rejoin")
+	_assert_true("NetworkClient rejoin_game_by_name method", NetworkClient.has_method("rejoin_game_by_name"),
+		"NetworkClient should expose user_name based rejoin")
 	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
 		"start_mainline should accept mainline_id, user_name, skip_intro, callback")
 	_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(NetworkClient, "advance_mainline"), 4,
@@ -136,6 +144,16 @@ func _ready() -> void:
 		"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
+
+	main_check.set("_user_name", "Alice")
+	main_check.call("_on_list_games_for_resume", [
+		{"id": 88, "name": "Save 88", "status": "playing"},
+	], 200)
+	_assert_eq("Resume picks filtered game summary", int(main_check.get("_resume_game_id")), 88,
+		"resume should trust /games?user_name summaries and not require embedded players")
+	var resume_btn: Button = main_check.get_node("Menu/CenterContainer/ButtonCol/ResumeButton")
+	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
+		"resume button should appear when a filtered playable save exists")
 
 	main_check.call("_on_ml_list_response", [
 		{
