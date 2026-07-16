@@ -2365,7 +2365,6 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 		if join_selected_btn != null and is_instance_valid(join_selected_btn):
 			join_selected_btn.disabled = true
 		return
-	var lines: Array = []
 	if room_select_option != null and is_instance_valid(room_select_option):
 		room_select_option.clear()
 		room_select_option.disabled = false
@@ -2374,17 +2373,10 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 		var id: int = int(g.get("id", 0))
 		if i == 0:
 			_selected_room_id = id
-		var marker := ">" if i == 0 else " "
 		var name := String(g.get("name", "Room"))
-		var preset := String(g.get("map_preset", "?"))
-		var cap := int(g.get("capacity", 0))
-		lines.append("%s #%d  %s  [%s]  cap:%d" % [marker, id, name, preset, cap])
 		if room_select_option != null and is_instance_valid(room_select_option):
 			room_select_option.add_item("#%d  %s" % [id, name])
-	if room_list != null and is_instance_valid(room_list):
-		room_list.text = "\n".join(lines)
-	if join_selected_btn != null and is_instance_valid(join_selected_btn):
-		join_selected_btn.disabled = _selected_room_id <= 0
+	_render_room_list()
 
 
 func _on_room_selected(index: int) -> void:
@@ -2393,6 +2385,29 @@ func _on_room_selected(index: int) -> void:
 	else:
 		var g: Dictionary = _lobby_rooms[index]
 		_selected_room_id = int(g.get("id", 0))
+	_render_room_list()
+
+
+func _render_room_list() -> void:
+	var lines: Array = []
+	var selected_name := ""
+	var selected_cap := 0
+	for g in _lobby_rooms:
+		if not g is Dictionary:
+			continue
+		var id: int = int(g.get("id", 0))
+		var marker := ">" if id == _selected_room_id else " "
+		var name := String(g.get("name", "Room"))
+		var preset := String(g.get("map_preset", "?"))
+		var cap := int(g.get("capacity", 0))
+		if id == _selected_room_id:
+			selected_name = name
+			selected_cap = cap
+		lines.append("%s #%d  %s  [%s]  cap:%d" % [marker, id, name, preset, cap])
+	if room_list != null and is_instance_valid(room_list):
+		room_list.text = "\n".join(lines)
+	if lobby_status_label != null and is_instance_valid(lobby_status_label) and _selected_room_id > 0:
+		lobby_status_label.text = "Selected room #%d: %s (cap %d)" % [_selected_room_id, selected_name, selected_cap]
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.disabled = _selected_room_id <= 0
 
