@@ -14,14 +14,14 @@ The Godot client is no longer just a map-rendering prototype. Recent commits add
 - Save management with open/mainline grouping, resume, delete, and refresh.
 - Battle HUD with turn/player/gold panels, action bubble, action log, war report, attack confirmation, recruit modal/feedback, CO roster, CO meter, and CO Power trigger.
 - Mainline list, pre/post dialogue fetch, start, advance, next battle, abandon, and pre-start commander selection.
-- Map editor first slice: menu entry, dedicated editor view, board-backed 15x15 preview, terrain/biome controls, click-to-paint terrain, unit placement, saved-map listing/loading/deletion, and `/editor/maps` network wrappers.
+- Map editor first slice: menu entry, dedicated editor view, board-backed 15x15 preview, terrain/biome controls, click-to-paint terrain, unit placement, saved-map listing/loading/deletion, immediate `custom:{id}` lobby preset upsert, and `/editor/maps` network wrappers.
 - NetworkClient wrappers for the main REST surfaces used by the Godot UI.
 - Headless smoke coverage for the major scene nodes, typed API wrappers, and response handlers.
 
 Latest verified smoke result during the recent development run:
 
 ```text
-Passed: 172   Failed: 0
+Passed: 173   Failed: 0
 ```
 
 ## Remaining Gaps
@@ -29,7 +29,7 @@ Passed: 172   Failed: 0
 ### P0 - Must Fix Before Calling It a Full Replacement
 
 1. **Map editor is only partially ported.**
-   Godot now has an editor entry, panel, board-backed preview, terrain/biome controls, click-to-paint terrain, unit placement, saved-map listing/loading/deletion, and editor API wrappers. It still needs resize, undo/redo, unit removal/move polish, and richer WebUI-style editing workflows.
+   Godot now has an editor entry, panel, board-backed preview, terrain/biome controls, click-to-paint terrain, unit placement, saved-map listing/loading/deletion, immediate `custom:{id}` lobby preset upsert, and editor API wrappers. It still needs resize, undo/redo, unit removal/move polish, and richer WebUI-style editing workflows.
 
 2. **Live backend e2e coverage is thin.**
    The Godot smoke test is good for scene/API wrapper regressions, but most checks are headless/unit-style. Add a scripted backend e2e that creates a game, joins, starts, performs one or two actions, tests spectator join, and resumes.
@@ -67,7 +67,7 @@ Passed: 172   Failed: 0
 
 ## Suggested Next Development Order
 
-1. Finish the Godot map editor first slice: confirm saved `custom:{id}` maps appear in lobby presets, then add unit removal/move polish.
+1. Finish the Godot map editor first slice: add unit removal/move polish, then resize and undo/redo.
 2. Add live backend e2e for create/join/start/action/resume so regressions are caught outside mocked response handlers.
 3. Expand spectator UX to match WebUI's convert/add-spectator choices.
 4. Upgrade room list rows from dropdown selection to clickable Godot controls.
