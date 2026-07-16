@@ -131,6 +131,10 @@ custom_minimum_size = Vector2(320, 52)
 text = "📖  主线章节"
 custom_minimum_size = Vector2(320, 52)
 
+[node name="EditorButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
+text = "Map Editor"
+custom_minimum_size = Vector2(320, 52)
+
 [node name="SettingsButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
 text = "⚙  设置"
 custom_minimum_size = Vector2(320, 52)
@@ -219,6 +223,86 @@ custom_minimum_size = Vector2(160, 40)
 ; T:3 基础大厅(联机厅)— 显示房间玩家列表 + Start 按钮
 ; 简化版:不展开 team / spectator 完整编辑,只支持查看 + Start。
 ; ============================================================
+[node name="EditorView" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="EditorBoard" parent="EditorView" instance=ExtResource("2_board")]
+position = Vector2(24, 88)
+
+[node name="EditorPanel" type="ColorRect" parent="EditorView"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_top = 48.0
+offset_right = -24.0
+offset_bottom = -24.0
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="EditorTitle" type="Label" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 320.0
+offset_bottom = 44.0
+text = "Map Editor"
+theme_override_font_sizes/font_size = 22
+
+[node name="EditorMapNameInput" type="LineEdit" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 60.0
+offset_right = 320.0
+offset_bottom = 96.0
+placeholder_text = "Map name"
+
+[node name="EditorBiomeOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 112.0
+offset_right = 156.0
+offset_bottom = 148.0
+
+[node name="EditorTerrainOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 164.0
+offset_top = 112.0
+offset_right = 320.0
+offset_bottom = 148.0
+
+[node name="EditorMapSelectOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 164.0
+offset_right = 320.0
+offset_bottom = 200.0
+
+[node name="EditorStatus" type="Label" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 216.0
+offset_right = 320.0
+offset_bottom = 256.0
+text = "Ready"
+theme_override_font_sizes/font_size = 13
+
+[node name="EditorNewBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 276.0
+offset_right = 156.0
+offset_bottom = 312.0
+text = "New 15x15"
+
+[node name="EditorSaveBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 164.0
+offset_top = 276.0
+offset_right = 320.0
+offset_bottom = 312.0
+text = "Save map"
+
+[node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 324.0
+offset_right = 320.0
+offset_bottom = 360.0
+text = "Back to menu"
+
 [node name="Lobby" type="Control" parent="."]
 visible = false
 anchor_right = 1.0

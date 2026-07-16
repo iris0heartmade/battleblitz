@@ -34,9 +34,9 @@ _CUSTOM_DIR = Path(__file__).resolve().parent.parent.parent / "maps" / "custom"
 _CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
 
 # Valid terrain chars (single-char per cell)
-# P=plain F=forest M=mountain R=river C=castle
+# P=plain F=forest M=mountain S=snow_peak R=river C=castle
 # v=village b=barracks r=road g=gate  (added 2026-06-30 P0.4)
-_VALID_TERRAINS = set("PFMRCvbrg")
+_VALID_TERRAINS = set("PFMSRCvbrg")
 _VALID_UNIT_TYPES = {"swordsman", "archer", "knight", "warlock", "healer"}
 _VALID_COLORS = {"red", "blue", "green", "yellow"}
 
