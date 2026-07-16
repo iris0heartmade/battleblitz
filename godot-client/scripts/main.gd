@@ -133,6 +133,13 @@ var _selected_unit_id: int = -1
 var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 # Main menu widgets (GBA 风 V2)
 @onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
+@onready var mainline_button: Button = $Menu/CenterContainer/ButtonCol/MainlineButton
+
+# T:96 MainlineView
+@onready var mainline_view: Control = $MainlineView
+@onready var ml_title: Label = $MainlineView/MLFrame/MLTitle
+@onready var ml_list_container: VBoxContainer = $MainlineView/MLFrame/MLListContainer
+@onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
 @onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
 @onready var exit_button: Button = $Menu/CenterContainer/ButtonCol/ExitButton
@@ -186,7 +193,11 @@ func _ready() -> void:
 
 	_show_view("menu")
 	menu_button.pressed.connect(_on_free_play_pressed)
+	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	# T:96 Mainline
+	if ml_back_btn != null and is_instance_valid(ml_back_btn):
+		ml_back_btn.pressed.connect(_on_ml_back_pressed)
 	# T:3 大厅按钮 — 接 add-ai / start / back
 	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
 		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
@@ -349,6 +360,7 @@ func _show_view(name: String) -> void:
 	connecting_panel.visible = (name == "connecting")
 	game_view.visible = (name == "game")
 	lobby_view.visible = (name == "lobby")
+	mainline_view.visible = (name == "mainline")
 
 
 func _on_free_play_pressed() -> void:
@@ -2224,6 +2236,68 @@ func _apply_lobby_theme() -> void:
 		MenuTheme.apply_label_theme(lobby_game_id_label, 12, MenuTheme.C_TEXT_DIM)
 	if lobby_list != null and is_instance_valid(lobby_list):
 		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+
+
+# T:96 — MainlineView 章节列表 + 入口
+func _on_mainline_pressed() -> void:
+	_show_view("mainline")
+	ml_title.text = "📖 主线章节 · 加载中..."
+	ml_list_container.text = ""
+	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"))
+
+
+func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
+	ml_title.text = "📖 主线章节"
+	for child in ml_list_container.get_children():
+		child.queue_free()
+	# /mainlines 返回 Array[MainlineSummaryOut]
+	var items: Array = body if body is Array else []
+	if items.is_empty():
+		var empty := Label.new()
+		empty.text = "(暂无可用章节)"
+		empty.add_theme_color_override("font_color", Color(0.65, 0.6, 0.45))
+		ml_list_container.add_child(empty)
+		return
+	for ml in items:
+		if not ml is Dictionary: continue
+		var id: int = int(ml.get("id", 0))
+		var title: String = String(ml.get("title", "?"))
+		var battles: int = int(ml.get("total_battles", 0))
+		var state: String = String(ml.get("state", "locked"))
+		var desc: String = String(ml.get("description", ""))
+		var btn := Button.new()
+		btn.text = "%s (%s) · %d 战" % [title, state, battles]
+		btn.tooltip_text = desc
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_ml_card_pressed.bind(id))
+		ml_list_container.add_child(btn)
+
+
+func _on_ml_card_pressed(mainline_id: int) -> void:
+	# 拉详情 → show_dialog（pre-battle dialogue）→ start
+	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
+
+
+func _on_ml_detail_response(body: Variant, mainline_id: int, _code: int = 0) -> void:
+	if not (body is Dictionary):
+		_update_status("加载章节详情失败")
+		return
+	var battles: Array = body.get("battles", []) if body.has("battles") else []
+	var dialogue: Variant = body.get("dialogue", null)
+	# 有 pre-battle 对话 → 播放
+	if dialogue != null and dialogue is Array and dialogue.size() > 0:
+		for d in dialogue:
+			if d is Dictionary:
+				var char_name: String = String(d.get("character", ""))
+				var txt: String = String(d.get("text", ""))
+				if txt != "":
+					show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, txt])
+	# 对话框完毕后:战斗
+	_update_status("主线章节 #%d: 开始战斗 (TODO)" % mainline_id)
+
+
+func _on_ml_back_pressed() -> void:
+	_show_view("menu")
 
 
 func _on_settings_pressed() -> void:

@@ -450,6 +450,31 @@ func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable(
 		{"user_name": user_name}, callback)
 
 
+# T:96 — Mainline 章节 API
+func list_mainlines(callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines", {}, callback)
+
+
+func get_mainline_detail(mainline_id: int, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/%d" % mainline_id, {}, callback)
+
+
+func start_mainline(mainline_id: int, commander: String, save_slot: int = 1, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%d/start" % mainline_id, {"commander": commander, "save_slot": save_slot}, callback)
+
+
+func advance_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%d/advance" % mainline_id, {}, callback)
+
+
+func next_battle_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%d/next-battle" % mainline_id, {}, callback)
+
+
+func abandon_mainline(mainline_id: int, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%d/abandon" % mainline_id, {}, callback)
+
+
 # T:94 — 拉战斗 BGM 列表
 # 详见 game/app/routes/audio.py:GET /audio/tracks
 # 返回: {"tracks": [{track_id, title, category, file, volume, fade_in_ms, ...}, ...]}
