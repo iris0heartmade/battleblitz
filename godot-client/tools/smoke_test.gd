@@ -101,6 +101,8 @@ func _ready() -> void:
 		"lobby hub should expose a map preset dropdown")
 	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyCommanderOption") != null,
 		"lobby hub should expose commander selection for room creation")
+	_assert_true("Lobby has LobbyBgmOption", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyBgmOption") != null,
+		"lobby hub should expose BGM selection for room creation")
 	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null("Lobby/LobbyFrame/CreateRoomBtn") != null,
 		"lobby hub should expose a create room button")
 	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiDifficultyOption") != null,
@@ -177,8 +179,8 @@ func _ready() -> void:
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
 		"join_game should accept game_id, user_name, color, team, role, callback")
-	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 6,
-		"create_game should accept an optional commander id before callback")
+	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 7,
+		"create_game should accept optional commander and BGM ids before callback")
 	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
 		"NetworkClient should expose DELETE /games/{id}")
 	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
@@ -305,6 +307,14 @@ func _ready() -> void:
 	}, 200)
 	_assert_true("Mainline commander select response updates status", commander_status.text.contains("anna"),
 		"commander select response should show the applied commander")
+	main_check.call("_on_audio_tracks_response", {
+		"tracks": [
+			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
+		],
+	}, 200)
+	var lobby_bgm_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyBgmOption")
+	_assert_gte("Lobby BGM selector lists tracks", lobby_bgm_option.item_count, 2,
+		"BGM selector should include none plus backend tracks")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_mainline_start_response", {

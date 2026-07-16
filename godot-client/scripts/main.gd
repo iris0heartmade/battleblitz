@@ -197,6 +197,7 @@ var _selected_save_id: int = 0
 @onready var team_option: OptionButton = $Lobby/LobbyFrame/TeamOption
 @onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyApplyTeamBtn
 @onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyCommanderOption
+@onready var lobby_bgm_option: OptionButton = $Lobby/LobbyFrame/LobbyBgmOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
 var _entry_flow: String = "free"
 var _lobby_rooms: Array = []
@@ -204,6 +205,7 @@ var _selected_room_id: int = 0
 var _selected_ai_player_id: int = 0
 var _preset_options: Array = []
 var _lobby_commander_ids: Array[String] = [""]
+var _lobby_bgm_track_ids: Array[String] = [""]
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
@@ -2394,8 +2396,10 @@ func _on_lobby_pressed() -> void:
 	_setup_lobby_join_options()
 	_setup_lobby_ai_options()
 	_setup_lobby_commander_options()
+	_setup_lobby_bgm_options()
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	_load_lobby_presets()
+	_load_lobby_audio_tracks()
 	_refresh_room_list()
 	return
 	# T:3 进入基础大厅视图
@@ -2407,6 +2411,7 @@ func _on_lobby_pressed() -> void:
 		"balanced_2p_15",
 		"grass",
 		"rout",
+		"",
 		"",
 		Callable(self, "_on_lobby_create_response")
 	)
@@ -2501,6 +2506,50 @@ func _selected_lobby_commander() -> String:
 	if index < 0 or index >= _lobby_commander_ids.size():
 		return ""
 	return _lobby_commander_ids[index]
+
+
+func _setup_lobby_bgm_options(tracks: Array = []) -> void:
+	_lobby_bgm_track_ids = [""]
+	if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
+		lobby_bgm_option.clear()
+		lobby_bgm_option.add_item("No BGM")
+	for item in tracks:
+		if not item is Dictionary:
+			continue
+		var track_id := str(item.get("track_id", ""))
+		if track_id == "" or _lobby_bgm_track_ids.has(track_id):
+			continue
+		var title := str(item.get("title", track_id))
+		var category := str(item.get("category", ""))
+		var label := title if category == "" else "%s (%s)" % [title, category]
+		_lobby_bgm_track_ids.append(track_id)
+		if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
+			lobby_bgm_option.add_item(label)
+	if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
+		lobby_bgm_option.select(0)
+		lobby_bgm_option.disabled = _lobby_bgm_track_ids.size() <= 1
+
+
+func _selected_lobby_bgm_track() -> String:
+	if lobby_bgm_option == null or not is_instance_valid(lobby_bgm_option):
+		return ""
+	var index := lobby_bgm_option.selected
+	if index < 0 or index >= _lobby_bgm_track_ids.size():
+		return ""
+	return _lobby_bgm_track_ids[index]
+
+
+func _load_lobby_audio_tracks() -> void:
+	_setup_lobby_bgm_options()
+	NetworkClient.list_audio_tracks(Callable(self, "_on_audio_tracks_response"))
+
+
+func _on_audio_tracks_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_setup_lobby_bgm_options()
+		return
+	var tracks: Array = body.get("tracks", []) if body.get("tracks", []) is Array else []
+	_setup_lobby_bgm_options(tracks)
 
 
 func _setup_lobby_ai_options() -> void:
@@ -2685,7 +2734,7 @@ func _on_create_room_pressed() -> void:
 		biome = String(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Creating room..."
-	NetworkClient.create_game(room_name, preset_id, biome, "rout", _selected_lobby_commander())
+	NetworkClient.create_game(room_name, preset_id, biome, "rout", _selected_lobby_commander(), _selected_lobby_bgm_track())
 
 
 func _on_join_selected_pressed() -> void:
