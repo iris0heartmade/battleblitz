@@ -77,6 +77,23 @@ func _ready() -> void:
 				"balanced_2p_15 should remain a 15x15 map")
 	board_check.queue_free()
 
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var main_check = main_scene.instantiate()
+	add_child(main_check)
+	_assert_true("Lobby has RoomList", main_check.get_node_or_null("Lobby/LobbyFrame/RoomList") != null,
+		"lobby hub should expose a waiting-room list")
+	_assert_true("Lobby has RefreshRoomsBtn", main_check.get_node_or_null("Lobby/LobbyFrame/RefreshRoomsBtn") != null,
+		"lobby hub should expose a room refresh button")
+	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null("Lobby/LobbyFrame/JoinSelectedBtn") != null,
+		"lobby hub should expose a join-selected button")
+	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null("Lobby/LobbyFrame/CreateNameInput") != null,
+		"lobby hub should expose a room name input")
+	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null("Lobby/LobbyFrame/MapPresetOption") != null,
+		"lobby hub should expose a map preset dropdown")
+	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null("Lobby/LobbyFrame/CreateRoomBtn") != null,
+		"lobby hub should expose a create room button")
+	main_check.queue_free()
+
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
 		"Unit.def_ must keep its Python-keyword underscore in JSON wire format")
 	_assert_true("GameState autoload", GameState != null,

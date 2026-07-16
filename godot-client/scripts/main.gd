@@ -157,6 +157,16 @@ var _resume_game_id: int = 0
 @onready var lobby_start_btn: Button = $Lobby/LobbyFrame/LobbyStartBtn
 @onready var lobby_back_btn: Button = $Lobby/LobbyFrame/LobbyBackBtn
 @onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyGameIdLabel
+@onready var room_list: RichTextLabel = $Lobby/LobbyFrame/RoomList
+@onready var refresh_rooms_btn: Button = $Lobby/LobbyFrame/RefreshRoomsBtn
+@onready var join_selected_btn: Button = $Lobby/LobbyFrame/JoinSelectedBtn
+@onready var create_name_input: LineEdit = $Lobby/LobbyFrame/CreateNameInput
+@onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/MapPresetOption
+@onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
+var _entry_flow: String = "free"
+var _lobby_rooms: Array = []
+var _selected_room_id: int = 0
+var _preset_options: Array = []
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
@@ -205,6 +215,12 @@ func _ready() -> void:
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
+	if refresh_rooms_btn != null and is_instance_valid(refresh_rooms_btn):
+		refresh_rooms_btn.pressed.connect(_refresh_room_list)
+	if join_selected_btn != null and is_instance_valid(join_selected_btn):
+		join_selected_btn.pressed.connect(_on_join_selected_pressed)
+	if create_room_btn != null and is_instance_valid(create_room_btn):
+		create_room_btn.pressed.connect(_on_create_room_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
@@ -316,11 +332,11 @@ func _ready() -> void:
 	)
 	NetworkClient.api_response.connect(func(method, path, body, code):
 		# New games created / joined surface their IDs in the API reply.
-		if path == "/games" and (code == 200 or code == 201):
+		if method == "POST" and path == "/games" and (code == 200 or code == 201):
 			_on_create_game_response(body)
-		elif path.ends_with("/join") and (code == 200 or code == 201):
+		elif method == "POST" and path.ends_with("/join") and (code == 200 or code == 201):
 			_on_join_game_response(body)
-		elif path.ends_with("/start") and (code == 200 or code == 201):
+		elif method == "POST" and path.ends_with("/start") and (code == 200 or code == 201):
 			_on_start_game_response(body)
 	)
 
@@ -364,6 +380,7 @@ func _show_view(name: String) -> void:
 
 
 func _on_free_play_pressed() -> void:
+	_entry_flow = "free"
 	_update_status("正在创建对局...")
 	_show_view("connecting")
 	connecting_label.text = "创建对局中..."
@@ -411,6 +428,13 @@ func _on_join_game_response(body: Dictionary) -> void:
 		return
 	GameState.local_player_id = _player_id
 	UserSettings.set_value("session.v1.last_player_id", _player_id)
+	if _entry_flow != "free":
+		_show_view("lobby")
+		if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
+			lobby_game_id_label.text = "Game #%d" % _game_id
+		_start_lobby_polling()
+		_refresh_room_list()
+		return
 	connecting_label.text = "已加入(玩家 #%d),添 AI 中..." % _player_id
 	# 3) Add an AI opponent. M3 will let the user pick kind/personality.
 	NetworkClient.request(
@@ -2115,6 +2139,22 @@ func _apply_hud_theme() -> void:
 # ============================================================
 
 func _on_lobby_pressed() -> void:
+	_entry_flow = "lobby"
+	_show_view("lobby")
+	_apply_lobby_theme()
+	_stop_lobby_polling()
+	_selected_room_id = 0
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Choose a room or create a new one."
+	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
+		lobby_game_id_label.text = "No room joined"
+	if lobby_list != null and is_instance_valid(lobby_list):
+		lobby_list.text = "(Join or create a room to see players.)"
+	if create_name_input != null and is_instance_valid(create_name_input):
+		create_name_input.text = "%s room" % _user_name
+	_load_lobby_presets()
+	_refresh_room_list()
+	return
 	# T:3 进入基础大厅视图
 	_show_view("lobby")
 	_apply_lobby_theme()
@@ -2145,6 +2185,113 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 func _on_lobby_join_response(_body: Dictionary, _code: int = 0) -> void:
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
+
+
+func _load_lobby_presets() -> void:
+	if map_preset_option == null or not is_instance_valid(map_preset_option):
+		return
+	map_preset_option.clear()
+	map_preset_option.add_item("balanced_2p_15")
+	_preset_options = [{"id": "balanced_2p_15", "biome": "grass"}]
+	NetworkClient.list_presets(Callable(self, "_on_lobby_presets_response"))
+
+
+func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
+	if map_preset_option == null or not is_instance_valid(map_preset_option):
+		return
+	var maps: Array = []
+	if body is Dictionary:
+		maps = (body as Dictionary).get("maps", [])
+	if maps.is_empty():
+		return
+	map_preset_option.clear()
+	_preset_options = []
+	for item in maps:
+		if not item is Dictionary:
+			continue
+		var id: String = String(item.get("id", ""))
+		if id == "":
+			continue
+		var name: String = String(item.get("name", id))
+		var biome: String = String(item.get("biome", "grass"))
+		var players: int = int(item.get("recommended_players", 0))
+		var label := name
+		if players > 0:
+			label = "%s (%dp)" % [name, players]
+		map_preset_option.add_item(label)
+		_preset_options.append({"id": id, "biome": biome})
+
+
+func _refresh_room_list() -> void:
+	if room_list != null and is_instance_valid(room_list):
+		room_list.text = "Loading rooms..."
+	if join_selected_btn != null and is_instance_valid(join_selected_btn):
+		join_selected_btn.disabled = true
+	NetworkClient.list_games(Callable(self, "_on_room_list_response"))
+
+
+func _on_room_list_response(body: Variant, _code: int = 0) -> void:
+	_lobby_rooms = []
+	_selected_room_id = 0
+	var games: Array = body if body is Array else []
+	for g in games:
+		if not g is Dictionary:
+			continue
+		if String(g.get("status", "")) != "waiting":
+			continue
+		_lobby_rooms.append(g)
+	if _lobby_rooms.is_empty():
+		if room_list != null and is_instance_valid(room_list):
+			room_list.text = "(No waiting rooms. Create one on the right.)"
+		if join_selected_btn != null and is_instance_valid(join_selected_btn):
+			join_selected_btn.disabled = true
+		return
+	var lines: Array = []
+	for i in range(_lobby_rooms.size()):
+		var g: Dictionary = _lobby_rooms[i]
+		var id: int = int(g.get("id", 0))
+		if i == 0:
+			_selected_room_id = id
+		var marker := ">" if i == 0 else " "
+		var name := String(g.get("name", "Room"))
+		var preset := String(g.get("map_preset", "?"))
+		var cap := int(g.get("capacity", 0))
+		lines.append("%s #%d  %s  [%s]  cap:%d" % [marker, id, name, preset, cap])
+	if room_list != null and is_instance_valid(room_list):
+		room_list.text = "\n".join(lines)
+	if join_selected_btn != null and is_instance_valid(join_selected_btn):
+		join_selected_btn.disabled = _selected_room_id <= 0
+
+
+func _on_create_room_pressed() -> void:
+	_entry_flow = "lobby_create"
+	var room_name := "%s room" % _user_name
+	if create_name_input != null and is_instance_valid(create_name_input):
+		var typed := create_name_input.text.strip_edges()
+		if typed != "":
+			room_name = typed
+	var preset_id := "balanced_2p_15"
+	var biome := "grass"
+	var idx := 0
+	if map_preset_option != null and is_instance_valid(map_preset_option):
+		idx = map_preset_option.selected
+	if idx >= 0 and idx < _preset_options.size():
+		var selected: Dictionary = _preset_options[idx]
+		preset_id = String(selected.get("id", preset_id))
+		biome = String(selected.get("biome", biome))
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Creating room..."
+	NetworkClient.create_game(room_name, preset_id, biome, "rout")
+
+
+func _on_join_selected_pressed() -> void:
+	if _selected_room_id <= 0:
+		return
+	_entry_flow = "lobby_join"
+	_game_id = _selected_room_id
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "Joining room #%d..." % _game_id
+	NetworkClient.join_game(_game_id, _user_name, "red")
 
 
 func _start_lobby_polling() -> void:
@@ -2185,16 +2332,30 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 		if is_self: tag = " (你)"
 		elif is_ai: tag = " 🤖"
 		lines.append("%s %s%s" % [emoji, name, tag])
+	if lines.is_empty():
+		var teams: Array = body.get("teams", [])
+		for t in teams:
+			if not t is Dictionary:
+				continue
+			var team_name := String(t.get("team", "?"))
+			var count := int(t.get("player_count", 0))
+			var cap := int(t.get("capacity", 0))
+			var color := String(t.get("color", "red"))
+			var cap_text := str(cap) if cap > 0 else "-"
+			lines.append("%s %s  %d/%s" % [_color_emoji(color), team_name, count, cap_text])
 	lobby_list.text = "\n".join(lines) if lines.size() > 0 else "(等待加入)"
 	var real_count: int = 0
 	for p in players:
 		if p is Dictionary and not bool(p.get("is_ai", false)):
 			real_count += 1
+	if real_count == 0:
+		real_count = int(body.get("player_count", 0))
+	var shown_count: int = int(body.get("player_count", players.size()))
 	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d)" % [
-		players.size(), real_count
+		shown_count, real_count
 	]
 	# Start 按钮 — 只要 ≥1 玩家即可(简化,实际 ≥2)
-	lobby_start_btn.disabled = players.size() < 1
+	lobby_start_btn.disabled = int(body.get("player_count", players.size())) < 1
 
 
 func _on_lobby_add_ai_pressed() -> void:
