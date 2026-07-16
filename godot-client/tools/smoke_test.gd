@@ -121,6 +121,8 @@ func _ready() -> void:
 		"attack confirm panel should expose a confirm action")
 	_assert_true("BattleResult has MainlineNextBtn", main_check.get_node_or_null("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn") != null,
 		"mainline results should expose a next-battle action")
+	_assert_true("MainlineView has MLAbandonBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLAbandonBtn") != null,
+		"mainline view should expose an abandon action")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
 	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
@@ -319,6 +321,16 @@ func _ready() -> void:
 		"mainline victory should show completion status")
 	_assert_true("Mainline victory hides next battle button", not ml_next_btn.visible,
 		"mainline victory should hide the next-battle button")
+	main_check.set("_active_mainline_id", "chapter_01_steel_rebellion")
+	main_check.call("_on_mainline_abandon_response", {
+		"ok": true,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"abandoned_at": "2026-07-16T00:00:00Z",
+	}, 200)
+	_assert_eq("Mainline abandon clears active id", str(main_check.get("_active_mainline_id")), "",
+		"abandon should clear active mainline state")
+	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
+		"abandon should update status")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

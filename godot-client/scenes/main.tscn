@@ -614,11 +614,22 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -100.0
+offset_left = -220.0
 offset_top = -52.0
-offset_right = 100.0
+offset_right = -20.0
 offset_bottom = -16.0
 text = "↩ 返回主菜单"
+
+[node name="MLAbandonBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -52.0
+offset_right = 220.0
+offset_bottom = -16.0
+text = "放弃主线"
 
 ; ============================================================
 ; Game 视图 — 棋盘 + HUD(M2.5 既有)

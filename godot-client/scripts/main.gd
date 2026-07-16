@@ -147,6 +147,7 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var ml_title: Label = $MainlineView/MLFrame/MLTitle
 @onready var ml_list_container: VBoxContainer = $MainlineView/MLFrame/MLListContainer
 @onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
+@onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
 @onready var saves_button: Button = $Menu/CenterContainer/ButtonCol/SavesButton
 @onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
@@ -242,6 +243,8 @@ func _ready() -> void:
 	# T:96 Mainline
 	if ml_back_btn != null and is_instance_valid(ml_back_btn):
 		ml_back_btn.pressed.connect(_on_ml_back_pressed)
+	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
+		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
 	# T:3 大厅按钮 — 接 add-ai / start / back
 	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
 		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
@@ -2100,7 +2103,8 @@ func _apply_gba_theme() -> void:
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
-	for btn in [menu_button, lobby_button, saves_button, settings_button, exit_button,
+	for btn in [menu_button, lobby_button, saves_button, mainline_button, settings_button, exit_button,
+				ml_back_btn, ml_abandon_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
@@ -2968,6 +2972,35 @@ func _on_mainline_next_battle_response(body: Variant, code: int = 0) -> void:
 
 func _on_ml_back_pressed() -> void:
 	_show_view("menu")
+
+
+func _on_ml_abandon_pressed() -> void:
+	var mainline_id := _active_mainline_id
+	if mainline_id == "":
+		mainline_id = str(UserSettings.get_value("session.v1.mainline_id", ""))
+	if mainline_id == "":
+		_update_status("没有活跃主线可放弃")
+		return
+	_update_status("正在放弃主线 %s..." % mainline_id)
+	NetworkClient.abandon_mainline(mainline_id, _user_name, Callable(self, "_on_mainline_abandon_response"))
+
+
+func _on_mainline_abandon_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "放弃主线失败"
+		if body is Dictionary:
+			msg = "放弃主线失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		return
+	_active_mainline_id = ""
+	_mainline_battle_game_id = 0
+	UserSettings.set_value("session.v1.mainline_id", "")
+	UserSettings.set_value("session.v1.mainline_game_id", 0)
+	UserSettings.set_value("session.v1.mainline_player_id", 0)
+	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
+		battle_mainline_next_btn.visible = false
+	_update_status("已放弃主线")
+	_show_view("mainline")
 
 
 func _on_settings_pressed() -> void:
