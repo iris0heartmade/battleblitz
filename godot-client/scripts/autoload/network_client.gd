@@ -450,6 +450,13 @@ func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable(
 		{"user_name": user_name}, callback)
 
 
+# T:94 — 拉战斗 BGM 列表
+# 详见 game/app/routes/audio.py:GET /audio/tracks
+# 返回: {"tracks": [{track_id, title, category, file, volume, fade_in_ms, ...}, ...]}
+func list_audio_tracks(callback: Callable = Callable()) -> void:
+	request("GET", "/audio/tracks", {}, callback)
+
+
 # ============================================================
 # Helpers
 # ============================================================
