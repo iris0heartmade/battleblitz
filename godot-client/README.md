@@ -6,11 +6,14 @@ this client replaces the old HTML/CSS/JS board renderer with a native
 
 See `../docs/路线/Godot移植方案.md` for the broader port context.
 
-> **Status:** 48x48 map presentation baseline complete. The client now
-> renders existing BattleBlitz map JSONs through dedicated ground /
-> structure / decor placeholder layers, highlight overlays, static unit
-> markers, and a board-bounded camera. Multiplayer / unit interaction
-> arrives in M2.
+> **Status as of 2026-07-16:** the Godot client has moved past the map
+> presentation baseline into playable parity slices: online room browsing
+> and creation, lobby AI controls, team switching, save management, attack
+> confirmation, recruit feedback, CO HUD/power, BGM selection, commander
+> selection, and mainline start/advance/abandon/next-battle flows. The
+> remaining gaps are mostly advanced Web UI parity: the map editor, richer
+> spectator/host controls, AI commander assignment, and deeper end-to-end
+> interaction coverage.
 
 ---
 
@@ -81,7 +84,19 @@ godot-client/
       `MapTheme` routes terrain into ground / structure / decor layers,
       `MapLoader` reads `game/maps/*.json`, and `Board` renders tiles,
       highlights, static units, and camera bounds.
-- [ ] **M2 - Online play.** WebSocket subscription, REST actions, full move/attack/claim loop.
-- [ ] **M3 - Full features.** Lobby / HUD / combat preview / CO meter / dialogue / mainline.
+- [x] **M2 - Online play core.** WebSocket subscription, REST action wrappers,
+      move/attack/claim/recruit/end-turn paths, action log, HUD refresh, and
+      reconnect/resume hooks are present.
+- [x] **M3 - Main feature parity slices.** Lobby room browsing, create/join,
+      spectator join option, team switching, add/remove AI, AI personality,
+      BGM selection, commander selection, save manager, combat confirmation,
+      CO meter/power, dialogue, and mainline lifecycle controls are present.
+- [ ] **M3.5 - Web UI parity polish.** Remaining work: full map editor,
+      richer spectator conversion/add-spectator UX, host row-level controls,
+      per-AI commander assignment, better room-row interaction, and full
+      integration/e2e coverage against a running backend.
 - [ ] **M4 - Touch + mobile export.** Android + iOS input remap, gesture camera.
 - [ ] **M5 - Backend deploy + Web export.** WSS on a public host, HTML5 export.
+
+For the current gap list, see
+`../docs/superpowers/specs/2026-07-16-godot-client-parity-audit.md`.
