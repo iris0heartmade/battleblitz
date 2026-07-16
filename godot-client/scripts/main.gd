@@ -2808,7 +2808,49 @@ func _on_ml_detail_response(body: Variant, mainline_id: String, _code: int = 0) 
 				if txt != "":
 					show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, txt])
 	# 对话框完毕后:战斗
-	_update_status("主线章节 %s: 开始战斗 (TODO)" % mainline_id)
+	_update_status("主线章节 %s: 创建战斗..." % mainline_id)
+	NetworkClient.start_mainline(mainline_id, _user_name, false, Callable(self, "_on_mainline_start_response"))
+
+
+func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "主线启动失败"
+		if body is Dictionary:
+			msg = "主线启动失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		_show_view("mainline")
+		return
+	_game_id = int(body.get("game_id", 0))
+	_player_id = int(body.get("player_id", 0))
+	if _game_id <= 0 or _player_id <= 0:
+		_update_status("主线启动失败: 响应缺少 game_id/player_id")
+		_show_view("mainline")
+		return
+	GameState.local_player_id = _player_id
+	UserSettings.set_value("session.v1.last_game_id", _game_id)
+	UserSettings.set_value("session.v1.last_player_id", _player_id)
+	UserSettings.set_value("session.v1.mainline_id", str(body.get("mainline_id", "")))
+	UserSettings.set_value("session.v1.mainline_game_id", _game_id)
+	UserSettings.set_value("session.v1.mainline_player_id", _player_id)
+	var battle_index: int = int(body.get("battle_index", 0)) + 1
+	var total_battles: int = int(body.get("total_battles", 1))
+	_update_status("主线战斗 %d/%d 已创建,进入棋盘..." % [battle_index, total_battles])
+	var dialogue_path := str(body.get("pre_battle_dialogue_url", ""))
+	if dialogue_path != "":
+		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
+	_show_view("game")
+	NetworkClient.connect_to_game(_game_id, _player_id)
+
+
+func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
+	var scenes: Array = body if body is Array else []
+	for entry in scenes:
+		if not (entry is Dictionary):
+			continue
+		var char_name := str(entry.get("character", entry.get("speaker", "")))
+		var text := str(entry.get("text", ""))
+		if text != "":
+			show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, text])
 
 
 func _on_ml_back_pressed() -> void:
