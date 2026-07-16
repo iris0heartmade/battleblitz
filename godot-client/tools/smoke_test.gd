@@ -128,8 +128,32 @@ func _ready() -> void:
 		"NetworkClient should expose a typed add-ai wrapper for the lobby")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
 		"join_game should accept game_id, user_name, color, team, role, callback")
+	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
+		"start_mainline should accept mainline_id, user_name, skip_intro, callback")
+	_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(NetworkClient, "advance_mainline"), 4,
+		"advance_mainline should accept mainline_id, user_name, game_id, callback")
+	_assert_true("NetworkClient fetch_mainline_dialogue method", NetworkClient.has_method("fetch_mainline_dialogue"),
+		"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
 	_assert_true("UserSettings autoload", UserSettings != null,
 		"UserSettings autoload not registered")
+
+	main_check.call("_on_ml_list_response", [
+		{
+			"id": "chapter_01_steel_rebellion",
+			"title": "Steel Rebellion",
+			"synopsis": "Opening chapter",
+			"battle_count": 2,
+		},
+	], 200)
+	var ml_list: VBoxContainer = main_check.get_node("MainlineView/MLFrame/MLListContainer")
+	_assert_gte("Mainline list renders one item", ml_list.get_child_count(), 1,
+		"mainline list should create a button for backend summaries")
+	if ml_list.get_child_count() > 0:
+		var ml_btn := ml_list.get_child(0) as Button
+		_assert_true("Mainline list uses backend battle_count", ml_btn.text.contains("2"),
+			"mainline button should render backend battle_count")
+		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
+			"mainline button tooltip should use backend synopsis")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

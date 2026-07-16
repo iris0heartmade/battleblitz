@@ -2582,25 +2582,25 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 		return
 	for ml in items:
 		if not ml is Dictionary: continue
-		var id: int = int(ml.get("id", 0))
+		var id: String = String(ml.get("id", ""))
+		if id == "": continue
 		var title: String = String(ml.get("title", "?"))
-		var battles: int = int(ml.get("total_battles", 0))
-		var state: String = String(ml.get("state", "locked"))
-		var desc: String = String(ml.get("description", ""))
+		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
+		var desc: String = String(ml.get("synopsis", ml.get("description", "")))
 		var btn := Button.new()
-		btn.text = "%s (%s) · %d 战" % [title, state, battles]
+		btn.text = "%s · %d battles" % [title, battles]
 		btn.tooltip_text = desc
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(_on_ml_card_pressed.bind(id))
 		ml_list_container.add_child(btn)
 
 
-func _on_ml_card_pressed(mainline_id: int) -> void:
+func _on_ml_card_pressed(mainline_id: String) -> void:
 	# 拉详情 → show_dialog（pre-battle dialogue）→ start
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
 
 
-func _on_ml_detail_response(body: Variant, mainline_id: int, _code: int = 0) -> void:
+func _on_ml_detail_response(body: Variant, mainline_id: String, _code: int = 0) -> void:
 	if not (body is Dictionary):
 		_update_status("加载章节详情失败")
 		return
@@ -2615,7 +2615,7 @@ func _on_ml_detail_response(body: Variant, mainline_id: int, _code: int = 0) -> 
 				if txt != "":
 					show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, txt])
 	# 对话框完毕后:战斗
-	_update_status("主线章节 #%d: 开始战斗 (TODO)" % mainline_id)
+	_update_status("主线章节 %s: 开始战斗 (TODO)" % mainline_id)
 
 
 func _on_ml_back_pressed() -> void:
