@@ -111,6 +111,8 @@ func _ready() -> void:
 		"lobby hub should expose AI backend selection")
 	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
 		"lobby hub should expose AI personality selection")
+	_assert_true("Lobby has AiCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiCommanderOption") != null,
+		"lobby hub should expose a commander preset for AI seats created with the room")
 	_assert_true("Lobby has AiPlayerOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPlayerOption") != null,
 		"lobby hub should expose an AI player selector")
 	_assert_true("Lobby has LobbyRemoveAiBtn", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyRemoveAiBtn") != null,
@@ -294,11 +296,18 @@ func _ready() -> void:
 	}, 200)
 	var commander_option: OptionButton = main_check.get_node("MainlineView/MLFrame/CommanderOption")
 	var lobby_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyCommanderOption")
+	var ai_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/AiCommanderOption")
 	var commander_status: Label = main_check.get_node("MainlineView/MLFrame/CommanderStatus")
 	_assert_gte("Mainline commander selector lists unlocked choices", commander_option.item_count, 3,
 		"commander selector should include none plus unlocked commanders")
 	_assert_gte("Lobby commander selector lists unlocked choices", lobby_commander_option.item_count, 3,
 		"lobby commander selector should include none plus unlocked commanders")
+	_assert_gte("Lobby AI commander selector lists unlocked choices", ai_commander_option.item_count, 3,
+		"AI commander selector should include auto plus unlocked commanders")
+	ai_commander_option.select(1)
+	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
+	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(2, "")), "yun",
+		"room creation should map the selected AI commander to seat 2")
 	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("yun"),
 		"commander response should show the selected commander")
 	main_check.call("_on_select_mainline_commander_response", {
