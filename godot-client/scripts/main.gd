@@ -57,6 +57,12 @@ var _recruit_mode_unit_id: int = -1
 @onready var war_report_button: Button = $GameView/HUD/BottomRight/WarReportButton
 @onready var war_report_panel: Panel = $GameView/HUD/WarReportPanel
 @onready var war_report_close_btn: Button = $GameView/HUD/WarReportPanel/CloseBtn
+
+# M5.1 CO Roster(全玩家头像 + 能量条 + Power 按钮)
+@onready var co_roster: HBoxContainer = $GameView/HUD/CORoster
+
+# M6.1 BGM player
+@onready var bgm_player: AudioStreamPlayer = $BGMPlayer
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
@@ -188,6 +194,10 @@ func _ready() -> void:
 	var saved_fs: int = int(UserSettings.get_value("settings.v1.font_size", 14))
 	if saved_fs != 14:
 		_apply_font_size(saved_fs)
+	# M6.3 静音设置 — 启动时按偏好设
+	var saved_mute: bool = bool(UserSettings.get_value("settings.v1.muted", false))
+	if AudioManager != null:
+		AudioManager.set_muted(saved_mute)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
@@ -447,6 +457,7 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
+	_refresh_co_roster()
 
 
 func _repaint_board_from_state() -> void:
@@ -672,9 +683,26 @@ func _refresh_commander_section() -> void:
 		commander_co_bar.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
 
 
+# M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
+# 简化:沿用现有 5-button action_bubble(移动/攻击/技能/待命/占领)
+# 由 can_move_after_action 决定可见动作。
+func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
+	if action_bubble == null or not is_instance_valid(action_bubble):
+		return
+	if unit_id != _player_id:
+		# 不在本玩家身上 → 不弹
+		return
+	_selected_unit_id = unit_id
+	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+	if ud.is_empty():
+		return
+	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
+	_show_action_bubble(unit_id, marker_pos)
+	_update_status("已 %s — 可继续操作(攻击/技能/占领/待命)" % action_name)
+
+
 func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int, _cost: int) -> void:
-	# M4.1:实际上 unit_node 位置更新已经在 units_changed 里走完。
-	# 这里加战报 log + status 更新 + highlight 清理。
 	if action_log != null and is_instance_valid(action_log):
 		action_log.append_text("[color=#5fa8e8]🚶 #%d 移动 (%d,%d) → (%d,%d) 耗能 %d[/color]\n" % [
 			unit_id, from_x, from_y, to_x, to_y, _cost
@@ -684,6 +712,11 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	_move_reachable_set = {}
 	if board != null:
 		board.clear_selection_marks()
+	# M4.13:post-move bubble — 移动后若 can_move_after_action,
+	# 弹气泡让玩家可选 "再次移动 / 攻击 / 待命"
+	if unit_id != _player_id and _selected_unit_id != unit_id:
+		return
+	_show_post_action_bubble(unit_id, "move")
 
 
 func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
@@ -692,7 +725,6 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 		" (暴击!)" if is_crit else "",
 		" (击杀)" if is_kill else "",
 	])
-	# M4.12:浮动 battle text — 在 target 位置弹出 dmg 数字
 	if board != null:
 		var tgt: Dictionary = GameState.get_unit(target_id) if GameState != null else {}
 		if not tgt.is_empty():
@@ -703,6 +735,9 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 				text = "💀%d" % damage
 				color_hex = "#c63a3a"
 			board.spawn_floating_text_at_cell(cell, text, color_hex, "damage")
+	# M4.14:post-attack bubble — 若目标未死 + can_move_after_action 还能再行动
+	if not is_kill:
+		_show_post_action_bubble(attacker_id, "attack")
 
 
 func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
@@ -712,6 +747,169 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 		if not u.is_empty():
 			var cell := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 			board.spawn_floating_text_at_cell(cell, "💀击杀", "#c63a3a", "kill")
+
+
+# M5.1 CO Roster — 顶部全玩家头像 + 名字 + CO 能量条 + Power 按钮
+func _refresh_co_roster() -> void:
+	if co_roster == null or not is_instance_valid(co_roster):
+		return
+	for child in co_roster.get_children():
+		child.queue_free()
+	if GameState == null:
+		return
+	var players: Array = (GameState.players as Array)
+	var co_states: Array = (GameState.co_states as Array)
+	for p in players:
+		if not p is Dictionary: continue
+		var pid: int = int(p.get("id", -1))
+		var name: String = String(p.get("user_name", "—"))
+		var color_name: String = String(p.get("color", "red"))
+		var color_hex: String = _color_name_to_godot(color_name)
+		var emoji: String = _color_emoji(color_name)
+		var is_ai: bool = bool(p.get("is_ai", false))
+		var is_local: bool = (pid == _player_id)
+		var meter: int = 0
+		var threshold: int = 100
+		for c in co_states:
+			if not c is Dictionary: continue
+			if int(c.get("player_id", -1)) == pid:
+				meter = int(c.get("meter", 0))
+				threshold = max(1, int(c.get("threshold", 100)))
+				break
+		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
+		# 简易容器:Panel(无边框背景) + 内含 3 行
+		var vb := VBoxContainer.new()
+		vb.custom_minimum_size = Vector2(130, 50)
+		vb.add_theme_constant_override("separation", 2)
+		var title := Label.new()
+		title.text = "%s %s%s%s" % [
+			emoji, name,
+			" 🤖" if is_ai else "",
+			" (你)" if is_local else ""
+		]
+		title.add_theme_color_override("font_color", Color(color_hex))
+		title.add_theme_font_size_override("font_size", 11)
+		vb.add_child(title)
+		var bar := ProgressBar.new()
+		bar.value = pct
+		bar.custom_minimum_size = Vector2(120, 10)
+		bar.tooltip_text = "CO %d / %d" % [meter, threshold]
+		vb.add_child(bar)
+		var btn := Button.new()
+		btn.text = "⚡ Power (%d)" % meter
+		btn.disabled = meter < threshold or not is_local
+		btn.add_theme_font_size_override("font_size", 10)
+		if is_local and meter >= threshold:
+			btn.pressed.connect(_on_co_power_pressed.bind(pid))
+		vb.add_child(btn)
+		co_roster.add_child(vb)
+
+
+# M5.3 CO Power 激活
+func _on_co_power_pressed(pid: int) -> void:
+	if _game_id <= 0:
+		return
+	NetworkClient.action_co_power(_game_id, pid)
+	_update_status("⚡ CO Power 激活中 (#%d)..." % pid)
+
+
+# M6.3 静音 toggle — Settings 上 toggle 按钮
+func _on_toggle_mute_pressed() -> void:
+	if AudioManager == null: return
+	var muted: bool = AudioManager.toggle_muted()
+	UserSettings.set_value("settings.v1.muted", muted)
+	_update_status("静音: %s" % ("开" if muted else "关"))
+
+
+# M6.5 主题切换 — 三套主题:deep_gba / metal_silver / minimal_light
+# 通过 set_root_theme 设置全局 default_* 颜色与字号。
+const _THEMES := ["deep_gba", "metal_silver", "minimal_light"]
+
+
+func _on_theme_change(theme_name: String) -> void:
+	UserSettings.set_value("settings.v1.theme", theme_name)
+	_apply_theme(theme_name)
+
+
+func _apply_theme(theme_name: String) -> void:
+	# 主题实际生效 — V2 简化版:仅换背景色 + 部分面板色调。
+	# 完整主题需 .tres 文件(M5.5 TODO)
+	var bg_color: Color = Color(0.06, 0.13, 0.10)  # GBA default
+	if theme_name == "metal_silver":
+		bg_color = Color(0.10, 0.10, 0.13)
+	elif theme_name == "minimal_light":
+		bg_color = Color(0.92, 0.92, 0.88)
+	if backdrop != null and is_instance_valid(backdrop):
+		backdrop.color = bg_color
+	_update_status("主题: %s" % theme_name)
+
+
+# M6.13 Help / 玩法说明 — 显示游戏规则静态指南
+var _help_panel: Panel = null
+
+
+func show_help() -> void:
+	if _help_panel == null:
+		_help_panel = Panel.new()
+		_help_panel.anchor_left = 0.5
+		_help_panel.anchor_top = 0.5
+		_help_panel.anchor_right = 0.5
+		_help_panel.anchor_bottom = 0.5
+		_help_panel.offset_left = -360.0
+		_help_panel.offset_top = -240.0
+		_help_panel.offset_right = 360.0
+		_help_panel.offset_bottom = 240.0
+		_help_panel.color = Color(0.06, 0.13, 0.10, 0.96)
+		get_tree().root.add_child(_help_panel)
+		var title := Label.new()
+		title.text = "📖 玩 法 说 明"
+		title.anchor_right = 1.0
+		title.offset_top = 12.0
+		title.offset_bottom = 44.0
+		title.horizontal_alignment = 1
+		title.add_theme_font_size_override("font_size", 22)
+		title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+		_help_panel.add_child(title)
+		var body := RichTextLabel.new()
+		body.bbcode_enabled = true
+		body.anchor_right = 1.0
+		body.anchor_bottom = 1.0
+		body.offset_left = 24.0
+		body.offset_top = 56.0
+		body.offset_right = -24.0
+		body.offset_bottom = -56.0
+		body.text = (
+			"[color=#f4e8c1][b]基础回合[/b][/color]\n"
+			+ "1. 点己方单位 → 弹 5 个动作(移动/攻击/技能/待命/占领)\n"
+			+ "2. 蓝框为可移动范围;红框为攻击范围\n"
+			+ "3. 单位可移动后还能再行动(post-attack/post-move)\n\n"
+			+ "[color=#f4e8c1][b]伤害公式(简化)[/b][/color]\n"
+			+ "  ATK × (ATK/(ATK + DEF)) × 类型倍率 × 暴击系数\n\n"
+			+ "[color=#f4e8c1][b]CO 系统[/b][/color]\n"
+			+ "  每回合能量累计到 100 可发动 Power(瞬间加 buff)\n\n"
+			+ "[color=#f4e8c1][b]胜利条件[/b][/color]\n"
+			+ "  消灭所有敌方单位,或占领对方 HQ(通用规则)"
+		)
+		_help_panel.add_child(body)
+		var close := Button.new()
+		close.text = "关 闭"
+		close.anchor_left = 0.5
+		close.anchor_top = 1.0
+		close.anchor_right = 0.5
+		close.anchor_bottom = 1.0
+		close.offset_left = -80.0
+		close.offset_top = -48.0
+		close.offset_right = 80.0
+		close.offset_bottom = -16.0
+		close.pressed.connect(hide_help)
+		close.add_theme_font_size_override("font_size", 14)
+		_help_panel.add_child(close)
+	_help_panel.visible = true
+
+
+func hide_help() -> void:
+	if _help_panel != null and is_instance_valid(_help_panel):
+		_help_panel.visible = false
 
 
 func _on_turn_ended(next_player_id, turn_number: int) -> void:
@@ -1253,13 +1451,108 @@ func _on_pause_quit_pressed() -> void:
 # V2 第 7 轮:对话 + 教程 + 战斗结算
 # ============================================================
 
+# M5.10 Dialog 系统 — server 端推 [{character, text, choices?}, ...]
+# typewrite 一次显示一字符(0.03s/字),Continue 跳过/next。
+# 简化版:本地一份队列 + typewriter,不接 server side (Mainline
+# _requestNextBattle 待 V5.4 实装)。
+
+const _DIALOG_TYPE := 0   # 角色说话
+const _DIALOG_NARRATION := 1  # 旁白(无角色名)
+const _DIALOG_CHOICE := 2   # 选项(底部按钮)
+
+var _dialog_queue: Array = []  # [{character, text, kind, choices?}]
+var _dialog_active: bool = false
+var _dialog_full_text: String = ""
+var _dialog_visible_text: String = ""
+var _dialog_type_tween: Tween = null
+var _dialog_choice_container: VBoxContainer = null
+
 func show_dialog(character: String, text_bbcode: String) -> void:
 	if dialog_panel == null or not is_instance_valid(dialog_panel):
 		return
-	dialog_name.text = character
-	dialog_text.bbcode_enabled = true
-	dialog_text.text = text_bbcode
+	# 推入队列
+	_dialog_queue.append({
+		"character": character,
+		"text": text_bbcode,
+		"kind": _DIALOG_TYPE if character != "" else _DIALOG_NARRATION,
+	})
+	_ensure_dialog_choice_container()  # 确保选项层存在
 	dialog_panel.visible = true
+	if not _dialog_active:
+		_advance_dialog()
+
+
+func _advance_dialog() -> void:
+	if _dialog_queue.is_empty():
+		_dialog_active = false
+		hide_dialog()
+		return
+	_dialog_active = true
+	var entry: Dictionary = _dialog_queue.pop_front()
+	dialog_name.text = String(entry.get("character", ""))
+	dialog_text.bbcode_enabled = true
+	# 隐藏选项层
+	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
+		_dialog_choice_container.visible = false
+	# typewriter:full text 缓存,visible 渐进加
+	var full_text: String = String(entry.get("text", ""))
+	_dialog_full_text = full_text
+	_dialog_visible_text = ""
+	dialog_text.text = ""
+	# kill 旧 tween
+	if _dialog_type_tween != null and _dialog_type_tween.is_running():
+		_dialog_type_tween.kill()
+	var per_char: float = 0.03
+	# 每 N 个字符加长
+	var n: int = full_text.length()
+	_dialog_type_tween = create_tween()
+	for i in n:
+		var ch: String = full_text.substr(i, 1)
+		_dialog_visible_text += ch
+		dialog_text.text = _dialog_visible_text
+	# 用 set_tween + interval 的简化:每 0.03s 显一字符
+	_dialog_type_tween.kill()
+	_dialog_type_tween = create_tween()
+	_dialog_type_tween.set_trans(Tween.TRANS_LINEAR)
+	for i in n:
+		var ch2: String = full_text.substr(i, 1)
+		_dialog_type_tween.tween_callback(func(c=ch2): _dialog_visible_text += c).set_delay(float(i) * per_char)
+	_dialog_type_tween.tween_callback(_on_dialog_typing_done).set_delay(float(n) * per_char + 0.05)
+	dialog_text.text = ""  # typewriter 在 callback 里推进
+
+
+func _on_dialog_typing_done() -> void:
+	# 打字结束 → show 最终 text
+	dialog_text.text = _dialog_full_text
+
+
+func _ensure_dialog_choice_container() -> void:
+	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
+		return
+	var vb := VBoxContainer.new()
+	vb.name = "ChoiceContainer"
+	vb.anchor_left = 0.0
+	vb.anchor_top = 0.0
+	vb.anchor_right = 1.0
+	vb.anchor_bottom = 1.0
+	vb.offset_left = 16.0
+	vb.offset_top = 130.0
+	vb.offset_right = -16.0
+	vb.offset_bottom = -50.0
+	vb.add_theme_constant_override("separation", 6)
+	vb.visible = false
+	dialog_panel.add_child(vb)
+	_dialog_choice_container = vb
+
+
+func _on_dialog_continue_pressed() -> void:
+	# 如果正在打字 → 完成剩余;否则下一行
+	if _dialog_type_tween != null and _dialog_type_tween.is_running():
+		_dialog_type_tween.kill()
+		dialog_text.text = _dialog_full_text
+		_dialog_visible_text = _dialog_full_text
+		return
+	_advance_dialog()
 
 
 func hide_dialog() -> void:
@@ -1301,11 +1594,6 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 func hide_battle_result() -> void:
 	if battle_result_panel != null and is_instance_valid(battle_result_panel):
 		battle_result_panel.visible = false
-
-
-func _on_dialog_continue_pressed() -> void:
-	hide_dialog()
-	# M3+ TODO: 推进到下一句对话;这里是骨架,只有单句
 
 
 func _on_tutorial_got_it_pressed() -> void:

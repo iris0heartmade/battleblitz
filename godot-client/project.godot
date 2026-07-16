@@ -23,6 +23,7 @@ UserSettings="*res://scripts/autoload/user_settings.gd"
 GameState="*res://scripts/autoload/game_state.gd"
 InputState="*res://scripts/autoload/input_state.gd"
 NetworkClient="*res://scripts/autoload/network_client.gd"
+AudioManager="*res://scripts/autoload/audio_manager.gd"
 
 [display]
 
