@@ -461,6 +461,10 @@ func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: Stri
 	}, callback)
 
 
+func remove_player(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
+	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d" % player_id, {}, callback)
+
+
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 
