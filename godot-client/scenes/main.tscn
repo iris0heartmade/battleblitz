@@ -500,20 +500,35 @@ bbcode_enabled = true
 text = "[i]战报 / 日志[/i]"
 scroll_following = true
 
-; 回合横幅
-[node name="TurnBanner" type="Label" parent="GameView"]
+; 回合横幅(M4.17 改造:Panel 烫金边 + emoji 玩家色)
+[node name="TurnBannerFrame" type="ColorRect" parent="GameView"]
 visible = false
 anchor_left = 0.5
 anchor_top = 0.4
 anchor_right = 0.5
 anchor_bottom = 0.4
-offset_left = -240.0
-offset_top = -24.0
-offset_right = 240.0
-offset_bottom = 24.0
+offset_left = -260.0
+offset_top = -34.0
+offset_right = 260.0
+offset_bottom = 34.0
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="TurnBannerBorder" type="ReferenceRect" parent="GameView/TurnBannerFrame"]
+editor_only = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+border_color = Color(0.788, 0.631, 0.290, 1)
+border_width = 3
+
+[node name="TurnBannerLabel" type="Label" parent="GameView/TurnBannerFrame"]
+anchor_right = 1.0
+anchor_bottom = 1.0
 text = "回合切换"
 horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
 theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.957, 0.910, 0.757, 1)
 
 ; ============================================================
 ; V2 第 6 轮:设置面板 + 暂停面板

@@ -127,7 +127,7 @@ static func compute_reachable(
 			var owner: int = int(owners.get(n, -1))
 			if not terrain_passable(t, owner, viewer_owner_id):
 				continue
-			if blocked_units.has(n) and not n.is_equal_approx(start):
+			if blocked_units.has(n) and not n == start:
 				continue
 			var step_cost: int = int(Config.TERRAIN_MOVE_COST.get(t, 9999))
 			var new_cost: int = cur_cost + step_cost
@@ -158,7 +158,7 @@ static func pathfind(
 	blocked_units: Dictionary = {},
 	size: int = 0,
 ) -> Array:
-	if start.is_equal_approx(goal):
+	if start == goal:
 		return [start]
 	if size <= 0:
 		size = _infer_size(terrain)
@@ -191,7 +191,7 @@ static func pathfind(
 			continue
 		# Accept goal only if cost within budget (P2.5 fix: prevents
 		# `pathfind` returning teleporting paths when cost > mov).
-		if node.is_equal_approx(goal) and cost <= budget:
+		if node == goal and cost <= budget:
 			var path: Array = [goal]
 			while came_from.has(path[-1]):
 				path.append(came_from[path[-1]])
