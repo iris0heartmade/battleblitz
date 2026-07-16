@@ -133,6 +133,8 @@ func _ready() -> void:
 		"map editor should expose a save action")
 	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
 		"map editor should expose a load-selected action")
+	_assert_true("EditorView has EditorDeleteBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorDeleteBtn") != null,
+		"map editor should expose a delete-selected action")
 	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
@@ -360,6 +362,9 @@ func _ready() -> void:
 	var editor_map_select: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorMapSelectOption")
 	_assert_eq("Editor map selector stores backend list", editor_map_select.item_count, 2,
 		"editor map response should populate saved maps")
+	var editor_delete_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorDeleteBtn")
+	_assert_true("Editor delete enables with saved map", not editor_delete_btn.disabled,
+		"delete should enable when a saved map is selected")
 	editor_map_select.select(1)
 	main_check.call("_on_editor_map_selected", 1)
 	_assert_eq("Editor selected map id updates", str(main_check.get("_selected_editor_map_id")), "map_beta",
@@ -375,6 +380,9 @@ func _ready() -> void:
 	var loaded_editor_map: Dictionary = main_check.get("_editor_map")
 	_assert_eq("Editor load response replaces current map", str(loaded_editor_map.get("id", "")), "map_beta",
 		"loading a saved map should replace the editor map")
+	main_check.call("_on_editor_delete_response", {}, 204)
+	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
+		"successful delete should clear the selected map id")
 	editor_terrain_option.select(1)
 	main_check.call("_paint_editor_tile", Vector2i(1, 1))
 	var editor_map: Dictionary = main_check.get("_editor_map")

@@ -185,6 +185,7 @@ var _selected_save_id: int = 0
 @onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
 @onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
 @onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
+@onready var editor_delete_btn: Button = $EditorView/EditorPanel/EditorDeleteBtn
 @onready var editor_back_btn: Button = $EditorView/EditorPanel/EditorBackBtn
 var _editor_map: Dictionary = {}
 var _editor_map_ids: Array[String] = []
@@ -321,6 +322,8 @@ func _ready() -> void:
 		editor_save_btn.pressed.connect(_on_editor_save_pressed)
 	if editor_load_btn != null and is_instance_valid(editor_load_btn):
 		editor_load_btn.pressed.connect(_on_editor_load_pressed)
+	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+		editor_delete_btn.pressed.connect(_on_editor_delete_pressed)
 	if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
 		editor_map_select_option.item_selected.connect(_on_editor_map_selected)
 	if editor_back_btn != null and is_instance_valid(editor_back_btn):
@@ -2156,7 +2159,7 @@ func _apply_gba_theme() -> void:
 				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
-				editor_new_btn, editor_save_btn, editor_load_btn, editor_back_btn,
+				editor_new_btn, editor_save_btn, editor_load_btn, editor_delete_btn, editor_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
@@ -2559,6 +2562,16 @@ func _on_editor_load_pressed() -> void:
 	NetworkClient.load_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_load_response"))
 
 
+func _on_editor_delete_pressed() -> void:
+	if _selected_editor_map_id == "":
+		if editor_status != null and is_instance_valid(editor_status):
+			editor_status.text = "Choose a saved map first."
+		return
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Deleting %s..." % _selected_editor_map_id
+	NetworkClient.delete_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_delete_response"))
+
+
 func _on_editor_save_pressed() -> void:
 	if _editor_map.is_empty():
 		_editor_map = _build_blank_editor_map()
@@ -2588,12 +2601,16 @@ func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
 		editor_map_select_option.add_item("No saved maps")
 		if editor_load_btn != null and is_instance_valid(editor_load_btn):
 			editor_load_btn.disabled = true
+		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+			editor_delete_btn.disabled = true
 		return
 	var maps: Array = body
 	if maps.is_empty():
 		editor_map_select_option.add_item("No saved maps")
 		if editor_load_btn != null and is_instance_valid(editor_load_btn):
 			editor_load_btn.disabled = true
+		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+			editor_delete_btn.disabled = true
 		return
 	for item in maps:
 		if not item is Dictionary:
@@ -2608,6 +2625,8 @@ func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
 		editor_map_select_option.select(0)
 	if editor_load_btn != null and is_instance_valid(editor_load_btn):
 		editor_load_btn.disabled = _selected_editor_map_id == ""
+	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+		editor_delete_btn.disabled = _selected_editor_map_id == ""
 
 
 func _on_editor_map_selected(index: int) -> void:
@@ -2617,6 +2636,8 @@ func _on_editor_map_selected(index: int) -> void:
 		_selected_editor_map_id = _editor_map_ids[index]
 	if editor_load_btn != null and is_instance_valid(editor_load_btn):
 		editor_load_btn.disabled = _selected_editor_map_id == ""
+	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+		editor_delete_btn.disabled = _selected_editor_map_id == ""
 
 
 func _on_editor_load_response(body: Variant, code: int = 0) -> void:
@@ -2639,6 +2660,25 @@ func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 		return
 	if editor_status != null and is_instance_valid(editor_status):
 		editor_status.text = "Load failed"
+
+
+func _on_editor_delete_response(_body: Variant, code: int = 0) -> void:
+	if code >= 200 and code < 300:
+		_selected_editor_map_id = ""
+		_editor_map_ids = []
+		if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
+			editor_map_select_option.clear()
+			editor_map_select_option.add_item("No saved maps")
+		if editor_load_btn != null and is_instance_valid(editor_load_btn):
+			editor_load_btn.disabled = true
+		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
+			editor_delete_btn.disabled = true
+		if editor_status != null and is_instance_valid(editor_status):
+			editor_status.text = "Deleted map."
+		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
+		return
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "Delete failed"
 
 
 func _on_editor_save_response(body: Variant, code: int = 0) -> void:

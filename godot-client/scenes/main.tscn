@@ -305,10 +305,18 @@ text = "Save map"
 
 [node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
+offset_top = 372.0
+offset_right = 320.0
+offset_bottom = 408.0
+text = "Back to menu"
+
+[node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 164.0
 offset_top = 324.0
 offset_right = 320.0
 offset_bottom = 360.0
-text = "Back to menu"
+text = "Delete map"
+disabled = true
 
 [node name="Lobby" type="Control" parent="."]
 visible = false
