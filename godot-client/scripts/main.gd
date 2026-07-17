@@ -3484,7 +3484,10 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 			continue
 		var name: String = String(item.get("name", id))
 		var biome: String = String(item.get("biome", "grass"))
-		var players: int = int(item.get("recommended_players", 0))
+		var raw_players = item.get("recommended_players", 0)
+		var players: int = 0
+		if raw_players != null:
+			players = int(raw_players)
 		var label := name
 		if players > 0:
 			label = "%s (%dp)" % [name, players]
@@ -3656,13 +3659,20 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	var real_count: int = 0
 	for p in players:
 		if not p is Dictionary: continue
-		var pname: String = String(p.get("user_name", "-"))
-		var color: String = String(p.get("color", "red"))
-		var is_ai: bool = bool(p.get("is_ai", false))
-		var is_spec: bool = bool(p.get("is_spectator", false))
-		var is_self: bool = int(p.get("id", -1)) == int(_player_id)
-		var team: String = String(p.get("team", ""))
-		var seat: int = int(p.get("seat", -1))
+		var pname_v = p.get("user_name")
+		var pname: String = pname_v if pname_v is String else "-"
+		var color_v = p.get("color")
+		var color: String = color_v if color_v is String else "red"
+		var ai_v = p.get("is_ai")
+		var is_ai: bool = (ai_v == true) if ai_v != null else false
+		var spec_v = p.get("is_spectator")
+		var is_spec: bool = (spec_v == true) if spec_v != null else false
+		var id_v = p.get("id")
+		var is_self: bool = (id_v == _player_id) if (id_v != null and _player_id > 0) else false
+		var team_v = p.get("team")
+		var team: String = team_v if team_v is String else ""
+		var seat_v = p.get("seat")
+		var seat: int = int(seat_v) if seat_v is int else -1
 		if is_spec:
 			spec_count += 1
 		elif not is_ai:
@@ -3824,7 +3834,8 @@ func _refresh_host_team_options(players: Array) -> void:
 	var teams: Array = []
 	for p in players:
 		if not p is Dictionary: continue
-		var t: String = String(p.get("team", ""))
+		var t_raw = p.get("team")
+		var t: String = t_raw if t_raw is String else ""
 		if t != "" and not seen.has(t):
 			seen[t] = true
 			teams.append(t)
@@ -4022,8 +4033,10 @@ func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> voi
 # T:96 — MainlineView 章节列表 + 入口
 func _on_mainline_pressed() -> void:
 	_show_view("mainline")
-	ml_title.text = "📖 主线章节 · 加载中..."
-	ml_list_container.text = ""
+	ml_title.text = "主线章节 · 加载中..."
+	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
+	for child in ml_list_container.get_children():
+		child.queue_free()
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
 		ml_commander_status.text = "Commander: loading..."
@@ -4178,7 +4191,7 @@ func _on_ml_card_pressed(mainline_id: String) -> void:
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
 
 
-func _on_ml_detail_response(body: Variant, mainline_id: String, _code: int = 0) -> void:
+func _on_ml_detail_response(body: Variant, mainline_id, _code: int = 0) -> void:
 	if not (body is Dictionary):
 		_update_status("加载章节详情失败")
 		return
