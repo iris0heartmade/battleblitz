@@ -471,6 +471,111 @@ size_flags_horizontal = 3
 horizontal_alignment = 2
 theme_override_font_sizes/font_size = 11
 
+
+; ===== Lobby 模式选择面板(第二层:创建/加入选择) =====
+[node name="ChoosePanel" type="VBoxContainer" parent="Lobby/LobbyFrame" unique_id=999999901]
+visible = false
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = -16.0
+theme_override_constants/separation = 32
+alignment = 1
+
+[node name="ChooseSpacerTop" type="Control" parent="Lobby/LobbyFrame/ChoosePanel" unique_id=999999902]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+
+[node name="ChooseTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel" unique_id=999999903]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "联机大厅"
+horizontal_alignment = 1
+
+[node name="ChooseSubtitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel" unique_id=999999904]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "选择你想要的模式"
+horizontal_alignment = 1
+
+[node name="ChooseSpacerMid" type="Control" parent="Lobby/LobbyFrame/ChoosePanel" unique_id=999999905]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="ChooseBtnRow" type="HBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel" unique_id=999999906]
+layout_mode = 2
+theme_override_constants/separation = 48
+alignment = 1
+
+[node name="CreateCard" type="Panel" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow" unique_id=999999907]
+custom_minimum_size = Vector2(280, 180)
+layout_mode = 2
+
+[node name="CreateCardInner" type="VBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard" unique_id=999999909]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+theme_override_constants/separation = 12
+
+[node name="CreateCardTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner" unique_id=999999910]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "创建房间"
+horizontal_alignment = 1
+
+[node name="CreateCardDesc" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner" unique_id=999999911]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "新建一个对局,设置地图、队伍和 AI"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="CreateCardBtn" type="Button" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner" unique_id=999999912]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "开始创建"
+
+[node name="JoinCard" type="Panel" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow" unique_id=999999908]
+custom_minimum_size = Vector2(280, 180)
+layout_mode = 2
+
+[node name="JoinCardInner" type="VBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard" unique_id=999999913]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+theme_override_constants/separation = 12
+
+[node name="JoinCardTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner" unique_id=999999914]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "加入房间"
+horizontal_alignment = 1
+
+[node name="JoinCardDesc" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner" unique_id=999999915]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "浏览已有房间,快速加入对战"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="JoinCardBtn" type="Button" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner" unique_id=999999916]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "浏览房间"
 [node name="LobbyDualCol" type="HBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
 offset_left = 24.0
