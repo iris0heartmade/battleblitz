@@ -301,7 +301,7 @@ offset_left = 16.0
 offset_top = 60.0
 offset_right = 320.0
 offset_bottom = 96.0
-placeholder_text = "Map name"
+placeholder_text = "地图名称"
 
 [node name="EditorBiomeOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
@@ -527,7 +527,7 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
 
 [node name="CreateNameInput" type="LineEdit" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
-placeholder_text = "Room name"
+placeholder_text = "房间名称"
 custom_minimum_size = Vector2(0, 36)
 
 [node name="MapPresetOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
@@ -850,7 +850,7 @@ offset_left = -340.0
 offset_top = -132.0
 offset_right = 340.0
 offset_bottom = -110.0
-text = "Commander: loading..."
+text = "指挥官: 加载中..."
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
 modulate = Color(0.65, 0.6, 0.45, 1)
@@ -909,7 +909,7 @@ mouse_filter = 2
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
-; HUD 容器(4 角极小 pill,中间让给棋盘)
+; HUD 包在 CanvasLayer 内 → 不受 BoardCamera 缩放/平移影响
 [node name="HUD" type="Control" parent="GameView"]
 anchor_right = 1.0
 anchor_bottom = 1.0

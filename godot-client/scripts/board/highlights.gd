@@ -191,13 +191,14 @@ func _make_outline_sprite(color: Color) -> Node2D:
 		wrapper.add_child(bar)
 	return wrapper
 
-func _make_dot_sprite(color: Color) -> ColorRect:
+func _make_dot_sprite(color: Color) -> Node2D:
+	var wrapper := Node2D.new()
 	var dot := ColorRect.new()
 	dot.size = Vector2(8, 8)
 	dot.position = -dot.size * 0.5
 	dot.color = color
 	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return dot
+	return wrapper
 
 ## Convert a tile coord to a global position using the bound layer.
 func _tile_to_viewport(tile: Vector2i) -> Vector2:
