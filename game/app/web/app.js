@@ -4913,6 +4913,18 @@ const MainlineView = {
     }
   },
 
+  async fetchPostBattleShop(id, userName) {
+    return api("GET", `/mainlines/${encodeURIComponent(id)}/shop?user_name=${encodeURIComponent(userName)}`);
+  },
+
+  async buyPostBattleShopItem(id, userName, itemId) {
+    return api("POST", `/mainlines/${encodeURIComponent(id)}/shop/purchase`, {
+      user_name: userName,
+      item_id: itemId,
+      quantity: 1,
+    });
+  },
+
   async startNextBattle(id, userName, opts = {}) {
     console.debug(`[mainline] startNextBattle entry: id=${id} user_name=${userName}`);
     try {
@@ -5319,8 +5331,10 @@ const MainlineView = {
     if (r.state === "victory") {
       console.info(`[mainline] USER_ACTION | user=${userName} | action=MAINLINE_CLEAR | mainline=${state.mainline.id}`);
       // 通关：播 victory 对话 + choice
+      await this._openPostBattleShop(state.mainline.id, userName);
       await this._handleVictory(r);
     } else if (r.state === "dialogue") {
+      await this._openPostBattleShop(state.mainline.id, userName);
       // 战后对话 → 然后请求下一场 battle
       this._updateHeader({ ...r, battle_index: r.battle_index });
       if (r.post_battle_dialogue_url) {
@@ -5380,6 +5394,66 @@ const MainlineView = {
       return;
     }
     showView("mainline-list");
+  },
+
+  async _openPostBattleShop(mainlineId, userName) {
+    try {
+      const shop = await this.fetchPostBattleShop(mainlineId, userName);
+      state.mainlineShop = {mainlineId, userName, shop, resolve: null};
+      const goldEl = document.getElementById("mainline-shop-gold");
+      const contentEl = document.getElementById("mainline-shop-content");
+      if (goldEl) goldEl.textContent = `金币：${shop.gold}`;
+      if (contentEl) contentEl.innerHTML = this._renderPostBattleShop(shop);
+      showView("mainline-shop");
+      await new Promise((resolve) => { state.mainlineShop.resolve = resolve; });
+    } catch (e) {
+      console.warn("[mainline] post-battle shop unavailable", e);
+      toast("商店暂时无法打开，继续主线。", 2500);
+    }
+  },
+
+  _renderPostBattleShop(shop) {
+    const items = Array.isArray(shop.items) ? shop.items : [];
+    if (!items.length) return `<div class="mainline-prepare-empty">本次商店暂无商品。</div>`;
+    return `<div class="mainline-prepare-grid">${items.map((item) => {
+      const bonuses = Object.entries(item.stat_bonuses || {})
+        .map(([stat, value]) => `${stat.toUpperCase()} +${value}`).join(" / ");
+      const affordable = Number(shop.gold || 0) >= Number(item.price || 0);
+      return `<section class="mainline-prepare-card">
+        <h3>${escapeHtml(item.name)}</h3>
+        <div class="mainline-prepare-note">${escapeHtml(item.description || "")}</div>
+        <div class="mainline-prepare-inventory">
+          <span class="mainline-prepare-chip">${escapeHtml(item.kind || "item")}</span>
+          ${bonuses ? `<span class="mainline-prepare-chip">${escapeHtml(bonuses)}</span>` : ""}
+        </div>
+        <div class="mainline-prepare-actions">
+          <span class="mainline-prepare-meta">💰 ${escapeHtml(String(item.price || 0))}</span>
+          <button class="btn btn-primary btn-sm" data-action="mainline-shop-buy" data-item-id="${escapeHtml(item.item_id)}" ${affordable ? "" : "disabled"}>购买</button>
+        </div>
+      </section>`;
+    }).join("")}</div>`;
+  },
+
+  async _buyPostBattleShopItem(itemId) {
+    const context = state.mainlineShop;
+    if (!context || !itemId) return;
+    try {
+      const result = await this.buyPostBattleShopItem(context.mainlineId, context.userName, itemId);
+      context.shop.gold = result.gold_remaining;
+      const goldEl = document.getElementById("mainline-shop-gold");
+      const contentEl = document.getElementById("mainline-shop-content");
+      if (goldEl) goldEl.textContent = `金币：${result.gold_remaining}`;
+      if (contentEl) contentEl.innerHTML = this._renderPostBattleShop(context.shop);
+      toast(`购买成功，库存现有 ${result.inventory_count} 件。`, 2500);
+    } catch (e) {
+      toast("购买失败：" + e.message, 3000);
+    }
+  },
+
+  _leavePostBattleShop() {
+    const context = state.mainlineShop;
+    state.mainlineShop = null;
+    if (context?.resolve) context.resolve();
   },
 
   async _requestNextBattle() {
@@ -6497,6 +6571,12 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "mainline-prepare-promote":
         await MainlineView._promoteFocusedHero();
+        break;
+      case "mainline-shop-buy":
+        if (target.dataset.itemId) await MainlineView._buyPostBattleShopItem(target.dataset.itemId);
+        break;
+      case "mainline-shop-leave":
+        MainlineView._leavePostBattleShop();
         break;
       case "mainline-prepare-equip":
         if (target.dataset.slot) {

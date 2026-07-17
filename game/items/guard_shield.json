@@ -1,0 +1,11 @@
+{
+  "item_id": "guard_shield",
+  "name": "守卫圆盾",
+  "kind": "equipment",
+  "slot": "armor",
+  "rarity": 1,
+  "stat_bonuses": {"def": 2},
+  "description": "结实的圆盾，物防 +2。",
+  "shop": {"price": 100},
+  "art": {"icon_path": "/ui/assets/equipment/guard_shield.png"}
+}

@@ -9,6 +9,7 @@ from app.hero_domain.legacy_bridge import (
     hero_campaign_state_from_dict,
     hero_campaign_state_to_dict,
 )
+from app.item_catalog import load_items, load_shop
 
 
 def test_starter_equipment_has_one_copy_per_catalog_item():
@@ -45,3 +46,13 @@ def test_campaign_state_keeps_equipment_ids_across_save_round_trip():
     assert hero_campaign_state_to_dict(state)["equipment"] == {
         "weapon": "oak_staff", "accessory": "ruby_ring"
     }
+
+
+def test_post_battle_shop_references_individual_json_defined_items():
+    items = load_items()
+    stock = load_shop("post_battle")
+    assert {item.item_id for item in stock} == {
+        "iron_sword", "oak_staff", "guard_shield", "ruby_ring", "hero_crest"
+    }
+    assert items["hero_crest"].price == 300
+    assert items["iron_sword"].icon_path.endswith("iron_sword.png")

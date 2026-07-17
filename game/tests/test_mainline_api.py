@@ -1038,7 +1038,52 @@ class TestAbandon:
 
 
 # ============================================================
-# 10. Dialogue file service
+# 10. Post-battle shop
+# ============================================================
+
+@pytest.mark.integration
+class TestPostBattleShop:
+    async def test_shop_lists_json_stock_and_purchases_inventory(self, ml_client):
+        client, _ = ml_client
+        profile_id = await _create_profile(client, "alice")
+        from app.database import AsyncSessionLocal
+        from app.progression.models import PlayerProfile
+        async with AsyncSessionLocal() as session:
+            profile = await session.get(PlayerProfile, profile_id)
+            profile.gold = 500
+            await session.commit()
+
+        shop = await client.get(
+            "/mainlines/chapter_01_steel_rebellion/shop",
+            params={"user_name": "alice"},
+        )
+        assert shop.status_code == 200, shop.text
+        body = shop.json()
+        assert body["gold"] == 500
+        by_id = {item["item_id"]: item for item in body["items"]}
+        assert by_id["iron_sword"]["price"] == 120
+        assert by_id["iron_sword"]["icon_path"].endswith("iron_sword.png")
+
+        purchased = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/shop/purchase",
+            json={"user_name": "alice", "item_id": "hero_crest", "quantity": 1},
+        )
+        assert purchased.status_code == 200, purchased.text
+        assert purchased.json()["gold_remaining"] == 200
+        assert purchased.json()["inventory_count"] == 1
+
+    async def test_shop_rejects_purchase_without_gold(self, ml_client):
+        client, _ = ml_client
+        await _create_profile(client, "alice")
+        result = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/shop/purchase",
+            json={"user_name": "alice", "item_id": "iron_sword", "quantity": 1},
+        )
+        assert result.status_code == 409
+
+
+# ============================================================
+# 11. Dialogue file service
 # ============================================================
 
 @pytest.mark.integration

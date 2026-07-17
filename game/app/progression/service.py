@@ -240,6 +240,23 @@ class ProgressionService:
             await self.session.flush()
         return inventory
 
+    async def purchase_hero_inventory_item(
+        self, user_name: str, item_id: str, *, unit_price: int, quantity: int,
+    ) -> tuple[int, int] | None:
+        """Atomically deduct profile gold and add stackable campaign inventory."""
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return None
+        total_price = unit_price * quantity
+        if profile.gold < total_price:
+            raise ValueError("not enough gold")
+        inventory = dict(getattr(profile, "hero_inventory", {}) or {})
+        inventory[item_id] = int(inventory.get(item_id, 0)) + quantity
+        profile.gold -= total_price
+        profile.hero_inventory = inventory
+        await self.session.flush()
+        return int(profile.gold), int(inventory[item_id])
+
     # ── Leveling ────────────────────────────────────────────
 
     async def award_xp(

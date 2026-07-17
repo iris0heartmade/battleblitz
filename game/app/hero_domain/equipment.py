@@ -6,41 +6,16 @@ those ids in ``HeroCampaignState.equipment`` and counts in
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Mapping
+from app.item_catalog import ItemDefinition, get_item, load_items
 
 
 EQUIPMENT_SLOTS = ("weapon", "armor", "accessory")
 
 
-@dataclass(frozen=True)
-class EquipmentDefinition:
-    equipment_id: str
-    name: str
-    slot: str
-    rarity: int
-    stat_bonuses: Mapping[str, int]
-    description: str
-    icon_path: str
-
-
-CATALOG: dict[str, EquipmentDefinition] = {
-    "iron_sword": EquipmentDefinition(
-        "iron_sword", "铁剑", "weapon", 1, {"atk": 2},
-        "制式单手剑，攻击 +2。", "/ui/assets/equipment/iron_sword.png",
-    ),
-    "oak_staff": EquipmentDefinition(
-        "oak_staff", "橡木法杖", "weapon", 1, {"matk": 2},
-        "朴素但可靠的法杖，魔攻 +2。", "/ui/assets/equipment/oak_staff.png",
-    ),
-    "guard_shield": EquipmentDefinition(
-        "guard_shield", "守卫圆盾", "armor", 1, {"def": 2},
-        "结实的圆盾，物防 +2。", "/ui/assets/equipment/guard_shield.png",
-    ),
-    "ruby_ring": EquipmentDefinition(
-        "ruby_ring", "赤玉戒", "accessory", 1, {"mdef": 1, "hp": 3},
-        "镶有赤玉的戒指，魔防 +1、HP +3。", "/ui/assets/equipment/ruby_ring.png",
-    ),
+EquipmentDefinition = ItemDefinition
+CATALOG: dict[str, ItemDefinition] = {
+    item_id: item for item_id, item in load_items().items() if item.kind == "equipment"
 }
 
 STARTER_INVENTORY = {
@@ -58,7 +33,8 @@ DEFAULT_EQUIPMENT_BY_CLASS = {
 
 
 def get_equipment(equipment_id: str | None) -> EquipmentDefinition | None:
-    return CATALOG.get(equipment_id or "")
+    item = get_item(equipment_id)
+    return item if item and item.kind == "equipment" else None
 
 
 def default_equipment_for_class(class_id: str) -> dict[str, str]:
@@ -80,7 +56,7 @@ def equipped_stat_bonuses(equipment: Mapping[str, str | None]) -> dict[str, int]
 def catalog_payload() -> list[dict]:
     return [
         {
-            "equipment_id": item.equipment_id,
+            "equipment_id": item.item_id,
             "name": item.name,
             "slot": item.slot,
             "rarity": item.rarity,

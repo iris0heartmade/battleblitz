@@ -73,6 +73,9 @@ from app.mainline.schemas import (
     MainlinePrepareOut,
     MainlinePreparePromoteOut,
     MainlinePrepareUnitOut,
+    MainlineShopOut,
+    MainlineShopPurchaseOut,
+    MainlineShopPurchaseRequest,
     MainlineStartOut,
 )
 from app.hero_domain import (
@@ -107,6 +110,7 @@ from app.save import (
     PrepCompleteRequest,
 )
 from app.commanders.registry import get_power_threshold
+from app.item_catalog import get_item, load_shop
 
 logger = logging.getLogger(__name__)
 # USER_ACTION audit lines per §15 of the logging standard
@@ -277,6 +281,7 @@ async def _persist_mainline_hero_results(
             "learned_skills": list(unit.skills or []),
             "promoted": build_hero_class_template(unit.unit_type).tier >= 2,
             "equipment": dict(prior.equipment),
+            "equipment_initialized": prior.equipment_initialized,
         }
         await svc.set_hero_campaign_state(profile.user_name, unit.hero_id, updated)
         persisted_count += 1
@@ -923,7 +928,7 @@ async def equip_mainline_hero(
 
     svc = ProgressionService(session)
     inventory = await svc.ensure_hero_equipment_starters(body.user_name)
-    if definition is not None and int(inventory.get(definition.equipment_id, 0)) <= 0:
+    if definition is not None and int(inventory.get(definition.item_id, 0)) <= 0:
         raise HTTPException(status.HTTP_409_CONFLICT, "equipment is not in inventory")
     stored_state = await svc.get_hero_campaign_state(body.user_name, body.hero_id)
     if stored_state is None:
@@ -935,9 +940,9 @@ async def equip_mainline_hero(
         equipped_elsewhere = 0
         all_states = dict(getattr(profile, "hero_campaign_states", {}) or {})
         for hero_id, raw_state in all_states.items():
-            if hero_id != body.hero_id and definition.equipment_id in (raw_state.get("equipment") or {}).values():
+            if hero_id != body.hero_id and definition.item_id in (raw_state.get("equipment") or {}).values():
                 equipped_elsewhere += 1
-        if equipped_elsewhere >= int(inventory.get(definition.equipment_id, 0)):
+        if equipped_elsewhere >= int(inventory.get(definition.item_id, 0)):
             raise HTTPException(status.HTTP_409_CONFLICT, "equipment is already equipped by another hero")
     equipment = dict(state.equipment)
     equipment[body.slot] = body.equipment_id
@@ -948,6 +953,61 @@ async def equip_mainline_hero(
         hero_id=state.hero_id,
         equipment=equipment,
         equipment_bonuses=equipped_stat_bonuses(equipment),
+    )
+
+
+@router.get("/{mainline_id}/shop", response_model=MainlineShopOut)
+async def get_post_battle_shop(
+    mainline_id: str,
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> MainlineShopOut:
+    """Return the JSON-authored post-battle stock and campaign gold."""
+    try:
+        load_mainline(mainline_id)
+        items = load_shop("post_battle")
+    except (MainlineNotFound, FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    profile = await _load_profile(session, user_name)
+    return MainlineShopOut(
+        mainline_id=mainline_id,
+        gold=int(profile.gold),
+        items=[item.payload() for item in items],
+    )
+
+
+@router.post(
+    "/{mainline_id}/shop/purchase",
+    response_model=MainlineShopPurchaseOut,
+)
+async def purchase_post_battle_shop_item(
+    mainline_id: str,
+    body: MainlineShopPurchaseRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlineShopPurchaseOut:
+    try:
+        load_mainline(mainline_id)
+        stock_ids = {item.item_id for item in load_shop("post_battle")}
+    except (MainlineNotFound, FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    item = get_item(body.item_id)
+    if item is None or item.item_id not in stock_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item is not sold by this shop")
+    svc = ProgressionService(session)
+    try:
+        result = await svc.purchase_hero_inventory_item(
+            body.user_name, item.item_id, unit_price=item.price, quantity=body.quantity,
+        )
+    except ValueError:
+        raise HTTPException(status.HTTP_409_CONFLICT, "not enough campaign gold")
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    gold_remaining, inventory_count = result
+    return MainlineShopPurchaseOut(
+        item_id=item.item_id,
+        quantity=body.quantity,
+        inventory_count=inventory_count,
+        gold_remaining=gold_remaining,
     )
 
 

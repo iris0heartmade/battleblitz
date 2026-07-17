@@ -575,6 +575,25 @@ class MainlinePrepareEquipmentOut(_PydanticBaseModel):
     equipment_bonuses: dict
 
 
+class MainlineShopPurchaseRequest(_PydanticBaseModel):
+    user_name: str = _Field(min_length=1, max_length=64)
+    item_id: str = _Field(min_length=1, max_length=64)
+    quantity: int = _Field(default=1, ge=1, le=99)
+
+
+class MainlineShopPurchaseOut(_PydanticBaseModel):
+    item_id: str
+    quantity: int
+    inventory_count: int
+    gold_remaining: int
+
+
+class MainlineShopOut(_PydanticBaseModel):
+    mainline_id: str
+    gold: int
+    items: list[dict]
+
+
 class MainlineNextBattleOut(MainlineStartOut):
     """Identical shape to MainlineStartOut but for battle_idx > 0."""
 
@@ -689,6 +708,9 @@ __all__ = [
     "MainlinePreparePromoteOut",
     "MainlinePrepareEquipmentRequest",
     "MainlinePrepareEquipmentOut",
+    "MainlineShopPurchaseRequest",
+    "MainlineShopPurchaseOut",
+    "MainlineShopOut",
     "MainlineAbandonRequest",
     "MainlineAbandonOut",
     "MainlineStepOut",
