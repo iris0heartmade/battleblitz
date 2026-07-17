@@ -418,312 +418,267 @@ disabled = true
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
-
-[node name="LobbyFrame" type="ColorRect" parent="Lobby"]
+[node name="LobbyFrame" type="Panel" parent="Lobby"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -430.0
-offset_top = -220.0
-offset_right = 430.0
-offset_bottom = 220.0
-color = Color(0.02, 0.04, 0.03, 0.92)
+offset_left = -520.0
+offset_top = -400.0
+offset_right = 520.0
+offset_bottom = 400.0
 
 [node name="LobbyBorder" type="ReferenceRect" parent="Lobby/LobbyFrame"]
-editor_only = false
 anchor_right = 1.0
 anchor_bottom = 1.0
 border_color = Color(0.788, 0.631, 0.29, 1)
-border_width = 4
+border_width = 4.0
+editor_only = false
 
-[node name="LobbyTitle" type="Label" parent="Lobby/LobbyFrame"]
+[node name="LobbyTopBar" type="VBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
-offset_top = 12.0
-offset_bottom = 44.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = 70.0
+theme_override_constants/separation = 4
+
+[node name="LobbyTitle" type="Label" parent="Lobby/LobbyFrame/LobbyTopBar"]
 text = "联机大厅"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 
-[node name="LobbyStatus" type="Label" parent="Lobby/LobbyFrame"]
+[node name="LobbyGameIdLabel" type="Label" parent="Lobby/LobbyFrame/LobbyTopBar"]
+text = "对局 #? · 创建中..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+
+[node name="LobbyInfoBar" type="HBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
-offset_top = 56.0
-offset_bottom = 76.0
+offset_left = 24.0
+offset_top = 76.0
+offset_right = -24.0
+offset_bottom = 100.0
+theme_override_constants/separation = 12
+
+[node name="LobbyStatus" type="Label" parent="Lobby/LobbyFrame/LobbyInfoBar"]
 text = "等待玩家加入... (0 / --)"
+size_flags_horizontal = 3
+
+[node name="LobbyWinBanner" type="Label" parent="Lobby/LobbyFrame/LobbyInfoBar"]
+text = "胜利条件: 消灭所有敌方单位,或占领对方 HQ"
+size_flags_horizontal = 3
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 11
+
+[node name="LobbyDualCol" type="HBoxContainer" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 112.0
+offset_right = -24.0
+offset_bottom = 408.0
+theme_override_constants/separation = 18
+
+[node name="LeftCol" type="VBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol"]
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.2
+theme_override_constants/separation = 8
+
+[node name="LeftHeader" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+text = "房间列表"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
 
-[node name="RoomListTitle" type="Label" parent="Lobby/LobbyFrame"]
-offset_left = 28.0
-offset_top = 90.0
-offset_right = 390.0
-offset_bottom = 114.0
-text = "房间列表"
-theme_override_font_sizes/font_size = 16
-
-[node name="RoomList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
-offset_left = 28.0
-offset_top = 118.0
-offset_right = 402.0
-offset_bottom = 208.0
+[node name="RoomList" type="RichTextLabel" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+custom_minimum_size = Vector2(0, 140)
+size_flags_vertical = 3
 bbcode_enabled = true
 text = "加载中..."
 fit_content = false
 scroll_following = true
 
-[node name="RoomSelectOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 28.0
-offset_top = 216.0
-offset_right = 402.0
-offset_bottom = 250.0
+[node name="RoomSelectOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+custom_minimum_size = Vector2(0, 32)
 
-[node name="JoinModeOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 28.0
-offset_top = 258.0
-offset_right = 402.0
-offset_bottom = 292.0
+[node name="JoinModeOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+custom_minimum_size = Vector2(0, 32)
 
-[node name="RefreshRoomsBtn" type="Button" parent="Lobby/LobbyFrame"]
-offset_left = 28.0
-offset_top = 300.0
-offset_right = 202.0
-offset_bottom = 334.0
+[node name="LeftBtnRow" type="HBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+theme_override_constants/separation = 8
+
+[node name="RefreshRoomsBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow"]
 text = "刷新房间"
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 34)
 
-[node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame"]
-offset_left = 220.0
-offset_top = 300.0
-offset_right = 402.0
-offset_bottom = 334.0
+[node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow"]
 text = "加入选中"
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 34)
 disabled = true
 
-[node name="CreateTitle" type="Label" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 90.0
-offset_right = 820.0
-offset_bottom = 114.0
+[node name="RightCol" type="VBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol"]
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="RightHeader" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 text = "创建房间"
-theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
 
-[node name="CreateNameInput" type="LineEdit" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 122.0
-offset_right = 820.0
-offset_bottom = 158.0
+[node name="CreateNameInput" type="LineEdit" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 placeholder_text = "Room name"
+custom_minimum_size = Vector2(0, 36)
 
-[node name="MapPresetOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 170.0
-offset_right = 820.0
-offset_bottom = 206.0
+[node name="MapPresetOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 32)
 
-[node name="TeamOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 218.0
-offset_right = 686.0
-offset_bottom = 254.0
+[node name="TeamRow" type="HBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+theme_override_constants/separation = 8
 
-[node name="LobbyApplyTeamBtn" type="Button" parent="Lobby/LobbyFrame"]
-offset_left = 696.0
-offset_top = 218.0
-offset_right = 820.0
-offset_bottom = 254.0
+[node name="TeamOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 32)
+
+[node name="LobbyApplyTeamBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow"]
 text = "应用队伍"
+custom_minimum_size = Vector2(0, 34)
 
-[node name="LobbyCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 266.0
-offset_right = 820.0
-offset_bottom = 302.0
+[node name="LobbyCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 32)
 
-[node name="LobbyBgmOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 314.0
-offset_right = 820.0
-offset_bottom = 350.0
+[node name="LobbyBgmOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 32)
 
-[node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame"]
-offset_left = 458.0
-offset_top = 362.0
-offset_right = 820.0
-offset_bottom = 398.0
+[node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 text = "创建并加入"
+custom_minimum_size = Vector2(0, 40)
+
+[node name="MidSectionBar" type="HBoxContainer" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 410.0
+offset_right = -24.0
+offset_bottom = 434.0
+
+[node name="MidHeader" type="Label" parent="Lobby/LobbyFrame/MidSectionBar"]
+text = "对局管理"
+horizontal_alignment = 1
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
 
 [node name="LobbyList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
-anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 408.0
+offset_top = 442.0
 offset_right = -24.0
-offset_bottom = -156.0
+offset_bottom = 580.0
 bbcode_enabled = true
 text = ""
 fit_content = true
 scroll_following = true
 
-[node name="LobbyHostPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -392.0
-offset_top = -150.0
-offset_right = -236.0
-offset_bottom = -114.0
+[node name="HostRow" type="HBoxContainer" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 584.0
+offset_right = -24.0
+offset_bottom = 618.0
+theme_override_constants/separation = 8
+
+[node name="LobbyHostPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame/HostRow"]
+size_flags_horizontal = 3
 tooltip_text = "房主:选择要改队伍的玩家"
+custom_minimum_size = Vector2(0, 32)
 
-[node name="LobbyHostTeamOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -228.0
-offset_top = -150.0
-offset_right = -72.0
-offset_bottom = -114.0
+[node name="LobbyHostTeamOption" type="OptionButton" parent="Lobby/LobbyFrame/HostRow"]
+size_flags_horizontal = 3
 tooltip_text = "房主:目标队伍(自由=无队伍,新建=分配新队名)"
+custom_minimum_size = Vector2(0, 32)
 
-[node name="LobbyHostApplyBtn" type="Button" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -64.0
-offset_top = -150.0
-offset_right = 48.0
-offset_bottom = -114.0
+[node name="LobbyHostApplyBtn" type="Button" parent="Lobby/LobbyFrame/HostRow"]
 text = "改队伍"
+custom_minimum_size = Vector2(0, 34)
 
 [node name="LobbyToSpecBtn" type="Button" parent="Lobby/LobbyFrame"]
 anchor_left = 0.5
-anchor_top = 1.0
 anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = 56.0
-offset_top = -150.0
-offset_right = 216.0
-offset_bottom = -114.0
+offset_left = -80.0
+offset_top = 622.0
+offset_right = 80.0
+offset_bottom = 650.0
 text = "切换观战"
-tooltip_text = "退出当前座位,以观战者身份重新加入(观战者无单位,只看不操作)"
+tooltip_text = "退出当前座位,以观战者身份重新加入"
+custom_minimum_size = Vector2(0, 28)
 
-[node name="LobbyWinBanner" type="Label" parent="Lobby/LobbyFrame"]
+[node name="AiConfigRow" type="HBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
-offset_top = 220.0
-offset_bottom = 244.0
-text = "胜利条件: 消灭所有敌方单位,或占领对方 HQ"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
+offset_left = 24.0
+offset_top = 654.0
+offset_right = -24.0
+offset_bottom = 686.0
+theme_override_constants/separation = 8
 
-[node name="AiDifficultyOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -392.0
-offset_top = -104.0
-offset_right = -264.0
-offset_bottom = -68.0
+[node name="AiKindOption" type="OptionButton" parent="Lobby/LobbyFrame/AiConfigRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 32)
 
-[node name="AiKindOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -256.0
-offset_top = -104.0
-offset_right = -168.0
-offset_bottom = -68.0
+[node name="AiPersonalityOption" type="OptionButton" parent="Lobby/LobbyFrame/AiConfigRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 32)
 
-[node name="AiPersonalityOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -160.0
-offset_top = -104.0
-offset_right = -32.0
-offset_bottom = -68.0
+[node name="AiDifficultyOption" type="OptionButton" parent="Lobby/LobbyFrame/AiConfigRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 32)
 
 [node name="AiCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -24.0
-offset_top = -104.0
-offset_right = 120.0
-offset_bottom = -68.0
-
-[node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = 128.0
-offset_top = -104.0
-offset_right = 248.0
-offset_bottom = -68.0
-text = "添加 AI"
-
-[node name="AiPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = 256.0
-offset_top = -104.0
-offset_right = 368.0
-offset_bottom = -68.0
-
-[node name="LobbyRemoveAiBtn" type="Button" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = 376.0
-offset_top = -104.0
-offset_right = 424.0
-offset_bottom = -68.0
-text = "移除"
-disabled = true
-
-[node name="LobbyStartBtn" type="Button" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = 176.0
-offset_top = -56.0
-offset_right = 320.0
-offset_bottom = -20.0
-text = "启动游戏"
-disabled = true
-
-[node name="LobbyBackBtn" type="Button" parent="Lobby/LobbyFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -100.0
-offset_top = -56.0
-offset_right = 100.0
-offset_bottom = -20.0
-text = "返回主菜单"
-
-[node name="LobbyGameIdLabel" type="Label" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
-offset_top = 32.0
-offset_bottom = 48.0
-text = "对局 #? · 创建中..."
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
-modulate = Color(0.65, 0.6, 0.45, 1)
+offset_left = 24.0
+offset_top = 690.0
+offset_right = -24.0
+offset_bottom = 722.0
 
-; ============================================================
-; SavesView — 存档管理(开房 / 主线分组 + 继续 / 删除)
-; ============================================================
+[node name="AiActionRow" type="HBoxContainer" parent="Lobby/LobbyFrame"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 726.0
+offset_right = -24.0
+offset_bottom = 758.0
+theme_override_constants/separation = 8
+
+[node name="LobbyAddAiBtn" type="Button" parent="Lobby/LobbyFrame/AiActionRow"]
+text = "添加 AI"
+custom_minimum_size = Vector2(0, 32)
+
+[node name="AiPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame/AiActionRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 32)
+
+[node name="LobbyRemoveAiBtn" type="Button" parent="Lobby/LobbyFrame/AiActionRow"]
+text = "移除"
+custom_minimum_size = Vector2(0, 32)
+disabled = true
+
+[node name="BottomBar" type="HBoxContainer" parent="Lobby/LobbyFrame"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -560.0
+offset_top = -56.0
+offset_right = -16.0
+offset_bottom = -16.0
+theme_override_constants/separation = 12
+alignment = 2
+
+[node name="LobbyStartBtn" type="Button" parent="Lobby/LobbyFrame/BottomBar"]
+text = "启动游戏"
+custom_minimum_size = Vector2(180, 40)
+disabled = true
+
+[node name="LobbyBackBtn" type="Button" parent="Lobby/LobbyFrame/BottomBar"]
+text = "返回主菜单"
+custom_minimum_size = Vector2(120, 40)
+
+
 [node name="SavesView" type="Control" parent="."]
 visible = false
 anchor_right = 1.0
