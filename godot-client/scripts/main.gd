@@ -56,7 +56,6 @@ var _recruit_mode_unit_id: int = -1
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
 @onready var gold_panel: ColorRect = $GameView/HUD/BottomLeft/GoldPanel
 @onready var gold_label: Label = $GameView/HUD/BottomLeft/GoldPanel/GoldLabel
-@onready var co_meter: ProgressBar = $GameView/HUD/BottomLeft/COBar
 @onready var war_report_button: Button = $GameView/HUD/BottomRight/WarReportButton
 @onready var war_report_panel: Panel = $GameView/HUD/WarReportPanel
 @onready var war_report_close_btn: Button = $GameView/HUD/WarReportPanel/CloseBtn
@@ -128,6 +127,7 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
+@onready var cancel_btn: Button = $GameView/HUD/ActionBubble/ActionList/CancelBtn
 @onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
 @onready var attack_btn: Button = $GameView/HUD/ActionBubble/ActionList/AttackBtn
 @onready var skill_btn: Button = $GameView/HUD/ActionBubble/ActionList/SkillBtn
@@ -141,10 +141,22 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 # 当前选中单位 + 待操作 action
 var _selected_unit_id: int = -1
 var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
+
+# Board 刷新防抖:server WS 只在 connect 时推 1 次 state.snapshot,
+# 后续只推 event.delta。客户端订阅粒度事件后,主动拉 GET /state (200ms 防抖)
+# → ingest_snapshot → emit units_changed → board FLIP 单位位置。
+const _BOARD_REFRESH_DEBOUNCE_SEC: float = 0.2
+var _board_refresh_pending: bool = false
+
+# 状态轮询:server WS 不推 turn_end / 回合结束 / 对局结束事件,
+# 这些必须靠 REST GET /state 轮询追踪。每 1 秒拉一次(game view 时)。
+const _STATE_POLL_INTERVAL_SEC: float = 1.0
+var _state_poll_timer: Timer = null
+
 # Main menu widgets (GBA 风 V2)
-@onready var menu_button: Button = $Menu/CenterContainer/ButtonCol/FreePlayButton
-@onready var mainline_button: Button = $Menu/CenterContainer/ButtonCol/MainlineButton
-@onready var editor_button: Button = $Menu/CenterContainer/ButtonCol/EditorButton
+@onready var menu_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/FreePlayButton
+@onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
+@onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
 
 # T:96 MainlineView
 @onready var mainline_view: Control = $MainlineView
@@ -157,13 +169,13 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
 @onready var ml_slots_container: VBoxContainer = $MainlineView/MLFrame/MLSlotsContainer
 var _ml_slot_records: Array = []
-@onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
-@onready var saves_button: Button = $Menu/CenterContainer/ButtonCol/SavesButton
-@onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
-@onready var exit_button: Button = $Menu/CenterContainer/ButtonCol/ExitButton
+@onready var lobby_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/LobbyButton
+@onready var saves_button: Button = $Menu/CenterContainer/FooterRow/SavesButton
+@onready var settings_button: Button = $Menu/CenterContainer/FooterRow/SettingsButton
+@onready var exit_button: Button = $Menu/CenterContainer/FooterRow/ExitButton
 
 # T:5 单槽存档
-@onready var resume_button: Button = $Menu/CenterContainer/ButtonCol/ResumeButton
+@onready var resume_button: Button = $Menu/CenterContainer/FooterRow/ResumeButton
 var _resume_game_id: int = 0
 var _resume_player_id: int = 0
 
@@ -231,6 +243,11 @@ var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 @onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/MapPresetOption
 @onready var team_option: OptionButton = $Lobby/LobbyFrame/TeamOption
 @onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyApplyTeamBtn
+# P1#8 房主行级队伍控制 + P1#7 切换观战(转换自己为观战者)
+@onready var lobby_host_player_option: OptionButton = $Lobby/LobbyFrame/LobbyHostPlayerOption
+@onready var lobby_host_team_option: OptionButton = $Lobby/LobbyFrame/LobbyHostTeamOption
+@onready var lobby_host_apply_btn: Button = $Lobby/LobbyFrame/LobbyHostApplyBtn
+@onready var lobby_to_spec_btn: Button = $Lobby/LobbyFrame/LobbyToSpecBtn
 @onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyCommanderOption
 @onready var lobby_bgm_option: OptionButton = $Lobby/LobbyFrame/LobbyBgmOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/CreateRoomBtn
@@ -242,6 +259,14 @@ var _preset_options: Array = []
 var _lobby_commander_ids: Array[String] = [""]
 var _lobby_ai_commander_ids: Array[String] = [""]
 var _lobby_bgm_track_ids: Array[String] = [""]
+# P1#8 房主:seat==0 即房主。_lobby_host_target_id = 当前选中的目标玩家 id。
+# _lobby_host_team_ids: 与 lobby_host_team_option 下标对齐的队伍名(""=自由)。
+var _lobby_is_host: bool = false
+var _lobby_self_is_spectator: bool = false
+var _lobby_host_target_id: int = 0
+var _lobby_host_team_ids: Array[String] = [""]
+var _lobby_last_players: Array = []
+var _lobby_host_player_sig: String = ""
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
@@ -318,6 +343,12 @@ func _ready() -> void:
 		create_room_btn.pressed.connect(_on_create_room_pressed)
 	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
 		lobby_apply_team_btn.pressed.connect(_on_lobby_apply_team_pressed)
+	if lobby_host_player_option != null and is_instance_valid(lobby_host_player_option):
+		lobby_host_player_option.item_selected.connect(_on_lobby_host_player_selected)
+	if lobby_host_apply_btn != null and is_instance_valid(lobby_host_apply_btn):
+		lobby_host_apply_btn.pressed.connect(_on_lobby_host_apply_pressed)
+	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
+		lobby_to_spec_btn.pressed.connect(_on_lobby_to_spec_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
@@ -373,6 +404,8 @@ func _ready() -> void:
 	skill_btn.pressed.connect(_on_skill_pressed)
 	wait_btn.pressed.connect(_on_wait_pressed)
 	claim_btn.pressed.connect(_on_claim_pressed)
+	if cancel_btn != null and is_instance_valid(cancel_btn):
+		cancel_btn.pressed.connect(_on_cancel_pressed)
 	if attack_confirm_btn != null and is_instance_valid(attack_confirm_btn):
 		attack_confirm_btn.pressed.connect(_on_attack_confirm_pressed)
 	if attack_cancel_btn != null and is_instance_valid(attack_cancel_btn):
@@ -470,6 +503,11 @@ func _ready() -> void:
 			_on_join_game_response(body)
 		elif method == "POST" and path.ends_with("/start") and (code == 200 or code == 201):
 			_on_start_game_response(body)
+		elif method == "GET" and path.ends_with("/state") and code == 200:
+			# M_WS_REFRESH:server WS 只在 connect 时推 1 次 state.snapshot,
+			# 后续只推 event.delta。粒度事件后我们主动拉一次 /state(防抖 200ms 合并),
+			# 把响应喂回 GameState → emit units_changed → board 自动 FLIP 单位位置。
+			_on_state_poll_response(body)
 	)
 
 
@@ -480,13 +518,21 @@ func _ready() -> void:
 		_update_status("DEV auto-play: 自动开始自由模式")
 		call_deferred("_on_free_play_pressed")
 	# BB_AUTO_QUIT=N — quit after N seconds (for headless e2e runs).
+	# 注意:_maybe_screenshot_menu() 必须在 BB_AUTO_QUIT await 之前,因为
+	# 它调 get_tree().quit() 会提早结束 _ready。
 	var quit_sec_str: String = OS.get_environment("BB_AUTO_QUIT")
+	var quit_sec: float = 0.0
 	if quit_sec_str != "":
-		var quit_sec: float = float(quit_sec_str)
-		if quit_sec > 0.0:
-			await get_tree().create_timer(quit_sec).timeout
-			_update_status("DEV auto-quit 触发,退出")
-			get_tree().quit(0)
+		quit_sec = float(quit_sec_str)
+	# UI Redesign Round 1/2 临时:env-gated screenshots(Round 完后清理)
+	if OS.get_environment("BB_SCREENSHOT_MENU") != "":
+		await _maybe_screenshot_menu()
+	elif OS.get_environment("BB_SCREENSHOT_VIEWS") != "":
+		await _maybe_screenshot_views()
+	if quit_sec > 0.0:
+		await get_tree().create_timer(quit_sec).timeout
+		_update_status("DEV auto-quit 触发,退出")
+		get_tree().quit(0)
 	# V2 第 6 轮:游戏视图下启用菜单"设置"按钮(直接打开 SettingsPanel)
 	if settings_button != null and is_instance_valid(settings_button):
 		settings_button.disabled = false
@@ -495,6 +541,10 @@ func _ready() -> void:
 		if settings_button.pressed.is_connected(_on_settings_pressed):
 			settings_button.pressed.disconnect(_on_settings_pressed)
 		settings_button.pressed.connect(_on_settings_open_pressed)
+	# TSCN-FIX:强制覆盖,确保 GameView 不吞棋盘点击(以防 tscn mouse_filter=2 没生效)
+	if game_view != null and is_instance_valid(game_view):
+		game_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# (诊断 HUD 改到 _show_view("game") 里调,确保切到 game view 时创建并可见)
 
 
 # ============================================================
@@ -502,6 +552,47 @@ func _ready() -> void:
 # ============================================================
 
 enum View { MENU, CONNECTING, GAME }
+
+# UI Redesign Round 1 临时:BB_SCREENSHOT_MENU=1 时 _ready 后截 menu view。
+# Round 1 完成后会清理。
+func _maybe_screenshot_menu() -> void:
+	if OS.get_environment("BB_SCREENSHOT_MENU") == "":
+		return
+	await get_tree().create_timer(0.8).timeout
+	_show_view("menu")
+	await get_tree().create_timer(0.6).timeout
+	var vp: Viewport = get_viewport()
+	var img: Image = vp.get_texture().get_image() if vp != null else null
+	if img == null or img.is_empty():
+		print("[MENU_SS] image empty")
+	else:
+		var path: String = ProjectSettings.globalize_path("user://diag_view_menu.png")
+		img.save_png(path)
+		print("[MENU_SS] saved " + path + " (%dx%d)" % [img.get_width(), img.get_height()])
+	get_tree().quit()
+
+
+# UI Redesign Round 2 临时:BB_SCREENSHOT_VIEWS=menu,connecting,lobby,saves,mainline,editor
+# 依次截图各 view(Round 完成后清理)
+func _maybe_screenshot_views() -> void:
+	if OS.get_environment("BB_SCREENSHOT_VIEWS") == "":
+		return
+	var names_str: String = OS.get_environment("BB_SCREENSHOT_VIEWS")
+	var names: PackedStringArray = names_str.split(",")
+	await get_tree().create_timer(0.8).timeout
+	for view_name in names:
+		_show_view(view_name)
+		await get_tree().create_timer(0.6).timeout
+		var vp: Viewport = get_viewport()
+		var img: Image = vp.get_texture().get_image() if vp != null else null
+		if img == null or img.is_empty():
+			print("[VIEWS] %s: empty" % view_name)
+			continue
+		var path: String = ProjectSettings.globalize_path("user://diag_view_%s.png" % view_name)
+		img.save_png(path)
+		print("[VIEWS] %s -> %s" % [view_name, path])
+	get_tree().quit()
+
 
 func _show_view(name: String) -> void:
 	menu_panel.visible = (name == "menu")
@@ -511,6 +602,39 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	# 最强保险:切到 game view 时强制 GameView 不吞棋盘点击
+	# (tscn mouse_filter=2 + _ready 兜底都没生效时,这里再设一次绝对生效)
+	if name == "game" and game_view != null and is_instance_valid(game_view):
+		game_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# game view 时启动状态轮询(每 1s GET /state 追 AI 行动)
+	if name == "game":
+		_start_state_polling()
+	else:
+		_stop_state_polling()
+
+
+func _start_state_polling() -> void:
+	if _state_poll_timer != null and is_instance_valid(_state_poll_timer):
+		return
+	_state_poll_timer = Timer.new()
+	_state_poll_timer.wait_time = _STATE_POLL_INTERVAL_SEC
+	_state_poll_timer.autostart = true
+	_state_poll_timer.timeout.connect(_poll_state_now)
+	add_child(_state_poll_timer)
+
+
+func _stop_state_polling() -> void:
+	if _state_poll_timer != null and is_instance_valid(_state_poll_timer):
+		_state_poll_timer.queue_free()
+	_state_poll_timer = null
+
+
+func _poll_state_now() -> void:
+	if _game_id <= 0:
+		return
+	if game_view == null or not is_instance_valid(game_view) or not game_view.visible:
+		return
+	NetworkClient.get_game_state(_game_id)
 
 
 func _on_free_play_pressed() -> void:
@@ -590,7 +714,11 @@ func _on_join_game_response(body: Dictionary) -> void:
 
 
 func _on_start_game_response(_body: Dictionary) -> void:
-	# 5) Open the WebSocket stream.
+	# 5) 切到 game 视图并打开 WebSocket 流(与 _on_lobby_start_response 一致:
+	# 先切视图,首帧 state.snapshot 到达后 _on_state_updated 刷新棋盘/HUD)。
+	# 之前漏了 _show_view("game"),导致自由对局 start 后视图停在 connecting,
+	# 一直显示"已连接,等待 state.snapshot..."进不去游戏。
+	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
 	# T:97 — 自由对局首次进入 game view 自动弹 tutorial
 	_trigger_first_tutorial()
@@ -650,7 +778,7 @@ func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 		_resume_game_id = int(g.get("id", 0))
 		_resume_player_id = last_player_id if _resume_game_id == last_game_id else 0
 		if resume_button != null and is_instance_valid(resume_button):
-			resume_button.text = "▶ 继续对局 #%d" % _resume_game_id
+			resume_button.text = "继续对局 #%d" % _resume_game_id
 			resume_button.visible = _resume_game_id > 0
 		return
 
@@ -842,6 +970,17 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 			AudioManager.apply_battle_bgm(bgm)
 
 
+# GET /state 响应处理:REST 响应直接是 GameStateOut,跟 WS payload.game 形状一致,
+# 直接喂 GameState.ingest_snapshot。事件→响应→ingest→units_changed→board FLIP。
+func _on_state_poll_response(body: Variant) -> void:
+	if not body is Dictionary:
+		return
+	if GameState == null:
+		return
+	GameState.ingest_snapshot(body)
+
+
+
 func _repaint_board_from_state() -> void:
 	if board == null or not is_instance_valid(board):
 		return
@@ -949,9 +1088,19 @@ func _refresh_hud_from_state() -> void:
 	else:
 		current_player_label.text = "→ —"
 
-	# End-turn button only enabled when it's the local player's turn
-	# AND the phase is "player".
-	end_turn_button.disabled = not (phase_text == "player" and int(cur_pid) == _player_id)
+	# End-turn button:玩家阶段(自己回合)或观战者阶段(自己观战回合)时启用。
+	# 观战者无单位、不能操作,但必须手动"确认(继续)"推进自己的观战回合,
+	# 否则对局卡在观战者回合(后端 end_turn 接受 is_spectator,turns.py:167)。
+	var my_turn: bool = int(cur_pid) == _player_id
+	if my_turn and phase_text == "spectator":
+		end_turn_button.disabled = false
+		end_turn_button.text = "✅ 确认(继续)"
+	elif my_turn and phase_text == "player":
+		end_turn_button.disabled = false
+		end_turn_button.text = "⏭ 结束回合"
+	else:
+		end_turn_button.disabled = true
+		end_turn_button.text = "⏭ 结束回合"
 
 	# Local player's gold
 	var me: Dictionary = GameState.get_player(_player_id)
@@ -965,8 +1114,7 @@ func _refresh_hud_from_state() -> void:
 			break
 	var meter: int = int(my_co.get("meter", 0))
 	var threshold: int = max(1, int(my_co.get("threshold", 100)))
-	co_meter.value = float(meter) / float(threshold) * 100.0
-	co_meter.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
+	# CO 能量进度只在 InfoPanel/CommanderCOBar 里更新;BottomLeft/COBar 已删除
 
 	# Players list (right column)
 	_rewrite_players_list()
@@ -980,6 +1128,12 @@ func _rewrite_players_list() -> void:
 		if not p is Dictionary:
 			continue
 		var name: String = String(p.get("user_name", "?"))
+		# P1#7 观战者:灰色卡,显示"观战中-无单位"(观战者无单位无金币)
+		var is_spec: bool = bool(p.get("is_spectator", false))
+		var ended_early: String = " ⏳" if p.get("has_ended_turn", false) else ""
+		if is_spec:
+			players_list.append_text("[color=#9aa0a6]👀 %s · 观战中-无单位%s[/color]\n" % [name, ended_early])
+			continue
 		var color: String = String(p.get("color", "?"))
 		var units: int = (p.get("units", []) as Array).size()
 		var gold: int = int(p.get("gold", 0))
@@ -1158,6 +1312,7 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	if unit_id != _player_id and _selected_unit_id != unit_id:
 		return
 	_show_post_action_bubble(unit_id, "move")
+	_schedule_board_refresh()
 
 
 func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
@@ -1179,6 +1334,7 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 	# M4.14:post-attack bubble — 若目标未死 + can_move_after_action 还能再行动
 	if not is_kill:
 		_show_post_action_bubble(attacker_id, "attack")
+	_schedule_board_refresh()
 
 
 func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
@@ -1188,6 +1344,24 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 		if not u.is_empty():
 			var cell := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 			board.spawn_floating_text_at_cell(cell, "💀击杀", "#c63a3a", "kill")
+	_schedule_board_refresh()
+
+
+# 200ms 防抖拉一次 GET /state。多个连续事件会被合并成一次 REST 调用,
+# 避免 AI 回合里 N 个 event.delta 各拉一次。事件→响应回来→ingest→
+# units_changed → board._on_units_changed 自动 FLIP 单位位置。
+func _schedule_board_refresh() -> void:
+	if _board_refresh_pending:
+		return
+	_board_refresh_pending = true
+	get_tree().create_timer(_BOARD_REFRESH_DEBOUNCE_SEC).timeout.connect(_do_board_refresh, CONNECT_ONE_SHOT)
+
+
+func _do_board_refresh() -> void:
+	_board_refresh_pending = false
+	if _game_id <= 0:
+		return
+	NetworkClient.get_game_state(_game_id)
 
 
 func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y: int, cost: int) -> void:
@@ -1198,6 +1372,7 @@ func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y
 	_update_status("招募事件: %s #%d" % [unit_type, new_unit_id])
 	if board != null:
 		board.spawn_floating_text_at_cell(Vector2i(tile_x, tile_y), "+%s" % unit_type, "#c9a14a", "gold")
+	_schedule_board_refresh()
 
 
 # M5.1 CO Roster — 顶部全玩家头像 + 名字 + CO 能量条 + Power 按钮
@@ -1376,6 +1551,7 @@ func _on_turn_ended(next_player_id, turn_number: int) -> void:
 	_show_turn_banner("回合 %d  ·  %s [color=%s]%s[/color]%s" % [
 		turn_number, emoji, color_hex, name, suffix
 	], 3.0)
+	_schedule_board_refresh()
 
 
 func _on_match_ended(winner_player_id, win_reason: String) -> void:
@@ -1525,6 +1701,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_path_dots_on_hover(event.global_position)
 		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
+	# M5.x:鼠标右键 = 取消当前模式(行动气泡 / 移动 / 攻击 / 技能)
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if game_view == null or not game_view.visible:
+			return
+		if board == null:
+			return
+		if (settings_panel != null and settings_panel.visible) \
+				or (pause_panel != null and pause_panel.visible) \
+				or (war_report_panel != null and war_report_panel.visible):
+			return
+		_cancel_action_mode()
+		_hide_action_bubble()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if game_view == null or not game_view.visible:
 			return
@@ -1536,6 +1726,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				or (war_report_panel != null and war_report_panel.visible):
 			return
 		var unit_id: int = board.pick_unit_at_screen(event.global_position)
+		print("[CLICK] _unhandled_input LMB: unit_id=%d move_mode=%d atk_mode=%d" % [unit_id, _move_mode_unit_id, _attack_mode_unit_id])
 		if unit_id > 0:
 			board.emit_unit_clicked(unit_id)
 		else:
@@ -1717,6 +1908,7 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	var cur_pid: int = int(GameState.current_player_id) if GameState.current_player_id != null else -1
 	var is_my_unit: bool = (owner_pid == _player_id)
 	var can_still_act: bool = not bool(ud.get("has_acted", false))
+	print("[CLICK] handle_unit: unit=%d owner=%d me=%d cur=%d my=%s acted=%s moved=%s" % [unit_id, owner_pid, _player_id, cur_pid, is_my_unit, bool(ud.get("has_acted", false)), bool(ud.get("has_moved", false))])
 	if not is_my_unit or not can_still_act:
 		# 不进入移动/攻击模式
 		_move_mode_unit_id = -1
@@ -2363,38 +2555,6 @@ func _apply_hud_theme() -> void:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_font_size_override("font_size", pill_size)
 			lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	# CO meter styling (unchanged from before)
-	if co_meter != null and is_instance_valid(co_meter):
-		var sb_bg := StyleBoxFlat.new()
-		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)
-		sb_bg.border_color = MenuTheme.C_GOLD
-		sb_bg.set_border_width_all(1)
-		sb_bg.content_margin_left = 2
-		sb_bg.content_margin_right = 2
-		sb_bg.content_margin_top = 2
-		sb_bg.content_margin_bottom = 2
-		var sb_fg := StyleBoxFlat.new()
-		sb_fg.bg_color = MenuTheme.C_GOLD
-		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
-		sb_fg.set_border_width_all(1)
-		co_meter.add_theme_stylebox_override("background", sb_bg)
-		co_meter.add_theme_stylebox_override("fill", sb_fg)
-	# CO meter:用烫金 progress 色
-	if co_meter != null and is_instance_valid(co_meter):
-		var sb_bg := StyleBoxFlat.new()
-		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)   # 深棕,确保 fill 0% 时也有底色
-		sb_bg.border_color = MenuTheme.C_GOLD
-		sb_bg.set_border_width_all(1)
-		sb_bg.content_margin_left = 2
-		sb_bg.content_margin_right = 2
-		sb_bg.content_margin_top = 2
-		sb_bg.content_margin_bottom = 2
-		var sb_fg := StyleBoxFlat.new()
-		sb_fg.bg_color = MenuTheme.C_GOLD
-		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
-		sb_fg.set_border_width_all(1)
-		co_meter.add_theme_stylebox_override("background", sb_bg)
-		co_meter.add_theme_stylebox_override("fill", sb_fg)
 	# V2 第 3 轮:InfoPanel 主题(当前指挥官 + 单位详情 + 玩家列表)
 	if commander_title != null and is_instance_valid(commander_title):
 		commander_title.add_theme_font_size_override("font_size", 16)
@@ -2429,7 +2589,9 @@ func _apply_hud_theme() -> void:
 	# V2 第 4 轮:行动气泡主题(深绿底 + 烫金粗边)
 	if action_bubble != null and is_instance_valid(action_bubble):
 		var sb_bubble := StyleBoxFlat.new()
-		sb_bubble.bg_color = MenuTheme.C_BG_PANEL
+		var bg: Color = MenuTheme.C_BG_PANEL
+		bg.a = 0.7
+		sb_bubble.bg_color = bg
 		sb_bubble.border_color = MenuTheme.C_GOLD
 		sb_bubble.set_border_width_all(2)
 		sb_bubble.set_corner_radius_all(3)
@@ -2562,6 +2724,14 @@ func _apply_hud_theme() -> void:
 	if battle_result_stats != null and is_instance_valid(battle_result_stats):
 		battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
 		battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# Round 3:主按钮烫金主题(web 风格)— 联机大厅 启动/添加 AI/改队伍/应用队伍
+	for primary_btn in [lobby_start_btn, lobby_add_ai_btn, lobby_host_apply_btn, lobby_apply_team_btn]:
+		if primary_btn != null and is_instance_valid(primary_btn):
+			MenuTheme.apply_primary_button_theme(primary_btn)
+	# 次按钮(web 风格)— 返回/取消/移除/切换观战
+	for secondary_btn in [lobby_back_btn, lobby_to_spec_btn, lobby_remove_ai_btn]:
+		if secondary_btn != null and is_instance_valid(secondary_btn):
+			MenuTheme.apply_secondary_button_theme(secondary_btn)
 
 
 # ============================================================
@@ -3458,51 +3628,61 @@ func _stop_lobby_polling() -> void:
 func _refresh_lobby_view() -> void:
 	if _game_id <= 0:
 		return
-	NetworkClient.get_lobby(_game_id, Callable(self, "_on_lobby_state"))
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_lobby_state"))
 
 
 func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	if not (body is Dictionary): return
-	var players: Array = (body.get("players", []) as Array)
-	var is_waiting: bool = String(body.get("status", "waiting")) == "waiting"
-	# 渲染列表 + 人头
+	# /state 返回 GameStateOut:{ game, players, tiles, ... }。比 /lobby 的 teams
+	# 聚合更细 - 能逐玩家拿到 seat / is_ai / team / is_spectator,这是 P1#8
+	# 房主行级控制 + P1#7 观战者显示的前提。
+	var game: Dictionary = body.get("game", {}) if body.get("game", {}) is Dictionary else {}
+	var players: Array = body.get("players", []) if body.get("players", []) is Array else []
+	var max_spec: int = int(game.get("max_spectators", 8))
+	_lobby_last_players = players
+	# 自己的 seat / 观战标记(房主 = seat 0)
+	var self_seat: int = -1
+	var self_is_spec: bool = false
+	for p in players:
+		if p is Dictionary and int(p.get("id", -1)) == int(_player_id):
+			self_seat = int(p.get("seat", -1))
+			self_is_spec = bool(p.get("is_spectator", false))
+			break
+	_lobby_is_host = (self_seat == 0)
+	_lobby_self_is_spectator = self_is_spec
+	# 渲染逐玩家列表(含 seat / 队伍 / 观战标记)
 	var lines: Array = []
+	var spec_count: int = 0
+	var real_count: int = 0
 	for p in players:
 		if not p is Dictionary: continue
-		var name: String = String(p.get("user_name", "—"))
+		var pname: String = String(p.get("user_name", "-"))
 		var color: String = String(p.get("color", "red"))
 		var is_ai: bool = bool(p.get("is_ai", false))
+		var is_spec: bool = bool(p.get("is_spectator", false))
 		var is_self: bool = int(p.get("id", -1)) == int(_player_id)
-		var emoji: String = _color_emoji(color)
+		var team: String = String(p.get("team", ""))
+		var seat: int = int(p.get("seat", -1))
+		if is_spec:
+			spec_count += 1
+		elif not is_ai:
+			real_count += 1
+		var emoji: String = "👀" if is_spec else _color_emoji(color)
 		var tag: String = ""
 		if is_self: tag = " (你)"
 		elif is_ai: tag = " 🤖"
-		lines.append("%s %s%s" % [emoji, name, tag])
-	if lines.is_empty():
-		var teams: Array = body.get("teams", [])
-		for t in teams:
-			if not t is Dictionary:
-				continue
-			var team_name := String(t.get("team", "?"))
-			var count := int(t.get("player_count", 0))
-			var cap := int(t.get("capacity", 0))
-			var color := String(t.get("color", "red"))
-			var cap_text := str(cap) if cap > 0 else "-"
-			lines.append("%s %s  %d/%s" % [_color_emoji(color), team_name, count, cap_text])
+		var team_tag: String = " [%s]" % team if team != "" else ""
+		var seat_tag: String = " #%d" % seat if seat >= 0 else ""
+		lines.append("%s %s%s%s%s" % [emoji, pname, tag, team_tag, seat_tag])
 	lobby_list.text = "\n".join(lines) if lines.size() > 0 else "(等待加入)"
-	var real_count: int = 0
-	for p in players:
-		if p is Dictionary and not bool(p.get("is_ai", false)):
-			real_count += 1
 	_render_lobby_ai_options(players)
-	if real_count == 0:
-		real_count = int(body.get("player_count", 0))
-	var shown_count: int = int(body.get("player_count", players.size()))
-	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d)" % [
-		shown_count, real_count
+	_render_lobby_host_controls(players)
+	var total_count: int = players.size()
+	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d · 观战 %d/%d)" % [
+		total_count, real_count, spec_count, max_spec
 	]
-	# Start 按钮 — 只要 ≥1 玩家即可(简化,实际 ≥2)
-	lobby_start_btn.disabled = int(body.get("player_count", players.size())) < 1
+	# Start 按钮:只要有 1 名真人(非 AI/非观战)即可,后端会校验 MIN_PLAYERS
+	lobby_start_btn.disabled = real_count < 1
 
 
 func _render_lobby_ai_options(players: Array) -> void:
@@ -3589,6 +3769,135 @@ func _on_lobby_team_response(body: Variant, code: int = 0) -> void:
 	var team := str(body.get("team", ""))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Team updated: %s" % (team if team != "" else "free")
+	_refresh_lobby_view()
+
+
+func _render_lobby_host_controls(players: Array) -> void:
+	# 房主可见 目标玩家/队伍/改队伍;所有人可见"切换观战"(转自己)。
+	var host_widgets: Array = [lobby_host_player_option, lobby_host_team_option, lobby_host_apply_btn]
+	for w in host_widgets:
+		if w != null and is_instance_valid(w):
+			w.visible = _lobby_is_host
+	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
+		lobby_to_spec_btn.visible = not _lobby_self_is_spectator
+		lobby_to_spec_btn.disabled = _player_id <= 0
+	if not _lobby_is_host:
+		return
+	if lobby_host_player_option == null or not is_instance_valid(lobby_host_player_option):
+		return
+	# 仅在玩家集合变化时重建下拉,避免 2s 轮询打断房主操作
+	var sig := ""
+	for p in players:
+		if p is Dictionary:
+			sig += "%d:%d:%d:%s|" % [int(p.get("id", 0)), int(p.get("seat", -1)), int(bool(p.get("is_spectator", false))), String(p.get("user_name", ""))]
+	if sig == _lobby_host_player_sig:
+		return
+	_lobby_host_player_sig = sig
+	var prev_target := _lobby_host_target_id
+	lobby_host_player_option.clear()
+	var idx := 0
+	var selected_idx := 0
+	for p in players:
+		if not p is Dictionary: continue
+		var pid: int = int(p.get("id", 0))
+		var pname: String = String(p.get("user_name", "-"))
+		var seat: int = int(p.get("seat", -1))
+		var is_spec: bool = bool(p.get("is_spectator", false))
+		var emoji: String = "👀" if is_spec else _color_emoji(String(p.get("color", "red")))
+		lobby_host_player_option.add_item("%s #%d %s" % [emoji, seat, pname], pid)
+		if pid == prev_target:
+			selected_idx = idx
+		idx += 1
+	if lobby_host_player_option.item_count > 0:
+		lobby_host_player_option.select(selected_idx)
+		_lobby_host_target_id = lobby_host_player_option.get_item_id(selected_idx)
+	else:
+		_lobby_host_target_id = 0
+	_refresh_host_team_options(players)
+
+
+func _refresh_host_team_options(players: Array) -> void:
+	if lobby_host_team_option == null or not is_instance_valid(lobby_host_team_option):
+		return
+	# 收集已有队伍名(去重,排除空)
+	var seen: Dictionary = {}
+	var teams: Array = []
+	for p in players:
+		if not p is Dictionary: continue
+		var t: String = String(p.get("team", ""))
+		if t != "" and not seen.has(t):
+			seen[t] = true
+			teams.append(t)
+	lobby_host_team_option.clear()
+	_lobby_host_team_ids = [""]
+	lobby_host_team_option.add_item("自由(无队伍)")
+	for t in teams:
+		_lobby_host_team_ids.append(t)
+		lobby_host_team_option.add_item("队:%s" % t)
+	# 哨兵值:apply 时按已有队数生成新队名
+	_lobby_host_team_ids.append("__new__")
+	lobby_host_team_option.add_item("🆕 新建队伍")
+	lobby_host_team_option.select(0)
+
+
+func _on_lobby_host_player_selected(index: int) -> void:
+	if lobby_host_player_option == null or not is_instance_valid(lobby_host_player_option):
+		return
+	if index < 0 or index >= lobby_host_player_option.item_count:
+		_lobby_host_target_id = 0
+	else:
+		_lobby_host_target_id = lobby_host_player_option.get_item_id(index)
+
+
+func _on_lobby_host_apply_pressed() -> void:
+	if not _lobby_is_host or _lobby_host_target_id <= 0 or _game_id <= 0:
+		return
+	if lobby_host_team_option == null or not is_instance_valid(lobby_host_team_option):
+		return
+	var team := ""
+	var tidx := lobby_host_team_option.selected
+	if tidx >= 0 and tidx < _lobby_host_team_ids.size():
+		var raw := _lobby_host_team_ids[tidx]
+		if raw == "__new__":
+			team = _next_team_name()
+		else:
+			team = raw
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "更新玩家 #%d 队伍..." % _lobby_host_target_id
+	NetworkClient.update_player_team(_game_id, _lobby_host_target_id, _player_id, team, Callable(self, "_on_lobby_team_response"))
+
+
+func _next_team_name() -> String:
+	# 基于已有队伍数生成不冲突的新队名(team1 / team2 / ...)
+	var existing: Dictionary = {}
+	for p in _lobby_last_players:
+		if p is Dictionary:
+			var t := String(p.get("team", ""))
+			if t != "":
+				existing[t] = true
+	var n := 1
+	while existing.has("team%d" % n):
+		n += 1
+	return "team%d" % n
+
+
+func _on_lobby_to_spec_pressed() -> void:
+	if _game_id <= 0 or _player_id <= 0 or _lobby_self_is_spectator:
+		return
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "切换为观战者..."
+	# convert:DELETE 自己 + POST /join role=spectator(后端无独立 convert 接口,
+	# 与 web 一致;join_game(role=spectator) 会分配 spectator 座位/颜色)。
+	NetworkClient.remove_player(_game_id, _player_id, Callable(self, "_on_lobby_to_spec_removed"))
+
+
+func _on_lobby_to_spec_removed(_body: Variant, _code: int = 0) -> void:
+	# 旧座位已删;以观战者身份重新加入。新 player_id 由全局 api_response ->
+	# _on_join_game_response 自动捕获。
+	NetworkClient.join_game(_game_id, _user_name, "", "", "spectator", Callable(self, "_on_lobby_to_spec_joined"))
+
+
+func _on_lobby_to_spec_joined(_body: Variant, _code: int = 0) -> void:
 	_refresh_lobby_view()
 
 
@@ -4091,6 +4400,13 @@ func _cancel_action_mode() -> void:
 		if board != null:
 			board.clear_selection_marks()
 		_update_status("已取消行动模式")
+
+
+# 行动气泡的"取消"按钮 + 右键取消都走这里
+func _on_cancel_pressed() -> void:
+	_cancel_action_mode()
+	_hide_action_bubble()
+	_update_status("已取消(右键亦可)")
 
 
 # 计算攻击范围内所有可攻击的目标(敌方单位所在格 — 需在范围内 + LoS 通)
