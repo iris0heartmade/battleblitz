@@ -1015,21 +1015,10 @@ mouse_filter = 2
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
 ; HUD 包在 CanvasLayer 内 → 不受 BoardCamera 缩放/平移影响
-[node name="HUD" type="Control" parent="GameView"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-mouse_filter = 2
+[node name="HUD" type="CanvasLayer" parent="GameView"]
+	layer = 10
 
 ; M5.1 CO Roster — 顶部全玩家头像 + 能量条 + Power 按钮
-[node name="CORoster" type="HBoxContainer" parent="GameView/HUD"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -400.0
-offset_top = 4.0
-offset_right = 400.0
-offset_bottom = 60.0
-theme_override_constants/separation = 8
-alignment = 1
 
 ; --- 左上:回合 + 阶段 pill ---
 [node name="TopLeft" type="HBoxContainer" parent="GameView/HUD"]

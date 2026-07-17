@@ -61,7 +61,6 @@ var _recruit_mode_unit_id: int = -1
 @onready var war_report_close_btn: Button = $GameView/HUD/WarReportPanel/CloseBtn
 
 # M5.1 CO Roster(全玩家头像 + 能量条 + Power 按钮)
-@onready var co_roster: HBoxContainer = $GameView/HUD/CORoster
 
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
@@ -970,8 +969,7 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
-	_refresh_co_roster()
-	# T:94 — battle_config.audio.bgm 触发 BGM 切换(server-authority)
+	
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)
 	if battle_config != null and battle_config.has("audio"):
@@ -1387,61 +1385,6 @@ func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y
 
 
 # M5.1 CO Roster — 顶部全玩家头像 + 名字 + CO 能量条 + Power 按钮
-func _refresh_co_roster() -> void:
-	if co_roster == null or not is_instance_valid(co_roster):
-		return
-	for child in co_roster.get_children():
-		child.queue_free()
-	if GameState == null:
-		return
-	var players: Array = (GameState.players as Array)
-	var co_states: Array = (GameState.co_states as Array)
-	for p in players:
-		if not p is Dictionary: continue
-		var pid: int = int(p.get("id", -1))
-		var name: String = String(p.get("user_name", "—"))
-		var color_name: String = String(p.get("color", "red"))
-		var color_hex: String = _color_name_to_godot(color_name)
-		var emoji: String = _color_emoji(color_name)
-		var is_ai: bool = bool(p.get("is_ai", false))
-		var is_local: bool = (pid == _player_id)
-		var meter: int = 0
-		var threshold: int = 100
-		for c in co_states:
-			if not c is Dictionary: continue
-			if int(c.get("player_id", -1)) == pid:
-				meter = int(c.get("meter", 0))
-				threshold = max(1, int(c.get("threshold", 100)))
-				break
-		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
-		# 简易容器:Panel(无边框背景) + 内含 3 行
-		var vb := VBoxContainer.new()
-		vb.custom_minimum_size = Vector2(130, 50)
-		vb.add_theme_constant_override("separation", 2)
-		var title := Label.new()
-		title.text = "%s %s%s%s" % [
-			emoji, name,
-			" 🤖" if is_ai else "",
-			" (你)" if is_local else ""
-		]
-		title.add_theme_color_override("font_color", Color(color_hex))
-		title.add_theme_font_size_override("font_size", 11)
-		vb.add_child(title)
-		var bar := ProgressBar.new()
-		bar.value = pct
-		bar.custom_minimum_size = Vector2(120, 10)
-		bar.tooltip_text = "CO %d / %d" % [meter, threshold]
-		vb.add_child(bar)
-		var btn := Button.new()
-		btn.text = "⚡ Power (%d)" % meter
-		btn.disabled = meter < threshold or not is_local
-		btn.add_theme_font_size_override("font_size", 10)
-		if is_local and meter >= threshold:
-			btn.pressed.connect(_on_co_power_pressed.bind(pid))
-		vb.add_child(btn)
-		co_roster.add_child(vb)
-
-
 # M5.3 CO Power 激活
 func _on_co_power_pressed(pid: int) -> void:
 	if _game_id <= 0:
@@ -3283,6 +3226,7 @@ func _show_lobby_create_view() -> void:
 	if choose_panel != null and is_instance_valid(choose_panel):
 		choose_panel.visible = false
 	_set_lobby_detail_visible(false)
+	_set_lobby_dualcol_visible(true)
 	_set_lobby_leftcol_visible(false)
 	_set_lobby_rightcol_visible(true)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
@@ -3294,6 +3238,7 @@ func _show_lobby_join_view() -> void:
 	if choose_panel != null and is_instance_valid(choose_panel):
 		choose_panel.visible = false
 	_set_lobby_detail_visible(false)
+	_set_lobby_dualcol_visible(true)
 	_set_lobby_leftcol_visible(true)
 	_set_lobby_rightcol_visible(false)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
@@ -3320,6 +3265,14 @@ func _set_lobby_detail_visible(v: bool) -> void:
 		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
 		if n != null:
 			n.visible = v
+
+
+func _set_lobby_dualcol_visible(v: bool) -> void:
+	if lobby_view == null:
+		return
+	var dc: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol")
+	if dc != null:
+		dc.visible = v
 
 
 func _set_lobby_leftcol_visible(v: bool) -> void:

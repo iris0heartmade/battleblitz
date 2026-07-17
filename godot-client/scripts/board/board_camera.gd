@@ -6,7 +6,7 @@ const _FIT_MARGIN := 16.0
 # UI V2 第 3 轮:棋盘 fit 中央剩余空间,留出左侧 30% 给 info panel
 # + 右侧 22% 给 HUD 留白。
 const _UI_LEFT_FRACTION := 0.30
-const _UI_RIGHT_FRACTION := 0.10
+const _UI_RIGHT_FRACTION := 0.00
 
 var _metrics = null
 var _user_positioned: bool = false
@@ -79,10 +79,11 @@ func _refresh_from_metrics(position_only: bool = false) -> void:
 	# rides the same canvas_transform, so clamping limits to board_rect
 	# pushes them into a 720×720 sub-rectangle of the viewport. Leaving
 	# limits at the full viewport keeps the UI where we put it in .tscn.
-	limit_left = 0
-	limit_top = 0
-	limit_right = int(ceil(viewport_size.x))
-	limit_bottom = int(ceil(viewport_size.y))
+	# limits 设为棋盘实际范围,用户可在此范围内自由拖拽
+	limit_left = int(floor(board_rect.position.x))
+	limit_top = int(floor(board_rect.position.y))
+	limit_right = int(ceil(board_rect.position.x + board_rect.size.x))
+	limit_bottom = int(ceil(board_rect.position.y + board_rect.size.y))
 
 
 func _board_rect_for(metrics) -> Rect2:
