@@ -251,7 +251,12 @@ var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 @onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyCommanderOption
 @onready var lobby_bgm_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyBgmOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateRoomBtn
+# Lobby 二层菜单导航
+@onready var choose_panel: VBoxContainer = $Lobby/LobbyFrame/ChoosePanel
+@onready var create_card_btn: Button = $Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner/CreateCardBtn
+@onready var join_card_btn: Button = $Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner/JoinCardBtn
 var _entry_flow: String = "free"
+var _lobby_mode: String = "choose"  # choose / create / join / in_room
 var _lobby_rooms: Array = []
 var _selected_room_id: int = 0
 var _selected_ai_player_id: int = 0
@@ -341,6 +346,11 @@ func _ready() -> void:
 		join_selected_btn.pressed.connect(_on_join_selected_pressed)
 	if create_room_btn != null and is_instance_valid(create_room_btn):
 		create_room_btn.pressed.connect(_on_create_room_pressed)
+	# Lobby 二层菜单导航
+	if create_card_btn != null and is_instance_valid(create_card_btn):
+		create_card_btn.pressed.connect(_on_create_card_pressed)
+	if join_card_btn != null and is_instance_valid(join_card_btn):
+		join_card_btn.pressed.connect(_on_join_card_pressed)
 	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
 		lobby_apply_team_btn.pressed.connect(_on_lobby_apply_team_pressed)
 	if lobby_host_player_option != null and is_instance_valid(lobby_host_player_option):
@@ -695,6 +705,7 @@ func _on_join_game_response(body: Dictionary) -> void:
 			lobby_game_id_label.text = "Game #%d" % _game_id
 		_start_lobby_polling()
 		_refresh_room_list()
+		_show_lobby_in_room()
 		return
 	connecting_label.text = "已加入(玩家 #%d),添 AI 中..." % _player_id
 	# 3) Add an AI opponent. M3 will let the user pick kind/personality.
@@ -3216,15 +3227,17 @@ func _on_lobby_pressed() -> void:
 	_apply_lobby_theme()
 	_stop_lobby_polling()
 	_selected_room_id = 0
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Choose a room or create a new one."
-	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-		lobby_game_id_label.text = "No room joined"
-	if lobby_list != null and is_instance_valid(lobby_list):
-		lobby_list.text = "(Join or create a room to see players.)"
 	if create_name_input != null and is_instance_valid(create_name_input):
-		create_name_input.text = "%s room" % _user_name
+		create_name_input.text = "%s 的房间" % _user_name
 	_setup_lobby_join_options()
+	_setup_lobby_ai_options()
+	_setup_lobby_commander_options()
+	_setup_lobby_bgm_options()
+	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
+	_load_lobby_presets()
+	_load_lobby_audio_tracks()
+	_refresh_room_list()
+	_show_lobby_choose()
 	_setup_lobby_ai_options()
 	_setup_lobby_commander_options()
 	_setup_lobby_bgm_options()
@@ -3249,6 +3262,89 @@ func _on_lobby_pressed() -> void:
 	)
 	lobby_status_label.text = "创建房间中..."
 	lobby_game_id_label.text = "对局 #? · 创建中..."
+
+
+
+# ============================================================
+# Lobby 二层菜单导航
+# ============================================================
+
+func _show_lobby_choose() -> void:
+	_lobby_mode = "choose"
+	if choose_panel != null and is_instance_valid(choose_panel):
+		choose_panel.visible = true
+	_set_lobby_detail_visible(false)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		lobby_back_btn.text = "返回主菜单"
+
+
+func _show_lobby_create_view() -> void:
+	_lobby_mode = "create"
+	if choose_panel != null and is_instance_valid(choose_panel):
+		choose_panel.visible = false
+	_set_lobby_detail_visible(false)
+	_set_lobby_leftcol_visible(false)
+	_set_lobby_rightcol_visible(true)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		lobby_back_btn.text = "返回模式选择"
+
+
+func _show_lobby_join_view() -> void:
+	_lobby_mode = "join"
+	if choose_panel != null and is_instance_valid(choose_panel):
+		choose_panel.visible = false
+	_set_lobby_detail_visible(false)
+	_set_lobby_leftcol_visible(true)
+	_set_lobby_rightcol_visible(false)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		lobby_back_btn.text = "返回模式选择"
+
+
+func _show_lobby_in_room() -> void:
+	_lobby_mode = "in_room"
+	if choose_panel != null and is_instance_valid(choose_panel):
+		choose_panel.visible = false
+	_set_lobby_detail_visible(true)
+	_set_lobby_leftcol_visible(true)
+	_set_lobby_rightcol_visible(true)
+	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
+		lobby_back_btn.text = "返回主菜单"
+
+
+func _set_lobby_detail_visible(v: bool) -> void:
+	for node_name in ["LobbyDualCol", "MidSectionBar", "LobbyList",
+			"HostRow", "LobbyToSpecBtn", "AiConfigRow", "AiCommanderOption",
+			"AiActionRow", "BottomBar"]:
+		if lobby_view == null:
+			continue
+		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
+		if n != null:
+			n.visible = v
+
+
+func _set_lobby_leftcol_visible(v: bool) -> void:
+	if lobby_view == null:
+		return
+	var left_col: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol")
+	if left_col != null:
+		left_col.visible = v
+
+
+func _set_lobby_rightcol_visible(v: bool) -> void:
+	if lobby_view == null:
+		return
+	var right_col: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/RightCol")
+	if right_col != null:
+		right_col.visible = v
+
+
+func _on_create_card_pressed() -> void:
+	_show_lobby_create_view()
+
+
+func _on_join_card_pressed() -> void:
+	_show_lobby_join_view()
+	_refresh_room_list()
 
 
 func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
@@ -3844,10 +3940,6 @@ func _refresh_host_team_options(players: Array) -> void:
 			teams.append(t)
 	lobby_host_team_option.clear()
 	_lobby_host_team_ids = [""]
-	lobby_host_team_option.add_item("自由(无队伍)")
-	for t in teams:
-		_lobby_host_team_ids.append(t)
-		lobby_host_team_option.add_item("队:%s" % t)
 	# 哨兵值:apply 时按已有队数生成新队名
 	_lobby_host_team_ids.append("__new__")
 	lobby_host_team_option.add_item("🆕 新建队伍")
@@ -3928,8 +4020,13 @@ func _on_lobby_start_response(_body: Dictionary, _code: int = 0) -> void:
 
 
 func _on_lobby_back_pressed() -> void:
-	_stop_lobby_polling()
-	_show_view("menu")
+	if _lobby_mode == "create" or _lobby_mode == "join":
+		_show_lobby_choose()
+	elif _lobby_mode == "in_room":
+		_show_lobby_choose()
+	else:
+		_stop_lobby_polling()
+		_show_view("menu")
 
 
 func _apply_lobby_theme() -> void:
