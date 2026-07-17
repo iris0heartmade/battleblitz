@@ -419,14 +419,14 @@ visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
 [node name="LobbyFrame" type="Panel" parent="Lobby"]
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -520.0
-offset_top = -400.0
-offset_right = 520.0
-offset_bottom = 400.0
+anchor_left = 0.04
+anchor_top = 0.05
+anchor_right = 0.96
+anchor_bottom = 0.95
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
 
 [node name="LobbyBorder" type="ReferenceRect" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
