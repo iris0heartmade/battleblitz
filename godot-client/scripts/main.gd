@@ -40,9 +40,10 @@ var _attack_mode_unit_id: int = -1
 var _attack_targets: Dictionary = {}
 var _pending_attack_attacker_id: int = -1
 var _pending_attack_target_id: int = -1
-# M4.3 治疗模式状态机
-var _heal_mode_unit_id: int = -1
-var _heal_targets: Dictionary = {}
+# 技能模式状态机(heal 选友军 / arcane_strike 选敌军,通用)
+var _skill_mode_unit_id: int = -1
+var _skill_targets: Dictionary = {}
+var _pending_skill_id: String = ""
 # M4.5 招募状态机(unit_type → name 也在用)
 const _RECRUIT_OPTIONS := [
 	{"type": "swordsman", "name": "剑士",   "cost": 200},
@@ -106,6 +107,8 @@ var _ai_pulse_tween: Tween = null
 @onready var dialog_name: Label = $GameView/HUD/DialogPanel/CharacterName
 @onready var dialog_text: RichTextLabel = $GameView/HUD/DialogPanel/DialogBody/DialogText
 @onready var dialog_continue_btn: Button = $GameView/HUD/DialogPanel/ContinueBtn
+@onready var dialog_portrait_panel: Panel = $GameView/HUD/DialogPanel/DialogBody/Portrait
+@onready var dialog_portrait_label: Label = $GameView/HUD/DialogPanel/DialogBody/Portrait/PortraitLabel
 
 # T:4 RecruitPanel — 真 modal(替换 status 凑合)
 @onready var recruit_panel: Panel = $GameView/HUD/RecruitPanel
@@ -152,6 +155,8 @@ var _selected_unit_pos: Vector2i = Vector2i(-1, -1)
 @onready var ml_apply_commander_btn: Button = $MainlineView/MLFrame/ApplyCommanderBtn
 @onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
 @onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
+@onready var ml_slots_container: VBoxContainer = $MainlineView/MLFrame/MLSlotsContainer
+var _ml_slot_records: Array = []
 @onready var lobby_button: Button = $Menu/CenterContainer/ButtonCol/LobbyButton
 @onready var saves_button: Button = $Menu/CenterContainer/ButtonCol/SavesButton
 @onready var settings_button: Button = $Menu/CenterContainer/ButtonCol/SettingsButton
@@ -1541,7 +1546,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _attack_mode_unit_id > 0:
 				# 攻击模式:空地点击 → 取消
 				_cancel_action_mode()
-			elif _heal_mode_unit_id > 0:
+			elif _skill_mode_unit_id > 0:
 				# 治疗模式:空地点击 → 取消
 				_cancel_action_mode()
 			else:
@@ -1646,13 +1651,13 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 				board.clear_selection_marks()
 		return
 	# 治疗模式下点单位 → 用作 heal target
-	if _heal_mode_unit_id > 0:
-		if _heal_targets.has(unit_id):
-			_heal_unit_to(_heal_mode_unit_id, unit_id)
+	if _skill_mode_unit_id > 0:
+		if _skill_targets.has(unit_id):
+			_use_skill_on_target(_pending_skill_id, _skill_mode_unit_id, unit_id)
 		else:
-			_update_status("目标无效,取消治疗")
-			_heal_mode_unit_id = -1
-			_heal_targets = {}
+			_update_status("目标无效,取消技能")
+			_skill_mode_unit_id = -1
+			_skill_targets = {}
 			if board != null:
 				board.clear_selection_marks()
 		return
@@ -1719,8 +1724,8 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
 		_hide_attack_confirm()
-		_heal_mode_unit_id = -1
-		_heal_targets = {}
+		_skill_mode_unit_id = -1
+		_skill_targets = {}
 		if board != null:
 			board.clear_selection_marks()
 		_hide_action_bubble()
@@ -1947,8 +1952,8 @@ func _reset_game_state_for_main_menu() -> void:
 	_move_reachable_set = {}
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
-	_heal_mode_unit_id = -1
-	_heal_targets = {}
+	_skill_mode_unit_id = -1
+	_skill_targets = {}
 	# 3) 停 CO / 战斗反馈 tween
 	if _ai_pulse_tween != null and _ai_pulse_tween.is_running():
 		_ai_pulse_tween.kill()
@@ -2004,6 +2009,8 @@ const _DIALOG_NARRATION := 1  # 旁白(无角色名)
 const _DIALOG_CHOICE := 2   # 选项(底部按钮)
 
 var _dialog_queue: Array = []  # [{character, text, kind, choices?}]
+var _hero_speaker_map: Dictionary = {}
+var _dialog_portrait_tex: TextureRect = null
 var _dialog_active: bool = false
 var _dialog_full_text: String = ""
 var _dialog_visible_text: String = ""
@@ -2025,6 +2032,123 @@ func show_dialog(character: String, text_bbcode: String) -> void:
 		_advance_dialog()
 
 
+func show_dialog_scene(scene: Dictionary) -> void:
+	# 富场景入口:按 server 对话 JSON 的 type 分发(web Dialog parity)。
+	# dialogue/narration/choice/battle_ref/wait。简单对话仍用 show_dialog。
+	if dialog_panel == null or not is_instance_valid(dialog_panel):
+		return
+	var stype := str(scene.get("type", "dialogue"))
+	if stype == "battle_ref" or stype == "wait":
+		return  # 战斗标记/等待:无 UI,跳过(主线靠 start_mainline 单独开战)
+	if stype == "choice":
+		var q := str(scene.get("question", "请选择:"))
+		var choices: Array = scene.get("choices", []) if scene.get("choices", []) is Array else []
+		_dialog_queue.append({"kind": _DIALOG_CHOICE, "question": q, "choices": choices})
+	else:
+		var speaker := str(scene.get("speaker", scene.get("character", "")))
+		var text := str(scene.get("text", ""))
+		var col := str(scene.get("speaker_color", ""))
+		var kind := _DIALOG_TYPE if speaker != "" else _DIALOG_NARRATION
+		_dialog_queue.append({"character": speaker, "text": text, "kind": kind, "color": col})
+	_ensure_dialog_choice_container()
+	dialog_panel.visible = true
+	if not _dialog_active:
+		_advance_dialog()
+
+
+func _play_dialogue_scenes(payload: Variant) -> void:
+	# 兼容 Array / {scenes:[...]} / 单 scene Dict 三种形状(server /mainlines/dialogue 返回 {scenes:[...]})。
+	var scenes: Array = []
+	if payload is Array:
+		scenes = payload
+	elif payload is Dictionary:
+		if payload.has("scenes") and payload["scenes"] is Array:
+			scenes = payload["scenes"]
+		else:
+			scenes = [payload]
+	for sc in scenes:
+		if sc is Dictionary:
+			show_dialog_scene(sc)
+
+
+func _render_dialog_choice(entry: Dictionary) -> void:
+	var question: String = String(entry.get("question", "请选择:"))
+	dialog_name.text = ""
+	if dialog_name.has_theme_color_override("font_color"):
+		dialog_name.remove_theme_color_override("font_color")
+	_set_dialog_portrait("")
+	dialog_text.bbcode_enabled = true
+	dialog_text.text = question
+	_dialog_full_text = question
+	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
+		dialog_continue_btn.visible = false
+	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
+		for child in _dialog_choice_container.get_children():
+			child.queue_free()
+		var choices: Array = entry.get("choices", []) if entry.get("choices", []) is Array else []
+		for ch in choices:
+			if not (ch is Dictionary): continue
+			var btn := Button.new()
+			btn.text = String(ch.get("text", ""))
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.pressed.connect(_on_dialog_choice_selected)
+			_dialog_choice_container.add_child(btn)
+		_dialog_choice_container.visible = true
+
+
+func _on_dialog_choice_selected() -> void:
+	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
+		_dialog_choice_container.visible = false
+	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
+		dialog_continue_btn.visible = true
+	_advance_dialog()
+
+
+func _set_dialog_portrait(speaker: String) -> void:
+	if dialog_portrait_panel == null or not is_instance_valid(dialog_portrait_panel):
+		return
+	if _dialog_portrait_tex == null:
+		_dialog_portrait_tex = TextureRect.new()
+		_dialog_portrait_tex.anchor_right = 1.0
+		_dialog_portrait_tex.anchor_bottom = 1.0
+		_dialog_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		_dialog_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		dialog_portrait_panel.add_child(_dialog_portrait_tex)
+	var tex: Texture2D = null
+	if speaker != "" and _hero_speaker_map.has(speaker):
+		var info: Dictionary = _hero_speaker_map[speaker]
+		if info.has("portrait_tex") and info["portrait_tex"] != null:
+			tex = info["portrait_tex"]
+		elif info.has("portrait_path") and str(info["portrait_path"]) != "":
+			tex = _load_portrait(str(info["portrait_path"]))
+			if tex != null:
+				_hero_speaker_map[speaker]["portrait_tex"] = tex
+	_dialog_portrait_tex.texture = tex
+	_dialog_portrait_tex.visible = tex != null
+	if dialog_portrait_label != null and is_instance_valid(dialog_portrait_label):
+		dialog_portrait_label.visible = tex == null
+
+
+func _load_portrait(res_path: String) -> Texture2D:
+	var img := Image.new()
+	if img.load(res_path) != OK:
+		return null
+	return ImageTexture.create_from_image(img)
+
+
+func _on_heroes_response(body: Variant, _code: int = 0) -> void:
+	var heroes: Array = body if body is Array else []
+	for h in heroes:
+		if not (h is Dictionary): continue
+		var dialogue_name := str(h.get("dialogue_name", h.get("display_cn", "")))
+		if dialogue_name == "": continue
+		var portrait_url := str(h.get("portrait_url", ""))
+		var portrait_path := ""
+		if portrait_url != "":
+			portrait_path = "res://assets/heroes/" + portrait_url.get_file()
+		_hero_speaker_map[dialogue_name] = {"portrait_path": portrait_path}
+
+
 func _advance_dialog() -> void:
 	if _dialog_queue.is_empty():
 		_dialog_active = false
@@ -2032,7 +2156,20 @@ func _advance_dialog() -> void:
 		return
 	_dialog_active = true
 	var entry: Dictionary = _dialog_queue.pop_front()
-	dialog_name.text = String(entry.get("character", ""))
+	var kind: int = int(entry.get("kind", _DIALOG_TYPE))
+	if kind == _DIALOG_CHOICE:
+		_render_dialog_choice(entry)
+		return
+	var speaker: String = String(entry.get("character", ""))
+	dialog_name.text = speaker if speaker != "" else "（旁白）"
+	var col_str: String = String(entry.get("color", ""))
+	if col_str != "":
+		dialog_name.add_theme_color_override("font_color", Color(col_str))
+	elif dialog_name.has_theme_color_override("font_color"):
+		dialog_name.remove_theme_color_override("font_color")
+	_set_dialog_portrait(speaker)
+	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
+		dialog_continue_btn.visible = true
 	dialog_text.bbcode_enabled = true
 	# 隐藏选项层
 	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
@@ -3581,8 +3718,120 @@ func _on_mainline_pressed() -> void:
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
 		ml_commander_status.text = "Commander: loading..."
+	if _hero_speaker_map.is_empty():
+		NetworkClient.list_heroes(Callable(self, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"))
+	if ml_slots_container != null and is_instance_valid(ml_slots_container):
+		for child in ml_slots_container.get_children():
+			child.queue_free()
+		var loading_lbl := Label.new()
+		loading_lbl.text = "存档格: 加载中..."
+		loading_lbl.modulate = Color(0.65, 0.6, 0.45)
+		ml_slots_container.add_child(loading_lbl)
+	NetworkClient.list_games(Callable(self, "_on_ml_slots_response"), _user_name)
+
+
+func _on_ml_slots_response(body: Variant, _code: int = 0) -> void:
+	# 主线存档格:取该用户 mainline: 前缀的未结束存档,最多 3 格(web MAINLINE_SLOT_COUNT=3)。
+	var games: Array = body if body is Array else []
+	_ml_slot_records = []
+	for g in games:
+		if not (g is Dictionary): continue
+		var nm := str(g.get("name", ""))
+		if not nm.begins_with("mainline:"): continue
+		var st := str(g.get("status", ""))
+		if st == "finished": continue
+		_ml_slot_records.append(g)
+		if _ml_slot_records.size() >= 3: break
+	_render_mainline_slots()
+
+
+func _render_mainline_slots() -> void:
+	if ml_slots_container == null or not is_instance_valid(ml_slots_container):
+		return
+	for child in ml_slots_container.get_children():
+		child.queue_free()
+	var shown: int = _ml_slot_records.size()
+	for i in range(3):
+		if i < shown:
+			var g: Dictionary = _ml_slot_records[i]
+			var save_id: int = int(g.get("id", 0))
+			var disp: String = _format_save_name(str(g.get("name", "")))
+			var turn: int = int(g.get("turn_number", 0))
+			var row := HBoxContainer.new()
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var lbl := Label.new()
+			lbl.text = "💾 %s · 回合 %d · #%d" % [disp, turn, save_id]
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(lbl)
+			var resume_btn := Button.new()
+			resume_btn.text = "▶ 继续"
+			resume_btn.pressed.connect(_on_ml_slot_resume.bind(save_id))
+			row.add_child(resume_btn)
+			var del_btn := Button.new()
+			del_btn.text = "🗑"
+			del_btn.pressed.connect(_on_ml_slot_delete.bind(save_id))
+			row.add_child(del_btn)
+			ml_slots_container.add_child(row)
+		else:
+			var empty := Label.new()
+			empty.text = "▢ 空存档 %d" % (i + 1)
+			empty.modulate = Color(0.5, 0.46, 0.35)
+			ml_slots_container.add_child(empty)
+
+
+func _on_ml_slot_resume(game_id: int) -> void:
+	if game_id <= 0: return
+	# 从存档名解析 mainline_id(格式 mainline:{mainline_id}:{chapter})
+	for g in _ml_slot_records:
+		if int(g.get("id", 0)) == game_id:
+			var parts := str(g.get("name", "")).split(":")
+			if parts.size() >= 2:
+				_active_mainline_id = parts[1]
+				_mainline_battle_game_id = game_id
+				UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
+				UserSettings.set_value("session.v1.mainline_game_id", game_id)
+			break
+	_show_view("connecting")
+	connecting_label.text = "正在继续主线存档 #%d..." % game_id
+	NetworkClient.rejoin_game_by_name(game_id, _user_name,
+		Callable(self, "_on_ml_slot_resume_response").bind(game_id))
+
+
+func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> void:
+	if not (body is Dictionary):
+		_update_status("主线存档恢复失败: 响应异常")
+		_show_view("mainline")
+		return
+	var p_dict: Dictionary = body.get("player", body)
+	var resp_game_id: int = int(body.get("game_id", game_id))
+	var resp_player_id: int = int(p_dict.get("id", 0))
+	if resp_game_id > 0:
+		_game_id = resp_game_id
+	if resp_player_id > 0:
+		_player_id = resp_player_id
+		GameState.local_player_id = _player_id
+		UserSettings.set_value("session.v1.last_player_id", _player_id)
+	if _game_id > 0:
+		UserSettings.set_value("session.v1.last_game_id", _game_id)
+	_update_status("已恢复主线存档 #%d,进入棋盘..." % _game_id)
+	_show_view("game")
+	NetworkClient.connect_to_game(_game_id, _player_id)
+
+
+func _on_ml_slot_delete(game_id: int) -> void:
+	if game_id <= 0: return
+	_update_status("删除主线存档 #%d..." % game_id)
+	NetworkClient.delete_game(game_id, Callable(self, "_on_ml_slot_delete_response").bind(game_id))
+
+
+func _on_ml_slot_delete_response(_body: Variant, code: int, game_id: int) -> void:
+	if code >= 200 and code < 300:
+		_update_status("已删除主线存档 #%d" % game_id)
+		NetworkClient.list_games(Callable(self, "_on_ml_slots_response"), _user_name)
+	else:
+		_update_status("删除主线存档 #%d 失败" % game_id)
 
 
 func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
@@ -3627,13 +3876,8 @@ func _on_ml_detail_response(body: Variant, mainline_id: String, _code: int = 0) 
 	var battles: Array = body.get("battles", []) if body.has("battles") else []
 	var dialogue: Variant = body.get("dialogue", null)
 	# 有 pre-battle 对话 → 播放
-	if dialogue != null and dialogue is Array and dialogue.size() > 0:
-		for d in dialogue:
-			if d is Dictionary:
-				var char_name: String = String(d.get("character", ""))
-				var txt: String = String(d.get("text", ""))
-				if txt != "":
-					show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, txt])
+	if dialogue != null:
+		_play_dialogue_scenes(dialogue)
 	# 对话框完毕后:战斗
 	_update_status("主线章节 %s: 创建战斗..." % mainline_id)
 	NetworkClient.start_mainline(mainline_id, _user_name, false, Callable(self, "_on_mainline_start_response"))
@@ -3674,14 +3918,7 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 
 
 func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
-	var scenes: Array = body if body is Array else []
-	for entry in scenes:
-		if not (entry is Dictionary):
-			continue
-		var char_name := str(entry.get("character", entry.get("speaker", "")))
-		var text := str(entry.get("text", ""))
-		if text != "":
-			show_dialog(char_name, "[color=#f0c75e]%s[/color]\n%s" % [char_name, text])
+	_play_dialogue_scenes(body)
 
 
 func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
@@ -3844,13 +4081,13 @@ func _on_attack_pressed() -> void:
 
 # 取消移动/攻击模式的统一接口
 func _cancel_action_mode() -> void:
-	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _heal_mode_unit_id > 0:
+	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
-		_heal_mode_unit_id = -1
-		_heal_targets = {}
+		_skill_mode_unit_id = -1
+		_skill_targets = {}
 		if board != null:
 			board.clear_selection_marks()
 		_update_status("已取消行动模式")
@@ -4005,6 +4242,52 @@ func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 	_hide_action_bubble()
 
 
+func _active_skill_of(ud: Dictionary) -> String:
+	# 返回单位的首个主动技能 id;被动技能(snipe/double_strike 走 attack 端点)返回空。
+	# 主动技能目录见 server app/classes/units/skills(heal, arcane_strike)。
+	# 新增主动技能需同步此处与 _on_skill_pressed 分支。
+	var skills: Array = (ud.get("skills", []) as Array)
+	if skills.has("heal"):
+		return "heal"
+	if skills.has("arcane_strike"):
+		return "arcane_strike"
+	return ""
+
+
+func _enter_arcane_mode(ud: Dictionary) -> void:
+	# arcane_strike: Manhattan 距离 1-2 内的敌方存活单位
+	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var me_pid2: int = int(_player_id)
+	var out: Dictionary = {}
+	for uu in _all_units_including_self():
+		var adx: int = abs(int(uu.get("x", 0)) - pos_h.x)
+		var ady: int = abs(int(uu.get("y", 0)) - pos_h.y)
+		var manh: int = adx + ady
+		if manh < 1 or manh > 2: continue
+		if int(uu.get("player_id", -1)) == me_pid2: continue
+		if int(uu.get("hp", 0)) <= 0: continue
+		out[int(uu.get("id", -1))] = {
+			"x": int(uu.get("x", 0)),
+			"y": int(uu.get("y", 0)),
+			"name": String(uu.get("name", uu.get("unit_type", "?"))),
+			"hp": int(uu.get("hp", 0)),
+			"max_hp": int(uu.get("max_hp", 0)),
+		}
+	if out.is_empty():
+		_update_status("奥术冲击: 1-2 格内无敌方目标")
+		return
+	_pending_skill_id = "arcane_strike"
+	_skill_mode_unit_id = _selected_unit_id
+	_skill_targets = out
+	if board != null:
+		var tiles: Array = []
+		for k in out.keys():
+			tiles.append(Vector2i(int(out[k].get("x", 0)), int(out[k].get("y", 0))))
+		board.show_attack_marks(tiles)
+	_update_status("奥术冲击: 点击红框内敌人 (可选 %d)" % out.size())
+	_hide_action_bubble()
+
+
 func _on_skill_pressed() -> void:
 	# M4.3:进入治疗模式 — 用 healer 唯一默认技能 "heal"
 	if _selected_unit_id <= 0:
@@ -4015,9 +4298,12 @@ func _on_skill_pressed() -> void:
 		_update_status("技能: 找不到单位")
 		return
 	# 仅 healer 默认技能 — 检查 skills 数组
-	var skills: Array = (ud.get("skills", []) as Array)
-	if not skills.has("heal"):
-		_update_status("技能: 该单位不会治疗")
+	var skill_id: String = _active_skill_of(ud)
+	if skill_id == "":
+		_update_status("技能: 该单位无可用主动技能")
+		return
+	if skill_id == "arcane_strike":
+		_enter_arcane_mode(ud)
 		return
 	# 计算 8-邻接范围内 HP<max_hp 的友军
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
@@ -4042,8 +4328,9 @@ func _on_skill_pressed() -> void:
 	if out.is_empty():
 		_update_status("治疗: 8-邻内无伤兵")
 		return
-	_heal_mode_unit_id = _selected_unit_id
-	_heal_targets = out
+	_pending_skill_id = "heal"
+	_skill_mode_unit_id = _selected_unit_id
+	_skill_targets = out
 	if board != null:
 		var tiles: Array = []
 		for k in out.keys():
@@ -4150,14 +4437,14 @@ func _all_units_including_self() -> Array:
 	return out
 
 
-func _heal_unit_to(healer_id: int, target_id: int) -> void:
+func _use_skill_on_target(skill_id: String, unit_id: int, target_id: int) -> void:
 	if _game_id <= 0 or _player_id <= 0: return
-	var info: Dictionary = _heal_targets.get(target_id, {})
+	var info: Dictionary = _skill_targets.get(target_id, {})
 	var name: String = String(info.get("name", "单位 #%d" % target_id))
-	_update_status("治疗 #%d → #%d (%s)..." % [healer_id, target_id, name])
-	NetworkClient.action_skill(_game_id, _player_id, healer_id, "heal", target_id)
-	_heal_mode_unit_id = -1
-	_heal_targets = {}
+	_update_status("技能 %s #%d→ #%d (%s)..." % [skill_id, unit_id, target_id, name])
+	NetworkClient.action_skill(_game_id, _player_id, unit_id, skill_id, target_id)
+	_skill_mode_unit_id = -1
+	_skill_targets = {}
 	if board != null: board.clear_selection_marks()
 	_hide_action_bubble()
 

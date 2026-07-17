@@ -543,6 +543,10 @@ func list_mainlines(callback: Callable = Callable()) -> void:
 	request("GET", "/mainlines", {}, callback)
 
 
+func list_heroes(callback: Callable = Callable()) -> void:
+	request("GET", "/heroes", {}, callback)
+
+
 func get_mainline_detail(mainline_id: String, callback: Callable = Callable()) -> void:
 	request("GET", "/mainlines/%s" % mainline_id.uri_encode(), {}, callback)
 
