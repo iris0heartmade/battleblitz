@@ -218,6 +218,28 @@ class ProgressionService:
         await self.session.flush()
         return inventory
 
+    async def ensure_hero_equipment_starters(self, user_name: str) -> dict:
+        """Grant each existing profile one copy of the four starter items.
+
+        This is intentionally idempotent and also migrates old campaign saves
+        that predate the equipment feature without a schema migration.
+        """
+        from app.hero_domain.equipment import STARTER_INVENTORY
+
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return {}
+        inventory = dict(getattr(profile, "hero_inventory", {}) or {})
+        changed = False
+        for equipment_id, count in STARTER_INVENTORY.items():
+            if equipment_id not in inventory:
+                inventory[equipment_id] = count
+                changed = True
+        if changed:
+            profile.hero_inventory = inventory
+            await self.session.flush()
+        return inventory
+
     # ── Leveling ────────────────────────────────────────────
 
     async def award_xp(

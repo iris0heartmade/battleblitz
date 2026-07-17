@@ -68,6 +68,8 @@ from app.mainline.schemas import (
     MainlineMercenaryConfigOut,
     MainlineNextBattleOut,
     MainlinePrepareHeroOut,
+    MainlinePrepareEquipmentOut,
+    MainlinePrepareEquipmentRequest,
     MainlinePrepareOut,
     MainlinePreparePromoteOut,
     MainlinePrepareUnitOut,
@@ -82,6 +84,10 @@ from app.hero_domain import (
     hero_campaign_state_from_dict,
     hero_campaign_state_to_dict,
     promote_hero,
+    EQUIPMENT_SLOTS,
+    catalog_payload,
+    equipped_stat_bonuses,
+    get_equipment,
 )
 from app.hero_domain.promotion import HeroPromotionError
 from app.mainline.spawn_overrides import apply_spawn_overrides
@@ -134,7 +140,7 @@ async def _build_prepare_payload(
         battle_index = 0
     battle = ml.battles[battle_index]
     svc = ProgressionService(session)
-    inventory = await svc.get_hero_inventory(profile.user_name)
+    inventory = await svc.ensure_hero_equipment_starters(profile.user_name)
     crest_count = int(inventory.get("hero_crest", 0))
 
     heroes: list[MainlinePrepareHeroOut] = []
@@ -174,6 +180,7 @@ async def _build_prepare_payload(
             learned_skills=list(state.learned_skills),
             base_stats=dict(state.base_stats),
             equipment=dict(state.equipment),
+            equipment_bonuses=equipped_stat_bonuses(state.equipment),
         ))
 
     return MainlinePrepareOut(
@@ -192,6 +199,7 @@ async def _build_prepare_payload(
         bgm_meta=BattleBgmMeta.model_validate(battle_bgm_meta(_battle_track_id(battle)))
         if _battle_track_id(battle) else None,
         inventory={k: int(v) for k, v in inventory.items()},
+        equipment_catalog=catalog_payload(),
         heroes=heroes,
         roster_units=roster_units,
         rewards_on_clear=ml.rewards_on_clear,
@@ -875,6 +883,59 @@ async def promote_mainline_hero(
         level=promoted_state.level,
         promoted=promoted_state.promoted,
         hero_crest_left=int((updated_inventory or {}).get("hero_crest", 0)),
+    )
+
+
+@router.post(
+    "/{mainline_id}/prepare/equipment",
+    response_model=MainlinePrepareEquipmentOut,
+)
+async def equip_mainline_hero(
+    mainline_id: str,
+    body: MainlinePrepareEquipmentRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlinePrepareEquipmentOut:
+    """Persist one equipment choice made in the pre-battle preparation view."""
+    try:
+        ml = load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    if body.slot not in EQUIPMENT_SLOTS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "unknown equipment slot")
+    hero_ids = {spec.hero_id for spec in ml.starting_units if spec.hero_id}
+    if body.hero_id not in hero_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"hero {body.hero_id!r} not found in mainline roster")
+    profile = await _load_profile(session, body.user_name)
+    definition = get_equipment(body.equipment_id)
+    if body.equipment_id is not None and (definition is None or definition.slot != body.slot):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "equipment does not match this slot")
+
+    svc = ProgressionService(session)
+    inventory = await svc.ensure_hero_equipment_starters(body.user_name)
+    if definition is not None and int(inventory.get(definition.equipment_id, 0)) <= 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, "equipment is not in inventory")
+    stored_state = await svc.get_hero_campaign_state(body.user_name, body.hero_id)
+    if stored_state is None:
+        stored_state = hero_campaign_state_to_dict(build_initial_campaign_state(body.hero_id))
+    state = hero_campaign_state_from_dict(stored_state)
+
+    # An inventory item can be equipped by only one hero at a time.
+    if definition is not None:
+        equipped_elsewhere = 0
+        all_states = dict(getattr(profile, "hero_campaign_states", {}) or {})
+        for hero_id, raw_state in all_states.items():
+            if hero_id != body.hero_id and definition.equipment_id in (raw_state.get("equipment") or {}).values():
+                equipped_elsewhere += 1
+        if equipped_elsewhere >= int(inventory.get(definition.equipment_id, 0)):
+            raise HTTPException(status.HTTP_409_CONFLICT, "equipment is already equipped by another hero")
+    equipment = dict(state.equipment)
+    equipment[body.slot] = body.equipment_id
+    state.equipment = equipment
+    await svc.set_hero_campaign_state(body.user_name, body.hero_id, hero_campaign_state_to_dict(state))
+    return MainlinePrepareEquipmentOut(
+        hero_id=state.hero_id,
+        equipment=equipment,
+        equipment_bonuses=equipped_stat_bonuses(equipment),
     )
 
 

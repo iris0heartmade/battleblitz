@@ -15,12 +15,24 @@ from app.hero_domain.promotion import (
 )
 from app.hero_domain.spawn import build_campaign_spawn_payload
 from app.hero_domain.state import HeroCampaignState
+from app.hero_domain.equipment import (
+    EQUIPMENT_SLOTS,
+    STARTER_INVENTORY,
+    catalog_payload,
+    equipped_stat_bonuses,
+    get_equipment,
+)
 from app.hero_domain.templates import HeroCharacterTemplate, HeroClassTemplate
 
 __all__ = [
     "HERO_PROMOTION_LEVEL",
     "HeroBattleState",
     "HeroCampaignState",
+    "EQUIPMENT_SLOTS",
+    "STARTER_INVENTORY",
+    "catalog_payload",
+    "equipped_stat_bonuses",
+    "get_equipment",
     "HeroCharacterTemplate",
     "HeroClassTemplate",
     "HeroPresetState",

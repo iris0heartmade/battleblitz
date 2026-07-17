@@ -440,6 +440,7 @@ class MainlinePrepareHeroOut(_PydanticBaseModel):
     learned_skills: list[str]
     base_stats: dict
     equipment: dict
+    equipment_bonuses: dict = {}
 
 
 class MainlinePrepareUnitOut(_PydanticBaseModel):
@@ -469,6 +470,7 @@ class MainlinePrepareOut(_PydanticBaseModel):
     post_battle_dialogue_key: Optional[str] = None
     bgm_meta: Optional[BattleBgmMeta] = None
     inventory: dict[str, int]
+    equipment_catalog: list[dict] = []
     heroes: list[MainlinePrepareHeroOut]
     roster_units: list[MainlinePrepareUnitOut]
     rewards_on_clear: MainlineRewards
@@ -558,6 +560,19 @@ class MainlinePreparePromoteOut(_PydanticBaseModel):
     level: int
     promoted: bool
     hero_crest_left: int
+
+
+class MainlinePrepareEquipmentRequest(_PydanticBaseModel):
+    user_name: str
+    hero_id: str
+    slot: str
+    equipment_id: Optional[str] = None
+
+
+class MainlinePrepareEquipmentOut(_PydanticBaseModel):
+    hero_id: str
+    equipment: dict
+    equipment_bonuses: dict
 
 
 class MainlineNextBattleOut(MainlineStartOut):
@@ -672,6 +687,8 @@ __all__ = [
     "MainlineNextBattleOut",
     "MainlinePreparePromoteRequest",
     "MainlinePreparePromoteOut",
+    "MainlinePrepareEquipmentRequest",
+    "MainlinePrepareEquipmentOut",
     "MainlineAbandonRequest",
     "MainlineAbandonOut",
     "MainlineStepOut",

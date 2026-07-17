@@ -4950,6 +4950,15 @@ const MainlineView = {
     });
   },
 
+  async equipPreparedHero(id, userName, heroId, slot, equipmentId) {
+    return api("POST", `/mainlines/${encodeURIComponent(id)}/prepare/equipment`, {
+      user_name: userName,
+      hero_id: heroId,
+      slot,
+      equipment_id: equipmentId,
+    });
+  },
+
   // ---------- 章节列表视图 ----------
 
   async renderList() {
@@ -5765,6 +5774,28 @@ const MainlineView = {
     }
   },
 
+  async _equipFocusedHero(slot, equipmentId) {
+    if (!state.mainline || !state.mainlinePrepare) return;
+    const draft = this._ensurePrepareDraft(state.mainlinePrepare);
+    const hero = (state.mainlinePrepare.heroes || []).find((it) => it.hero_id === draft.focusedHeroId);
+    if (!hero) {
+      toast("请先选择一名英雄。", 2500);
+      return;
+    }
+    const userName = await this.ensureProfile();
+    if (!userName) return;
+    try {
+      await this.equipPreparedHero(state.mainline.id, userName, hero.hero_id, slot, equipmentId || null);
+      const prep = await this.fetchPrepare(state.mainline.id, userName);
+      state.mainlinePrepare = prep;
+      state.mainlinePrepareDraft = {...draft, focusedHeroId: hero.hero_id};
+      this._enterPrepareView(prep);
+      toast(equipmentId ? "装备已配置，将在本场战斗生效。" : "已卸下装备。", 2500);
+    } catch (e) {
+      toast("装备配置失败：" + e.message, 3000);
+    }
+  },
+
   _renderPrepareRosterTab(prep, draft) {
     const heroes = Array.isArray(prep.heroes) ? prep.heroes : [];
     const roster = Array.isArray(prep.roster_units) ? prep.roster_units : [];
@@ -5868,27 +5899,25 @@ const MainlineView = {
   _renderPrepareItemsTab(prep, draft) {
     const heroes = Array.isArray(prep.heroes) ? prep.heroes : [];
     const inventory = prep.inventory || {};
-    const inventoryEntries = Object.entries(inventory);
+    const catalog = Array.isArray(prep.equipment_catalog) ? prep.equipment_catalog : [];
     const focusedHero = heroes.find((hero) => hero.hero_id === draft.focusedHeroId) || heroes[0] || null;
-    const itemRows = inventoryEntries.length
-      ? inventoryEntries.map(([itemId, count]) => {
-          const assignedHeroId = draft.itemAssignments[itemId] || null;
-          const assignedHero = heroes.find((hero) => hero.hero_id === assignedHeroId) || null;
-          return `
-            <div class="mainline-prepare-row">
-              <div>
-                <strong>${escapeHtml(itemId)}</strong>
-                <div class="mainline-prepare-meta">库存 x${escapeHtml(String(count))}</div>
-                <div class="mainline-prepare-meta">${escapeHtml(assignedHero ? `计划交给 ${assignedHero.name || assignedHero.hero_id}` : "尚未分配")}</div>
-              </div>
-              <div class="mainline-prepare-actions">
-                <button class="btn btn-secondary btn-sm" data-action="mainline-prepare-assign-item" data-item-id="${escapeHtml(itemId)}" ${focusedHero ? "" : "disabled"}>
-                  ${escapeHtml(assignedHeroId === draft.focusedHeroId ? "取消分配" : "交给当前英雄")}
-                </button>
-              </div>
-            </div>`;
+    const itemRows = catalog.length
+      ? catalog.map((item) => {
+          const equipped = focusedHero?.equipment?.[item.slot] === item.equipment_id;
+          const count = Number(inventory[item.equipment_id] || 0);
+          const bonuses = Object.entries(item.stat_bonuses || {}).map(([stat, value]) => `${stat.toUpperCase()} +${value}`).join(" / ");
+          return `<div class="mainline-prepare-row">
+            <div>
+              <strong>${escapeHtml(item.name)}</strong>
+              <div class="mainline-prepare-meta">${escapeHtml(item.slot)} / 库存 x${count} / ${escapeHtml(bonuses)}</div>
+              <div class="mainline-prepare-meta">${escapeHtml(item.description || "")}</div>
+            </div>
+            <div class="mainline-prepare-actions">
+              <button class="btn ${equipped ? "btn-secondary" : "btn-primary"} btn-sm" data-action="mainline-prepare-equip" data-slot="${escapeHtml(item.slot)}" data-equipment-id="${escapeHtml(item.equipment_id)}" ${(!focusedHero || count <= 0 || equipped) ? "disabled" : ""}>${equipped ? "已装备" : "装备"}</button>
+            </div>
+          </div>`;
         }).join("")
-      : `<div class="mainline-prepare-empty">当前没有主线英雄道具库存。</div>`;
+      : `<div class="mainline-prepare-empty">当前没有可装备物品。</div>`;
 
     const heroRows = heroes.length
       ? heroes.map((hero) => {
@@ -5905,7 +5934,7 @@ const MainlineView = {
         }).join("")
       : `<div class="mainline-prepare-empty">暂无可整理道具的英雄。</div>`;
 
-    let suggestion = "先选择英雄，再整理库存。";
+    let suggestion = "选择英雄后，装备会立即保存，并在下一场战斗生成时生效。";
     if (focusedHero?.can_promote && Number(inventory.hero_crest || 0) > 0) {
       suggestion = `${focusedHero.name || focusedHero.hero_id} 已满足转职条件，可作为转职道具入口。`;
     } else if (focusedHero?.promoted) {
@@ -5917,7 +5946,7 @@ const MainlineView = {
         <section class="mainline-prepare-card">
           <div class="mainline-prepare-card-header">
             <h3>道具整理</h3>
-            <span class="muted small">先做战前整理骨架，后接正式使用逻辑</span>
+            <span class="muted small">装备会在本场主线战斗开始时生效</span>
           </div>
           <div class="mainline-prepare-list">${itemRows}</div>
         </section>
@@ -5928,21 +5957,21 @@ const MainlineView = {
         <section class="mainline-prepare-card">
           <h3>使用建议</h3>
           <div class="mainline-prepare-note">${escapeHtml(suggestion)}</div>
-          <div class="mainline-prepare-note">纹章、战后奖励、章节事件都可以继续挂在这一栏，不用重做 UI。</div>
+          <div class="mainline-prepare-note">同一件库存装备不能同时给两名英雄使用。</div>
         </section>
         <section class="mainline-prepare-card">
-          <h3>当前计划</h3>
+          <h3>当前装备</h3>
           ${focusedHero ? `
             <div class="mainline-prepare-note">
               ${escapeHtml(focusedHero.name || focusedHero.hero_id)} / ${escapeHtml(focusedHero.class_id)} / Lv.${focusedHero.level}
             </div>
           ` : `<div class="mainline-prepare-empty">暂无选中英雄。</div>`}
           <div class="mainline-prepare-inventory">
-            ${Object.entries(draft.itemAssignments).map(([itemId, heroId]) => {
-              if (!heroId) return "";
-              const hero = heroes.find((it) => it.hero_id === heroId);
-              return `<span class="mainline-prepare-chip">${escapeHtml(itemId)} → ${escapeHtml(hero?.name || heroId)}</span>`;
-            }).join("") || `<span class="muted">尚未做出分配计划</span>`}
+            ${focusedHero ? ["weapon", "armor", "accessory"].map((slot) => {
+              const equipmentId = focusedHero.equipment?.[slot];
+              const item = catalog.find((it) => it.equipment_id === equipmentId);
+              return `<span class="mainline-prepare-chip">${escapeHtml(slot)}: ${escapeHtml(item?.name || "未装备")}${equipmentId ? ` <button class="btn btn-ghost btn-sm" data-action="mainline-prepare-equip" data-slot="${escapeHtml(slot)}">卸下</button>` : ""}</span>`;
+            }).join("") : `<span class="muted">请选择英雄</span>`}
           </div>
         </section>
       </div>`;
@@ -6468,6 +6497,11 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "mainline-prepare-promote":
         await MainlineView._promoteFocusedHero();
+        break;
+      case "mainline-prepare-equip":
+        if (target.dataset.slot) {
+          await MainlineView._equipFocusedHero(target.dataset.slot, target.dataset.equipmentId || null);
+        }
         break;
     }
   });

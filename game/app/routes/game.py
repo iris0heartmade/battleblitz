@@ -359,6 +359,26 @@ def _apply_hero_overrides(
                 candidate.mov = int(campaign_stats["mov"])
             if "mp" in campaign_stats:
                 candidate.mp = int(campaign_stats["mp"])
+            # Campaign equipment is a persistent pre-battle choice.  Apply
+            # it only after all class/level values have been materialised so
+            # every combat path sees the same effective stats.
+            from app.hero_domain.equipment import equipped_stat_bonuses
+            equipment_bonuses = equipped_stat_bonuses(
+                dict(campaign_state.get("equipment", {}))
+            )
+            if "hp" in equipment_bonuses:
+                candidate.max_hp += equipment_bonuses["hp"]
+                candidate.hp += equipment_bonuses["hp"]
+            if "atk" in equipment_bonuses:
+                candidate.atk += equipment_bonuses["atk"]
+            if "def" in equipment_bonuses:
+                candidate.def_ += equipment_bonuses["def"]
+            if "matk" in equipment_bonuses:
+                candidate.matk += equipment_bonuses["matk"]
+            if "mdef" in equipment_bonuses:
+                candidate.mdef += equipment_bonuses["mdef"]
+            if "mov" in equipment_bonuses:
+                candidate.mov += equipment_bonuses["mov"]
             merged_skills = list(candidate.skills)
             for sid in campaign_state.get("learned_skills", []):
                 if sid and sid not in merged_skills:
