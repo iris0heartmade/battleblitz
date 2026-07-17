@@ -91,3 +91,4 @@ ref/
 !ref/README.md
 !ref/*.bat
 !ref/*.md
+godot-client/godot-ref/
