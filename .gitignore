@@ -92,3 +92,4 @@ ref/
 !ref/*.bat
 !ref/*.md
 godot-client/godot-ref/
+.git-rewrite/

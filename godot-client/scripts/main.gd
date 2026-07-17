@@ -62,6 +62,9 @@ var _recruit_mode_unit_id: int = -1
 
 # M5.1 CO Roster(全玩家头像 + 能量条 + Power 按钮)
 
+# HUD 是 CanvasLayer — 独立 transform 层,不受 GameView.visible 控制
+@onready var hud_layer: CanvasLayer = $GameView/HUD
+
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
@@ -611,6 +614,14 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	# HUD 是 CanvasLayer,不受 GameView.visible 控制 — 手动同步显隐
+	if name == "game":
+		_show_hud()
+	else:
+		_hide_hud()
+	# lobby 视图默认进二层菜单(创建/加入选择)
+	if name == "lobby":
+		_show_lobby_choose()
 	# 最强保险:切到 game view 时强制 GameView 不吞棋盘点击
 	# (tscn mouse_filter=2 + _ready 兜底都没生效时,这里再设一次绝对生效)
 	if name == "game" and game_view != null and is_instance_valid(game_view):
@@ -620,6 +631,17 @@ func _show_view(name: String) -> void:
 		_start_state_polling()
 	else:
 		_stop_state_polling()
+
+
+# HUD (CanvasLayer) 显隐控制 — CanvasLayer 不受父 Control.visible 影响
+func _show_hud() -> void:
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.visible = true
+
+
+func _hide_hud() -> void:
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.visible = false
 
 
 func _start_state_polling() -> void:
@@ -3257,9 +3279,9 @@ func _show_lobby_in_room() -> void:
 
 
 func _set_lobby_detail_visible(v: bool) -> void:
-	for node_name in ["LobbyDualCol", "MidSectionBar", "LobbyList",
-			"HostRow", "LobbyToSpecBtn", "AiConfigRow", "AiCommanderOption",
-			"AiActionRow", "BottomBar"]:
+	for node_name in ["LobbyInfoBar", "LobbyTopBar", "LobbyDualCol",
+			"MidSectionBar", "LobbyList", "HostRow", "LobbyToSpecBtn",
+			"AiConfigRow", "AiCommanderOption", "AiActionRow", "BottomBar"]:
 		if lobby_view == null:
 			continue
 		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
@@ -3312,9 +3334,33 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 		"", "", Callable(self, "_on_lobby_join_response"))
 
 
-func _on_lobby_join_response(_body: Dictionary, _code: int = 0) -> void:
+# 创建房间后自动加 AI(等同 webui app.js 的默认行为)
+# join_game 完成后调这里 → add-ai + add-ai(凑够 2 个 AI)
+func _on_lobby_join_response(_body: Variant, _code: int = 0) -> void:
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
+	# 自动加 AI(仅 free / lobby_create 流程)
+	if _entry_flow == "lobby_create" and _game_id > 0:
+		_auto_add_ai_after_lobby_create()
+
+
+func _auto_add_ai_after_lobby_create() -> void:
+	# 用 lobby AI 选项(如果有);默认 rules/balanced/normal
+	var difficulty := "normal"
+	var agent_kind := "rules"
+	var personality := "balanced"
+	if ai_difficulty_option != null and is_instance_valid(ai_difficulty_option):
+		var idx: int = ai_difficulty_option.selected
+		var items: Array = ["easy", "normal", "hard"]
+		if idx >= 0 and idx < items.size():
+			difficulty = items[idx]
+	NetworkClient.add_ai_player(_game_id, difficulty, agent_kind, personality, Callable(self, "_on_auto_add_ai_response").bind(true))
+
+
+func _on_auto_add_ai_response(_body: Variant, _code: int, _expect_more: bool = false) -> void:
+	pass  # 这里只触发,可以扩展添加多个 AI
+
+
 
 
 func _setup_lobby_join_options() -> void:

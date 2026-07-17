@@ -23,6 +23,8 @@ modulate = Color(0.7, 0.65, 0.5, 1)
 [node name="Backdrop" type="ColorRect" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
+color = Color(0.102, 0.2, 0.161, 1)
+mouse_filter = 2
 
 ; M6.1 BGM AudioStreamPlayer — 一条不冲突音轨
 [node name="BGMPlayer" type="AudioStreamPlayer" parent="."]
@@ -767,7 +769,7 @@ disabled = true
 [node name="BottomBar" type="HBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -560.0
+offset_left = -340.0
 offset_top = -56.0
 offset_right = -16.0
 offset_bottom = -16.0
