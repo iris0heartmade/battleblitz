@@ -71,78 +71,125 @@ border_color = Color(0.788, 0.631, 0.29, 1)
 border_width = 1.0
 editor_only = false
 
-; --- 中央容器(标题 + 4 按钮) ---
+; --- 中央容器(标题 + group-card) ---
 [node name="CenterContainer" type="VBoxContainer" parent="Menu"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -300.0
-offset_top = -200.0
-offset_right = 300.0
-offset_bottom = 200.0
+offset_left = -380.0
+offset_top = -240.0
+offset_right = 380.0
+offset_bottom = 240.0
 theme_override_constants/separation = 24
 alignment = 1
 
-; --- 标题区 ---
+; --- 标题区(无 emoji,2 行文字) ---
 [node name="TitleBlock" type="VBoxContainer" parent="Menu/CenterContainer"]
 alignment = 1
 theme_override_constants/separation = 4
 
 [node name="TitleLine1" type="Label" parent="Menu/CenterContainer/TitleBlock"]
-text = "⚔  BATTLEBLITZ  ⚔"
+text = "BATTLEBLITZ"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 56
 
 [node name="TitleLine2" type="Label" parent="Menu/CenterContainer/TitleBlock"]
-text = "「 战 棋 · 轮 回 」"
+text = "战棋 · 轮回"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 20
 
+[node name="TitleDivider" type="HSeparator" parent="Menu/CenterContainer"]
+custom_minimum_size = Vector2(0, 1)
+
 [node name="Spacer1" type="Control" parent="Menu/CenterContainer"]
+custom_minimum_size = Vector2(0, 8)
+
+; --- 两列 group-card(单人对战 / 多人对战) ---
+[node name="GroupRow" type="HBoxContainer" parent="Menu/CenterContainer"]
+theme_override_constants/separation = 18
+alignment = 1
+
+; --- Group A: 单人对战 ---
+[node name="SoloCard" type="VBoxContainer" parent="Menu/CenterContainer/GroupRow"]
+custom_minimum_size = Vector2(280, 0)
+theme_override_constants/separation = 8
+
+[node name="SoloCardTitle" type="Label" parent="Menu/CenterContainer/GroupRow/SoloCard"]
+text = "单人模式"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="FreePlayButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
+text = "自由对局 (人机)"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="MainlineButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
+text = "主线章节"
+custom_minimum_size = Vector2(0, 44)
+
+; --- Group B: 多人对战 ---
+[node name="MultiCard" type="VBoxContainer" parent="Menu/CenterContainer/GroupRow"]
+custom_minimum_size = Vector2(280, 0)
+theme_override_constants/separation = 8
+
+[node name="MultiCardTitle" type="Label" parent="Menu/CenterContainer/GroupRow/MultiCard"]
+text = "多人对战"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="LobbyButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard"]
+text = "联机大厅"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="JoinByCodeButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard"]
+text = "按房间号加入"
+custom_minimum_size = Vector2(0, 44)
+disabled = true
+
+; --- Spacer ---
+[node name="Spacer2" type="Control" parent="Menu/CenterContainer"]
 custom_minimum_size = Vector2(0, 12)
 
-; --- 按钮区(4 个按钮垂直排) ---
-[node name="ButtonCol" type="VBoxContainer" parent="Menu/CenterContainer"]
-alignment = 1
+; --- 副按钮行(存档 / 编辑器 / 设置 / 退出) ---
+[node name="FooterRow" type="HBoxContainer" parent="Menu/CenterContainer"]
+custom_minimum_size = Vector2(580, 0)
 theme_override_constants/separation = 12
+alignment = 1
 
-[node name="FreePlayButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "🎮  自由对局 (AI 对手)"
-custom_minimum_size = Vector2(320, 52)
-
-[node name="LobbyButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "🛡  联机大厅"
-custom_minimum_size = Vector2(320, 52)
-
-; T:5 单槽存档 — 主菜单 Resume button(默认隐藏,有存档时显示)
-[node name="ResumeButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "▶  继续上次对局"
-custom_minimum_size = Vector2(320, 52)
+; T:5 单槽存档 — 主菜单 Resume button(默认隐藏)
+[node name="ResumeButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "继续对局"
+custom_minimum_size = Vector2(0, 32)
 visible = false
 disabled = true
 
-[node name="SavesButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "📁  存档管理"
-custom_minimum_size = Vector2(320, 52)
+[node name="SavesButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "存档管理"
+custom_minimum_size = Vector2(0, 32)
 
-; T:96 主线章节按钮
-[node name="MainlineButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "📖  主线章节"
-custom_minimum_size = Vector2(320, 52)
+[node name="EditorButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "地图编辑"
+custom_minimum_size = Vector2(0, 32)
 
-[node name="EditorButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "Map Editor"
-custom_minimum_size = Vector2(320, 52)
-
-[node name="SettingsButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "⚙  设置"
-custom_minimum_size = Vector2(320, 52)
+[node name="SettingsButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "设置"
+custom_minimum_size = Vector2(0, 32)
 disabled = true
 
-[node name="ExitButton" type="Button" parent="Menu/CenterContainer/ButtonCol"]
-text = "❌  退出"
-custom_minimum_size = Vector2(320, 52)
+[node name="ExitButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "退出"
+custom_minimum_size = Vector2(0, 32)
+
+; --- 顶部 状态条 (Settings 入口放在右上角,左下角版本号) ---
+[node name="TopBarLabel" type="Label" parent="Menu"]
+offset_left = 24.0
+offset_top = 14.0
+offset_right = 200.0
+offset_bottom = 34.0
+text = "BattleBlitz 客户端 v0.2"
+horizontal_alignment = 0
+theme_override_font_sizes/font_size = 12
 
 ; --- 底部 footer ---
 [node name="Footer" type="HBoxContainer" parent="Menu"]
@@ -156,9 +203,9 @@ offset_bottom = -16.0
 alignment = 1
 
 [node name="FooterLabel" type="Label" parent="Menu/Footer"]
-text = "v0.2.0-M2.5  ·  GBA FE 风  ·  © 2026  BattleBlitz"
+text = "GBA 火纹风 · © 2026 BattleBlitz"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 
 ; ============================================================
 ; Connecting 视图 — 复古"等待连接"画面
@@ -206,7 +253,7 @@ theme_override_constants/separation = 16
 alignment = 1
 
 [node name="ConnectingTitle" type="Label" parent="Connecting/ConnectingInner"]
-text = "⚔  战 场 调 度 中  ⚔"
+text = "战场调度中"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
@@ -246,7 +293,7 @@ offset_left = 16.0
 offset_top = 16.0
 offset_right = 320.0
 offset_bottom = 44.0
-text = "Map Editor"
+text = "地图编辑器"
 theme_override_font_sizes/font_size = 22
 
 [node name="EditorMapNameInput" type="LineEdit" parent="EditorView/EditorPanel"]
@@ -279,14 +326,14 @@ offset_left = 212.0
 offset_top = 164.0
 offset_right = 320.0
 offset_bottom = 200.0
-text = "Load"
+text = "加载地图"
 
 [node name="EditorStatus" type="Label" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 216.0
 offset_right = 320.0
 offset_bottom = 256.0
-text = "Ready"
+text = "就绪"
 theme_override_font_sizes/font_size = 13
 
 [node name="EditorModeOption" type="OptionButton" parent="EditorView/EditorPanel"]
@@ -324,14 +371,14 @@ offset_left = 16.0
 offset_top = 356.0
 offset_right = 156.0
 offset_bottom = 392.0
-text = "New 15x15"
+text = "新建 15x15"
 
 [node name="EditorSaveBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
 offset_top = 356.0
 offset_right = 320.0
 offset_bottom = 392.0
-text = "Save map"
+text = "保存地图"
 
 [node name="EditorWidthOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
@@ -350,21 +397,21 @@ offset_left = 208.0
 offset_top = 404.0
 offset_right = 320.0
 offset_bottom = 440.0
-text = "Apply size"
+text = "应用尺寸"
 
 [node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 500.0
 offset_right = 320.0
 offset_bottom = 536.0
-text = "Back to menu"
+text = "返回主菜单"
 
 [node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
 offset_top = 452.0
 offset_right = 320.0
 offset_bottom = 488.0
-text = "Delete map"
+text = "删除地图"
 disabled = true
 
 [node name="Lobby" type="Control" parent="."]
@@ -394,7 +441,7 @@ border_width = 4
 anchor_right = 1.0
 offset_top = 12.0
 offset_bottom = 44.0
-text = "🛡   联 机 大 厅   🛡"
+text = "联机大厅"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
@@ -411,7 +458,7 @@ offset_left = 28.0
 offset_top = 90.0
 offset_right = 390.0
 offset_bottom = 114.0
-text = "Waiting rooms"
+text = "房间列表"
 theme_override_font_sizes/font_size = 16
 
 [node name="RoomList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
@@ -420,7 +467,7 @@ offset_top = 118.0
 offset_right = 402.0
 offset_bottom = 208.0
 bbcode_enabled = true
-text = "Loading..."
+text = "加载中..."
 fit_content = false
 scroll_following = true
 
@@ -441,14 +488,14 @@ offset_left = 28.0
 offset_top = 300.0
 offset_right = 202.0
 offset_bottom = 334.0
-text = "Refresh"
+text = "刷新房间"
 
 [node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame"]
 offset_left = 220.0
 offset_top = 300.0
 offset_right = 402.0
 offset_bottom = 334.0
-text = "Join selected"
+text = "加入选中"
 disabled = true
 
 [node name="CreateTitle" type="Label" parent="Lobby/LobbyFrame"]
@@ -456,7 +503,7 @@ offset_left = 458.0
 offset_top = 90.0
 offset_right = 820.0
 offset_bottom = 114.0
-text = "Create room"
+text = "创建房间"
 theme_override_font_sizes/font_size = 16
 
 [node name="CreateNameInput" type="LineEdit" parent="Lobby/LobbyFrame"]
@@ -483,7 +530,7 @@ offset_left = 696.0
 offset_top = 218.0
 offset_right = 820.0
 offset_bottom = 254.0
-text = "Apply team"
+text = "应用队伍"
 
 [node name="LobbyCommanderOption" type="OptionButton" parent="Lobby/LobbyFrame"]
 offset_left = 458.0
@@ -502,7 +549,7 @@ offset_left = 458.0
 offset_top = 362.0
 offset_right = 820.0
 offset_bottom = 398.0
-text = "Create and join"
+text = "创建并加入"
 
 [node name="LobbyList" type="RichTextLabel" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
@@ -510,17 +557,62 @@ anchor_bottom = 1.0
 offset_left = 24.0
 offset_top = 408.0
 offset_right = -24.0
-offset_bottom = -120.0
+offset_bottom = -156.0
 bbcode_enabled = true
 text = ""
 fit_content = true
 scroll_following = true
 
+[node name="LobbyHostPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -392.0
+offset_top = -150.0
+offset_right = -236.0
+offset_bottom = -114.0
+tooltip_text = "房主:选择要改队伍的玩家"
+
+[node name="LobbyHostTeamOption" type="OptionButton" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -228.0
+offset_top = -150.0
+offset_right = -72.0
+offset_bottom = -114.0
+tooltip_text = "房主:目标队伍(自由=无队伍,新建=分配新队名)"
+
+[node name="LobbyHostApplyBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -64.0
+offset_top = -150.0
+offset_right = 48.0
+offset_bottom = -114.0
+text = "改队伍"
+
+[node name="LobbyToSpecBtn" type="Button" parent="Lobby/LobbyFrame"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 56.0
+offset_top = -150.0
+offset_right = 216.0
+offset_bottom = -114.0
+text = "切换观战"
+tooltip_text = "退出当前座位,以观战者身份重新加入(观战者无单位,只看不操作)"
+
 [node name="LobbyWinBanner" type="Label" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
 offset_top = 220.0
 offset_bottom = 244.0
-text = "🏁 胜利条件: 消灭所有敌方单位,或占领对方 HQ"
+text = "胜利条件: 消灭所有敌方单位,或占领对方 HQ"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 12
 
@@ -573,7 +665,7 @@ offset_left = 128.0
 offset_top = -104.0
 offset_right = 248.0
 offset_bottom = -68.0
-text = "🤖 添加 AI"
+text = "添加 AI"
 
 [node name="AiPlayerOption" type="OptionButton" parent="Lobby/LobbyFrame"]
 anchor_left = 0.5
@@ -606,7 +698,7 @@ offset_left = 176.0
 offset_top = -56.0
 offset_right = 320.0
 offset_bottom = -20.0
-text = "▶ 启 动 游 戏"
+text = "启动游戏"
 disabled = true
 
 [node name="LobbyBackBtn" type="Button" parent="Lobby/LobbyFrame"]
@@ -618,7 +710,7 @@ offset_left = -100.0
 offset_top = -56.0
 offset_right = 100.0
 offset_bottom = -20.0
-text = "↩ 返回主菜单"
+text = "返回主菜单"
 
 [node name="LobbyGameIdLabel" type="Label" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
@@ -659,7 +751,7 @@ border_width = 4
 anchor_right = 1.0
 offset_top = 12.0
 offset_bottom = 44.0
-text = "📁  存 档 管 理"
+text = "存档管理"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
@@ -679,7 +771,7 @@ offset_left = 32.0
 offset_top = 86.0
 offset_right = 396.0
 offset_bottom = 112.0
-text = "开房模式存档"
+text = "对局存档"
 theme_override_font_sizes/font_size = 16
 
 [node name="MainlineTitle" type="Label" parent="SavesView/SaveFrame"]
@@ -687,7 +779,7 @@ offset_left = 464.0
 offset_top = 86.0
 offset_right = 828.0
 offset_bottom = 112.0
-text = "主线模式存档"
+text = "主线存档"
 theme_override_font_sizes/font_size = 16
 
 [node name="SaveOpenList" type="RichTextLabel" parent="SavesView/SaveFrame"]
@@ -719,28 +811,28 @@ offset_left = 552.0
 offset_top = 406.0
 offset_right = 672.0
 offset_bottom = 442.0
-text = "继续"
+text = "继续存档"
 
 [node name="SaveDeleteBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 688.0
 offset_top = 406.0
 offset_right = 808.0
 offset_bottom = 442.0
-text = "删除"
+text = "删除存档"
 
 [node name="SaveRefreshBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 252.0
 offset_top = 492.0
 offset_right = 392.0
 offset_bottom = 528.0
-text = "刷新"
+text = "刷新存档"
 
 [node name="SaveBackBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 468.0
 offset_top = 492.0
 offset_right = 608.0
 offset_bottom = 528.0
-text = "返回"
+text = "返回上级"
 
 ; ============================================================
 ; T:96 MainlineView — 章节列表 + 详情 + 对话
@@ -772,7 +864,7 @@ border_width = 4
 anchor_right = 1.0
 offset_top = 12.0
 offset_bottom = 44.0
-text = "📖  主 线 章 节"
+text = "主线章节"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
@@ -827,7 +919,7 @@ offset_left = 136.0
 offset_top = -102.0
 offset_right = 340.0
 offset_bottom = -66.0
-text = "Apply commander"
+text = "选定指挥官"
 
 [node name="MLBackBtn" type="Button" parent="MainlineView/MLFrame"]
 anchor_left = 0.5
@@ -838,7 +930,7 @@ offset_left = -220.0
 offset_top = -52.0
 offset_right = -20.0
 offset_bottom = -16.0
-text = "↩ 返回主菜单"
+text = "返回主菜单"
 
 [node name="MLAbandonBtn" type="Button" parent="MainlineView/MLFrame"]
 anchor_left = 0.5
@@ -858,6 +950,7 @@ text = "放弃主线"
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
+mouse_filter = 2
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
@@ -905,7 +998,7 @@ color = Color(0.02, 0.04, 0.03, 0.92)
 [node name="Label" type="Label" parent="GameView/HUD/TopLeft/PhaseBadge"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-text = "🟢 玩家阶段"
+text = "玩家阶段"
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
@@ -934,7 +1027,7 @@ vertical_alignment = 1
 mouse_filter = 2
 
 [node name="EndTurnButton" type="Button" parent="GameView/HUD/TopRight"]
-text = "结束回合 →"
+text = "结束回合"
 custom_minimum_size = Vector2(120, 28)
 disabled = true
 
@@ -960,11 +1053,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
-[node name="COBar" type="ProgressBar" parent="GameView/HUD/BottomLeft"]
-custom_minimum_size = Vector2(200, 22)
-max_value = 100.0
-value = 0.0
-show_percentage = false
+; COBar removed — 能量由 CORoster(顶部)+ InfoPanel/CommanderCOBar 显示
 
 ; --- 右下:AI 思考中 + 战报按钮 ---
 [node name="BottomRight" type="HBoxContainer" parent="GameView/HUD"]
@@ -987,23 +1076,25 @@ color = Color(0.02, 0.04, 0.03, 0.92)
 [node name="Label" type="Label" parent="GameView/HUD/BottomRight/AIThinking"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-text = "🤖 AI 思考中..."
+text = "AI 思考中..."
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
 [node name="WarReportButton" type="Button" parent="GameView/HUD/BottomRight"]
-text = "📜 战报"
+text = "战报"
 custom_minimum_size = Vector2(100, 28)
 
 ; --- 左侧 30% 信息区(选中单位详情 + 玩家列表) ---
 ; 横向: anchor_left=0, offset_right = 384 (30% of 1280)
 ; 纵向: anchor_top=0, anchor_bottom=1, offset_top=70 (避开左上 pill), offset_bottom=-60 (避开左下 pill)
 [node name="InfoPanel" type="Panel" parent="GameView/HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 8.0
+offset_left = -384.0
 offset_top = 70.0
-offset_right = 384.0
+offset_right = -8.0
 offset_bottom = -60.0
 mouse_filter = 0
 
@@ -1012,7 +1103,7 @@ offset_left = 12.0
 offset_top = 8.0
 offset_right = -12.0
 offset_bottom = 32.0
-text = "⚔ 当前指挥官"
+text = "当前指挥官"
 theme_override_font_sizes/font_size = 16
 
 [node name="CommanderName" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
@@ -1091,9 +1182,9 @@ text = "等待 state.snapshot..."
 visible = false
 offset_left = 0.0
 offset_top = 0.0
-offset_right = 200.0
-offset_bottom = 260.0
-mouse_filter = 0
+offset_right = 180.0
+offset_bottom = 280.0
+mouse_filter = 2
 
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
 anchor_right = 1.0
@@ -1105,24 +1196,28 @@ offset_bottom = -6.0
 theme_override_constants/separation = 4
 
 [node name="MoveBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
-text = "🚶  移动"
+text = "移动"
 custom_minimum_size = Vector2(0, 36)
 
 [node name="AttackBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
-text = "⚔   攻击"
+text = "攻击"
 custom_minimum_size = Vector2(0, 36)
 
 [node name="SkillBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
-text = "✨  技能"
+text = "技能"
 custom_minimum_size = Vector2(0, 36)
 
 [node name="WaitBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
-text = "💤  待命"
+text = "待命"
 custom_minimum_size = Vector2(0, 36)
 
 [node name="ClaimBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
-text = "👑  占领 / 招募"
+text = "占领 / 招募"
 custom_minimum_size = Vector2(0, 36)
+
+[node name="CancelBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
+text = "取消 (右键亦可)"
+custom_minimum_size = Vector2(0, 32)
 
 ; --- 攻击确认卡:目标点击后先确认,再 POST attack ---
 [node name="AttackConfirmPanel" type="Panel" parent="GameView/HUD"]
@@ -1609,7 +1704,7 @@ text = "▶ 下一战"
 custom_minimum_size = Vector2(140, 36)
 
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
-text = "↩ 返回主菜单"
+text = "返回主菜单"
 custom_minimum_size = Vector2(140, 36)
 
 ; ============================================================

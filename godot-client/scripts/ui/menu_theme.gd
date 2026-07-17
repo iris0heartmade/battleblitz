@@ -26,20 +26,34 @@ const C_BTN_BLUE_PRESS: Color = Color("#1c2d44") # 按钮按下
 const C_FIRE_RED: Color = Color("#c63a3a")       # 火红(强调/危险)
 const C_HEAL_GREEN: Color = Color("#7ec97e")     # 回血绿
 const C_BORDER_THIN: Color = Color("#5a4426")    # 细线(深棕)
+# === 新增(UI Redesign Round 1) ===
+const C_DIVIDER: Color = Color("#5a4426")         # 分隔线色(同 BORDER_THIN)
+const C_DISABLED: Color = Color("#5a5640")        # disabled 文字底色
 
 # === 字体大小 ===
-const FS_HERO: int = 56      # 主标题
+const FS_HERO: int = 56      # 主标题(主菜单唯一)
+const FS_TITLE: int = 32     # 子页标题(Lobby / Saves 等)
+const FS_SECTION: int = 22   # 视图内 section header
+const FS_BODY: int = 16      # 默认正文/表单 label
 const FS_SUB: int = 18       # 副标题/版本号
-const FS_BTN: int = 18       # 按钮
+const FS_BTN: int = 17       # 按钮
+const FS_HINT: int = 13      # 提示/暗色副文
 const FS_FOOT: int = 12      # footer 小字
 const FS_PILL: int = 14      # 顶部小角标(HUD 4 角)
 
-# === 尺寸常量 ===
-const PAD: int = 16          # 标准内边距
+# === 尺寸常量(8px 网格) ===
+const PAD_X: int = 24        # 外框内边距
+const PAD_Y: int = 18        # 外框内边距
+const PAD: int = 16          # 通用内边距(已用)
+const GAP_SM: int = 6        # 紧凑间距(说明文字)
 const GAP: int = 12          # 标准间距
+const GAP_LG: int = 18       # 大间距(分隔区)
+const ROW_H: int = 36        # 默认 row 高度
 const BTN_W: int = 280       # 主菜单按钮宽
-const BTN_H: int = 52        # 主菜单按钮高
+const BTN_H: int = 40        # 主菜单按钮高(从 52 降到 40)
 const FRAME_W: int = 4       # 外框粗
+const TITLE_BAR_H: int = 44  # 标题栏高度
+const FOOTER_BAR_H: int = 48 # 操作栏高度
 
 # === 间距/字号工具 ===
 ## 返回一段 RichTextLabel 的"colorize" BBCode 包装(用于战报 / 单位信息)。
@@ -118,11 +132,92 @@ static func apply_panel_theme(panel: Control, fill: Color = C_BG_PANEL) -> void:
 		panel.modulate = fill
 
 
+## 主按钮(烫金底 + 烫金亮边 + 暖白粗字)— web UI "创建并进入大厅"风格。
+## 用于关键确认操作:创建房间、启动游戏、添加 AI、改队伍等。
+static func apply_primary_button_theme(btn: Button, font_size: int = FS_BTN) -> void:
+	btn.add_theme_font_size_override("font_size", font_size)
+	btn.add_theme_color_override("font_color", Color("#1a1208"))
+	btn.add_theme_color_override("font_hover_color", Color("#1a1208"))
+	btn.add_theme_color_override("font_pressed_color", Color("#1a1208"))
+	btn.add_theme_color_override("font_disabled_color", Color(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.6))
+	# 烫金填充(跟 web "创建并进入大厅"按钮一致)
+	var sb_normal := StyleBoxFlat.new()
+	sb_normal.bg_color = C_GOLD
+	sb_normal.border_color = C_GOLD_BRIGHT
+	sb_normal.set_border_width_all(2)
+	sb_normal.set_corner_radius_all(3)
+	sb_normal.content_margin_left = 16
+	sb_normal.content_margin_right = 16
+	sb_normal.content_margin_top = 8
+	sb_normal.content_margin_bottom = 8
+	var sb_hover := sb_normal.duplicate()
+	sb_hover.bg_color = C_GOLD_BRIGHT
+	hover_soft_glow(sb_hover)
+	var sb_press := sb_normal.duplicate()
+	sb_press.bg_color = C_BTN_BLUE_PRESS
+	press_dim(sb_press)
+	var sb_disabled := sb_normal.duplicate()
+	sb_disabled.bg_color = Color(C_GOLD.r * 0.6, C_GOLD.g * 0.6, C_GOLD.b * 0.6, 0.6)
+	sb_disabled.border_color = C_TEXT_DIM
+	btn.add_theme_stylebox_override("normal", sb_normal)
+	btn.add_theme_stylebox_override("hover", sb_hover)
+	btn.add_theme_stylebox_override("pressed", sb_press)
+	btn.add_theme_stylebox_override("disabled", sb_disabled)
+	btn.add_theme_stylebox_override("focus", sb_hover)
+
+static func hover_soft_glow(sb: StyleBoxFlat) -> void:
+	sb.shadow_color = Color(C_GOLD_BRIGHT.r, C_GOLD_BRIGHT.g, C_GOLD_BRIGHT.b, 0.45)
+	sb.shadow_size = 6
+
+static func press_dim(sb: StyleBoxFlat) -> void:
+	pass
+
+## 普通按钮,但用 section header 风格(小尺寸、淡背景)— 用于"返回/取消"。
+static func apply_secondary_button_theme(btn: Button, font_size: int = 14) -> void:
+	btn.add_theme_font_size_override("font_size", font_size)
+	btn.add_theme_color_override("font_color", C_TEXT_DIM)
+	btn.add_theme_color_override("font_hover_color", C_TEXT_WARM)
+	btn.add_theme_color_override("font_pressed_color", C_TEXT_WARM)
+	btn.add_theme_color_override("font_disabled_color", Color(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.5))
+	var sb_normal := StyleBoxFlat.new()
+	sb_normal.bg_color = Color(C_BG_PANEL.r, C_BG_PANEL.g, C_BG_PANEL.b, 0.6)
+	sb_normal.border_color = C_BORDER_THIN
+	sb_normal.set_border_width_all(1)
+	sb_normal.set_corner_radius_all(2)
+	sb_normal.content_margin_left = 12
+	sb_normal.content_margin_right = 12
+	sb_normal.content_margin_top = 6
+	sb_normal.content_margin_bottom = 6
+	var sb_hover := sb_normal.duplicate()
+	sb_hover.border_color = C_GOLD
+	var sb_press := sb_normal.duplicate()
+	press_dim(sb_press)
+	btn.add_theme_stylebox_override("normal", sb_normal)
+	btn.add_theme_stylebox_override("hover", sb_hover)
+	btn.add_theme_stylebox_override("pressed", sb_press)
+	btn.add_theme_stylebox_override("disabled", sb_normal)
+	btn.add_theme_stylebox_override("focus", sb_hover)
+
+
 ## 给 Label 设置统一字号 + 暖白文字。
 static func apply_label_theme(lbl: Label, font_size: int = FS_SUB,
 		color: Color = C_TEXT_WARM) -> void:
 	lbl.add_theme_font_size_override("font_size", font_size)
 	lbl.add_theme_color_override("font_color", color)
+
+
+## 给 Label 设置成 section header(暖金小字)—— web UI 的 section title 风格。
+static func apply_section_header(lbl: Label) -> void:
+	lbl.add_theme_font_size_override("font_size", 14)
+	lbl.add_theme_color_override("font_color", C_GOLD)
+
+
+## 给 HSeparator 灌入烫金主题(用作 section divider)。
+static func apply_section_divider(sep: HSeparator) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = C_GOLD
+	sb.content_margin_top = 1
+	sep.add_theme_stylebox_override("separator", sb)
 
 
 ## 给 RichTextLabel 设置字号 + 暖白。

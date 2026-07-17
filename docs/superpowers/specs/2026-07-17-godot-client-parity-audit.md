@@ -23,7 +23,15 @@ P0 work done this session (smoke 184/0 throughout; **no backend changes**):
 - **P0#5 立绘/crest 系统** - DONE. Added `NetworkClient.list_heroes` (GET /heroes) + `_hero_speaker_map` (dialogue_name -> portrait path). Copied hero portraits/crests to `godot-client/assets/heroes/`. `_set_dialog_portrait` loads the portrait via `Image.load` into a dynamic TextureRect over the existing Portrait panel; unknown speakers keep the 👤 placeholder.
 - **P0#6 BGM 音频** - DONE (core). Copied `sample_battle_01.mp3` (+ alias `1.mp3`) to `godot-client/audio/` and ran `--import` to generate .import files. The existing `_on_state_updated` -> `AudioManager.apply_battle_bgm(bgm)` trigger now resolves the track. Crossfade (web `_transitionToBgm`) remains a polish gap; Godot swaps the stream without fade.
 
-Caveat: smoke is the automated gate for these UI changes (the live e2e is a passive free-play game and does not click skills / open mainline / play dialogue, so it would not exercise most of the above). Manual playtest recommended to confirm runtime behavior of skills, mainline slots, dialogue scenes, portraits, and BGM.
+P1 work done this session (smoke 184/0; **no backend changes**):
+
+- **P1#7 观战完整流程** - DONE (core). Spectator join already worked via JoinModeOption ("Join as spectator" -> `join_game` role=spectator). Added self-convert "👀 切换观战" button (lobby): DELETE self + POST /join role=spectator (no dedicated convert endpoint, matches web). In-game spectator view limits: end-turn button enabled + renamed "✅ 确认(继续)" on the spectator's own turn (`phase=="spectator" && cur_pid==self`) so the spectator is no longer stuck (backend `end_turn` accepts `is_spectator`, turns.py:167); player card shows grey "👀 {name} · 观战中-无单位". Action bubble / recruit are already gated (spectators own no units / no barracks). Phase badge "👀 观战" already present. Hints (waiting-for-host / seat X/Y) are shown via the lobby status line ("观战 N/8"); per-room "👀 观战" button not added (JoinModeOption covers the function - UI may differ).
+- **P1#8 房主行级控制** - DONE. Switched the lobby poll from `/lobby` (teams-only aggregate) to `/state` so per-player `seat`/`is_ai`/`team`/`is_spectator` is available (this also fixes a latent bug where `/lobby` returns no `players` field, so the per-player list + AI-removal dropdown were effectively empty). Host = `self.seat==0`. Host sees a target-player dropdown + team dropdown (existing teams / 自由 / ➕新建队伍) + "改队伍" (`update_player_team` with host as caller - backend lets seat 0 change anyone's team incl. AI). Non-host keeps the existing self-team control. Player-dropdown rebuild is signature-gated so the 2s poll doesn't interrupt host interaction.
+
+Bug fix found while reproducing a user-reported "stuck waiting for snapshot" hang:
+- **Free-play start never switched to the game view** (pre-existing, not introduced by the P1 work). `_on_start_game_response` opened the WS but omitted `_show_view("game")` (the lobby-start and resume paths both have it). So after create→join→add-ai→start→WS-connect, the snapshot arrived and the board painted, but the view stayed on "connecting" showing "已连接,等待 state.snapshot..." forever — the client looked stuck. The headless e2e (`e2e_one_game.gd`) bypasses the view system (direct NetworkClient), so it never caught this. Fixed by adding `_show_view("game")` to `_on_start_game_response` (matches `_on_lobby_start_response`). Verified: `BB_AUTO_PLAY=1` now reaches `state_updated` (players=2, phase=player) and the game view; smoke 184/0.
+
+Caveat: smoke is the automated gate for these UI changes (the live e2e is a passive free-play game and does not click skills / open mainline / play dialogue / convert to spectator / exercise host controls, so it would not exercise most of the above). Manual playtest recommended to confirm runtime behavior of skills, mainline slots, dialogue scenes, portraits, BGM, spectator convert + view limits, and host row-level team controls (the last two need a 2-client setup: host + joiner/spectator).
 
 Files touched: `scripts/main.gd`, `scripts/autoload/network_client.gd`, `scenes/main.tscn`, this doc, new `assets/heroes/*`, new `audio/*.mp3`.
 
@@ -51,9 +59,9 @@ Files touched: `scripts/main.gd`, `scripts/autoload/network_client.gd`, `scenes/
 
 ### P1 - 重要缺失 (parity / experience)
 
-7. **观战完整流程 (spectator flow).** Web: per-room "👀 观战" button on the join list, lobby "加入观战者" two-choice modal (join-as-spectator / convert - convert currently toast-only), team-dropdown "切换为观战" (DELETE + POST join spectator), spectator hints (waiting-for-host / seat X/Y / max 8), spectator view limits (grey swatch / player card "观战中-无单位" / end-turn renamed "✅ 确认(继续)" / phase text / hide join button for spectators). Godot: only `join_mode` option + "👀 观战" phase badge.
+7. ✅ DONE (2026-07-17) — **观战完整流程 (spectator flow).** Web: per-room "👀 观战" button on the join list, lobby "加入观战者" two-choice modal (join-as-spectator / convert - convert currently toast-only), team-dropdown "切换为观战" (DELETE + POST join spectator), spectator hints (waiting-for-host / seat X/Y / max 8), spectator view limits (grey swatch / player card "观战中-无单位" / end-turn renamed "✅ 确认(继续)" / phase text / hide join button for spectators). Godot now: `join_mode` spectator join + "👀 切换观战" self-convert (DELETE+POST) + in-game end-turn "✅ 确认(继续)" on spectator turn + grey "观战中-无单位" player card + "观战 N/8" status hint. Per-room button + two-choice modal not added (JoinModeOption covers function; UI may differ).
 
-8. **大厅房主行级控制 (host row-level lobby controls).** Web host sees everyone's (incl. AI) team dropdown + "➕ 新建队伍" + (self row only) "切换为观战". Godot: self team update + AI removal only, no host row-level controls.
+8. ✅ DONE (2026-07-17) - **大厅房主行级控制 (host row-level lobby controls).** Web host sees everyone's (incl. AI) team dropdown + "➕ 新建队伍" + (self row only) "切换为观战". Godot now: host (self.seat==0) gets a target-player dropdown + team dropdown (existing/自由/新建) + "改队伍" (update_player_team with host caller - seat 0 may change anyone incl. AI). Non-host keeps self-team control. Lobby poll switched /lobby -> /state for per-player seat/team/is_spectator (also fixed latent empty-players bug).
 
 9. **主线指挥官锁定原因 + Profile 防御 (commander lock reasons + profile ensure).** Web shows lock reasons (active_mainline / not-unlocked / current / selectable) and `ensureProfile` (`GET /profile/{name}` probe, 404 -> `POST /progression/profiles`, 409 ok). Godot: all chapters shown as clickable, no lock reasons, no profile endpoint.
 
@@ -110,8 +118,8 @@ Driven by the standing goal "complete the view system, combat system, and full g
 1. **P0#2** - multi-skill (generalize skill button to active-skill dispatch; covers heal + arcane_strike). P0#1 deferred.
 2. **P0#3 + P0#4 + P0#5** - mainline save slots + Dialog upgrade + portrait system. Mainline narrative completeness (the three are coupled: portrait is part of Dialog, slots wrap the mainline flow).
 3. **P0#6** - BGM audio. Likely a matter of locating the web audio assets and wiring them in.
-4. **P1#7 + P1#8** - spectator flow + host row-level controls. "Full game" social completeness.
-5. **P1#17 + P1#14** - editor undo/fill/line/select + help panel. Editor parity + onboarding.
+4. ✅ DONE (2026-07-17) - **P1#7 + P1#8** - spectator flow + host row-level controls. "Full game" social completeness.
+5. **NEXT: P1#17 + P1#14** - editor undo/fill/line/select + help panel. Editor parity + onboarding.
 6. Remaining P1/P2 in descending impact.
 
 ## Deferred Gaps (tracked)
