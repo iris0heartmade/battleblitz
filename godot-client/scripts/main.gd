@@ -69,16 +69,6 @@ var _recruit_mode_unit_id: int = -1
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
 # CreateFormPanel(自由模式专用)— 房间设置表单
-@onready var create_form_panel: Control = $CreateFormPanel
-@onready var free_name_input: LineEdit = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateNameInput
-@onready var create_players_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreatePlayersOption
-@onready var create_map_preset_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateMapPresetOption
-@onready var create_team_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateTeamOption
-@onready var create_commander_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateCommanderOption
-@onready var create_bgm_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateBgmOption
-@onready var create_win_option: OptionButton = $CreateFormPanel/CreateFormFrame/CreateFormFields/CreateWinOption
-@onready var create_form_confirm_btn: Button = $CreateFormPanel/CreateFormFrame/CreateFormScroll/CreateFormInner/CreateFormBtnRow/CreateFormConfirmBtn
-@onready var create_form_cancel_btn: Button = $CreateFormPanel/CreateFormFrame/CreateFormScroll/CreateFormInner/CreateFormBtnRow/CreateFormCancelBtn
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
 @onready var commander_title: Label = $GameView/HUD/InfoPanel/CommanderTitle
@@ -332,10 +322,6 @@ func _ready() -> void:
 	if saves_button != null and is_instance_valid(saves_button):
 		saves_button.pressed.connect(_on_saves_pressed)
 	# CreateFormPanel(自由模式)按钮
-	if create_form_confirm_btn != null and is_instance_valid(create_form_confirm_btn):
-		create_form_confirm_btn.pressed.connect(_on_create_form_confirm_pressed)
-	if create_form_cancel_btn != null and is_instance_valid(create_form_cancel_btn):
-		create_form_cancel_btn.pressed.connect(_on_create_form_cancel_pressed)
 	# T:96 Mainline
 	if ml_back_btn != null and is_instance_valid(ml_back_btn):
 		ml_back_btn.pressed.connect(_on_ml_back_pressed)
@@ -343,9 +329,6 @@ func _ready() -> void:
 		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
 	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
 		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
-	# T:3 大厅按钮 — 接 add-ai / start / back
-	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
-		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
 	if ai_player_option != null and is_instance_valid(ai_player_option):
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
@@ -685,128 +668,11 @@ func _poll_state_now() -> void:
 
 
 func _on_free_play_pressed() -> void:
-	# 自由模式:弹 CreateFormPanel(独立 view,不走 lobby 二层)
-	# 用户填完点确认 → _on_create_form_confirm 提交
-	_entry_flow = "free"
-	_show_create_form()
-	# debug 截图
-# 显示自由模式创建对局表单
-func _show_create_form() -> void:
-	menu_panel.visible = false
-	if game_view != null:
-		game_view.visible = false
-	if lobby_view != null:
-		lobby_view.visible = false
-	if connecting_panel != null:
-		connecting_panel.visible = false
-	_hide_hud()
-	if create_form_panel != null and is_instance_valid(create_form_panel):
-		create_form_panel.visible = true
-	if free_name_input != null and is_instance_valid(free_name_input):
-		free_name_input.text = "%s 的自由对局" % _user_name
-	if create_players_option != null and is_instance_valid(create_players_option):
-		create_players_option.clear()
-		for n in [2, 3, 4]:
-			create_players_option.add_item("%d 人" % n, n)
-		create_players_option.select(0)
-	if create_map_preset_option != null and is_instance_valid(create_map_preset_option):
-		create_map_preset_option.clear()
-		for p in _preset_options:
-			if p is Dictionary:
-				var preset_id: String = String(p.get("id", ""))
-				if preset_id != "":
-					create_map_preset_option.add_item(preset_id)
-		if create_map_preset_option.item_count == 0:
-			create_map_preset_option.add_item("balanced_2p_15")
-	if create_team_option != null and is_instance_valid(create_team_option):
-		create_team_option.clear()
-		for t in ["自由", "红", "蓝", "绿", "黄"]:
-			create_team_option.add_item(t)
-	if create_commander_option != null and is_instance_valid(create_commander_option):
-		create_commander_option.clear()
-		create_commander_option.add_item("无指挥官")
-	if create_bgm_option != null and is_instance_valid(create_bgm_option):
-		create_bgm_option.clear()
-		create_bgm_option.add_item("无 BGM")
-	if create_win_option != null and is_instance_valid(create_win_option):
-		create_win_option.clear()
-		create_win_option.add_item("消灭所有敌方单位")
-		create_win_option.add_item("占领对方 HQ")
-		create_win_option.add_item("摧毁对方城堡")
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_create_form_commanders_response"))
-	NetworkClient.list_audio_tracks(Callable(self, "_on_create_form_audio_response"))
-
-
-func _on_create_form_commanders_response(body: Variant, _code: int = 0) -> void:
-	if create_commander_option == null or not is_instance_valid(create_commander_option):
-		return
-	if body is Dictionary:
-		var unlocked: Array = (body as Dictionary).get("unlocked_commanders", [])
-		for c in unlocked:
-			if c is String:
-				create_commander_option.add_item(c)
-
-
-func _on_create_form_audio_response(body: Variant, _code: int = 0) -> void:
-	if create_bgm_option == null or not is_instance_valid(create_bgm_option):
-		return
-	if body is Dictionary:
-		var tracks: Array = (body as Dictionary).get("tracks", [])
-		for t in tracks:
-			if t is Dictionary:
-				create_bgm_option.add_item(String(t.get("name", "track")))
-
-
-func _on_create_form_cancel_pressed() -> void:
-	if create_form_panel != null and is_instance_valid(create_form_panel):
-		create_form_panel.visible = false
-	_show_view("menu")
-
-
-func _on_create_form_confirm_pressed() -> void:
-	if create_form_panel != null and is_instance_valid(create_form_panel):
-		create_form_panel.visible = false
-	var room_name: String = "自由对局"
-	if free_name_input != null and is_instance_valid(free_name_input):
-		var typed: String = free_name_input.text.strip_edges()
-		if typed != "":
-			room_name = typed
-	var players_count: int = 2
-	if create_players_option != null and is_instance_valid(create_players_option):
-		players_count = create_players_option.selected + 2
-	var preset_id: String = "balanced_2p_15"
-	if create_map_preset_option != null and is_instance_valid(create_map_preset_option) and create_map_preset_option.item_count > 0:
-		var preset_idx: int = create_map_preset_option.selected
-		# preset_id 来自 _preset_options,但 list 选项只用文本(没 int id)
-		if preset_idx >= 0 and preset_idx < _preset_options.size():
-			var p: Dictionary = _preset_options[preset_idx]
-			preset_id = String(p.get("id", preset_id))
-		elif preset_idx >= 0:
-			preset_id = create_map_preset_option.get_item_text(preset_idx)
-	var team: String = "red"
-	if create_team_option != null and is_instance_valid(create_team_option) and create_team_option.selected > 0:
-		var teams: Array = ["red", "red", "blue", "green", "yellow"]
-		team = teams[create_team_option.selected] if create_team_option.selected < teams.size() else "red"
-	var commander: String = ""
-	if create_commander_option != null and is_instance_valid(create_commander_option) and create_commander_option.selected > 0:
-		# index 0 是 "无指挥官" placeholder
-		commander = create_commander_option.get_item_text(create_commander_option.selected)
-	var bgm: String = ""
-	if create_bgm_option != null and is_instance_valid(create_bgm_option) and create_bgm_option.selected > 0:
-		# index 0 是 "无 BGM"
-		bgm = create_bgm_option.get_item_text(create_bgm_option.selected)
-	var win: String = "rout"
-	if create_win_option != null and is_instance_valid(create_win_option) and create_win_option.selected >= 0:
-		# option index → win id 映射
-		var wins: Array = ["rout", "hq", "castle"]
-		if create_win_option.selected < wins.size():
-			win = wins[create_win_option.selected]
-	_show_view("connecting")
-	connecting_label.text = "创建对局中..."
-	_tutorial_shown = false
-	NetworkClient.create_game(room_name, preset_id, "grass", win,
-		commander, bgm, {})
-
+	# 自由模式:进入 lobby + 显示二层选择(创建/加入)
+	_entry_flow = "lobby"
+	_show_view("lobby")
+	_apply_lobby_theme()
+	_show_lobby_choose()
 
 func _on_create_game_response(body: Dictionary) -> void:
 	# The create-game response is the game summary; pull id.
@@ -3319,44 +3185,11 @@ func _on_lobby_pressed() -> void:
 	if lobby_name_input != null and is_instance_valid(lobby_name_input):
 		lobby_name_input.text = "%s 的房间" % _user_name
 	_setup_lobby_join_options()
-	_setup_lobby_ai_options()
-	_setup_lobby_commander_options()
-	_setup_lobby_bgm_options()
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	_load_lobby_presets()
 	_load_lobby_audio_tracks()
 	_refresh_room_list()
 	_show_lobby_choose()
-	_setup_lobby_ai_options()
-	_setup_lobby_commander_options()
-	_setup_lobby_bgm_options()
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
-	_load_lobby_presets()
-	_load_lobby_audio_tracks()
-	_refresh_room_list()
-	return
-	# T:3 进入基础大厅视图
-	_show_view("lobby")
-	_apply_lobby_theme()
-	# 还没 game_id — 帮玩家创建一个并自动 join
-	NetworkClient.create_game(
-		"联机对局",
-		"balanced_2p_15",
-		"grass",
-		"rout",
-		"",
-		"",
-		{},
-		Callable(self, "_on_lobby_create_response")
-	)
-	lobby_status_label.text = "创建房间中..."
-	lobby_game_id_label.text = "对局 #? · 创建中..."
-
-
-
-# ============================================================
-# Lobby 二层菜单导航
-# ============================================================
 
 func _show_lobby_choose() -> void:
 	_lobby_mode = "choose"
@@ -3799,8 +3632,8 @@ func _render_room_list() -> void:
 func _on_create_room_pressed() -> void:
 	_entry_flow = "lobby_create"
 	var room_name := "%s room" % _user_name
-	if free_name_input != null and is_instance_valid(free_name_input):
-		var typed := free_name_input.text.strip_edges()
+	if lobby_name_input != null and is_instance_valid(lobby_name_input):
+		var typed := lobby_name_input.text.strip_edges()
 		if typed != "":
 			room_name = typed
 	var preset_id := "balanced_2p_15"

@@ -211,123 +211,6 @@ theme_override_font_sizes/font_size = 11
 
 ; ============================================================
 ; Connecting 视图 — 复古"等待连接"画面
-
-; ============================================================
-; CreateFormPanel — 自由模式专用:点"自由对局"后弹出的房间设置表单
-; 字段:房间名称 / 人数 / 选地图 / 队伍 / 指挥官 / 战斗 BGM / 胜利条件
-; ============================================================
-[node name="CreateFormPanel" type="Control" parent="."]
-visible = false
-anchor_right = 1.0
-anchor_bottom = 1.0
-mouse_filter = 1
-
-[node name="CreateFormFrame" type="Panel" parent="CreateFormPanel"]
-anchor_left = 0.18
-anchor_top = 0.04
-anchor_right = 0.82
-anchor_bottom = 0.96
-mouse_filter = 0
-
-[node name="CreateFormBorder" type="ReferenceRect" parent="CreateFormPanel/CreateFormFrame"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-border_color = Color(0.788, 0.631, 0.29, 1)
-border_width = 4.0
-editor_only = false
-
-[node name="CreateFormTitle" type="Label" parent="CreateFormPanel/CreateFormFrame"]
-anchor_right = 1.0
-offset_top = 6.0
-offset_bottom = 36.0
-text = "创建对局"
-theme_override_font_sizes/font_size = 22
-horizontal_alignment = 1
-
-[node name="CreateFormFields" type="VBoxContainer" parent="CreateFormPanel/CreateFormFrame"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = 44.0
-offset_right = -16.0
-offset_bottom = -56.0
-theme_override_constants/separation = 6
-
-[node name="CreateNameLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "房间名称"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateNameInput" type="LineEdit" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-placeholder_text = "请输入房间名"
-
-[node name="CreatePlayersLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "玩家人数"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreatePlayersOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择玩家人数"
-
-[node name="CreateMapLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "选地图"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateMapPresetOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择地图"
-
-[node name="CreateTeamLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "队伍"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateTeamOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择队伍"
-
-[node name="CreateCommanderLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "指挥官"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateCommanderOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择指挥官"
-
-[node name="CreateBgmLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "战斗 BGM"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateBgmOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择背景音乐"
-
-[node name="CreateWinLabel" type="Label" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-text = "胜利条件"
-theme_override_font_sizes/font_size = 13
-
-[node name="CreateWinOption" type="OptionButton" parent="CreateFormPanel/CreateFormFrame/CreateFormFields"]
-custom_minimum_size = Vector2(0, 28)
-text = "选择胜利条件"
-
-[node name="CreateFormBtnRow" type="HBoxContainer" parent="CreateFormPanel/CreateFormFrame"]
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -160.0
-offset_top = -48.0
-offset_right = 160.0
-offset_bottom = -8.0
-theme_override_constants/separation = 16
-alignment = 1
-
-[node name="CreateFormCancelBtn" type="Button" parent="CreateFormPanel/CreateFormFrame/CreateFormBtnRow"]
-custom_minimum_size = Vector2(140, 36)
-text = "取消"
-
-[node name="CreateFormConfirmBtn" type="Button" parent="CreateFormPanel/CreateFormFrame/CreateFormBtnRow"]
-custom_minimum_size = Vector2(140, 36)
-text = "开始对局"
 ; ============================================================
 [node name="Connecting" type="Control" parent="."]
 visible = false
@@ -595,6 +478,104 @@ theme_override_font_sizes/font_size = 11
 anchor_right = 1.0
 offset_left = 24.0
 offset_top = 112.0
+
+; ===== 自由模式二层选择(创建房间 / 加入房间) =====
+[node name="ChoosePanel" type="VBoxContainer" parent="Lobby/LobbyFrame"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = -16.0
+theme_override_constants/separation = 32
+alignment = 1
+
+[node name="ChooseSpacerTop" type="Control" parent="Lobby/LobbyFrame/ChoosePanel"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+
+[node name="ChooseTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "自由模式"
+horizontal_alignment = 1
+
+[node name="ChooseSubtitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "选择操作"
+horizontal_alignment = 1
+
+[node name="ChooseSpacerMid" type="Control" parent="Lobby/LobbyFrame/ChoosePanel"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="ChooseBtnRow" type="HBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel"]
+layout_mode = 2
+theme_override_constants/separation = 48
+alignment = 1
+
+[node name="CreateCard" type="Panel" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow"]
+custom_minimum_size = Vector2(280, 160)
+layout_mode = 2
+
+[node name="CreateCardInner" type="VBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_all = 16
+theme_override_constants/separation = 12
+
+[node name="CreateCardTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "创建房间"
+horizontal_alignment = 1
+
+[node name="CreateCardDesc" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "新建一个对局,设置地图、队伍和 AI"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="CreateCardBtn" type="Button" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "开始创建"
+
+[node name="JoinCard" type="Panel" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow"]
+custom_minimum_size = Vector2(280, 160)
+layout_mode = 2
+
+[node name="JoinCardInner" type="VBoxContainer" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_all = 16
+theme_override_constants/separation = 12
+
+[node name="JoinCardTitle" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "加入房间"
+horizontal_alignment = 1
+
+[node name="JoinCardDesc" type="Label" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.7, 0.65, 0.5, 1)
+text = "浏览已有房间,快速加入对战"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="JoinCardBtn" type="Button" parent="Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "浏览房间"
 offset_right = -24.0
 offset_bottom = 408.0
 theme_override_constants/separation = 18
