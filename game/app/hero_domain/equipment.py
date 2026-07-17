@@ -43,11 +43,26 @@ CATALOG: dict[str, EquipmentDefinition] = {
     ),
 }
 
-STARTER_INVENTORY = {equipment_id: 1 for equipment_id in CATALOG}
+STARTER_INVENTORY = {
+    "iron_sword": 1,
+    "oak_staff": 2,  # Yun and Anna are both spell users in chapter one.
+    "guard_shield": 1,
+    "ruby_ring": 1,
+}
+
+DEFAULT_EQUIPMENT_BY_CLASS = {
+    "swordsman": {"weapon": "iron_sword", "armor": "guard_shield"},
+    "warlock": {"weapon": "oak_staff", "accessory": "ruby_ring"},
+    "healer": {"weapon": "oak_staff"},
+}
 
 
 def get_equipment(equipment_id: str | None) -> EquipmentDefinition | None:
     return CATALOG.get(equipment_id or "")
+
+
+def default_equipment_for_class(class_id: str) -> dict[str, str]:
+    return dict(DEFAULT_EQUIPMENT_BY_CLASS.get(class_id, {}))
 
 
 def equipped_stat_bonuses(equipment: Mapping[str, str | None]) -> dict[str, int]:

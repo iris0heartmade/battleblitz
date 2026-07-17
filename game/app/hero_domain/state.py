@@ -18,6 +18,10 @@ class HeroCampaignState:
     learned_skills: list[str] = field(default_factory=list)
     promoted: bool = False
     equipment: dict[str, str | None] = field(default_factory=dict)
+    # Marks that starter equipment was assigned (or deliberately reviewed).
+    # This prevents a player who unequips every slot from being re-equipped
+    # the next time they open the preparation screen.
+    equipment_initialized: bool = False
 
     @classmethod
     def from_templates(

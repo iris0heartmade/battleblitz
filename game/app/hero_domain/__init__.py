@@ -19,6 +19,7 @@ from app.hero_domain.equipment import (
     EQUIPMENT_SLOTS,
     STARTER_INVENTORY,
     catalog_payload,
+    default_equipment_for_class,
     equipped_stat_bonuses,
     get_equipment,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "EQUIPMENT_SLOTS",
     "STARTER_INVENTORY",
     "catalog_payload",
+    "default_equipment_for_class",
     "equipped_stat_bonuses",
     "get_equipment",
     "HeroCharacterTemplate",

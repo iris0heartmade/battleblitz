@@ -137,6 +137,9 @@ def build_initial_campaign_state(hero_id: str) -> HeroCampaignState:
         *hero.active_skills,
         *hero.passive_skills,
     ]))
+    from app.hero_domain.equipment import default_equipment_for_class
+    state.equipment = default_equipment_for_class(state.class_id)
+    state.equipment_initialized = True
     return state
 
 
@@ -151,6 +154,7 @@ def hero_campaign_state_to_dict(state: HeroCampaignState) -> dict:
         "learned_skills": list(state.learned_skills),
         "promoted": state.promoted,
         "equipment": dict(state.equipment),
+        "equipment_initialized": state.equipment_initialized,
     }
 
 
@@ -169,4 +173,5 @@ def hero_campaign_state_from_dict(payload: dict) -> HeroCampaignState:
             build_hero_class_template,
         ),
         equipment=dict(payload.get("equipment", {})),
+        equipment_initialized=bool(payload.get("equipment_initialized", False)),
     )

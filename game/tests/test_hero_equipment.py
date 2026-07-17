@@ -3,6 +3,7 @@ from app.hero_domain.equipment import (
     EQUIPMENT_SLOTS,
     STARTER_INVENTORY,
     equipped_stat_bonuses,
+    default_equipment_for_class,
 )
 from app.hero_domain.legacy_bridge import (
     hero_campaign_state_from_dict,
@@ -12,8 +13,15 @@ from app.hero_domain.legacy_bridge import (
 
 def test_starter_equipment_has_one_copy_per_catalog_item():
     assert set(STARTER_INVENTORY) == set(CATALOG)
-    assert all(count == 1 for count in STARTER_INVENTORY.values())
+    assert STARTER_INVENTORY["oak_staff"] == 2
     assert {item.slot for item in CATALOG.values()} == set(EQUIPMENT_SLOTS)
+
+
+def test_default_loadouts_cover_chapter_one_spell_heroes():
+    assert default_equipment_for_class("warlock") == {
+        "weapon": "oak_staff", "accessory": "ruby_ring"
+    }
+    assert default_equipment_for_class("healer") == {"weapon": "oak_staff"}
 
 
 def test_equipment_bonuses_only_accept_the_correct_slot():

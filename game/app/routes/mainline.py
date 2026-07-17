@@ -86,6 +86,7 @@ from app.hero_domain import (
     promote_hero,
     EQUIPMENT_SLOTS,
     catalog_payload,
+    default_equipment_for_class,
     equipped_stat_bonuses,
     get_equipment,
 )
@@ -167,6 +168,16 @@ async def _build_prepare_payload(
                 stored_state,
             )
         state = hero_campaign_state_from_dict(stored_state)
+        # One-time migration for campaign saves created before equipment
+        # existed.  Thereafter an empty loadout is a deliberate player
+        # choice and must stay empty.
+        if not state.equipment_initialized:
+            state.equipment = default_equipment_for_class(state.class_id)
+            state.equipment_initialized = True
+            stored_state = hero_campaign_state_to_dict(state)
+            await svc.set_hero_campaign_state(
+                profile.user_name, spec.hero_id, stored_state,
+            )
         current_class = build_hero_class_template(state.class_id)
         heroes.append(MainlinePrepareHeroOut(
             hero_id=state.hero_id,
@@ -931,6 +942,7 @@ async def equip_mainline_hero(
     equipment = dict(state.equipment)
     equipment[body.slot] = body.equipment_id
     state.equipment = equipment
+    state.equipment_initialized = True
     await svc.set_hero_campaign_state(body.user_name, body.hero_id, hero_campaign_state_to_dict(state))
     return MainlinePrepareEquipmentOut(
         hero_id=state.hero_id,

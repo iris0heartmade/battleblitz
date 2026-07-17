@@ -232,7 +232,7 @@ class ProgressionService:
         inventory = dict(getattr(profile, "hero_inventory", {}) or {})
         changed = False
         for equipment_id, count in STARTER_INVENTORY.items():
-            if equipment_id not in inventory:
+            if int(inventory.get(equipment_id, 0)) < count:
                 inventory[equipment_id] = count
                 changed = True
         if changed:
