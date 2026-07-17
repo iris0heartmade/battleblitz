@@ -9,6 +9,7 @@ const _UI_LEFT_FRACTION := 0.30
 const _UI_RIGHT_FRACTION := 0.10
 
 var _metrics = null
+var _user_positioned: bool = false
 
 
 func _ready() -> void:
@@ -16,22 +17,30 @@ func _ready() -> void:
 	if viewport != null and not viewport.size_changed.is_connected(_on_viewport_size_changed):
 		viewport.size_changed.connect(_on_viewport_size_changed)
 
-
 func apply_metrics(metrics) -> void:
 	_metrics = metrics
-	_refresh_from_metrics()
-	# Only switch the camera on once we have real map metrics —
-	# otherwise its anchor_mode=DRAG_CENTER drags the canvas origin
-	# to viewport_size/2, which clips the main menu UI into the
-	# bottom-right quadrant.
+	if _user_positioned:
+		pass
+	else:
+		_refresh_from_metrics(true)
 	enabled = true
 
 
 func _on_viewport_size_changed() -> void:
-	_refresh_from_metrics()
+	_refresh_from_metrics(false)
 
 
-func _refresh_from_metrics() -> void:
+func reset_to_fit() -> void:
+	_user_positioned = false
+	_refresh_from_metrics(false)
+
+
+func mark_user_positioned() -> void:
+	_user_positioned = true
+
+
+
+func _refresh_from_metrics(position_only: bool = false) -> void:
 	if _metrics == null:
 		return
 
@@ -58,7 +67,11 @@ func _refresh_from_metrics() -> void:
 	var zoom_x: float = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
 	var zoom_y: float = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)
 	var fit_zoom: float = min(zoom_x, zoom_y)
-	zoom = Vector2(fit_zoom, fit_zoom)
+	if not position_only:
+			zoom_x = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
+			zoom_y = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)
+			fit_zoom = min(zoom_x, zoom_y)
+			zoom = Vector2(fit_zoom, fit_zoom)
 
 	# M3+ TODO: tighten the limits back to board_rect once the HUD is
 	# hosted on a dedicated CanvasLayer that lives ABOVE the camera

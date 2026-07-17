@@ -80,13 +80,14 @@ func _on_units_changed(units_data: Array) -> void:
 			continue
 		# 新单位:完整插入(无动画,瞬时出现)
 		_add_unit_node(unit_data)
-	# 清理掉已不存在的
+		# 清理掉已不存在的(只在 not seen 时 erase)
 	for uid in _unit_nodes_by_id.keys():
+		if seen_ids.has(uid):
+			continue
 		var n: Node = _unit_nodes_by_id[uid]
-		if n != null and is_instance_valid(n):
-			if not seen_ids.has(uid):
-				n.queue_free()
 		_unit_nodes_by_id.erase(uid)
+		if n != null and is_instance_valid(n):
+				n.queue_free()
 
 
 # M4.7:把 1 个单位作为 UnitNode 插入 UnitLayer
@@ -109,7 +110,10 @@ func _add_unit_node(unit_data: Dictionary) -> void:
 func pick_unit_at_screen(global_pos: Vector2) -> int:
 	if metrics == null or ground_layer == null:
 		return -1
-	var local: Vector2 = ground_layer.to_local(global_pos)
+	var world_pos: Vector2 = global_pos
+	if board_camera != null and board_camera.enabled:
+		world_pos = board_camera.get_canvas_transform().affine_inverse() * global_pos
+	var local: Vector2 = ground_layer.to_local(world_pos)
 	var cell: Vector2i = ground_layer.local_to_map(local)
 	return _unit_id_at_cell(cell)
 
@@ -119,9 +123,9 @@ func _unit_id_at_cell(cell: Vector2i) -> int:
 		var n: Node = _unit_nodes_by_id[uid]
 		if n == null or not is_instance_valid(n):
 			continue
-		var ud: Dictionary = n.unit_data if n.has_method("get") else {}
+		var ud: Dictionary = n.get("unit_data") if n != null else {}
 		# UnitNode 暴露 unit_data 字段;直接读
-		if ud.is_empty():
+		if typeof(ud) != TYPE_DICTIONARY or ud.is_empty():
 			continue
 		if int(ud.get("x", -1)) == cell.x and int(ud.get("y", -1)) == cell.y:
 			return int(uid)
@@ -194,6 +198,78 @@ func spawn_floating_text_at_cell(cell: Vector2i, text: String, color_hex: String
 
 # M4.10:让 main 主动 emit unit_clicked 信号 — 在 _unhandled_input 中
 # 调 pick_unit_at_screen 取到 id 后调用本函数,main 那边订阅即可。
+
+# ============================================================
+# 缩放(Zoom) + 拖拽(Pan) — 鼠标滚轮缩放,左键拖拽
+# ============================================================
+
+const ZOOM_MIN: float = 0.4
+const ZOOM_MAX: float = 3.0
+const ZOOM_STEP: float = 0.15
+const DRAG_THRESHOLD_PX: float = 6.0
+var _panning: bool = false
+var _pan_was_dragging: bool = false
+var _pan_start_mouse: Vector2 = Vector2.ZERO
+var _pan_start_cam_pos: Vector2 = Vector2.ZERO
+var _press_start_mouse: Vector2 = Vector2.ZERO
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_zoom_at_point(mb.global_position, ZOOM_STEP)
+			get_viewport().set_input_as_handled()
+			return
+		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_zoom_at_point(mb.global_position, -ZOOM_STEP)
+			get_viewport().set_input_as_handled()
+			return
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				_press_start_mouse = mb.global_position
+				_pan_start_mouse = mb.global_position
+				if board_camera != null:
+					_pan_start_cam_pos = board_camera.position
+				_panning = true
+				_pan_was_dragging = false
+			else:
+				if _panning and _pan_was_dragging:
+					get_viewport().set_input_as_handled()
+				_panning = false
+				if _pan_was_dragging and board_camera != null:
+					board_camera.position_smoothing_enabled = true
+				_pan_was_dragging = false
+			return
+	if event is InputEventMouseMotion and _panning and board_camera != null:
+		var diff2: Vector2 = event.global_position - _press_start_mouse
+		if not _pan_was_dragging and diff2.length() < DRAG_THRESHOLD_PX:
+			return
+		if not _pan_was_dragging:
+			board_camera.position_smoothing_enabled = false
+		_pan_was_dragging = true
+		var pan_delta: Vector2 = (event.global_position - _pan_start_mouse) / board_camera.zoom.x
+		board_camera.position = _pan_start_cam_pos - pan_delta
+		board_camera.mark_user_positioned()
+		get_viewport().set_input_as_handled()
+		return
+
+
+func _zoom_at_point(screen_pos: Vector2, delta: float) -> void:
+	if board_camera == null:
+		return
+	var old_zoom: float = board_camera.zoom.x
+	var new_zoom: float = clamp(old_zoom + delta, ZOOM_MIN, ZOOM_MAX)
+	if new_zoom == old_zoom:
+		return
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var mouse_world_before: Vector2 = (screen_pos - vp_size * 0.5) / old_zoom + board_camera.position
+	board_camera.zoom = Vector2(new_zoom, new_zoom)
+	var mouse_world_after: Vector2 = (screen_pos - vp_size * 0.5) / new_zoom + board_camera.position
+	board_camera.position += mouse_world_before - mouse_world_after
+	board_camera.mark_user_positioned()
+
+
 func emit_unit_clicked(unit_id: int) -> void:
 	unit_clicked.emit(unit_id)
 
@@ -203,7 +279,10 @@ func emit_tile_clicked(global_pos: Vector2) -> void:
 	if metrics == null or ground_layer == null:
 		tile_clicked.emit(Vector2i(-1, -1))
 		return
-	var local: Vector2 = ground_layer.to_local(global_pos)
+	var world_pos: Vector2 = global_pos
+	if board_camera != null and board_camera.enabled:
+		world_pos = board_camera.get_canvas_transform().affine_inverse() * global_pos
+	var local: Vector2 = ground_layer.to_local(world_pos)
 	tile_clicked.emit(ground_layer.local_to_map(local))
 
 

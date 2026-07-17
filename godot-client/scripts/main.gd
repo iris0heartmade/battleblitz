@@ -2006,6 +2006,8 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 func _toggle_pause() -> void:
 	var open: bool = not (pause_panel != null and is_instance_valid(pause_panel) and pause_panel.visible)
 	if open:
+		pause_overlay.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+		pause_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 		pause_overlay.visible = true
 		pause_panel.visible = true
 		# 暂停时关闭行动气泡 + 战报面板
@@ -2493,6 +2495,7 @@ func _on_battle_back_menu_pressed() -> void:
 func _apply_gba_theme() -> void:
 	# 1) 全屏深绿背景(ColorRect 颜色已在 .tscn 设)
 	backdrop.color = MenuTheme.C_BG_DEEP
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# 2) 边框由 ReferenceRect 画,这里只调整颜色变量(已硬编码在 .tscn)
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
