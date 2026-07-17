@@ -4,6 +4,8 @@
 .godot/
 .import/
 *.import
+# Godot 4.5+ resource UID files - auto-generated next to each .gd/.tres/.tscn, safe to delete + regenerate.
+*.uid
 
 # Imported translations (none today; reserved for future i18n).
 *.translation
