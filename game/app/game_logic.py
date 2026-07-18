@@ -504,16 +504,36 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     unit.exp -= EXP_TO_LEVEL
     unit.level += 1
     factor = 1.0 + LEVEL_UP_STAT_BONUS  # 1.05
-    new_max_hp = int(round(unit.max_hp * factor))
-    hp_gain = new_max_hp - unit.max_hp
-    unit.max_hp = new_max_hp
-    unit.hp = min(unit.max_hp, unit.hp + hp_gain)
-    unit.atk = int(round(unit.atk * factor))
-    unit.def_ = int(round(unit.def_ * factor))
+    campaign_base = dict(unit.campaign_base_stats or {})
+    if campaign_base:
+        # Hero battle Units hold naked campaign stats separately from their
+        # effective equipment-modified values.  Level the naked values, then
+        # apply only their delta to combat values so equipment stays a
+        # temporary modifier instead of becoming permanent progression.
+        old_base_hp = int(campaign_base.get("hp", unit.max_hp))
+        old_base_atk = int(campaign_base.get("atk", unit.atk))
+        old_base_def = int(campaign_base.get("def", unit.def_))
+        campaign_base["hp"] = int(round(old_base_hp * factor))
+        campaign_base["atk"] = int(round(old_base_atk * factor)) + 1
+        campaign_base["def"] = int(round(old_base_def * factor)) + 1
+        unit.max_hp += campaign_base["hp"] - old_base_hp
+        unit.hp = min(unit.max_hp, unit.hp + campaign_base["hp"] - old_base_hp)
+        unit.atk += campaign_base["atk"] - old_base_atk
+        unit.def_ += campaign_base["def"] - old_base_def
+        unit.campaign_base_stats = campaign_base
+    else:
+        # Non-heroes and battles created before the snapshot migration retain
+        # the legacy effective-stat behaviour.
+        new_max_hp = int(round(unit.max_hp * factor))
+        hp_gain = new_max_hp - unit.max_hp
+        unit.max_hp = new_max_hp
+        unit.hp = min(unit.max_hp, unit.hp + hp_gain)
+        unit.atk = int(round(unit.atk * factor))
+        unit.def_ = int(round(unit.def_ * factor))
 
-    # Auto-allocate bonus points
-    unit.atk += 1
-    unit.def_ += 1
+        # Auto-allocate bonus points
+        unit.atk += 1
+        unit.def_ += 1
 
     return LevelUpResult(
         new_level=unit.level,

@@ -33,6 +33,7 @@ def valid_class_ids() -> set[str]:
 
 # Backward-compatible export for callers that only need a startup snapshot.
 VALID_CLASS_IDS: tuple[str, ...] = tuple(sorted(valid_class_ids()))
+VALID_MERCENARY_UPGRADE_STATS = frozenset({"hp", "atk", "def", "matk", "mdef", "mov"})
 
 WinCondition = Literal["rout", "seize", "defend", "boss"]
 
@@ -269,6 +270,42 @@ class MainlineRewards(APIModel):
     exp_per_unit: int = Field(default=0, ge=0, le=10_000)
 
 
+class MercenaryUpgradeRuleSpec(APIModel):
+    """Authorable point cost and cap for one mercenary stat."""
+
+    point_cost: int = Field(ge=1, le=100)
+    max_bonus: int = Field(ge=1, le=100)
+
+
+class MainlineMercenaryBalance(APIModel):
+    """Declarative campaign-side rules for generic, non-hero units.
+
+    Hero progression remains in the hero campaign state.  These values are
+    intentionally scoped to the mainline's expendable mercenary roster.
+    """
+
+    total_points: int = Field(default=100, ge=0, le=10_000)
+    starting_fund: int = Field(default=1000, ge=0, le=1_000_000)
+    allowed_unit_types: Optional[list[str]] = None
+    stat_rules: dict[str, MercenaryUpgradeRuleSpec] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_mercenary_unit_types(self) -> "MainlineMercenaryBalance":
+        if self.allowed_unit_types is not None:
+            known = valid_class_ids()
+            unknown = sorted(set(self.allowed_unit_types) - known)
+            if unknown:
+                raise ValueError(
+                    f"mercenary_balance.allowed_unit_types contains unknown class_ids {unknown!r}"
+                )
+        unknown_stats = sorted(set(self.stat_rules) - VALID_MERCENARY_UPGRADE_STATS)
+        if unknown_stats:
+            raise ValueError(
+                f"mercenary_balance.stat_rules contains unsupported stats {unknown_stats!r}"
+            )
+        return self
+
+
 class Mainline(APIModel):
     """A campaign: a sequence of battles with dialogue framing.
 
@@ -289,6 +326,9 @@ class Mainline(APIModel):
     dialogues: dict[str, str] = Field(default_factory=dict)
     battles: list[BattleSpec] = Field(min_length=1, max_length=32)
     rewards_on_clear: MainlineRewards = Field(default_factory=MainlineRewards)
+    mercenary_balance: MainlineMercenaryBalance = Field(
+        default_factory=MainlineMercenaryBalance
+    )
     # Optional campaign link. Completion remains an explicit player choice;
     # this only tells the client which chapter can be entered next.
     next_mainline_id: Optional[str] = Field(default=None, pattern=r"^[a-z0-9_]{3,64}$")
@@ -639,6 +679,9 @@ class ChapterBalanceConfigOut(_PydanticBaseModel):
     enemy_modifiers: dict[str, int]
     max_recruit_count: int
     starting_fund: int
+    total_points: int
+    allowed_unit_types: list[str]
+    stat_rules: dict[str, dict[str, int]]
 
 
 class CommanderAllocationOut(_PydanticBaseModel):
@@ -673,7 +716,6 @@ class MainlineMercenaryAllocateRequest(_PydanticBaseModel):
     unit_type: str = _Field(min_length=1, max_length=16)
     stat: str = _Field(min_length=1, max_length=16)
     value: int = _Field(ge=1, le=10)
-    cost: int = _Field(ge=1, le=100)
 
 
 class MainlineMercenaryAllocateOut(_PydanticBaseModel):

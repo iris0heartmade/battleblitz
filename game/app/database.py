@@ -230,6 +230,14 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN hero_id VARCHAR(64)"
         ))
         logger.info("Migration: added units.hero_id")
+    # 2026-07-18: mainline heroes retain their bare campaign attributes on
+    # the battle Unit.  Equipment is applied afterwards and must never be
+    # written back as permanent progression at battle settlement.
+    if "campaign_base_stats" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN campaign_base_stats JSON"
+        ))
+        logger.info("Migration: added units.campaign_base_stats")
     # 2026-07-10: commander persistence for Player and PlayerProfile.
     profile_rows = sync_conn.execute(text(
         "PRAGMA table_info(player_profiles)"

@@ -13,7 +13,7 @@ Endpoints covered:
           number of mercenary points they have to spend
   - POST /mainlines/{id}/mercenary/allocate
         → body: { "user_name": ..., "unit_type": ..., "stat": ...,
-                   "value": ..., "cost": ... }
+                   "value": ... }; the server calculates the cost
         → decrements ``mercenary_points`` on the profile, records the
           upgrade in ``MercenaryRosterState.unit_type_upgrades``,
           returns the updated allocation
@@ -73,6 +73,10 @@ class TestMercenaryConfig:
             "attack": 0, "defense": 0, "income": 0,
             "move": 0, "vision": 0,
         }
+        assert body["balance"]["total_points"] == 100
+        assert body["balance"]["stat_rules"]["atk"] == {
+            "point_cost": 10, "max_bonus": 5,
+        }
         # New player starts with a clean allocation and 100 points.
         assert body["allocation"]["total_points"] == 100
         assert body["allocation"]["spent_points"] == 0
@@ -131,14 +135,13 @@ class TestMercenaryAllocate:
                 "unit_type": "swordsman",
                 "stat": "atk",
                 "value": 1,
-                "cost": 20,
             },
         )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["ok"] is True
-        assert body["spent_points"] == 20
-        assert body["remaining_points"] == 80
+        assert body["spent_points"] == 10
+        assert body["remaining_points"] == 90
         assert body["unit_type_upgrades"] == {"swordsman": {"atk": 1}}
 
         # Persisted to the profile.
@@ -148,35 +151,32 @@ class TestMercenaryAllocate:
                 select(PlayerProfile).where(PlayerProfile.user_name == "alice")
             )).scalar_one()
             saved = profile.mercenary_roster_state["allocation"]
-            assert saved["spent_points"] == 20
+            assert saved["spent_points"] == 10
             assert saved["unit_type_upgrades"] == {"swordsman": {"atk": 1}}
 
     async def test_allocate_rejects_overspend(self, merc_client):
         client, _ = merc_client
         await _create_profile(client, "alice")
 
-        # First allocate 90 points (within budget).
-        r1 = await client.post(
-            "/mainlines/chapter_01_steel_rebellion/mercenary/allocate",
-            json={
-                "user_name": "alice",
-                "unit_type": "swordsman",
-                "stat": "atk",
-                "value": 1,
-                "cost": 90,
-            },
-        )
-        assert r1.status_code == 200, r1.text
+        # Reach 90 points within per-stat limits, then exceed the total.
+        for payload in (
+            {"unit_type": "swordsman", "stat": "hp", "value": 10},
+            {"unit_type": "swordsman", "stat": "hp", "value": 10},
+            {"unit_type": "swordsman", "stat": "atk", "value": 5},
+        ):
+            r1 = await client.post(
+                "/mainlines/chapter_01_steel_rebellion/mercenary/allocate",
+                json={"user_name": "alice", **payload},
+            )
+            assert r1.status_code == 200, r1.text
 
-        # Then try to add 20 more — would push spent past 100.
         r2 = await client.post(
             "/mainlines/chapter_01_steel_rebellion/mercenary/allocate",
             json={
                 "user_name": "alice",
                 "unit_type": "swordsman",
                 "stat": "def",
-                "value": 1,
-                "cost": 20,
+                "value": 2,
             },
         )
         assert r2.status_code == 409, r2.text
@@ -191,7 +191,43 @@ class TestMercenaryAllocate:
                 "unit_type": "swordsman",
                 "stat": "atk",
                 "value": 1,
-                "cost": 10,
             },
         )
         assert r.status_code == 404
+
+
+@pytest.mark.integration
+async def test_mainline_spawn_applies_allocation_only_to_generic_units(merc_client):
+    client, SessionLocal = merc_client
+    await _create_profile(client, "alice")
+    allocated = await client.post(
+        "/mainlines/chapter_01_steel_rebellion/mercenary/allocate",
+        json={
+            "user_name": "alice", "unit_type": "swordsman",
+            "stat": "atk", "value": 2,
+        },
+    )
+    assert allocated.status_code == 200, allocated.text
+
+    started = await client.post(
+        "/mainlines/chapter_01_steel_rebellion/start",
+        json={"user_name": "alice", "skip_intro": True},
+    )
+    assert started.status_code == 201, started.text
+
+    from app.models import Game, Player, Unit
+    async with SessionLocal() as s:
+        game = (await s.execute(select(Game))).scalar_one()
+        human = (await s.execute(
+            select(Player).where(Player.game_id == game.id, Player.is_ai.is_(False))
+        )).scalar_one()
+        units = (await s.execute(
+            select(Unit).where(Unit.player_id == human.id)
+        )).scalars().all()
+        generic_swordsman = next(unit for unit in units if unit.hero_id is None and unit.unit_type == "swordsman")
+        hero_warlock = next(unit for unit in units if unit.hero_id == "yun")
+        assert generic_swordsman.atk == 20  # base 18 + allocated 2
+        assert hero_warlock.atk == 20  # hero data, not a swordsman allocation
+        assert game.battle_config["mercenary"]["unit_type_upgrades"] == {
+            "swordsman": {"atk": 2},
+        }

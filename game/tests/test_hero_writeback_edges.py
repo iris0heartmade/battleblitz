@@ -72,6 +72,37 @@ async def _finish_battle(SessionLocal, game_id):
         await s.commit()
 
 
+def test_level_up_scales_hero_snapshot_not_equipment_bonus():
+    """Level growth must use naked stats, preserving the equipment delta."""
+    from types import SimpleNamespace
+
+    from app.config import EXP_TO_LEVEL
+    from app.game_logic import level_up_if_ready
+
+    unit = SimpleNamespace(
+        level=1,
+        exp=EXP_TO_LEVEL,
+        # Effective battle values: ruby ring already added HP +3.
+        hp=53,
+        max_hp=53,
+        atk=20,
+        def_=11,
+        campaign_base_stats={
+            "hp": 50, "atk": 20, "def": 11,
+            "matk": 27, "mdef": 12, "mov": 4, "mp": 8,
+        },
+    )
+
+    result = level_up_if_ready(unit)
+
+    assert result is not None
+    assert unit.campaign_base_stats["hp"] == 52
+    assert unit.max_hp == 55
+    assert unit.hp == 55
+    assert unit.campaign_base_stats["atk"] == 22
+    assert unit.atk == 22
+
+
 # ============================================================
 # Edge 1: hero died during battle
 # ============================================================
@@ -89,7 +120,7 @@ class TestDeadHeroWriteback:
         game_id = body["game_id"]
         await _finish_battle(SessionLocal, game_id)
 
-        from app.models import Player, Unit
+        from app.models import Game, Player, Unit
         from app.progression.models import PlayerProfile
         async with SessionLocal() as s:
             # Capture the pre-battle max_hp for yun from the hero_campaign_states
@@ -134,6 +165,51 @@ class TestDeadHeroWriteback:
 
 @pytest.mark.integration
 class TestEquipmentSlot:
+    async def test_equipment_bonus_is_not_written_into_campaign_base_stats(
+        self, wb_client,
+    ):
+        """Battle equipment raises effective stats only for that battle."""
+        client, SessionLocal = wb_client
+        await _create_profile(client, "alice")
+        body = await _start_mainline(client, "alice")
+        game_id = body["game_id"]
+
+        from app.models import Game, Player, Unit
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game_id, Player.user_name == "alice")
+            )).scalar_one()
+            yun = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id, Unit.hero_id == "yun")
+            )).scalar_one()
+            # Yun's default ruby ring gives HP +3.  The Unit must carry the
+            # effective 53 HP while its settlement snapshot remains 50.
+            assert yun.max_hp == 53
+            assert yun.campaign_base_stats["hp"] == 50
+            assert profile.hero_campaign_states["yun"]["base_stats"]["hp"] == 50
+            game = await s.get(Game, game_id)
+            game.status = "finished"
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/advance",
+            json={"user_name": "alice", "game_id": game_id},
+        )
+        assert r.status_code == 200, r.text
+
+        async with SessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            saved = profile.hero_campaign_states["yun"]
+            assert saved["base_stats"]["hp"] == 50
+            assert saved["base_stats"]["matk"] == 27
+            assert saved["base_stats"]["mdef"] == 12
+
     async def test_advance_does_not_overwrite_long_term_equipment(
         self, wb_client,
     ):

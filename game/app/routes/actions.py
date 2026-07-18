@@ -861,6 +861,13 @@ async def recruit_unit(
         has_moved=True,    # can't move this turn
         skills=list(profile.default_skills),
     )
+    mercenary_snapshot = dict((game.battle_config or {}).get("mercenary") or {})
+    if int(mercenary_snapshot.get("human_player_id", -1)) == player.id:
+        from app.mercenary_domain import apply_allocation_to_unit
+        apply_allocation_to_unit(
+            new_unit,
+            dict(mercenary_snapshot.get("unit_type_upgrades") or {}),
+        )
     session.add(new_unit)
     await session.flush()  # populate new_unit.id
     # Park the new unit on the barracks tile.

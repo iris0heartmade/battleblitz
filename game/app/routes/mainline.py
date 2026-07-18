@@ -262,18 +262,39 @@ async def _persist_mainline_hero_results(
                 build_initial_campaign_state(unit.hero_id)
             )
         prior = hero_campaign_state_from_dict(stored_state)
+        campaign_base_stats = dict(unit.campaign_base_stats or {})
+        if not campaign_base_stats:
+            # Legacy in-flight battles predate Unit.campaign_base_stats.
+            # This is a one-time best-effort recovery; new games always use
+            # the explicit snapshot above.  Log so an operator can identify
+            # saves whose equipment may already have been persisted wrongly.
+            equipment_bonuses = equipped_stat_bonuses(prior.equipment)
+            logger.warning(
+                "mainline hero persist using legacy stat fallback: user=%s game=%d hero=%s",
+                profile.user_name,
+                game_id,
+                unit.hero_id,
+            )
+            campaign_base_stats = {
+                "hp": int(unit.max_hp) - int(equipment_bonuses.get("hp", 0)),
+                "atk": int(unit.atk) - int(equipment_bonuses.get("atk", 0)),
+                "def": int(unit.def_) - int(equipment_bonuses.get("def", 0)),
+                "matk": int(unit.matk) - int(equipment_bonuses.get("matk", 0)),
+                "mdef": int(unit.mdef) - int(equipment_bonuses.get("mdef", 0)),
+                "mov": int(unit.mov) - int(equipment_bonuses.get("mov", 0)),
+            }
         updated = {
             "hero_id": unit.hero_id,
             "class_id": unit.unit_type,
             "level": int(unit.level),
             "exp": int(unit.exp),
             "base_stats": {
-                "hp": int(unit.max_hp),
-                "atk": int(unit.atk),
-                "def": int(unit.def_),
-                "matk": int(unit.matk),
-                "mdef": int(unit.mdef),
-                "mov": int(unit.mov),
+                "hp": int(campaign_base_stats["hp"]),
+                "atk": int(campaign_base_stats["atk"]),
+                "def": int(campaign_base_stats["def"]),
+                "matk": int(campaign_base_stats["matk"]),
+                "mdef": int(campaign_base_stats["mdef"]),
+                "mov": int(campaign_base_stats["mov"]),
                 # MP is temporary battle state; keep the stored long-term pool.
                 "mp": int(prior.base_stats.get("mp", build_initial_campaign_state(unit.hero_id).base_stats["mp"])),
             },
@@ -542,7 +563,7 @@ async def _spawn_battle_for_index(
         color="red",
         seat=0,
         is_ai=False,
-        gold=MAINLINE_INITIAL_GOLD,
+        gold=int(ml.mercenary_balance.starting_fund),
         commander_id=(profile.mainline_commanders or {}).get(mainline_id),
     )
     human.co_state = {
@@ -649,6 +670,36 @@ async def _spawn_battle_for_index(
         map_seed=battle.map_seed,
         hero_overrides=hero_overrides or None,
         spawn_overrides=merged_spawn_overrides,
+    )
+
+    # Commander points strengthen only generic mercenaries.  Hero Units keep
+    # their own campaign snapshot and equipment path, so they are excluded.
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    _balance, rules = _build_mercenary_policy(ml)
+    human_units = (await session.execute(
+        select(Unit).where(Unit.player_id == human.id)
+    )).scalars().all()
+    from app.mercenary_domain import apply_allocation_to_unit
+    applied_unit_count = 0
+    for unit in human_units:
+        if unit.hero_id or unit.unit_type not in rules.available_unit_types():
+            continue
+        if apply_allocation_to_unit(unit, allocation.unit_type_upgrades):
+            applied_unit_count += 1
+
+    # Persist the exact, already-validated allocation on the Game.  Recruit
+    # actions consume this snapshot so post-start changes to a profile cannot
+    # rewrite a battle that is already in progress.
+    battle_config = dict(game.battle_config or {})
+    battle_config["mercenary"] = {
+        "human_player_id": int(human.id),
+        "unit_type_upgrades": allocation.unit_type_upgrades,
+    }
+    game.battle_config = battle_config
+    logger.info(
+        "mainline mercenary allocation applied: mainline=%s game=%d units=%d",
+        mainline_id, game.id, applied_unit_count,
     )
 
     # 5. Audit log.
@@ -1567,26 +1618,41 @@ async def abandon_mainline(
 # ============================================================
 
 
-def _build_default_mercenary_balance() -> "ChapterBalanceConfig":
-    """Return the chapter's ``ChapterBalanceConfig``.
+def _build_mercenary_policy(ml):
+    """Build the server-authoritative allocation policy from mainline JSON."""
+    from app.mercenary_domain import (
+        ChapterBalanceConfig,
+        DEFAULT_UPGRADE_RULES,
+        MercenaryAllocationRules,
+        UpgradeRule,
+    )
 
-    Until the mainline JSON supports a ``chapter_balance`` block, we
-    always return the dataclass defaults. This keeps the FE panel
-    stable across mainlines.
-    """
-    from app.mercenary_domain import ChapterBalanceConfig
-    return ChapterBalanceConfig()
+    config = ml.mercenary_balance
+    balance = ChapterBalanceConfig(starting_fund=int(config.starting_fund))
+    configured_rules = {
+        stat: UpgradeRule(
+            point_cost=int(rule.point_cost), max_bonus=int(rule.max_bonus),
+        )
+        for stat, rule in config.stat_rules.items()
+    }
+    return balance, MercenaryAllocationRules(
+        stat_rules=configured_rules or dict(DEFAULT_UPGRADE_RULES),
+        allowed_unit_types=(
+            frozenset(config.allowed_unit_types)
+            if config.allowed_unit_types is not None
+            else None
+        ),
+    )
 
 
 def _load_allocation_from_profile(
     profile: PlayerProfile,
-) -> tuple["CommanderAllocation", "ChapterBalanceConfig"]:
+) -> "CommanderAllocation":
     """Read ``profile.mercenary_roster_state`` into a fresh
     ``CommanderAllocation`` (or a default if absent).
 
-    Returns ``(allocation, balance)`` — the balance is always the
-    chapter default for now; future revision may override it from
-    the mainline JSON.
+    The chapter determines which part of this shared commander allocation
+    can be spent; no client-controlled value participates in pricing.
     """
     from app.mercenary_domain import CommanderAllocation
     stored = dict(getattr(profile, "mercenary_roster_state", {}) or {})
@@ -1599,7 +1665,7 @@ def _load_allocation_from_profile(
             for ut, stats in (alloc_payload.get("unit_type_upgrades") or {}).items()
         },
     )
-    return allocation, _build_default_mercenary_balance()
+    return allocation
 
 
 async def _save_allocation_to_profile(
@@ -1645,7 +1711,7 @@ async def get_mercenary_config(
         mainline_id, user_name,
     )
     try:
-        load_mainline(mainline_id)
+        ml = load_mainline(mainline_id)
     except MainlineNotFound as exc:
         logger.warning("get_mercenary_config not found: mainline=%s", mainline_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
@@ -1654,13 +1720,24 @@ async def get_mercenary_config(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
     profile = await _ensure_profile_or_create(session, user_name)
-    allocation, balance = _load_allocation_from_profile(profile)
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    balance, rules = _build_mercenary_policy(ml)
     return MainlineMercenaryConfigOut(
         mainline_id=mainline_id,
         balance=ChapterBalanceConfigOut(
             enemy_modifiers=dict(balance.enemy_modifiers),
             max_recruit_count=int(balance.max_recruit_count),
             starting_fund=int(balance.starting_fund),
+            total_points=int(ml.mercenary_balance.total_points),
+            allowed_unit_types=sorted(rules.available_unit_types()),
+            stat_rules={
+                stat: {
+                    "point_cost": int(rule.point_cost),
+                    "max_bonus": int(rule.max_bonus),
+                }
+                for stat, rule in rules.stat_rules.items()
+            },
         ),
         allocation=CommanderAllocationOut(
             total_points=int(allocation.total_points),
@@ -1698,7 +1775,7 @@ async def allocate_mercenary_points(
         mainline_id, body.user_name, body.unit_type, body.stat,
     )
     try:
-        load_mainline(mainline_id)
+        ml = load_mainline(mainline_id)
     except MainlineNotFound as exc:
         logger.warning(
             "allocate_mercenary_points not found: mainline=%s", mainline_id,
@@ -1713,30 +1790,37 @@ async def allocate_mercenary_points(
     # Strict 404: a typo'd user_name must not auto-create a wrong
     # profile (mirrors /advance, /abandon).
     profile = await _load_profile(session, body.user_name)
-    allocation, _balance = _load_allocation_from_profile(profile)
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    _balance, rules = _build_mercenary_policy(ml)
 
     try:
-        allocation.add_upgrade(
-            body.unit_type, body.stat, body.value, body.cost,
+        from app.mercenary_domain import apply_commander_upgrade
+        receipt = apply_commander_upgrade(
+            allocation,
+            unit_type=body.unit_type,
+            stat=body.stat,
+            value=body.value,
+            rules=rules,
         )
     except ValueError as exc:
         logger.warning(
-            "allocate_mercenary_points overspend: user=%s spent=%d cost=%d",
-            body.user_name, allocation.spent_points, body.cost,
+            "allocate_mercenary_points rejected: user=%s reason=%s",
+            body.user_name, exc,
         )
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"mercenary points exceeded: have "
-            f"{allocation.total_points - allocation.spent_points}, "
-            f"need {body.cost}",
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if "points exceeded" in str(exc)
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
         )
+        raise HTTPException(status_code, str(exc))
 
     await _save_allocation_to_profile(session, profile, allocation)
     logger.info(
         "allocate_mercenary_points ok: user=%s unit_type=%s stat=%s "
         "value=%d cost=%d spent=%d",
         body.user_name, body.unit_type, body.stat,
-        body.value, body.cost, allocation.spent_points,
+        body.value, receipt.cost, allocation.spent_points,
     )
     return MainlineMercenaryAllocateOut(
         ok=True,

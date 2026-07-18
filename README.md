@@ -381,6 +381,12 @@ python ../tools/verify_economy.py
 
 # 真实浏览器模拟玩家(需要 Node + npm install 一次)
 cd tools && npm install && node playwright_e2e.js
+
+# 主线 UI 浏览器回归（可选；使用隔离 SQLite，不会读取 battleblitz.db）
+cd game
+python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-e2e.txt
+python -m playwright install chromium
+python -m pytest tests/e2e -m e2e -q
 ```
 
 ---

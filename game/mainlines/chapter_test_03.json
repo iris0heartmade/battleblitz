@@ -10,14 +10,18 @@
       "level": 20,
       "name": "云",
       "hero_id": "yun",
-      "color": "red"
+      "color": "red",
+      "x": 2,
+      "y": 8
     },
     {
       "class_id": "healer",
       "level": 1,
       "name": "安娜",
       "hero_id": "anna",
-      "color": "red"
+      "color": "red",
+      "x": 2,
+      "y": 9
     },
     {"class_id": "swordsman", "level": 1, "name": "红刀"}
   ],

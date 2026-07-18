@@ -721,6 +721,18 @@ class TestAdvance:
             yun.mov = 6
             yun.mp = 1
             yun.skills = ["arcane_strike", "veteran_focus"]
+            # Battle progression now updates a separate naked-stat snapshot;
+            # simulate that authoritative combat progression rather than
+            # treating the equipment-modified Unit fields as persistent data.
+            yun.campaign_base_stats = {
+                "hp": 68,
+                "atk": 31,
+                "def": 18,
+                "matk": 40,
+                "mdef": 21,
+                "mov": 6,
+                "mp": 8,
+            }
             await s.commit()
 
         r = await client.post(

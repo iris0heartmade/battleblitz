@@ -5979,6 +5979,9 @@ const MainlineView = {
       ? catalog.map((item) => {
           const equipped = focusedHero?.equipment?.[item.slot] === item.equipment_id;
           const count = Number(inventory[item.equipment_id] || 0);
+          const equippedElsewhere = heroes.filter((hero) => hero.hero_id !== focusedHero?.hero_id)
+            .filter((hero) => Object.values(hero.equipment || {}).includes(item.equipment_id)).length;
+          const unavailable = equippedElsewhere >= count;
           const bonuses = Object.entries(item.stat_bonuses || {}).map(([stat, value]) => `${stat.toUpperCase()} +${value}`).join(" / ");
           return `<div class="mainline-prepare-row">
             <div>
@@ -5987,7 +5990,7 @@ const MainlineView = {
               <div class="mainline-prepare-meta">${escapeHtml(item.description || "")}</div>
             </div>
             <div class="mainline-prepare-actions">
-              <button class="btn ${equipped ? "btn-secondary" : "btn-primary"} btn-sm" data-action="mainline-prepare-equip" data-slot="${escapeHtml(item.slot)}" data-equipment-id="${escapeHtml(item.equipment_id)}" ${(!focusedHero || count <= 0 || equipped) ? "disabled" : ""}>${equipped ? "已装备" : "装备"}</button>
+              <button class="btn ${equipped ? "btn-secondary" : "btn-primary"} btn-sm" data-action="mainline-prepare-equip" data-slot="${escapeHtml(item.slot)}" data-equipment-id="${escapeHtml(item.equipment_id)}" ${(!focusedHero || count <= 0 || equipped || unavailable) ? "disabled" : ""}>${equipped ? "已装备" : (unavailable ? "已分配" : "装备")}</button>
             </div>
           </div>`;
         }).join("")
@@ -5996,7 +5999,10 @@ const MainlineView = {
     const heroRows = heroes.length
       ? heroes.map((hero) => {
           const selected = draft.focusedHeroId === hero.hero_id ? " selected" : "";
-          const assignmentCount = Object.values(draft.itemAssignments).filter((heroId) => heroId === hero.hero_id).length;
+          // Equipment saves immediately and refreshes `prep`; this count
+          // must use that authoritative hero state, not the obsolete local
+          // item-assignment draft used by the earlier mock UI.
+          const assignmentCount = Object.values(hero.equipment || {}).filter(Boolean).length;
           return `
             <button class="mainline-prepare-row selectable${selected}" data-action="mainline-prepare-focus-hero" data-hero-id="${escapeHtml(hero.hero_id)}">
               <div>

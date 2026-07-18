@@ -1,0 +1,8 @@
+# Optional real-browser test tooling. Kept separate from normal pytest so
+# contributors and CI jobs without a browser do not download Chromium.
+#
+# Install from game/:
+#   python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-e2e.txt
+#   python -m playwright install chromium
+#   python -m pytest tests/e2e -m e2e -q
+playwright>=1.40.0

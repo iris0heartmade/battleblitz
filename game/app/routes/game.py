@@ -359,6 +359,18 @@ def _apply_hero_overrides(
                 candidate.mov = int(campaign_stats["mov"])
             if "mp" in campaign_stats:
                 candidate.mp = int(campaign_stats["mp"])
+            # Keep permanent attributes separate from the effective combat
+            # values below.  Settlement writes this snapshot, not the Unit's
+            # equipment-modified fields.
+            candidate.campaign_base_stats = {
+                "hp": int(candidate.max_hp),
+                "atk": int(candidate.atk),
+                "def": int(candidate.def_),
+                "matk": int(candidate.matk),
+                "mdef": int(candidate.mdef),
+                "mov": int(candidate.mov),
+                "mp": int(campaign_stats.get("mp", candidate.mp)),
+            }
             # Campaign equipment is a persistent pre-battle choice.  Apply
             # it only after all class/level values have been materialised so
             # every combat path sees the same effective stats.
