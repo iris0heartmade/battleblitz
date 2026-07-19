@@ -6,14 +6,17 @@ this client replaces the old HTML/CSS/JS board renderer with a native
 
 See `../docs/路线/Godot移植方案.md` for the broader port context.
 
-> **Status as of 2026-07-16:** the Godot client has moved past the map
-> presentation baseline into playable parity slices: online room browsing
-> and creation, lobby AI controls, team switching, save management, attack
-> confirmation, recruit feedback, CO HUD/power, BGM selection, commander
-> selection, and mainline start/advance/abandon/next-battle flows. The
-> remaining gaps are mostly advanced Web UI parity: the map editor, richer
-> spectator/host controls, AI commander assignment, and deeper end-to-end
-> interaction coverage.
+> **Status as of 2026-07-19:** the Godot client is now close to replacing
+> the old Web UI for normal play. The old home-page "free play vs AI" entry
+> has been removed; users enter through mainline or the online lobby. It
+> covers room browsing and creation, lobby host controls, spectator
+> join/convert, team switching, save management, movement/attack/skill/
+> claim/recruit/wait/end-turn, CO HUD/power, BGM selection, commander
+> selection, mainline lifecycle with auto-abandon retry, dialogue scenes,
+> portrait assets, and a basic map editor. Remaining gaps are mostly
+> advanced parity and release polish: editor undo/fill/line/select,
+> help/reference panels, AI commentary UI,
+> phase-aware polling/diagnostics, and export-safe asset loading.
 
 ---
 
@@ -46,6 +49,12 @@ Run the smoke test:
 "<godot_exe>" --headless --path godot-client res://tools/smoke_test.tscn
 ```
 
+Verify the two critical GUI entry flows against a running backend:
+
+```bash
+"<godot_exe>" --headless --path godot-client res://tools/entry_flow_e2e.tscn
+```
+
 Launch the demo board scene:
 
 ```bash
@@ -72,7 +81,8 @@ godot-client/
 │   └── board.tscn
 └── tools/
     ├── sync_assets.py
-    └── smoke_test.gd
+    ├── smoke_test.gd
+    └── entry_flow_e2e.gd
 ```
 
 ---
@@ -92,11 +102,13 @@ godot-client/
       BGM selection, commander selection, save manager, combat confirmation,
       CO meter/power, dialogue, and mainline lifecycle controls are present.
 - [ ] **M3.5 - Web UI parity polish.** Remaining work: full map editor,
-      richer spectator conversion/add-spectator UX, host row-level controls,
-      per-AI commander assignment, better room-row interaction, and full
-      integration/e2e coverage against a running backend.
+      help/reference panels, commentary UI, diagnostics, and full integration/e2e coverage against
+      a running backend.
 - [ ] **M4 - Touch + mobile export.** Android + iOS input remap, gesture camera.
 - [ ] **M5 - Backend deploy + Web export.** WSS on a public host, HTML5 export.
 
 For the current gap list, see
-`../docs/superpowers/specs/2026-07-16-godot-client-parity-audit.md`.
+`../docs/WebUI-vs-GodotClient-差异与计划.md`.
+
+For the backend contract used by this client, see
+`../docs/参考/Godot客户端后端接口.md`.

@@ -81,45 +81,51 @@ func _ready() -> void:
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_check = main_scene.instantiate()
 	add_child(main_check)
-	_assert_true("Lobby has RoomList", main_check.get_node_or_null("Lobby/LobbyFrame/RoomList") != null,
+	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
+	var lobby_create_col := "Lobby/LobbyFrame/LobbyDualCol/RightCol"
+	var lobby_ai_row := "Lobby/LobbyFrame/AiConfigRow"
+	var lobby_ai_actions := "Lobby/LobbyFrame/AiActionRow"
+	_assert_true("Lobby has RoomList", main_check.get_node_or_null(lobby_join_col + "/RoomList") != null,
 		"lobby hub should expose a waiting-room list")
-	_assert_true("Lobby has RoomSelectOption", main_check.get_node_or_null("Lobby/LobbyFrame/RoomSelectOption") != null,
+	_assert_true("Lobby has RoomSelectOption", main_check.get_node_or_null(lobby_join_col + "/RoomSelectOption") != null,
 		"lobby hub should expose a selectable room dropdown")
-	_assert_true("Lobby has RefreshRoomsBtn", main_check.get_node_or_null("Lobby/LobbyFrame/RefreshRoomsBtn") != null,
+	_assert_true("Lobby has RefreshRoomsBtn", main_check.get_node_or_null(lobby_join_col + "/LeftBtnRow/RefreshRoomsBtn") != null,
 		"lobby hub should expose a room refresh button")
-	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null("Lobby/LobbyFrame/JoinSelectedBtn") != null,
+	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null(lobby_join_col + "/LeftBtnRow/JoinSelectedBtn") != null,
 		"lobby hub should expose a join-selected button")
-	_assert_true("Lobby has JoinModeOption", main_check.get_node_or_null("Lobby/LobbyFrame/JoinModeOption") != null,
+	_assert_true("Lobby has JoinModeOption", main_check.get_node_or_null(lobby_join_col + "/JoinModeOption") != null,
 		"lobby hub should expose player/spectator join mode")
-	_assert_true("Lobby has TeamOption", main_check.get_node_or_null("Lobby/LobbyFrame/TeamOption") != null,
+	_assert_true("Lobby has TeamOption", main_check.get_node_or_null(lobby_create_col + "/TeamRow/TeamOption") != null,
 		"lobby hub should expose a team selection option")
-	_assert_true("Lobby has LobbyApplyTeamBtn", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyApplyTeamBtn") != null,
+	_assert_true("Lobby has LobbyApplyTeamBtn", main_check.get_node_or_null(lobby_create_col + "/TeamRow/LobbyApplyTeamBtn") != null,
 		"lobby hub should expose a team update action")
-	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null("Lobby/LobbyFrame/CreateNameInput") != null,
+	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null(lobby_create_col + "/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
-	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null("Lobby/LobbyFrame/MapPresetOption") != null,
+	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null(lobby_create_col + "/MapPresetOption") != null,
 		"lobby hub should expose a map preset dropdown")
-	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyCommanderOption") != null,
+	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null(lobby_create_col + "/LobbyCommanderOption") != null,
 		"lobby hub should expose commander selection for room creation")
-	_assert_true("Lobby has LobbyBgmOption", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyBgmOption") != null,
+	_assert_true("Lobby has LobbyBgmOption", main_check.get_node_or_null(lobby_create_col + "/LobbyBgmOption") != null,
 		"lobby hub should expose BGM selection for room creation")
-	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null("Lobby/LobbyFrame/CreateRoomBtn") != null,
+	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null(lobby_create_col + "/CreateRoomBtn") != null,
 		"lobby hub should expose a create room button")
-	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiDifficultyOption") != null,
+	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null(lobby_ai_row + "/AiDifficultyOption") != null,
 		"lobby hub should expose AI difficulty selection")
-	_assert_true("Lobby has AiKindOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiKindOption") != null,
+	_assert_true("Lobby has AiKindOption", main_check.get_node_or_null(lobby_ai_row + "/AiKindOption") != null,
 		"lobby hub should expose AI backend selection")
-	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPersonalityOption") != null,
+	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null(lobby_ai_row + "/AiPersonalityOption") != null,
 		"lobby hub should expose AI personality selection")
 	_assert_true("Lobby has AiCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiCommanderOption") != null,
 		"lobby hub should expose a commander preset for AI seats created with the room")
-	_assert_true("Lobby has AiPlayerOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiPlayerOption") != null,
+	_assert_true("Lobby has AiPlayerOption", main_check.get_node_or_null(lobby_ai_actions + "/AiPlayerOption") != null,
 		"lobby hub should expose an AI player selector")
-	_assert_true("Lobby has LobbyRemoveAiBtn", main_check.get_node_or_null("Lobby/LobbyFrame/LobbyRemoveAiBtn") != null,
+	_assert_true("Lobby has LobbyRemoveAiBtn", main_check.get_node_or_null(lobby_ai_actions + "/LobbyRemoveAiBtn") != null,
 		"lobby hub should expose AI removal")
-	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/SavesButton") != null,
+	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/SavesButton") != null,
 		"main menu should expose save management")
-	_assert_true("Menu has EditorButton", main_check.get_node_or_null("Menu/CenterContainer/ButtonCol/EditorButton") != null,
+	_assert_true("Menu has no FreePlayButton", main_check.get_node_or_null("Menu/CenterContainer/GroupRow/SoloCard/FreePlayButton") == null,
+		"the obsolete home free-play vs AI entry should stay removed")
+	_assert_true("Menu has EditorButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/EditorButton") != null,
 		"main menu should expose the map editor")
 	_assert_true("EditorView exists", main_check.get_node_or_null("EditorView") != null,
 		"map editor should have a dedicated Godot view")
@@ -169,8 +175,10 @@ func _ready() -> void:
 		"mainline view should expose commander apply action")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
-	var room_select: OptionButton = main_check.get_node("Lobby/LobbyFrame/RoomSelectOption")
-	var room_list: RichTextLabel = main_check.get_node("Lobby/LobbyFrame/RoomList")
+	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
+		"attack forecast should render in the right-side information panel")
+	var room_select: OptionButton = main_check.get_node(lobby_join_col + "/RoomSelectOption")
+	var room_list: RichTextLabel = main_check.get_node(lobby_join_col + "/RoomList")
 	main_check.call("_on_room_list_response", [
 		{"id": 101, "name": "Alpha", "status": "waiting", "map_preset": "balanced_2p_15", "capacity": 2},
 		{"id": 202, "name": "Beta", "status": "waiting", "map_preset": "balanced_3p_15", "capacity": 3},
@@ -187,8 +195,8 @@ func _ready() -> void:
 			{"id": 9, "user_name": "Bot", "color": "blue", "is_ai": true},
 		],
 	}, 200)
-	var ai_player_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/AiPlayerOption")
-	var remove_ai_btn: Button = main_check.get_node("Lobby/LobbyFrame/LobbyRemoveAiBtn")
+	var ai_player_option: OptionButton = main_check.get_node(lobby_ai_actions + "/AiPlayerOption")
+	var remove_ai_btn: Button = main_check.get_node(lobby_ai_actions + "/LobbyRemoveAiBtn")
 	_assert_gte("Lobby AI selector lists AI", ai_player_option.item_count, 1,
 		"lobby state should populate removable AI players")
 	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
@@ -209,6 +217,8 @@ func _ready() -> void:
 		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
 	_assert_true("NetworkClient update_player_team method", NetworkClient.has_method("update_player_team"),
 		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
+	_assert_true("NetworkClient forecast_attack method", NetworkClient.has_method("forecast_attack"),
+		"NetworkClient should expose GET /games/{id}/forecast-attack")
 	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
@@ -252,7 +262,7 @@ func _ready() -> void:
 	], 200)
 	_assert_eq("Resume picks filtered game summary", int(main_check.get("_resume_game_id")), 88,
 		"resume should trust /games?user_name summaries and not require embedded players")
-	var resume_btn: Button = main_check.get_node("Menu/CenterContainer/ButtonCol/ResumeButton")
+	var resume_btn: Button = main_check.get_node("Menu/CenterContainer/FooterRow/ResumeButton")
 	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
 		"resume button should appear when a filtered playable save exists")
 
@@ -271,16 +281,33 @@ func _ready() -> void:
 		"save manager should populate operation selector")
 
 	var confirm_text: String = main_check.call("_build_attack_confirm_text", {
-		"name": "Knight", "x": 1, "y": 1, "hp": 10
+		"name": "Knight", "unit_type": "knight", "x": 1, "y": 1, "hp": 10
 	}, {
-		"defender_name": "Bandit", "x": 3, "y": 2, "hp": 7
+		"defender_name": "Bandit", "unit_type": "swordsman", "x": 3, "y": 2, "hp": 7
 	})
-	_assert_true("Attack confirm text includes attacker", confirm_text.contains("Knight"),
-		"attack confirm text should name the attacker")
-	_assert_true("Attack confirm text includes target", confirm_text.contains("Bandit"),
-		"attack confirm text should name the target")
+	_assert_true("Attack confirm text includes attacker", confirm_text.contains("骑士"),
+		"attack confirm text should use the attacker's Chinese unit name")
+	_assert_true("Attack confirm text includes target", confirm_text.contains("剑士"),
+		"attack confirm text should use the target's Chinese unit name")
 	_assert_true("Attack confirm text includes distance", confirm_text.contains("距离 3"),
 		"attack confirm text should include Manhattan distance")
+	var forecast_text: String = main_check.call("_build_attack_forecast_info_text", {
+		"damage": 8,
+		"target_hp_after": 2,
+		"counter_damage": 3,
+		"attacker_hp_after": 7,
+		"is_kill": false,
+		"counter_will_kill": false,
+		"target_def_bonus": 1,
+	}, {
+		"name": "Knight", "hp": 10, "max_hp": 10
+	}, {
+		"defender_name": "Bandit", "hp": 10, "max_hp": 10
+	})
+	_assert_true("Attack forecast text is Chinese", forecast_text.contains("战斗预测") and forecast_text.contains("预计伤害"),
+		"forecast panel text should be localized")
+	_assert_true("Attack forecast text includes counter", forecast_text.contains("反击 3"),
+		"forecast panel text should include counter damage")
 
 	_last_recruit_event = []
 	GameState.unit_recruited.connect(_capture_recruit_event, CONNECT_ONE_SHOT)
@@ -335,7 +362,7 @@ func _ready() -> void:
 		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
 	}, 200)
 	var commander_option: OptionButton = main_check.get_node("MainlineView/MLFrame/CommanderOption")
-	var lobby_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyCommanderOption")
+	var lobby_commander_option: OptionButton = main_check.get_node(lobby_create_col + "/LobbyCommanderOption")
 	var ai_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/AiCommanderOption")
 	var commander_status: Label = main_check.get_node("MainlineView/MLFrame/CommanderStatus")
 	_assert_gte("Mainline commander selector lists unlocked choices", commander_option.item_count, 3,
@@ -361,7 +388,7 @@ func _ready() -> void:
 			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
 		],
 	}, 200)
-	var lobby_bgm_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/LobbyBgmOption")
+	var lobby_bgm_option: OptionButton = main_check.get_node(lobby_create_col + "/LobbyBgmOption")
 	_assert_gte("Lobby BGM selector lists tracks", lobby_bgm_option.item_count, 2,
 		"BGM selector should include none plus backend tracks")
 	main_check.call("_on_editor_pressed")
@@ -531,7 +558,7 @@ func _ready() -> void:
 	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
 		"abandon should update status")
 	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
-	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyStatus")
+	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
 	_assert_true("Lobby team response updates status", lobby_status.text.contains("red"),
 		"team update response should show selected team")
 

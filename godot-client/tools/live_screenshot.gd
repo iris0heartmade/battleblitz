@@ -20,8 +20,8 @@ func _ready() -> void:
 	var main_app: Node = get_tree().current_scene
 	if main_app.name == "LiveScreenshot":
 		main_app = main_app.get_child(0) if main_app.get_child_count() > 0 else main_app
-	if main_app != null and main_app.has_method("_on_free_play_pressed"):
-		main_app.call("_on_free_play_pressed")
+	if main_app != null and main_app.has_method("_start_dev_ai_game"):
+		main_app.call("_start_dev_ai_game")
 	# Wait for state.snapshot.
 	var deadline: float = Time.get_ticks_msec() + int(_WAIT_FOR_SNAPSHOT_SEC * 1000.0)
 	while Time.get_ticks_msec() < deadline:

@@ -501,6 +501,14 @@ func start_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/start", {}, callback)
 
 
+func forecast_attack(game_id: int, player_id: int, attacker_id: int, target_id: int, callback: Callable = Callable()) -> void:
+	var path := _ACTIONS_GAME_BASE.format({"id": game_id}) \
+		+ "/forecast-attack?player_id=%d&attacker_id=%d&target_id=%d" % [
+			player_id, attacker_id, target_id
+		]
+	request("GET", path, {}, callback)
+
+
 func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", {
 		"difficulty": difficulty,

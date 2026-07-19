@@ -1,12 +1,11 @@
 extends Node
-## lobby_subview_screenshot.gd — 截 3 张图:自由模式 choose / create / join
+## lobby_subview_screenshot.gd — 截 4 张图:联机大厅 choose / create / join / in-room
 
 const _OUT_DIR := "user://"
 const _STEP_DELAY := 0.6
 
 
 func _ready() -> void:
-	OS.set_environment("BB_AUTO_PLAY", "1")
 	for i in 3:
 		await RenderingServer.frame_post_draw
 	var main: Node = get_tree().current_scene
@@ -14,10 +13,10 @@ func _ready() -> void:
 		printerr("no current scene")
 		get_tree().quit(1); return
 
-	# === Frame 1: 自由模式 choose 层 ===
-	if main.has_method("_on_free_play_pressed"):
-		main.call("_on_free_play_pressed")
-		print("[lobby] frame 1: _on_free_play_pressed")
+	# === Frame 1: lobby choose 层 ===
+	if main.has_method("_on_lobby_pressed"):
+		main.call("_on_lobby_pressed")
+		print("[lobby] frame 1: _on_lobby_pressed")
 	await get_tree().create_timer(_STEP_DELAY).timeout
 	for i in 3:
 		await RenderingServer.frame_post_draw
@@ -41,7 +40,32 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 	_save(main, "lobby_subview_3_join.png")
 
-	print("[lobby] done — 3 frames in user:// & res://")
+	# === Frame 4: in_room 视图(房主控制台)— 走真实创建流程
+	# 先回到 choose → 创建卡片 → 触发 create_game
+	if main.has_method("_show_lobby_choose"):
+		main.call("_show_lobby_choose")
+		print("[lobby] frame 4a: back to choose")
+	await get_tree().create_timer(0.3).timeout
+	# 点 CreateCardBtn 触发创建
+	if main.has_method("_on_create_card_pressed"):
+		main.call("_on_create_card_pressed")
+		print("[lobby] frame 4b: click create card")
+	await get_tree().create_timer(0.4).timeout
+	# 点 CreateRoomBtn 提交创建表单
+	var create_btn: Button = main.get_node_or_null(
+		"Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateRoomBtn"
+	) as Button
+	if create_btn != null:
+		create_btn.pressed.emit()
+		print("[lobby] frame 4c: click CreateRoomBtn")
+	# 等后端 create + join 完成,自动跳到 in_room
+	await get_tree().create_timer(3.0).timeout
+	for i in 3:
+		await RenderingServer.frame_post_draw
+	_save(main, "lobby_subview_4_in_room.png")
+	print("[lobby] frame 4: in_room (real create+join)")
+
+	print("[lobby] done — 4 frames in user:// & res://")
 	get_tree().quit(0)
 
 

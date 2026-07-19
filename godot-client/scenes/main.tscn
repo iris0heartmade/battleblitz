@@ -122,10 +122,6 @@ text = "单人模式"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
 
-[node name="FreePlayButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
-text = "自由对局 (人机)"
-custom_minimum_size = Vector2(0, 44)
-
 [node name="MainlineButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
 text = "主线章节"
 custom_minimum_size = Vector2(0, 44)

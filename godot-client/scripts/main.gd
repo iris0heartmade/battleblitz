@@ -157,9 +157,9 @@ var _board_refresh_pending: bool = false
 # 这些必须靠 REST GET /state 轮询追踪。每 1 秒拉一次(game view 时)。
 const _STATE_POLL_INTERVAL_SEC: float = 1.0
 var _state_poll_timer: Timer = null
+var _mainline_auto_retry_pending: bool = false
 
 # Main menu widgets (GBA 风 V2)
-@onready var menu_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/FreePlayButton
 @onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
 @onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
 
@@ -319,7 +319,6 @@ func _ready() -> void:
 	_apply_gba_theme()
 
 	_show_view("menu")
-	menu_button.pressed.connect(_on_free_play_pressed)
 	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
 	if editor_button != null and is_instance_valid(editor_button):
@@ -514,12 +513,14 @@ func _ready() -> void:
 		_update_status("WS 断开: %s" % reason)
 	)
 	NetworkClient.api_response.connect(func(method, path, body, code):
-		# New games created / joined surface their IDs in the API reply.
-		if method == "POST" and path == "/games" and (code == 200 or code == 201):
+		# Lobby and mainline flows use explicit callbacks. Keep this legacy
+		# auto chain scoped so POST /mainlines/{id}/start cannot enter GameView
+		# before the mainline callback has stored game_id/player_id.
+		if _entry_flow == "free" and method == "POST" and path == "/games" and (code == 200 or code == 201):
 			_on_create_game_response(body)
-		elif method == "POST" and path.ends_with("/join") and (code == 200 or code == 201):
+		elif _entry_flow == "free" and method == "POST" and path.begins_with("/games/") and path.ends_with("/join") and (code == 200 or code == 201):
 			_on_join_game_response(body)
-		elif method == "POST" and path.ends_with("/start") and (code == 200 or code == 201):
+		elif _entry_flow == "free" and method == "POST" and path.begins_with("/games/") and path.ends_with("/start") and (code == 200 or code == 201):
 			_on_start_game_response(body)
 		elif method == "GET" and path.ends_with("/state") and code == 200:
 			# M_WS_REFRESH:server WS 只在 connect 时推 1 次 state.snapshot,
@@ -529,12 +530,12 @@ func _ready() -> void:
 	)
 
 
-	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play triggers a free-play
+	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play opens the lobby
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
 	# to validate the WS pipeline end-to-end without manual clicks.
 	if _dev_auto_play_enabled():
 		_update_status("DEV auto-play: 自动开始自由模式")
-		call_deferred("_on_free_play_pressed")
+		call_deferred("_on_lobby_pressed")
 	# BB_AUTO_QUIT=N — quit after N seconds (for headless e2e runs).
 	# 注意:_maybe_screenshot_menu() 必须在 BB_AUTO_QUIT await 之前,因为
 	# 它调 get_tree().quit() 会提早结束 _ready。
@@ -674,13 +675,6 @@ func _poll_state_now() -> void:
 	NetworkClient.get_game_state(_game_id)
 
 
-func _on_free_play_pressed() -> void:
-	# 自由模式:进入 lobby + 显示二层选择(创建/加入)
-	_entry_flow = "lobby"
-	_show_view("lobby")
-	_apply_lobby_theme()
-	_show_lobby_choose()
-
 func _on_create_game_response(body: Dictionary) -> void:
 	# The create-game response is the game summary; pull id.
 	_game_id = int(body.get("id", 0))
@@ -745,12 +739,63 @@ func _on_join_game_response(body: Dictionary) -> void:
 func _on_start_game_response(_body: Dictionary) -> void:
 	# 5) 切到 game 视图并打开 WebSocket 流(与 _on_lobby_start_response 一致:
 	# 先切视图,首帧 state.snapshot 到达后 _on_state_updated 刷新棋盘/HUD)。
-	# 之前漏了 _show_view("game"),导致自由对局 start 后视图停在 connecting,
+	# 之前漏了 _show_view("game"),导致快捷 AI 对局 start 后视图停在 connecting,
 	# 一直显示"已连接,等待 state.snapshot..."进不去游戏。
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
-	# T:97 — 自由对局首次进入 game view 自动弹 tutorial
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
+	# T:97 — 快捷 AI 对局首次进入 game view 自动弹 tutorial
 	_trigger_first_tutorial()
+
+
+func _start_dev_ai_game() -> void:
+	_entry_flow = "dev_ai"
+	_show_view("connecting")
+	if connecting_label != null and is_instance_valid(connecting_label):
+		connecting_label.text = "DEV: creating AI game..."
+	NetworkClient.create_game(
+		"%s dev room" % _user_name,
+		"balanced_2p_15",
+		"grass",
+		"rout",
+		"",
+		"",
+		{},
+		Callable(self, "_on_dev_ai_created")
+	)
+
+
+func _on_dev_ai_created(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_update_status("DEV AI create failed")
+		return
+	_game_id = int(body.get("id", body.get("game_id", 0)))
+	UserSettings.set_value("session.v1.last_game_id", _game_id)
+	NetworkClient.join_game(_game_id, _user_name, "red", "", "", Callable(self, "_on_dev_ai_joined"))
+
+
+func _on_dev_ai_joined(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_update_status("DEV AI join failed")
+		return
+	_player_id = int(body.get("id", body.get("player_id", 0)))
+	if _player_id <= 0:
+		var p: Variant = body.get("player", {})
+		if p is Dictionary:
+			_player_id = int(p.get("id", 0))
+	GameState.local_player_id = _player_id
+	UserSettings.set_value("session.v1.last_player_id", _player_id)
+	NetworkClient.add_ai_player(_game_id, "normal", "rules", "balanced", Callable(self, "_on_dev_ai_added"))
+
+
+func _on_dev_ai_added(_body: Variant, _code: int = 0) -> void:
+	NetworkClient.start_game(_game_id, Callable(self, "_on_dev_ai_started"))
+
+
+func _on_dev_ai_started(_body: Variant, _code: int = 0) -> void:
+	_show_view("game")
+	NetworkClient.connect_to_game(_game_id, _player_id)
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
 # T:97 — 触发 tutorial 弹窗(只在第一次进 game view 时)
@@ -801,7 +846,7 @@ func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
 	for g in games:
 		if not g is Dictionary: continue
-		var status := String(g.get("status", ""))
+		var status := str(g.get("status", ""))
 		if status != "playing" and status != "waiting":
 			continue
 		_resume_game_id = int(g.get("id", 0))
@@ -843,6 +888,7 @@ func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
 		UserSettings.set_value("session.v1.last_game_id", _game_id)
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
 func _on_saves_pressed() -> void:
@@ -1000,7 +1046,7 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 
 # GET /state 响应处理:REST 响应直接是 GameStateOut,跟 WS payload.game 形状一致,
 # 直接喂 GameState.ingest_snapshot。事件→响应→ingest→units_changed→board FLIP。
-func _on_state_poll_response(body: Variant) -> void:
+func _on_state_poll_response(body: Variant, _code: int = 0) -> void:
 	if not body is Dictionary:
 		return
 	if GameState == null:
@@ -1075,14 +1121,14 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 	for p in GameState.players:
 		if not p is Dictionary:
 			continue
-		var color: String = String(p.get("color", "red"))
+		var color: String = str(p.get("color", "red"))
 		for u in p.get("units", []):
 			if not u is Dictionary:
 				continue
 			initial_units.append({
 				"x": int(u.get("x", 0)),
 				"y": int(u.get("y", 0)),
-				"type": String(u.get("unit_type", "swordsman")),
+				"type": str(u.get("unit_type", "swordsman")),
 				"color": color,
 				"level": int(u.get("level", 1)),
 			})
@@ -1099,7 +1145,7 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 func _refresh_hud_from_state() -> void:
 	var summary: Dictionary = GameState.game_summary
 	turn_badge_label.text = "回合 %d" % int(summary.get("turn_number", 1))
-	var phase_text: String = String(summary.get("phase", "player"))
+	var phase_text: String = str(summary.get("phase", "player"))
 	match phase_text:
 		"player": phase_badge_label.text = "🟢 你的阶段"
 		"ai": phase_badge_label.text = "🤖 AI 阶段"
@@ -1111,7 +1157,7 @@ func _refresh_hud_from_state() -> void:
 	var cur_pid = GameState.current_player_id
 	if cur_pid != null:
 		var cp: Dictionary = GameState.get_player(cur_pid)
-		var name: String = String(cp.get("user_name", "—"))
+		var name: String = str(cp.get("user_name", "—"))
 		current_player_label.text = "→ %s" % name
 	else:
 		current_player_label.text = "→ —"
@@ -1168,8 +1214,8 @@ func _refresh_co_roster() -> void:
 		if not (c is Dictionary):
 			continue
 		var pid: int = int(c.get("player_id", -1))
-		var color_name: String = String(c.get("color", "—"))
-		var commander_id: String = String(c.get("commander_id", ""))
+		var color_name: String = str(c.get("color", "—"))
+		var commander_id: String = str(c.get("commander_id", ""))
 		var meter: int = int(c.get("meter", 0))
 		var threshold: int = max(1, int(c.get("threshold", 100)))
 		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
@@ -1235,14 +1281,14 @@ func _rewrite_players_list() -> void:
 	for p in GameState.players:
 		if not p is Dictionary:
 			continue
-		var name: String = String(p.get("user_name", "?"))
+		var name: String = str(p.get("user_name", "?"))
 		# P1#7 观战者:灰色卡,显示"观战中-无单位"(观战者无单位无金币)
 		var is_spec: bool = bool(p.get("is_spectator", false))
 		var ended_early: String = " ⏳" if p.get("has_ended_turn", false) else ""
 		if is_spec:
 			players_list.append_text("[color=#9aa0a6]👀 %s · 观战中-无单位%s[/color]\n" % [name, ended_early])
 			continue
-		var color: String = String(p.get("color", "?"))
+		var color: String = str(p.get("color", "?"))
 		var units: int = (p.get("units", []) as Array).size()
 		var gold: int = int(p.get("gold", 0))
 		var alive: String = "✅" if p.get("is_alive", true) else "💀"
@@ -1275,12 +1321,12 @@ func _color_emoji(c: String) -> String:
 # ============================================================
 
 func _on_log_received(action: Dictionary) -> void:
-	var desc: String = String(action.get("description", ""))
+	var desc: String = str(action.get("description", ""))
 	if desc == "":
-		desc = String(action.get("event_type", ""))
+		desc = str(action.get("event_type", ""))
 	if desc == "":
 		return
-	var importance: String = String(action.get("importance", "normal"))
+	var importance: String = str(action.get("importance", "normal"))
 	var color: String = "white"
 	match importance:
 		"critical": color = "#e85a6a"
@@ -1299,8 +1345,8 @@ func _refresh_commander_section() -> void:
 			commander_co_bar.value = 0.0
 		return
 	var cp: Dictionary = GameState.get_player(cur_pid)
-	var name: String = String(cp.get("user_name", "—"))
-	var color: String = String(cp.get("color", "?"))
+	var name: String = str(cp.get("user_name", "—"))
+	var color: String = str(cp.get("color", "?"))
 	var units: int = (cp.get("units", []) as Array).size()
 	var gold: int = int(cp.get("gold", 0))
 	var color_godot: String = _color_name_to_godot(color)
@@ -1374,7 +1420,7 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
-			terrain[k] = String(t.get("terrain", "plain"))
+			terrain[k] = str(t.get("terrain", "plain"))
 	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
 	var path: Array = MapLogic.pathfind(
 		src_cell, target_cell, terrain, owners, mov * 2, _player_id, blocked, size_v
@@ -1640,8 +1686,8 @@ func _on_turn_ended(next_player_id, turn_number: int) -> void:
 	# M4.17:turn banner slide-down + 玩家色 + emoji
 	var pid_str := str(next_player_id)
 	var cp: Dictionary = GameState.get_player(int(next_player_id)) if next_player_id != null else {}
-	var name: String = String(cp.get("user_name", "—"))
-	var color_name: String = String(cp.get("color", "red"))
+	var name: String = str(cp.get("user_name", "—"))
+	var color_name: String = str(cp.get("color", "red"))
 	var color_hex: String = _color_name_to_godot(color_name)
 	var emoji: String = _color_emoji(color_name)
 	var is_local: bool = (int(next_player_id) == _player_id) if next_player_id != null else false
@@ -1659,8 +1705,8 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 	# S:4:弹 BattleResultPanel — 展示 winner + 战斗统计
 	var winner_id: int = int(winner_player_id) if winner_player_id != null else -1
 	var winner_p: Dictionary = GameState.get_player(winner_id) if winner_id > 0 else {}
-	var winner_name: String = String(winner_p.get("user_name", "—"))
-	var winner_color: String = String(winner_p.get("color", "red"))
+	var winner_name: String = str(winner_p.get("user_name", "—"))
+	var winner_color: String = str(winner_p.get("color", "red"))
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var stats: Dictionary = {
 		"kills": 0,
@@ -1677,7 +1723,7 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 		var all_logs: Array = (GameState.logs as Array)
 		for log in all_logs:
 			if not (log is Dictionary): continue
-			var action_type: String = String(log.get("action_type", ""))
+			var action_type: String = str(log.get("action_type", ""))
 			var actor_pid_v: Variant = log.get("player_id", -1)
 			var actor_pid: int = -1 if actor_pid_v == null else int(actor_pid_v)
 			if action_type == "kill":
@@ -1693,7 +1739,7 @@ func _on_match_ended(winner_player_id, win_reason: String) -> void:
 					stats["skills"] = int(stats.get("skills", 0)) + 1
 			# 战报行(全部):turn N · action_type · description
 			var turn_n: int = int(log.get("turn_number", 0))
-			var desc: String = String(log.get("description", ""))
+			var desc: String = str(log.get("description", ""))
 			detail_lines.append("[color=#a89878]回合 %d[/color]  [color=#c9a14a]%s[/color]  %s" % [
 				turn_n, action_type, desc
 			])
@@ -1867,7 +1913,7 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 		var t: Dictionary = terrain[k]
 		if Vector2i(int(t.get("x", k.x)), int(t.get("y", k.y))) != cell:
 			continue
-		if String(t.get("terrain", "")) != "barracks":
+		if str(t.get("terrain", "")) != "barracks":
 			return {}
 		if int(t.get("owner_id", -1)) != _player_id:
 			return {}
@@ -1900,8 +1946,8 @@ func _show_recruit_at(info: Dictionary) -> void:
 		child.queue_free()
 	for opt in _RECRUIT_OPTIONS:
 		var btn := Button.new()
-		var unit_type: String = String(opt.get("type", "?"))
-		var name: String = String(opt.get("name", "?"))
+		var unit_type: String = str(opt.get("type", "?"))
+		var name: String = str(opt.get("name", "?"))
 		var cost: int = int(opt.get("cost", 0))
 		btn.text = "%s  💰 %d" % [name, cost]
 		btn.disabled = gold_i < cost
@@ -2060,7 +2106,7 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 	if board != null and board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
-			terrain[k] = String(t.get("terrain", "plain"))
+			terrain[k] = str(t.get("terrain", "plain"))
 	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
 	var result: Dictionary = MapLogic.compute_reachable(
 		unit_pos, terrain, owners, mp, owner, blocked, size_v
@@ -2089,7 +2135,7 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 	if board != null and board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
-			terrain[k] = String(t.get("terrain", "plain"))
+			terrain[k] = str(t.get("terrain", "plain"))
 			owners[k] = int(t.get("owner_id", 0))
 	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
 	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, size)
@@ -2364,7 +2410,7 @@ func _play_dialogue_scenes(payload: Variant) -> void:
 
 
 func _render_dialog_choice(entry: Dictionary) -> void:
-	var question: String = String(entry.get("question", "请选择:"))
+	var question: String = str(entry.get("question", "请选择:"))
 	dialog_name.text = ""
 	if dialog_name.has_theme_color_override("font_color"):
 		dialog_name.remove_theme_color_override("font_color")
@@ -2381,7 +2427,7 @@ func _render_dialog_choice(entry: Dictionary) -> void:
 		for ch in choices:
 			if not (ch is Dictionary): continue
 			var btn := Button.new()
-			btn.text = String(ch.get("text", ""))
+			btn.text = str(ch.get("text", ""))
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			btn.pressed.connect(_on_dialog_choice_selected)
 			_dialog_choice_container.add_child(btn)
@@ -2452,9 +2498,9 @@ func _advance_dialog() -> void:
 	if kind == _DIALOG_CHOICE:
 		_render_dialog_choice(entry)
 		return
-	var speaker: String = String(entry.get("character", ""))
+	var speaker: String = str(entry.get("character", ""))
 	dialog_name.text = speaker if speaker != "" else "（旁白）"
-	var col_str: String = String(entry.get("color", ""))
+	var col_str: String = str(entry.get("color", ""))
 	if col_str != "":
 		dialog_name.add_theme_color_override("font_color", Color(col_str))
 	elif dialog_name.has_theme_color_override("font_color"):
@@ -2467,7 +2513,7 @@ func _advance_dialog() -> void:
 	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
 		_dialog_choice_container.visible = false
 	# typewriter:full text 缓存,visible 渐进加
-	var full_text: String = String(entry.get("text", ""))
+	var full_text: String = str(entry.get("text", ""))
 	_dialog_full_text = full_text
 	_dialog_visible_text = ""
 	dialog_text.text = ""
@@ -2558,7 +2604,7 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 		+ "[color=#f4e8c1]击杀:[/color] [color=#f0c75e]%d[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]%d[/color]\n" % [int(stats.get("kills", 0)), int(stats.get("deaths", 0))] \
 		+ "[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]%d[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]%d/100[/color]\n" % [int(stats.get("captures", 0)), int(stats.get("co_peak", 0))] \
 		+ "[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]%d[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]%d[/color]\n\n" % [int(stats.get("turns", 0)), int(stats.get("skills", 0))] \
-		+ "[color=#a89878]胜利原因: %s[/color]" % String(stats.get("reason", "—")) \
+		+ "[color=#a89878]胜利原因: %s[/color]" % str(stats.get("reason", "—")) \
 		+ detail_text
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
@@ -2598,7 +2644,7 @@ func _apply_gba_theme() -> void:
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
-	for btn in [menu_button, lobby_button, saves_button, mainline_button, editor_button, settings_button, exit_button,
+	for btn in [lobby_button, saves_button, mainline_button, editor_button, settings_button, exit_button,
 				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
 				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
@@ -3540,7 +3586,21 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 
 # 创建房间后自动加 AI(等同 webui app.js 的默认行为)
 # join_game 完成后调这里 → add-ai + add-ai(凑够 2 个 AI)
-func _on_lobby_join_response(_body: Variant, _code: int = 0) -> void:
+func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
+	if body is Dictionary:
+		_player_id = int(body.get("id", 0))
+		if _player_id <= 0:
+			_player_id = int(body.get("player_id", 0))
+		if _player_id <= 0:
+			var p: Variant = body.get("player", {})
+			if p is Dictionary:
+				_player_id = int(p.get("id", 0))
+	if _player_id > 0:
+		GameState.local_player_id = _player_id
+		UserSettings.set_value("session.v1.last_player_id", _player_id)
+	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
+		lobby_game_id_label.text = "Game #%d" % _game_id
+	_show_lobby_in_room()
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
 	# 自动加 AI(仅 free / lobby_create 流程)
@@ -3798,11 +3858,11 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 	for item in maps:
 		if not item is Dictionary:
 			continue
-		var id: String = String(item.get("id", ""))
+		var id: String = str(item.get("id", ""))
 		if id == "":
 			continue
-		var name: String = String(item.get("name", id))
-		var biome: String = String(item.get("biome", "grass"))
+		var name: String = str(item.get("name", id))
+		var biome: String = str(item.get("biome", "grass"))
 		var raw_players = item.get("recommended_players", 0)
 		var players: int = 0
 		if raw_players != null:
@@ -3833,7 +3893,7 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 	for g in games:
 		if not g is Dictionary:
 			continue
-		if String(g.get("status", "")) != "waiting":
+		if str(g.get("status", "")) != "waiting":
 			continue
 		_lobby_rooms.append(g)
 	if _lobby_rooms.is_empty():
@@ -3854,7 +3914,7 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 		var id: int = int(g.get("id", 0))
 		if i == 0:
 			_selected_room_id = id
-		var name := String(g.get("name", "Room"))
+		var name := str(g.get("name", "Room"))
 		if room_select_option != null and is_instance_valid(room_select_option):
 			room_select_option.add_item("#%d  %s" % [id, name])
 	_render_room_list()
@@ -3878,8 +3938,8 @@ func _render_room_list() -> void:
 			continue
 		var id: int = int(g.get("id", 0))
 		var marker := ">" if id == _selected_room_id else " "
-		var name := String(g.get("name", "Room"))
-		var preset := String(g.get("map_preset", "?"))
+		var name := str(g.get("name", "Room"))
+		var preset := str(g.get("map_preset", "?"))
 		var cap := int(g.get("capacity", 0))
 		if id == _selected_room_id:
 			selected_name = name
@@ -3907,8 +3967,8 @@ func _on_create_room_pressed() -> void:
 		idx = map_preset_option.selected
 	if idx >= 0 and idx < _preset_options.size():
 		var selected: Dictionary = _preset_options[idx]
-		preset_id = String(selected.get("id", preset_id))
-		biome = String(selected.get("biome", biome))
+		preset_id = str(selected.get("id", preset_id))
+		biome = str(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Creating room..."
 	NetworkClient.create_game(
@@ -3918,7 +3978,8 @@ func _on_create_room_pressed() -> void:
 		_selected_lobby_win_condition(),
 		_selected_lobby_commander(),
 		_selected_lobby_bgm_track(),
-		_selected_lobby_ai_commanders()
+		_selected_lobby_ai_commanders(),
+		Callable(self, "_on_lobby_create_response")
 	)
 
 
@@ -3929,7 +3990,7 @@ func _on_join_selected_pressed() -> void:
 	_game_id = _selected_room_id
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "Joining room #%d..." % _game_id
-	NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role())
+	NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role(), Callable(self, "_on_lobby_join_response"))
 
 
 func _start_lobby_polling() -> void:
@@ -4120,7 +4181,7 @@ func _render_lobby_host_controls(players: Array) -> void:
 	var sig := ""
 	for p in players:
 		if p is Dictionary:
-			sig += "%d:%d:%d:%s|" % [int(p.get("id", 0)), int(p.get("seat", -1)), int(bool(p.get("is_spectator", false))), String(p.get("user_name", ""))]
+			sig += "%d:%d:%d:%s|" % [int(p.get("id", 0)), int(p.get("seat", -1)), int(bool(p.get("is_spectator", false))), str(p.get("user_name", ""))]
 	if sig == _lobby_host_player_sig:
 		return
 	_lobby_host_player_sig = sig
@@ -4131,10 +4192,10 @@ func _render_lobby_host_controls(players: Array) -> void:
 	for p in players:
 		if not p is Dictionary: continue
 		var pid: int = int(p.get("id", 0))
-		var pname: String = String(p.get("user_name", "-"))
+		var pname: String = str(p.get("user_name", "-"))
 		var seat: int = int(p.get("seat", -1))
 		var is_spec: bool = bool(p.get("is_spectator", false))
-		var emoji: String = "👀" if is_spec else _color_emoji(String(p.get("color", "red")))
+		var emoji: String = "👀" if is_spec else _color_emoji(str(p.get("color", "red")))
 		lobby_host_player_option.add_item("%s #%d %s" % [emoji, seat, pname], pid)
 		if pid == prev_target:
 			selected_idx = idx
@@ -4200,7 +4261,7 @@ func _next_team_name() -> String:
 	var existing: Dictionary = {}
 	for p in _lobby_last_players:
 		if p is Dictionary:
-			var t := String(p.get("team", ""))
+			var t := str(p.get("team", ""))
 			if t != "":
 				existing[t] = true
 	var n := 1
@@ -4238,6 +4299,7 @@ func _on_lobby_start_response(_body: Dictionary, _code: int = 0) -> void:
 	# 启动游戏 — 切到 game 视图,接 WS
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 	_stop_lobby_polling()
 
 
@@ -4462,6 +4524,7 @@ func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> voi
 	_update_status("已恢复主线存档 #%d,进入棋盘..." % _game_id)
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
 func _on_ml_slot_delete(game_id: int) -> void:
@@ -4492,13 +4555,13 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 		return
 	for ml in items:
 		if not ml is Dictionary: continue
-		var id: String = String(ml.get("id", ""))
+		var id: String = str(ml.get("id", ""))
 		if id == "": continue
 		if _selected_mainline_id == "":
 			_selected_mainline_id = id
-		var title: String = String(ml.get("title", "?"))
+		var title: String = str(ml.get("title", "?"))
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
-		var desc: String = String(ml.get("synopsis", ml.get("description", "")))
+		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
 		var btn := Button.new()
 		btn.text = "%s · %d battles" % [title, battles]
 		btn.tooltip_text = desc
@@ -4513,10 +4576,11 @@ func _on_ml_card_pressed(mainline_id: String) -> void:
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
 
 
-func _on_ml_detail_response(body: Variant, mainline_id, _code: int = 0) -> void:
+func _on_ml_detail_response(body: Variant, _code: int = 0, mainline_id: String = "") -> void:
 	if not (body is Dictionary):
 		_update_status("加载章节详情失败")
 		return
+	_mainline_auto_retry_pending = false
 	var battles: Array = body.get("battles", []) if body.has("battles") else []
 	var dialogue: Variant = body.get("dialogue", null)
 	# 有 pre-battle 对话 → 播放
@@ -4529,12 +4593,22 @@ func _on_ml_detail_response(body: Variant, mainline_id, _code: int = 0) -> void:
 
 func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	if code < 200 or code >= 300 or not (body is Dictionary):
+		if code == 409 and _is_mainline_already_active_response(body) and not _mainline_auto_retry_pending:
+			_mainline_auto_retry_pending = true
+			var retry_id := _selected_mainline_id
+			if retry_id == "":
+				retry_id = "chapter_01_steel_rebellion"
+			_update_status("已有主线进度,正在放弃旧进度并重试...")
+			NetworkClient.abandon_mainline(retry_id, _user_name, Callable(self, "_on_mainline_auto_abandon_response").bind(retry_id))
+			return
+		_mainline_auto_retry_pending = false
 		var msg := "主线启动失败"
 		if body is Dictionary:
 			msg = "主线启动失败: %s" % str(body.get("detail", body.get("message", msg)))
 		_update_status(msg)
 		_show_view("mainline")
 		return
+	_mainline_auto_retry_pending = false
 	_game_id = int(body.get("game_id", 0))
 	_player_id = int(body.get("player_id", 0))
 	if _game_id <= 0 or _player_id <= 0:
@@ -4559,6 +4633,29 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false
 	NetworkClient.connect_to_game(_game_id, _player_id)
+	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
+
+
+func _is_mainline_already_active_response(body: Variant) -> bool:
+	if not (body is Dictionary):
+		return false
+	var detail: Variant = body.get("detail", {})
+	if detail is Dictionary:
+		return str(detail.get("error", "")) == "mainline_already_active"
+	return str(detail).contains("mainline_already_active")
+
+
+func _on_mainline_auto_abandon_response(body: Variant, code: int, mainline_id: String) -> void:
+	if code < 200 or code >= 300:
+		_mainline_auto_retry_pending = false
+		var msg := "放弃旧主线失败"
+		if body is Dictionary:
+			msg = "放弃旧主线失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		_show_view("mainline")
+		return
+	_update_status("旧主线已放弃,重新创建战斗...")
+	NetworkClient.start_mainline(mainline_id, _user_name, false, Callable(self, "_on_mainline_start_response"))
 
 
 func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
@@ -4792,8 +4889,10 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 				out[int(uu.get("id", -1))] = {
 					"x": rt_v.x,
 					"y": rt_v.y,
-					"defender_name": String(uu.get("name", uu.get("unit_type", "?"))),
+					"defender_name": str(uu.get("name", uu.get("unit_type", "?"))),
+					"unit_type": str(uu.get("unit_type", "")),
 					"hp": int(uu.get("hp", 0)),
+					"max_hp": int(uu.get("max_hp", uu.get("hp", 0))),
 					# 不预测,只显示攻击者/目标基本信息。真实伤害由
 					# server 决定。
 				}
@@ -4801,8 +4900,8 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 
 
 # (删)旧 _forecast_attack_simple 已移除 — 客户端不抄伤害公式,
-# server calculate_damage 单一来源。真要展示预测数字时,
-# 走 GET /games/{id}/forecast-attack 端点(M4+ TODO)
+# server calculate_damage 单一来源。预测数字走
+# GET /games/{id}/forecast-attack，只展示后端结果。
 
 
 # 拿 attack_range(含 snipe 技能 +1),然后用 MapLogic.attack_range_tiles 求出范围
@@ -4834,12 +4933,21 @@ func _show_attack_confirm(attacker_id: int, target_id: int) -> void:
 		attack_confirm_body.text = _build_attack_confirm_text(attacker, info)
 	if attack_confirm_panel != null and is_instance_valid(attack_confirm_panel):
 		attack_confirm_panel.visible = true
+	_show_attack_forecast_loading(attacker, info)
+	if _game_id > 0 and _player_id > 0 and NetworkClient != null:
+		NetworkClient.forecast_attack(
+			_game_id,
+			_player_id,
+			attacker_id,
+			target_id,
+			Callable(self, "_on_attack_forecast_response").bind(attacker_id, target_id, info)
+		)
 	_update_status("确认攻击目标 #%d" % target_id)
 
 
 func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -> String:
-	var attacker_name := str(attacker.get("name", attacker.get("unit_type", "单位")))
-	var target_name := str(target_info.get("defender_name", target_info.get("name", "目标")))
+	var attacker_name := _unit_cn_name(attacker, "单位")
+	var target_name := _unit_cn_name(target_info, "目标")
 	var ax := int(attacker.get("x", 0))
 	var ay := int(attacker.get("y", 0))
 	var tx := int(target_info.get("x", 0))
@@ -4847,10 +4955,91 @@ func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -
 	var dist: int = abs(ax - tx) + abs(ay - ty)
 	var hp_text: String = ""
 	if target_info.has("hp"):
-		hp_text = " · HP %d" % int(target_info.get("hp", 0))
+		hp_text = " · 生命 %d" % int(target_info.get("hp", 0))
 	return "[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]\n距离 %d%s\n确认后将提交攻击指令。" % [
 		attacker_name, target_name, dist, hp_text
 	]
+
+
+func _show_attack_forecast_loading(attacker: Dictionary, target_info: Dictionary) -> void:
+	if unit_info_title != null and is_instance_valid(unit_info_title):
+		unit_info_title.text = "战斗预测"
+	if unit_info != null and is_instance_valid(unit_info):
+		unit_info.bbcode_enabled = true
+		var attacker_name := _unit_cn_name(attacker, "单位")
+		var target_name := _unit_cn_name(target_info, "目标")
+		unit_info.text = "[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]\n正在计算战斗预测..." % [
+			attacker_name, target_name
+		]
+
+
+func _on_attack_forecast_response(body: Variant, code: int = 0, attacker_id: int = -1, target_id: int = -1, target_info: Dictionary = {}) -> void:
+	if attacker_id != _pending_attack_attacker_id or target_id != _pending_attack_target_id:
+		return
+	var attacker: Dictionary = GameState.get_unit(attacker_id) if GameState != null else {}
+	if unit_info_title != null and is_instance_valid(unit_info_title):
+		unit_info_title.text = "战斗预测"
+	if unit_info == null or not is_instance_valid(unit_info):
+		return
+	unit_info.bbcode_enabled = true
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		unit_info.text = "无法预测本次攻击。\n仍可手动确认攻击，后端会校验真实结果。"
+		return
+	unit_info.text = _build_attack_forecast_info_text(body, attacker, target_info)
+
+
+func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary, target_info: Dictionary) -> String:
+	var attacker_name: String = _unit_cn_name(attacker, "我方单位")
+	var target_name: String = _unit_cn_name(target_info, "目标")
+	var attacker_hp: int = int(attacker.get("hp", int(forecast.get("attacker_hp_after", 0))))
+	var attacker_max_hp: int = max(1, int(attacker.get("max_hp", attacker_hp)))
+	var target_hp: int = int(target_info.get("hp", int(forecast.get("target_hp_after", 0))))
+	var target_max_hp: int = max(1, int(target_info.get("max_hp", target_hp)))
+	var damage: int = int(forecast.get("damage", 0))
+	var target_after: int = int(forecast.get("target_hp_after", max(0, target_hp - damage)))
+	var counter_damage: int = int(forecast.get("counter_damage", 0))
+	var attacker_after: int = int(forecast.get("attacker_hp_after", max(0, attacker_hp - counter_damage)))
+	var is_kill: bool = bool(forecast.get("is_kill", false))
+	var counter_will_kill: bool = bool(forecast.get("counter_will_kill", false))
+	var def_bonus: int = int(forecast.get("target_def_bonus", 0))
+	var lines: Array = [
+		"[color=#f0c75e][b]战斗预测[/b][/color]",
+		"[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]" % [attacker_name, target_name],
+		"预计伤害: [color=#c63a3a][b]%d[/b][/color]" % damage,
+		"目标剩余生命: %d/%d%s" % [target_after, target_max_hp, "  可击杀" if is_kill else ""],
+	]
+	if counter_damage > 0:
+		lines.append("反击 %d，我方剩余生命 %d/%d%s" % [
+			counter_damage,
+			attacker_after,
+			attacker_max_hp,
+			"  可能被击倒" if counter_will_kill else "",
+		])
+	else:
+		lines.append("目标无法反击")
+	lines.append("地形防御: +%d" % def_bonus)
+	return "\n".join(lines)
+
+
+func _unit_cn_name(unit: Dictionary, fallback: String = "单位") -> String:
+	var unit_type := str(unit.get("unit_type", unit.get("type", "")))
+	match unit_type:
+		"swordsman":
+			return "剑士"
+		"archer":
+			return "弓箭手"
+		"knight":
+			return "骑士"
+		"warlock":
+			return "术士"
+		"healer":
+			return "治疗师"
+		_:
+			if unit.has("display_cn"):
+				return str(unit.get("display_cn"))
+			if unit.has("name_cn"):
+				return str(unit.get("name_cn"))
+			return fallback
 
 
 func _hide_attack_confirm() -> void:
@@ -4880,7 +5069,7 @@ func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 	if _game_id <= 0 or _player_id <= 0:
 		return
 	var info: Dictionary = _attack_targets.get(target_id, {})
-	var tgt_name: String = String(info.get("defender_name", "单位 #%d" % target_id))
+	var tgt_name: String = str(info.get("defender_name", "单位 #%d" % target_id))
 	_update_status("正在攻击 %s (单位 #%d → #%d)..." % [tgt_name, attacker_id, target_id])
 	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
 	# 客户端不预测伤害 - server 推 unit_attacked 事件后,从 signal args
@@ -4920,7 +5109,7 @@ func _enter_arcane_mode(ud: Dictionary) -> void:
 		out[int(uu.get("id", -1))] = {
 			"x": int(uu.get("x", 0)),
 			"y": int(uu.get("y", 0)),
-			"name": String(uu.get("name", uu.get("unit_type", "?"))),
+			"name": str(uu.get("name", uu.get("unit_type", "?"))),
 			"hp": int(uu.get("hp", 0)),
 			"max_hp": int(uu.get("max_hp", 0)),
 		}
@@ -4972,7 +5161,7 @@ func _on_skill_pressed() -> void:
 		out[int(uu.get("id", -1))] = {
 			"x": int(uu.get("x", 0)),
 			"y": int(uu.get("y", 0)),
-			"name": String(uu.get("name", uu.get("unit_type", "?"))),
+			"name": str(uu.get("name", uu.get("unit_type", "?"))),
 			"hp": hp_i,
 			"max_hp": max_hp_i,
 		}
@@ -5037,7 +5226,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	if unit_info == null or not is_instance_valid(unit_info):
 		return
 	unit_info.bbcode_enabled = true
-	var name: String = String(ud.get("name", ud.get("unit_type", "?")))
+	var name: String = str(ud.get("name", ud.get("unit_type", "?")))
 	var lvl: int = int(ud.get("level", 1))
 	var hp: int = int(ud.get("hp", 0))
 	var max_hp: int = max(1, int(ud.get("max_hp", 1)))
@@ -5054,7 +5243,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var skills: Array = (ud.get("skills", []) as Array)
 	var pos := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
-	var color_name: String = String(ud.get("color", "red"))
+	var color_name: String = str(ud.get("color", "red"))
 	var cur_pid_v: Variant = GameState.current_player_id if GameState != null else null
 	var cur_pid: int = -1 if cur_pid_v == null else int(cur_pid_v)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
@@ -5091,7 +5280,7 @@ func _all_units_including_self() -> Array:
 func _use_skill_on_target(skill_id: String, unit_id: int, target_id: int) -> void:
 	if _game_id <= 0 or _player_id <= 0: return
 	var info: Dictionary = _skill_targets.get(target_id, {})
-	var name: String = String(info.get("name", "单位 #%d" % target_id))
+	var name: String = str(info.get("name", "单位 #%d" % target_id))
 	_update_status("技能 %s #%d→ #%d (%s)..." % [skill_id, unit_id, target_id, name])
 	NetworkClient.action_skill(_game_id, _player_id, unit_id, skill_id, target_id)
 	_skill_mode_unit_id = -1

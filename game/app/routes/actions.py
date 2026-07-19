@@ -45,6 +45,7 @@ from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.log_format import fmt_attack, fmt_move, fmt_wait
 from app.schemas import (
+    AttackForecastOut,
     AttackRequest,
     AttackResult,
     ClaimRequest,
@@ -331,6 +332,144 @@ async def move_unit(
 # ============================================================
 # Attack
 # ============================================================
+
+async def _validate_attack_request(
+    session: AsyncSession,
+    game_id: int,
+    player: Player,
+    attacker_id: int,
+    target_id: int,
+) -> Tuple[Unit, Unit, int]:
+    attacker = await _load_unit(session, attacker_id)
+    if attacker.player_id != player.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "攻击者不属于你")
+    if attacker.has_acted:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "攻击者本回合已行动过")
+
+    target = await _load_unit(session, target_id)
+    if target.player_id == player.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
+
+    distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
+    atk_min = unit_min_attack_range(attacker)
+    atk_range = unit_attack_range(attacker)
+    if distance == 0 or distance <= atk_min or distance > atk_range:
+        logger.info(
+            "attack: range FAILED (game %s, att=%s at (%s,%s), tgt=%s at (%s,%s), d=%s, range=(%s,%s])",
+            game_id, attacker.id, attacker.x, attacker.y, target.id, target.x, target.y,
+            distance, atk_min, atk_range,
+        )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"目标超出射程（需要 {atk_min} < 距离 {distance} <= {atk_range}）",
+        )
+
+    if atk_range > 1 and not _get_unit(attacker.unit_type).ignores_line_of_sight:
+        terrain, _owners, _occ = await _load_tile_grid(session, game_id)
+        blockers = _blocker_set(terrain)
+        blockers.discard((target.x, target.y))
+        if not has_line_of_sight((attacker.x, attacker.y), (target.x, target.y), blockers):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "视线被阻挡")
+
+    def_tile = (
+        await session.execute(
+            select(Tile).where(Tile.game_id == game_id, Tile.x == target.x, Tile.y == target.y)
+        )
+    ).scalars().first()
+    tile_bonus = TERRAIN_DEF_BONUS.get(def_tile.terrain if def_tile else "plain", 0)
+    return attacker, target, tile_bonus
+
+
+def _format_attack_forecast(
+    attacker: Unit,
+    target: Unit,
+    damage: int,
+    target_hp_after: int,
+    counter_damage: int,
+    attacker_hp_after: int,
+    is_kill: bool,
+    counter_will_kill: bool,
+) -> str:
+    kill_text = "，可击杀" if is_kill else ""
+    counter_text = (
+        f"；反击 {counter_damage}，我方剩余生命 {attacker_hp_after}/{attacker.max_hp}"
+        if counter_damage > 0 else "；目标无法反击"
+    )
+    if counter_will_kill:
+        counter_text += "，我方可能被击倒"
+    return (
+        f"{attacker.name} 攻击 {target.name}：预计伤害 {damage}"
+        f"；目标剩余生命 {target_hp_after}/{target.max_hp}{kill_text}{counter_text}"
+    )
+
+
+@router.get("/{game_id}/forecast-attack", response_model=AttackForecastOut)
+async def forecast_attack(
+    game_id: int,
+    player_id: int,
+    attacker_id: int,
+    target_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> AttackForecastOut:
+    game = await _load_active_game(session, game_id)
+    player = await _ensure_current_player(session, game, player_id)
+    attacker, target, tile_bonus = await _validate_attack_request(
+        session, game_id, player, attacker_id, target_id
+    )
+
+    hits = attack_with_double_strike(attacker, target, tile_bonus, rng=random.Random(0))
+    total_dmg = sum(h.damage for h in hits)
+    crit_hits = attack_with_double_strike(attacker, target, tile_bonus, rng=random.Random(1))
+    crit_dmg = sum(h.damage for h in crit_hits)
+    target_hp_after = max(0, target.hp - total_dmg)
+    is_kill = target_hp_after <= 0
+
+    counter_damage = 0
+    attacker_hp_after = attacker.hp
+    defender_skills = set(target.skills or [])
+    has_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    if (
+        not is_kill
+        and not has_immunity
+        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    ):
+        counter_tile = (
+            await session.execute(
+                select(Tile).where(
+                    Tile.game_id == game_id,
+                    Tile.x == target.x,
+                    Tile.y == target.y,
+                )
+            )
+        ).scalars().first()
+        counter_bonus = TERRAIN_DEF_BONUS.get(
+            counter_tile.terrain if counter_tile else "plain", 0
+        )
+        counter_hits = attack_with_double_strike(
+            target, attacker, counter_bonus, rng=random.Random(2)
+        )
+        for ch in counter_hits:
+            counter_damage += max(1, int(ch.damage * COUNTER_DAMAGE_MULT))
+        attacker_hp_after = max(0, attacker.hp - counter_damage)
+
+    counter_will_kill = attacker_hp_after <= 0 and counter_damage > 0
+    return AttackForecastOut(
+        attacker_unit_id=attacker.id,
+        target_unit_id=target.id,
+        damage=total_dmg,
+        crit_damage=crit_dmg,
+        is_kill=is_kill,
+        target_hp_after=target_hp_after,
+        target_def_bonus=tile_bonus,
+        counter_damage=counter_damage,
+        attacker_hp_after=attacker_hp_after,
+        counter_will_kill=counter_will_kill,
+        description=_format_attack_forecast(
+            attacker, target, total_dmg, target_hp_after,
+            counter_damage, attacker_hp_after, is_kill, counter_will_kill,
+        ),
+    )
+
 
 @router.post("/{game_id}/attack", response_model=AttackResult)
 async def attack(
