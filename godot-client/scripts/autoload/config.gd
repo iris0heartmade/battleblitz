@@ -253,8 +253,8 @@ func tile_asset_basename(terrain: String, biome: String, x: int, y: int) -> Stri
 
 ## Returns the colour tint for a player — used to colour unit sprites
 ## and the HUD until per-unit hero art lands in a later milestone.
-func player_color(name: String) -> Color:
-	return PLAYER_COLOR_RGB.get(name, Color.WHITE)
+func player_color(color_name: String) -> Color:
+	return PLAYER_COLOR_RGB.get(color_name, Color.WHITE)
 
 ## True iff the terrain is a `castle` cell that has a sub-feature
 ## (castle_floor / castle_wall / ...). MapLoader uses this to decide

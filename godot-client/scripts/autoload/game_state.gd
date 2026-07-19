@@ -67,11 +67,11 @@ var is_local_turn: bool = false:
 		is_local_turn = value
 		phase_changed.emit(phase)
 
-var is_connected: bool = false:
+var ws_connected: bool = false:
 	set(value):
-		if is_connected == value:
+		if ws_connected == value:
 			return
-		is_connected = value
+		ws_connected = value
 		connection_state_changed.emit(value)
 
 
