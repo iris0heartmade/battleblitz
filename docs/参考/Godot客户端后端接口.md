@@ -218,9 +218,20 @@ Godot 当前已封装 presets、heroes、audio tracks、commanders。单位和�
   "layout": ["PPPP...", "..."],
   "initial_units": [
     {"x": 1, "y": 1, "type": "swordsman", "color": "red", "level": 1}
+  ],
+  "tile_owners": [
+    {"x": 3, "y": 4, "color": "blue"}
   ]
 }
 ```
+
+字段说明：
+
+- `layout` 仍是每格一个字符：`P/F/M/R/S/r` 主要作为地形部署，`C/v/b/g` 主要作为地表部署。
+- `initial_units[].color` 是单位开局归属，可为 `red/blue/green/yellow`。
+- `tile_owners` 是可选字段，用于有归属的地表建筑。地图 JSON 只保存颜色，不保存数据库 `player_id`。
+- 开始自定义地图游戏时，后端会把 `tile_owners[].color` 解析到实际加入房间的玩家，并写入 `Tile.owner_id`。如果某个颜色没有对应玩家，该归属会被跳过。
+- 旧自定义地图没有 `tile_owners` 时按空数组处理。
 
 ## WebSocket
 

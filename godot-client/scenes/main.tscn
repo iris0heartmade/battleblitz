@@ -304,10 +304,23 @@ placeholder_text = "地图名称"
 [node name="EditorBiomeOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 112.0
-offset_right = 156.0
+offset_right = 108.0
 offset_bottom = 148.0
 
+[node name="EditorApplyBiomeBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 116.0
+offset_top = 112.0
+offset_right = 156.0
+offset_bottom = 148.0
+text = "套用"
+
 [node name="EditorTerrainOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 164.0
+offset_top = 112.0
+offset_right = 320.0
+offset_bottom = 148.0
+
+[node name="EditorSurfaceOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 164.0
 offset_top = 112.0
 offset_right = 320.0
@@ -353,6 +366,12 @@ offset_right = 320.0
 offset_bottom = 296.0
 
 [node name="EditorUnitColorOption" type="OptionButton" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 304.0
+offset_right = 156.0
+offset_bottom = 340.0
+
+[node name="EditorSurfaceOwnerOption" type="OptionButton" parent="EditorView/EditorPanel"]
 offset_left = 16.0
 offset_top = 304.0
 offset_right = 156.0

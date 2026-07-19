@@ -135,8 +135,14 @@ func _ready() -> void:
 		"map editor should expose a map name input")
 	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorTerrainOption") != null,
 		"map editor should expose a terrain brush selector")
+	_assert_true("EditorView has EditorSurfaceOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOption") != null,
+		"map editor should expose a surface/building brush selector")
+	_assert_true("EditorView has EditorSurfaceOwnerOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOwnerOption") != null,
+		"map editor should expose surface/building ownership selection")
+	_assert_true("EditorView has EditorApplyBiomeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorApplyBiomeBtn") != null,
+		"map editor should expose one-click biome branch switching")
 	_assert_true("EditorView has EditorModeOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorModeOption") != null,
-		"map editor should expose terrain/unit edit modes")
+		"map editor should expose terrain/surface/unit edit modes")
 	_assert_true("EditorView has EditorUnitOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitOption") != null,
 		"map editor should expose a unit type selector")
 	_assert_true("EditorView has EditorUnitToolOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitToolOption") != null,
@@ -425,6 +431,9 @@ func _ready() -> void:
 	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
 	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
 		"terrain selector should expose the initial paint brushes")
+	var editor_surface_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOption")
+	var editor_surface_owner_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOwnerOption")
+	var editor_apply_biome_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorApplyBiomeBtn")
 	var editor_mode_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorModeOption")
 	var editor_unit_tool_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitToolOption")
 	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitOption")
@@ -432,8 +441,18 @@ func _ready() -> void:
 	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitLevelOption")
 	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorWidthOption")
 	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorHeightOption")
-	_assert_gte("Editor mode selector lists modes", editor_mode_option.item_count, 2,
-		"editor mode selector should include terrain and unit placement")
+	_assert_eq("Editor mode selector lists three deploy modes", editor_mode_option.item_count, 3,
+		"editor mode selector should include terrain, surface, and unit deployment")
+	_assert_eq("Editor terrain deploy mode text", editor_mode_option.get_item_text(0), "地形部署",
+		"first editor mode should be terrain deployment")
+	_assert_eq("Editor surface deploy mode text", editor_mode_option.get_item_text(1), "地表部署",
+		"second editor mode should be surface deployment")
+	_assert_eq("Editor unit deploy mode text", editor_mode_option.get_item_text(2), "单位部署",
+		"third editor mode should be unit deployment")
+	_assert_gte("Editor surface selector lists buildings", editor_surface_option.item_count, 4,
+		"surface selector should include owned buildings and gates")
+	_assert_gte("Editor surface owner selector lists teams", editor_surface_owner_option.item_count, 5,
+		"surface owner selector should include unowned plus four teams")
 	_assert_gte("Editor unit selector lists unit types", editor_unit_option.item_count, 5,
 		"editor unit selector should include deployable unit types")
 	_assert_gte("Editor unit tool selector lists tools", editor_unit_tool_option.item_count, 2,
@@ -470,7 +489,7 @@ func _ready() -> void:
 	main_check.call("_on_editor_delete_response", {}, 204)
 	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
 		"successful delete should clear the selected map id")
-	editor_mode_option.select(1)
+	editor_mode_option.select(2)
 	editor_unit_option.select(1)
 	editor_unit_color_option.select(1)
 	editor_unit_level_option.select(2)
@@ -492,6 +511,29 @@ func _ready() -> void:
 	_assert_eq("Editor unit erase removes unit", editor_units.size(), 0,
 		"unit erase mode should remove the unit at the clicked tile")
 	editor_unit_tool_option.select(0)
+	editor_mode_option.select(1)
+	editor_surface_option.select(1)
+	editor_surface_owner_option.select(2)
+	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = main_check.get("_editor_map")
+	var surface_layout: Array = unit_editor_map.get("layout", [])
+	var tile_owners: Array = unit_editor_map.get("tile_owners", [])
+	_assert_true("Editor surface mode paints building", str(surface_layout[3])[3] == "v",
+		"surface deployment should paint the selected building char")
+	_assert_eq("Editor surface mode stores owner", str((tile_owners[0] as Dictionary).get("color", "")), "blue",
+		"surface deployment should store the selected owner color")
+	editor_surface_owner_option.select(0)
+	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = main_check.get("_editor_map")
+	tile_owners = unit_editor_map.get("tile_owners", [])
+	_assert_eq("Editor surface unowned clears owner", tile_owners.size(), 0,
+		"painting an unowned surface should remove ownership metadata")
+	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorBiomeOption")
+	editor_biome_option.select(1)
+	editor_apply_biome_btn.pressed.emit()
+	unit_editor_map = main_check.get("_editor_map")
+	_assert_eq("Editor biome apply updates map", str(unit_editor_map.get("biome", "")), "snow",
+		"one-click biome branch switching should update the editor map immediately")
 	editor_width_option.select(1)
 	editor_height_option.select(0)
 	main_check.call("_on_editor_resize_pressed")

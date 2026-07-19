@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -385,6 +385,7 @@ async def _start_battle_internal(
     # as "custom:<id>" and bypass the procedural generator but still
     # follow the same `initial_units` schema.
     custom_map_biome: Optional[str] = None
+    custom_tile_owners: List[Dict[str, Any]] = []
     result: MapPresetResult
     if preset_id.startswith("custom:"):
         from app.routes.editor import _read_map
@@ -393,6 +394,7 @@ async def _start_battle_internal(
         custom_layout = data["layout"]
         # Use custom map's biome if game doesn't have one explicitly set
         custom_map_biome = data.get("biome", "grass")
+        custom_tile_owners = list(data.get("tile_owners", []))
         # Tile grid is sized by the custom map; bypass procedural generator
         grid: List[List[Tile]] = []
         for y, row in enumerate(custom_layout):
@@ -553,6 +555,27 @@ async def _start_battle_internal(
                 if closest_seat == seat:
                     t.owner_id = pid
                     logger.debug(f"Game {game.id}: income building ({t.terrain}) at ({t.x},{t.y}) -> player {pid}(seat={seat}), dist={min_dist}")
+
+    if custom_tile_owners:
+        for owner in custom_tile_owners:
+            color = str(owner.get("color", ""))
+            target_player = color_to_player.get(color)
+            if target_player is None:
+                logger.warning(
+                    "Game %d: tile owner color %r at (%s,%s) has no player; skipped",
+                    game.id, color, owner.get("x"), owner.get("y"),
+                )
+                continue
+            ox = int(owner.get("x", -1))
+            oy = int(owner.get("y", -1))
+            for t in tiles:
+                if t.x == ox and t.y == oy:
+                    t.owner_id = target_player.id
+                    logger.debug(
+                        "Game %d: custom tile owner (%d,%d) -> player %d color=%s",
+                        game.id, ox, oy, target_player.id, color,
+                    )
+                    break
 
     for u in units:
         for t in tiles:

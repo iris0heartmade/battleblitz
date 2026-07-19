@@ -14,7 +14,8 @@ See `../docs/路线/Godot移植方案.md` for the broader port context.
 > claim/recruit/wait/end-turn, dynamic action bubbles, CO HUD/power, BGM
 > selection, commander selection, mainline lifecycle with auto-abandon retry,
 > dialogue scenes, portrait assets, Chinese UI text, and a map editor with
-> undo/redo history.
+> terrain/surface/unit deployment modes, ownership metadata, and undo/redo
+> history.
 > Remaining gaps are mostly advanced parity and release polish: editor
 > fill/line/select, help/reference panels, AI commentary UI,
 > phase-aware polling/diagnostics, export-safe asset loading, and dynamic
@@ -50,6 +51,18 @@ map resizing push undo history; loading or saving a backend map resets that
 history so edits from one map cannot leak into another. The smoke test covers
 button presence, undo availability after painting, terrain rollback, redo
 availability, and redo reapply behavior.
+
+## 2026-07-19 editor deployment modes
+
+The editor mode selector is now split into "地形部署", "地表部署", and
+"单位部署". Terrain deployment paints natural/base terrain, surface
+deployment paints buildings such as castles, villages, barracks, and gates
+with optional ownership, and unit deployment places/removes starting units
+with red/blue/green/yellow team ownership.
+
+Owned surface buildings are saved as `tile_owners`, using color ids rather
+than database player ids. When a custom map starts, the backend resolves those
+colors to the actual joined players and applies `Tile.owner_id`.
 
 ---
 
