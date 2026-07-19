@@ -3288,42 +3288,43 @@ func _hide_lobby_host_extras(hide: bool) -> void:
 
 # 房主控制台专用: 动态调整 in_room 视图下各元素的 anchor
 # 让 TopBar / InfoBar / LobbyList / DualCol / AI 配置 / BottomBar
-# 全部 fit 进 LobbyFrame(避免 UI 溢出 viewport)
+# 全部 fit 进 LobbyFrame(避免 UI 溢出 viewport 720)
 #
-# 布局(LobbyFrame 内部坐标):
-#   TopBar:       0-70    (标题)
-#   InfoBar:      76-100  (Game # + 玩家数)
-#   LobbyList:    110-260 (玩家列表,150px)
-#   DualCol:      270-540 (RightCol 装 6 项配置 + 启动按钮, 270px)
-#   AiConfigRow:  550-582 (AI 类型+性格+难度, 32px)
-#   AiActionRow:  590-622 (添加 AI + 选 AI + 移除, 32px)
-#   BottomBar:    632-672 (返回主菜单, 40px,接近 LobbyFrame 底)
+# viewport 720,LobbyFrame anchor_top=0.05 / anchor_bottom=0.95 → y=36-684,高 648
+# 布局(LobbyFrame 内部坐标,0-648):
+#   TopBar:       0-44     (标题,44px 紧凑)
+#   InfoBar:      48-72    (Game # + 玩家数,24px)
+#   LobbyList:    80-176   (玩家列表,96px)
+#   DualCol:      184-504  (RightCol 装 6 项 + 启动按钮,320px)
+#   AiConfigRow:  512-544  (AI 类型+性格+难度,32px)
+#   AiActionRow:  552-584  (添加 AI + 选 AI + 移除,32px)
+#   BottomBar:    592-632  (返回主菜单,40px) → 总 632,LobbyFrame 648 内,留 16px 边距
 func _layout_lobby_in_room() -> void:
 	if lobby_view == null:
 		return
 	var lobby_list: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyList") as Control
 	if lobby_list != null:
-		lobby_list.offset_top = 110.0
-		lobby_list.offset_bottom = 260.0
+		lobby_list.offset_top = 80.0
+		lobby_list.offset_bottom = 176.0
 	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
 	if dual_col != null:
-		dual_col.offset_top = 270.0
-		dual_col.offset_bottom = 540.0
+		dual_col.offset_top = 184.0
+		dual_col.offset_bottom = 504.0
 	var ai_cfg: Control = lobby_view.get_node_or_null("LobbyFrame/AiConfigRow") as Control
 	if ai_cfg != null:
-		ai_cfg.offset_top = 550.0
-		ai_cfg.offset_bottom = 582.0
+		ai_cfg.offset_top = 512.0
+		ai_cfg.offset_bottom = 544.0
 	var ai_act: Control = lobby_view.get_node_or_null("LobbyFrame/AiActionRow") as Control
 	if ai_act != null:
-		ai_act.offset_top = 590.0
-		ai_act.offset_bottom = 622.0
-	# BottomBar 改成绝对位置(原 anchor 1.0/1.0 → 顶部往上挪,避免跟 AiActionRow 重叠)
+		ai_act.offset_top = 552.0
+		ai_act.offset_bottom = 584.0
+	# BottomBar 改成绝对位置(原 anchor 1.0/1.0 → 顶部往上挪,避免溢出 LobbyFrame 648)
 	var bb: Control = lobby_view.get_node_or_null("LobbyFrame/BottomBar") as Control
 	if bb != null:
 		bb.anchor_top = 0.0
 		bb.anchor_bottom = 0.0
-		bb.offset_top = 632.0
-		bb.offset_bottom = 672.0
+		bb.offset_top = 592.0
+		bb.offset_bottom = 632.0
 
 
 # 还原 LobbyFrame 各元素到 tscn 默认 anchor(切回非 in_room 模式时调用)

@@ -623,7 +623,7 @@ disabled = true
 
 [node name="RightCol" type="VBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol"]
 size_flags_horizontal = 3
-theme_override_constants/separation = 8
+theme_override_constants/separation = 4
 
 [node name="RightHeader" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 text = "创建房间"
