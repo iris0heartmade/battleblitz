@@ -1117,6 +1117,19 @@ mouse_filter = 2
 
 ; COBar removed — 能量由 CORoster(顶部)+ InfoPanel/CommanderCOBar 显示
 
+; --- 顶部中央:CO Roster — 全玩家头像 + meter + 发动按钮 ---
+; 动态生成:每玩家一个 Panel(头像 + 名字 + ProgressBar + 发动按钮)
+; 居中,避让 TopLeft/TopRight 各 360px 宽
+[node name="CORoster" type="HBoxContainer" parent="GameView/HUD"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -280.0
+offset_top = 30.0
+offset_right = 280.0
+offset_bottom = 62.0
+theme_override_constants/separation = 6
+alignment = 1
+
 ; --- 右下:AI 思考中 + 战报按钮 ---
 [node name="BottomRight" type="HBoxContainer" parent="GameView/HUD"]
 anchor_left = 1.0

@@ -73,6 +73,8 @@ var _recruit_mode_unit_id: int = -1
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
 @onready var commander_title: Label = $GameView/HUD/InfoPanel/CommanderTitle
 @onready var commander_name: RichTextLabel = $GameView/HUD/InfoPanel/CommanderName
+# M5.1 CO Roster — 顶部全玩家头像 + meter + 发动按钮
+@onready var co_roster: HBoxContainer = $GameView/HUD/CORoster
 @onready var commander_co_bar: ProgressBar = $GameView/HUD/InfoPanel/CommanderCOBar
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
@@ -1146,6 +1148,86 @@ func _refresh_hud_from_state() -> void:
 	_rewrite_players_list()
 	# V2 第 3 轮补丁:左上 InfoPanel 当前指挥官
 	_refresh_commander_section()
+	# M5.1 顶部 CORoster — 全玩家 CO meter + 发动按钮
+	_refresh_co_roster()
+
+
+# M5.1 CO Roster — 顶部全玩家头像 + 名字 + meter + 发动按钮
+# 每个 co_state 一行:Panel(VBox:头像色块 + Label + ProgressBar + Button)
+# 按钮只在 can_fire=true(且是自己)时显示;is_power_active 时显示 "⚡ 生效中"
+func _refresh_co_roster() -> void:
+	if co_roster == null or not is_instance_valid(co_roster):
+		return
+	# 清空旧 children(每次刷新重建)
+	for child in co_roster.get_children():
+		child.queue_free()
+	var states: Array = GameState.co_states if GameState != null else []
+	if states.is_empty():
+		return
+	for c in states:
+		if not (c is Dictionary):
+			continue
+		var pid: int = int(c.get("player_id", -1))
+		var color_name: String = String(c.get("color", "—"))
+		var commander_id: String = String(c.get("commander_id", ""))
+		var meter: int = int(c.get("meter", 0))
+		var threshold: int = max(1, int(c.get("threshold", 100)))
+		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
+		var is_active: bool = bool(c.get("is_power_active", false))
+		var can_fire: bool = bool(c.get("can_fire", false))
+		var is_local: bool = pid == _player_id
+		# Panel 容器(单行:HBox)
+		var row := Panel.new()
+		row.custom_minimum_size = Vector2(160, 32)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		co_roster.add_child(row)
+		var row_inner := HBoxContainer.new()
+		row_inner.anchor_right = 1.0
+		row_inner.anchor_bottom = 1.0
+		row_inner.offset_left = 4.0
+		row_inner.offset_top = 2.0
+		row_inner.offset_right = -4.0
+		row_inner.offset_bottom = -2.0
+		row_inner.theme_override_constants/separation = 4
+		row.add_child(row_inner)
+		# 1) 阵营色块(16x16)
+		var swatch := ColorRect.new()
+		swatch.custom_minimum_size = Vector2(16, 16)
+		swatch.color = Config.player_color(color_name)
+		row_inner.add_child(swatch)
+		# 2) Label:颜色缩写 + 指挥官名
+		var lbl := Label.new()
+		lbl.text = "%s:%s" % [color_name.to_upper(), commander_id if commander_id != "" else "—"]
+		lbl.add_theme_font_size_override("font_size", 11)
+		row_inner.add_child(lbl)
+		# 3) ProgressBar(meter / threshold)
+		var bar := ProgressBar.new()
+		bar.custom_minimum_size = Vector2(56, 12)
+		bar.value = pct
+		bar.show_percentage = false
+		bar.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
+		row_inner.add_child(bar)
+		# 4) 状态标签 / 发动按钮
+		if is_active:
+			var active_lbl := Label.new()
+			active_lbl.text = "⚡ 生效中"
+			active_lbl.add_theme_color_override("font_color", Color(0.96, 0.78, 0.18))
+			active_lbl.add_theme_font_size_override("font_size", 11)
+			row_inner.add_child(active_lbl)
+		elif can_fire and is_local:
+			var btn := Button.new()
+			btn.text = "发动"
+			btn.custom_minimum_size = Vector2(36, 20)
+			btn.add_theme_font_size_override("font_size", 10)
+			btn.tooltip_text = "激活 CO Power(消耗全部能量)"
+			# 用 Callable.bind 把 pid 绑到 pressed 信号
+			btn.pressed.connect(_on_co_power_pressed.bind(pid))
+			row_inner.add_child(btn)
+		else:
+			var meter_lbl := Label.new()
+			meter_lbl.text = "%d/%d" % [meter, threshold]
+			meter_lbl.add_theme_font_size_override("font_size", 10)
+			row_inner.add_child(meter_lbl)
 
 
 func _rewrite_players_list() -> void:
@@ -1408,6 +1490,51 @@ func _on_co_power_pressed(pid: int) -> void:
 		return
 	NetworkClient.action_co_power(_game_id, pid)
 	_update_status("⚡ CO Power 激活中 (#%d)..." % pid)
+	# 视觉反馈:屏幕中央大飘字 + 屏幕震动
+	_play_co_power_fx()
+
+
+# M5.3 CO Power 视觉反馈:屏幕中央大飘字 + Camera2D 抖动 0.4s
+func _play_co_power_fx() -> void:
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	# 1) 中央大飘字(用 hud_layer CanvasLayer,避免受 Camera2D 影响)
+	if hud_layer != null and is_instance_valid(hud_layer):
+		var lbl := Label.new()
+		lbl.text = "⚡ CO Power 已激活!"
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.30))
+		lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+		lbl.add_theme_constant_override("shadow_offset_x", 3)
+		lbl.add_theme_constant_override("shadow_offset_y", 3)
+		lbl.add_theme_font_size_override("font_size", 48)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 中央位置
+		var vp_size: Vector2 = viewport.get_visible_rect().size
+		lbl.position = Vector2(vp_size.x * 0.5 - 200, vp_size.y * 0.4)
+		lbl.size = Vector2(400, 64)
+		hud_layer.add_child(lbl)
+		# Tween:1.2s 内 alpha 1.0→0.0 + 向上飘 40px
+		var t: Tween = create_tween()
+		t.set_parallel(true)
+		t.tween_property(lbl, "position:y", lbl.position.y - 40, 1.2).set_trans(Tween.TRANS_CUBIC)
+		t.tween_property(lbl, "modulate:a", 0.0, 1.2).set_trans(Tween.TRANS_LINEAR)
+		t.set_parallel(false)
+		t.tween_callback(lbl.queue_free)
+	# 2) Camera2D 抖动 0.4s
+	var board_node: Node = get_node_or_null("GameView/Board")
+	if board_node != null:
+		var cam: Camera2D = board_node.get_node_or_null("BoardCamera") as Camera2D
+		if cam != null:
+			var orig_pos: Vector2 = cam.position
+			var t2: Tween = create_tween()
+			t2.set_loops(8)
+			var seed_amp: float = 6.0
+			t2.tween_property(cam, "position", orig_pos + Vector2(seed_amp, 0), 0.05)
+			t2.tween_property(cam, "position", orig_pos + Vector2(-seed_amp, seed_amp), 0.05)
+			t2.tween_property(cam, "position", orig_pos + Vector2(seed_amp, -seed_amp), 0.05)
+			t2.tween_property(cam, "position", orig_pos, 0.05)
 
 
 # M6.3 静音 toggle — Settings 上 toggle 按钮
