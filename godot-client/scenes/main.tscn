@@ -654,8 +654,22 @@ custom_minimum_size = Vector2(0, 32)
 [node name="LobbyBgmOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 custom_minimum_size = Vector2(0, 32)
 
+[node name="WinConditionOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 32)
+
+[node name="PlayerCountLabel" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 24)
+text = "—"
+horizontal_alignment = 1
+modulate = Color(0.85, 0.78, 0.55, 1)
+
 [node name="CreateRoomBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 text = "创建并加入"
+custom_minimum_size = Vector2(0, 40)
+
+[node name="StartGameInlineBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+visible = false
+text = "启动游戏"
 custom_minimum_size = Vector2(0, 40)
 
 [node name="MidSectionBar" type="HBoxContainer" parent="Lobby/LobbyFrame"]

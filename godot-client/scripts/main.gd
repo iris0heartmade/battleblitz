@@ -235,6 +235,8 @@ var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 @onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/AiActionRow/LobbyAddAiBtn
 @onready var lobby_remove_ai_btn: Button = $Lobby/LobbyFrame/AiActionRow/LobbyRemoveAiBtn
 @onready var lobby_start_btn: Button = $Lobby/LobbyFrame/BottomBar/LobbyStartBtn
+@onready var player_count_label: Label = $Lobby/LobbyFrame/LobbyDualCol/RightCol/PlayerCountLabel
+@onready var start_game_inline_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/StartGameInlineBtn
 @onready var lobby_back_btn: Button = $Lobby/LobbyFrame/BottomBar/LobbyBackBtn
 @onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyTopBar/LobbyGameIdLabel
 @onready var room_list: RichTextLabel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/RoomList
@@ -253,6 +255,7 @@ var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 @onready var lobby_to_spec_btn: Button = $Lobby/LobbyFrame/LobbyToSpecBtn
 @onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyCommanderOption
 @onready var lobby_bgm_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyBgmOption
+@onready var win_condition_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/WinConditionOption
 @onready var create_room_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateRoomBtn
 # Lobby 二层菜单导航
 @onready var choose_panel: VBoxContainer = $Lobby/LobbyFrame/ChoosePanel
@@ -335,6 +338,8 @@ func _ready() -> void:
 		lobby_remove_ai_btn.pressed.connect(_on_lobby_remove_ai_pressed)
 	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
+	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
+		start_game_inline_btn.pressed.connect(_on_lobby_start_pressed)
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
 	if room_select_option != null and is_instance_valid(room_select_option):
@@ -3188,6 +3193,7 @@ func _on_lobby_pressed() -> void:
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
 	_load_lobby_presets()
 	_load_lobby_audio_tracks()
+	_setup_lobby_win_condition_options()
 	_refresh_room_list()
 	_show_lobby_choose()
 
@@ -3196,6 +3202,8 @@ func _show_lobby_choose() -> void:
 	if choose_panel != null and is_instance_valid(choose_panel):
 		choose_panel.visible = true
 	_set_lobby_detail_visible(false)
+	# 切回非 in_room 模式:恢复 BottomBar 默认 anchor + 切换按钮可见性
+	_restore_lobby_default_layout()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
 
@@ -3208,6 +3216,7 @@ func _show_lobby_create_view() -> void:
 	_set_lobby_dualcol_visible(true)
 	_set_lobby_leftcol_visible(false)
 	_set_lobby_rightcol_visible(true)
+	_restore_lobby_default_layout()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -3220,6 +3229,7 @@ func _show_lobby_join_view() -> void:
 	_set_lobby_dualcol_visible(true)
 	_set_lobby_leftcol_visible(true)
 	_set_lobby_rightcol_visible(false)
+	_restore_lobby_default_layout()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -3229,8 +3239,24 @@ func _show_lobby_in_room() -> void:
 	if choose_panel != null and is_instance_valid(choose_panel):
 		choose_panel.visible = false
 	_set_lobby_detail_visible(true)
-	_set_lobby_leftcol_visible(true)
+	# 房主控制台: 隐藏冗余(房间列表/选房加入是加入者用的,房主不需要)
+	_set_lobby_leftcol_visible(false)
 	_set_lobby_rightcol_visible(true)
+	# 隐藏 HostRow(改队伍)/ LobbyToSpecBtn(切换观战)/ MidSectionBar / AiCommanderOption
+	_hide_lobby_host_extras(true)
+	# 启动游戏按钮移到 RightCol 底部,BottomBar 那个隐藏
+	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
+		lobby_start_btn.visible = false
+	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
+		start_game_inline_btn.visible = true
+	# 动态调整 anchor 让所有元素 fit 进 LobbyFrame(viewport 720 时 LobbyFrame ~648px)
+	_layout_lobby_in_room()
+	# 同步玩家人数 Label(从 MapPresetOption 的 selected text 取,如 "balanced_2p_15 (2p)")
+	if player_count_label != null and is_instance_valid(player_count_label):
+		if map_preset_option != null and is_instance_valid(map_preset_option) and map_preset_option.selected >= 0:
+			player_count_label.text = map_preset_option.get_item_text(map_preset_option.selected)
+		else:
+			player_count_label.text = "—"
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
 
@@ -3244,6 +3270,99 @@ func _set_lobby_detail_visible(v: bool) -> void:
 		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
 		if n != null:
 			n.visible = v
+
+
+# 房主控制台专用: 隐藏"加入者/对局中"才需要的控件
+# 保留 LobbyList(玩家列表) + AiConfigRow/AiActionRow(房主需要加 AI)
+# 隐藏:LeftCol(房间列表,房主不需要选房) / HostRow(改队伍,合并到 TeamOption) /
+#       LobbyToSpecBtn(切换观战) / MidSectionBar(对局管理,合并到顶部信息)
+#       AiCommanderOption(AI 指挥官,合并到 AiConfigRow)
+func _hide_lobby_host_extras(hide: bool) -> void:
+	if lobby_view == null:
+		return
+	for node_name in ["HostRow", "LobbyToSpecBtn", "MidSectionBar", "AiCommanderOption"]:
+		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
+		if n != null:
+			n.visible = not hide
+
+
+# 房主控制台专用: 动态调整 in_room 视图下各元素的 anchor
+# 让 TopBar / InfoBar / LobbyList / DualCol / AI 配置 / BottomBar
+# 全部 fit 进 LobbyFrame(避免 UI 溢出 viewport)
+#
+# 布局(LobbyFrame 内部坐标):
+#   TopBar:       0-70    (标题)
+#   InfoBar:      76-100  (Game # + 玩家数)
+#   LobbyList:    110-260 (玩家列表,150px)
+#   DualCol:      270-540 (RightCol 装 6 项配置 + 启动按钮, 270px)
+#   AiConfigRow:  550-582 (AI 类型+性格+难度, 32px)
+#   AiActionRow:  590-622 (添加 AI + 选 AI + 移除, 32px)
+#   BottomBar:    632-672 (返回主菜单, 40px,接近 LobbyFrame 底)
+func _layout_lobby_in_room() -> void:
+	if lobby_view == null:
+		return
+	var lobby_list: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyList") as Control
+	if lobby_list != null:
+		lobby_list.offset_top = 110.0
+		lobby_list.offset_bottom = 260.0
+	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
+	if dual_col != null:
+		dual_col.offset_top = 270.0
+		dual_col.offset_bottom = 540.0
+	var ai_cfg: Control = lobby_view.get_node_or_null("LobbyFrame/AiConfigRow") as Control
+	if ai_cfg != null:
+		ai_cfg.offset_top = 550.0
+		ai_cfg.offset_bottom = 582.0
+	var ai_act: Control = lobby_view.get_node_or_null("LobbyFrame/AiActionRow") as Control
+	if ai_act != null:
+		ai_act.offset_top = 590.0
+		ai_act.offset_bottom = 622.0
+	# BottomBar 改成绝对位置(原 anchor 1.0/1.0 → 顶部往上挪,避免跟 AiActionRow 重叠)
+	var bb: Control = lobby_view.get_node_or_null("LobbyFrame/BottomBar") as Control
+	if bb != null:
+		bb.anchor_top = 0.0
+		bb.anchor_bottom = 0.0
+		bb.offset_top = 632.0
+		bb.offset_bottom = 672.0
+
+
+# 还原 LobbyFrame 各元素到 tscn 默认 anchor(切回非 in_room 模式时调用)
+# 复位 LobbyList / DualCol / AiConfigRow / AiActionRow / BottomBar
+func _restore_lobby_default_layout() -> void:
+	if lobby_view == null:
+		return
+	var lobby_list: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyList") as Control
+	if lobby_list != null:
+		lobby_list.offset_top = 442.0
+		lobby_list.offset_bottom = 580.0
+	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
+	if dual_col != null:
+		dual_col.offset_top = 112.0
+		dual_col.offset_bottom = -16.0
+	var ai_cfg: Control = lobby_view.get_node_or_null("LobbyFrame/AiConfigRow") as Control
+	if ai_cfg != null:
+		ai_cfg.offset_top = 654.0
+		ai_cfg.offset_bottom = 686.0
+	var ai_act: Control = lobby_view.get_node_or_null("LobbyFrame/AiActionRow") as Control
+	if ai_act != null:
+		ai_act.offset_top = 726.0
+		ai_act.offset_bottom = 758.0
+	var bb: Control = lobby_view.get_node_or_null("LobbyFrame/BottomBar") as Control
+	if bb != null:
+		# 还原 tscn 默认 anchor(右下角)
+		bb.anchor_left = 1.0
+		bb.anchor_right = 1.0
+		bb.anchor_top = 0.0
+		bb.anchor_bottom = 0.0
+		bb.offset_left = -340.0
+		bb.offset_top = -56.0
+		bb.offset_right = -16.0
+		bb.offset_bottom = -16.0
+	# 切回非 in_room:BottomBar 的 LobbyStartBtn 可见,RightCol 的 StartGameInlineBtn 隐藏
+	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
+		lobby_start_btn.visible = true
+	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
+		start_game_inline_btn.visible = false
 
 
 func _set_lobby_dualcol_visible(v: bool) -> void:
@@ -3393,6 +3512,14 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 		ai_commander_option.disabled = _lobby_ai_commander_ids.size() <= 1
 
 
+func _selected_lobby_win_condition() -> String:
+	# P2.4 polish:win_condition 现在固定为 rout(rout+seize 二合一)。
+	# 下拉里只有 1 项,这个函数保持接口以便未来扩展。
+	if win_condition_option == null or not is_instance_valid(win_condition_option):
+		return "rout"
+	return "rout"
+
+
 func _selected_lobby_commander() -> String:
 	if lobby_commander_option == null or not is_instance_valid(lobby_commander_option):
 		return ""
@@ -3416,6 +3543,15 @@ func _selected_lobby_ai_commanders() -> Dictionary:
 	if commander_id == "":
 		return {}
 	return {2: commander_id}
+
+
+# 胜利条件下拉:P2.4 polish 后只剩 rout+seize 二合一,默认 "rout"
+func _setup_lobby_win_condition_options() -> void:
+	if win_condition_option == null or not is_instance_valid(win_condition_option):
+		return
+	win_condition_option.clear()
+	win_condition_option.add_item("消灭所有敌方单位,或占领对方 HQ", 0)
+	win_condition_option.select(0)
 
 
 func _setup_lobby_bgm_options(tracks: Array = []) -> void:
@@ -3651,7 +3787,7 @@ func _on_create_room_pressed() -> void:
 		room_name,
 		preset_id,
 		biome,
-		"rout",
+		_selected_lobby_win_condition(),
 		_selected_lobby_commander(),
 		_selected_lobby_bgm_track(),
 		_selected_lobby_ai_commanders()
@@ -3748,6 +3884,8 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	]
 	# Start 按钮:只要有 1 名真人(非 AI/非观战)即可,后端会校验 MIN_PLAYERS
 	lobby_start_btn.disabled = real_count < 1
+	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
+		start_game_inline_btn.disabled = real_count < 1
 
 
 func _render_lobby_ai_options(players: Array) -> void:
