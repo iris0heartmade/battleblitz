@@ -26,7 +26,7 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 | 战斗 HUD | 回合、当前玩家、CO meter/power、战报、结算、行动面板、服务端攻击预测已实现 | 参考/帮助入口、地块 tooltip、部分 polish 待补 |
 | 主线 | 列表、详情、开始、推进、下一战、放弃、指挥官选择、剧情分发已实现；409 自动 abandon 后重试已补 | 锁定原因、失败 modal、胜利专属剧情表现仍可加强 |
 | 对话 | dialogue/narration/choice/battle_ref/wait 基础分发可用 | 打字速度、crest/portrait 表现可继续追 Web |
-| 地图编辑器 | 基础地形/单位编辑、尺寸、保存/加载/删除可用 | undo/redo、fill、line、select/move/recolor 等高级工具待补 |
+| 地图编辑器 | 基础地形/单位编辑、尺寸、撤销/重做、保存/加载/删除可用 | fill、line、select/move/recolor 等高级工具待补 |
 | 设置/音频 | 名字、字号、颜色、主题、静音、BGM 轨道调用已有 | SFX、crossfade、音频 UI 细节待补 |
 | 网络 | HTTP 队列、REST 封装、WS heartbeat/reconnect/since_seq 已实现 | 阶段感知轮询、诊断 HUD、WS 安全网待补 |
 
@@ -44,7 +44,7 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 & 'D:\Python\godot\Godot_v4.7-stable_win64_console.exe' --headless --path godot-client res://tools/smoke_test.tscn
 ```
 
-结果：退出码 0，`Passed: 198 Failed: 0`。
+结果：退出码 0，`Passed: 205 Failed: 0`。
 
 ```powershell
 & 'D:\Python\godot\Godot_v4.7-stable_win64_console.exe' --headless --path godot-client res://tools/entry_flow_e2e.tscn
@@ -59,7 +59,7 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 
 ## 剩余优先级
 
-1. P1：地图编辑器高级工具：undo/redo、flood fill、line、select/move/recolor。
+1. P1：地图编辑器高级工具：flood fill、line、select/move/recolor。
 2. P1：帮助/参考面板：地形、单位、技能、胜利条件、CO power。
 3. P1：AI commentary UI：消费 `commentary.text/audio` 并接入战报/聊天面板。
 4. P1：网络诊断：阶段感知轮询、WS 软刷新、连接诊断 HUD。
@@ -82,11 +82,19 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 
 - 指令气泡只负责 UI 层筛选，最终动作合法性仍以后端 REST 接口返回为准。
 - 汉化扫描覆盖静态 UI 文案和常见动态赋值。后端返回的玩家名、地图 ID、房间名、BGM 轨道名、调试字段、未来新增数据字段仍可能含英文或原始 ID，后续应按展示入口逐步增加映射。
-- Godot 导入和 smoke test 均已覆盖本轮动态按钮逻辑。当前 smoke test 为 `Passed: 198 Failed: 0`，额外包含初始指令气泡、移动后气泡、攻击可用状态、主动治疗技能、占领按钮等断言。
+- Godot 导入和 smoke test 均已覆盖本轮动态按钮逻辑和地图编辑器撤销/重做。当前 smoke test 为 `Passed: 205 Failed: 0`，额外包含初始指令气泡、移动后气泡、攻击可用状态、主动治疗技能、占领按钮、编辑器撤销、编辑器重做等断言。
+
+### 2026-07-19 追加进展：地图编辑器撤销/重做
+
+- 新增编辑器“撤销”“重做”按钮，保持全中文 UI。
+- 支持 Ctrl+Z / Ctrl+Y 快捷键。
+- 地形绘制、单位放置、单位擦除、新建地图、调整尺寸会进入历史栈。
+- 后端加载或保存响应会清空历史栈，避免跨地图撤销。
+- 历史按钮会按栈状态自动启用/禁用。
 
 当前剩余缺口应按以下顺序继续：
 
-1. 地图编辑器高级工具：undo/redo、fill、line、select/move/recolor。
+1. 地图编辑器高级工具：fill、line、select/move/recolor。
 2. 帮助/参考面板：地形、单位、技能、胜利条件、CO power。
 3. AI commentary UI：消费 `commentary.text/audio` 并接入战报或聊天面板。
 4. 网络诊断和发布 polish：阶段感知轮询、WS 软刷新、连接诊断 HUD、PNG 导出 warning、SFX/crossfade、地块 tooltip、动态后端数据汉化映射。

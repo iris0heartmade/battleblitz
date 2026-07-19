@@ -215,6 +215,8 @@ var _selected_save_id: int = 0
 @onready var editor_width_option: OptionButton = $EditorView/EditorPanel/EditorWidthOption
 @onready var editor_height_option: OptionButton = $EditorView/EditorPanel/EditorHeightOption
 @onready var editor_resize_btn: Button = $EditorView/EditorPanel/EditorResizeBtn
+@onready var editor_undo_btn: Button = $EditorView/EditorPanel/EditorUndoBtn
+@onready var editor_redo_btn: Button = $EditorView/EditorPanel/EditorRedoBtn
 @onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
 @onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
 @onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
@@ -227,6 +229,9 @@ var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "C", "v", "b", "
 var _editor_unit_types: Array[String] = ["swordsman", "archer", "knight", "healer", "warlock"]
 var _editor_unit_colors: Array[String] = ["red", "blue", "green", "yellow"]
 var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
+var _editor_undo_stack: Array[Dictionary] = []
+var _editor_redo_stack: Array[Dictionary] = []
+const _EDITOR_HISTORY_LIMIT := 50
 
 @onready var lobby_view: Control = $Lobby
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus
@@ -393,6 +398,10 @@ func _ready() -> void:
 		editor_delete_btn.pressed.connect(_on_editor_delete_pressed)
 	if editor_resize_btn != null and is_instance_valid(editor_resize_btn):
 		editor_resize_btn.pressed.connect(_on_editor_resize_pressed)
+	if editor_undo_btn != null and is_instance_valid(editor_undo_btn):
+		editor_undo_btn.pressed.connect(_on_editor_undo_pressed)
+	if editor_redo_btn != null and is_instance_valid(editor_redo_btn):
+		editor_redo_btn.pressed.connect(_on_editor_redo_pressed)
 	if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
 		editor_map_select_option.item_selected.connect(_on_editor_map_selected)
 	if editor_back_btn != null and is_instance_valid(editor_back_btn):
@@ -1831,6 +1840,16 @@ func _update_status(text: String) -> void:
 # ============================================================
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if editor_view != null and is_instance_valid(editor_view) and editor_view.visible and event.ctrl_pressed:
+			if event.keycode == KEY_Z:
+				_on_editor_undo_pressed()
+				get_viewport().set_input_as_handled()
+				return
+			if event.keycode == KEY_Y:
+				_on_editor_redo_pressed()
+				get_viewport().set_input_as_handled()
+				return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
 	if event.is_action_pressed("pause"):
 		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
@@ -2896,6 +2915,7 @@ func _on_editor_pressed() -> void:
 	_setup_editor_options()
 	if _editor_map.is_empty():
 		_editor_map = _build_blank_editor_map()
+		_reset_editor_history()
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
 		editor_status.text = "地图编辑器已就绪。"
@@ -3130,6 +3150,81 @@ func _render_editor_map() -> void:
 	if _editor_map.is_empty():
 		return
 	editor_board.load_map(_editor_map)
+	_update_editor_history_buttons()
+
+
+func _snapshot_editor_map() -> Dictionary:
+	if _editor_map.is_empty():
+		return {}
+	return (_editor_map.duplicate(true) as Dictionary)
+
+
+func _push_editor_history() -> void:
+	var snapshot := _snapshot_editor_map()
+	if snapshot.is_empty():
+		return
+	_editor_undo_stack.append(snapshot)
+	if _editor_undo_stack.size() > _EDITOR_HISTORY_LIMIT:
+		_editor_undo_stack.pop_front()
+	_editor_redo_stack.clear()
+	_update_editor_history_buttons()
+
+
+func _reset_editor_history() -> void:
+	_editor_undo_stack.clear()
+	_editor_redo_stack.clear()
+	_update_editor_history_buttons()
+
+
+func _update_editor_history_buttons() -> void:
+	if editor_undo_btn != null and is_instance_valid(editor_undo_btn):
+		editor_undo_btn.disabled = _editor_undo_stack.is_empty()
+	if editor_redo_btn != null and is_instance_valid(editor_redo_btn):
+		editor_redo_btn.disabled = _editor_redo_stack.is_empty()
+
+
+func _restore_editor_snapshot(snapshot: Dictionary) -> void:
+	_editor_map = snapshot.duplicate(true)
+	var size: Dictionary = _editor_map.get("size", {})
+	_select_editor_size_option(editor_width_option, int(size.get("width", 15)))
+	_select_editor_size_option(editor_height_option, int(size.get("height", 15)))
+	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
+		editor_map_name_input.text = str(_editor_map.get("name", "自定义地图"))
+	if editor_biome_option != null and is_instance_valid(editor_biome_option):
+		match str(_editor_map.get("biome", "grass")):
+			"snow":
+				editor_biome_option.select(1)
+			"desert":
+				editor_biome_option.select(2)
+			_:
+				editor_biome_option.select(0)
+	_render_editor_map()
+
+
+func _on_editor_undo_pressed() -> void:
+	if _editor_undo_stack.is_empty():
+		return
+	var current := _snapshot_editor_map()
+	if not current.is_empty():
+		_editor_redo_stack.append(current)
+	var previous: Dictionary = _editor_undo_stack.pop_back()
+	_restore_editor_snapshot(previous)
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "已撤销上一步编辑。"
+	_update_editor_history_buttons()
+
+
+func _on_editor_redo_pressed() -> void:
+	if _editor_redo_stack.is_empty():
+		return
+	var current := _snapshot_editor_map()
+	if not current.is_empty():
+		_editor_undo_stack.append(current)
+	var next: Dictionary = _editor_redo_stack.pop_back()
+	_restore_editor_snapshot(next)
+	if editor_status != null and is_instance_valid(editor_status):
+		editor_status.text = "已重做上一步编辑。"
+	_update_editor_history_buttons()
 
 
 func _paint_editor_tile(tile: Vector2i) -> void:
@@ -3147,6 +3242,9 @@ func _paint_editor_tile(tile: Vector2i) -> void:
 	if tile.x >= row.length():
 		return
 	var terrain_char := _selected_editor_terrain_char()
+	if row.substr(tile.x, 1) == terrain_char:
+		return
+	_push_editor_history()
 	layout[tile.y] = row.substr(0, tile.x) + terrain_char + row.substr(tile.x + 1)
 	_editor_map["layout"] = layout
 	_render_editor_map()
@@ -3177,8 +3275,9 @@ func _erase_editor_unit(tile: Vector2i) -> void:
 			removed = true
 			continue
 		next_units.append(unit)
-	_editor_map["initial_units"] = next_units
 	if removed:
+		_push_editor_history()
+		_editor_map["initial_units"] = next_units
 		_render_editor_map()
 		if editor_status != null and is_instance_valid(editor_status):
 			editor_status.text = "已移除 %d,%d 的单位" % [tile.x, tile.y]
@@ -3207,6 +3306,7 @@ func _place_editor_unit(tile: Vector2i) -> void:
 		"color": _selected_editor_unit_color(),
 		"level": _selected_editor_unit_level(),
 	})
+	_push_editor_history()
 	_editor_map["initial_units"] = next_units
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
@@ -3216,6 +3316,8 @@ func _place_editor_unit(tile: Vector2i) -> void:
 
 
 func _on_editor_new_pressed() -> void:
+	if not _editor_map.is_empty():
+		_push_editor_history()
 	_editor_map = _build_blank_editor_map()
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
@@ -3227,6 +3329,11 @@ func _on_editor_resize_pressed() -> void:
 		_editor_map = _build_blank_editor_map()
 	var new_width := _selected_editor_size(editor_width_option)
 	var new_height := _selected_editor_size(editor_height_option)
+	var current_size: Dictionary = _editor_map.get("size", {})
+	if int(current_size.get("width", 0)) == new_width and int(current_size.get("height", 0)) == new_height:
+		if editor_status != null and is_instance_valid(editor_status):
+			editor_status.text = "尺寸未变化。"
+		return
 	var layout: Array = _editor_map.get("layout", [])
 	var new_layout: Array[String] = []
 	for y in range(new_height):
@@ -3243,6 +3350,7 @@ func _on_editor_resize_pressed() -> void:
 	for unit in units:
 		if unit is Dictionary and int(unit.get("x", -1)) < new_width and int(unit.get("y", -1)) < new_height:
 			kept_units.append(unit)
+	_push_editor_history()
 	_editor_map["size"] = {"width": new_width, "height": new_height}
 	_editor_map["layout"] = new_layout
 	_editor_map["initial_units"] = kept_units
@@ -3342,6 +3450,7 @@ func _on_editor_map_selected(index: int) -> void:
 func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 	if code >= 200 and code < 300 and body is Dictionary:
 		_editor_map = body
+		_reset_editor_history()
 		if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
 			editor_map_name_input.text = str(body.get("name", "自定义地图"))
 		var biome := str(body.get("biome", "grass"))
@@ -3407,6 +3516,7 @@ func _on_editor_delete_response(_body: Variant, code: int = 0) -> void:
 func _on_editor_save_response(body: Variant, code: int = 0) -> void:
 	if code >= 200 and code < 300 and body is Dictionary:
 		_editor_map = body
+		_reset_editor_history()
 		_render_editor_map()
 		_upsert_editor_map_as_lobby_preset(body)
 		if editor_status != null and is_instance_valid(editor_status):

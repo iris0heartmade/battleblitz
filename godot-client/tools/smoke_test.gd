@@ -151,6 +151,10 @@ func _ready() -> void:
 		"map editor should expose a height selector")
 	_assert_true("EditorView has EditorResizeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorResizeBtn") != null,
 		"map editor should expose a resize action")
+	_assert_true("EditorView has EditorUndoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorUndoBtn") != null,
+		"map editor should expose undo for editing mistakes")
+	_assert_true("EditorView has EditorRedoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorRedoBtn") != null,
+		"map editor should expose redo after undo")
 	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
 		"map editor should expose a save action")
 	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
@@ -518,6 +522,24 @@ func _ready() -> void:
 	var editor_layout: Array = editor_map.get("layout", [])
 	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
 		"painting with the forest brush should mutate the editor layout")
+	var editor_undo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorUndoBtn")
+	var editor_redo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorRedoBtn")
+	_assert_true("Editor undo enables after paint", not editor_undo_btn.disabled,
+		"painting should push a history entry that can be undone")
+	_assert_true("Editor redo disabled before undo", editor_redo_btn.disabled,
+		"redo should stay disabled until an undo is performed")
+	main_check.call("_on_editor_undo_pressed")
+	editor_map = main_check.get("_editor_map")
+	editor_layout = editor_map.get("layout", [])
+	_assert_true("Editor undo restores terrain", str(editor_layout[1])[1] == "P",
+		"undo should restore the previous terrain at the painted tile")
+	_assert_true("Editor redo enables after undo", not editor_redo_btn.disabled,
+		"undo should make redo available")
+	main_check.call("_on_editor_redo_pressed")
+	editor_map = main_check.get("_editor_map")
+	editor_layout = editor_map.get("layout", [])
+	_assert_true("Editor redo reapplies terrain", str(editor_layout[1])[1] == "F",
+		"redo should reapply the terrain change")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_mainline_start_response", {

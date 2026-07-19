@@ -397,18 +397,34 @@ offset_right = 320.0
 offset_bottom = 440.0
 text = "应用尺寸"
 
-[node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorUndoBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 16.0
-offset_top = 500.0
-offset_right = 320.0
-offset_bottom = 536.0
-text = "返回主菜单"
+offset_top = 452.0
+offset_right = 156.0
+offset_bottom = 488.0
+text = "撤销"
+disabled = true
 
-[node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorRedoBtn" type="Button" parent="EditorView/EditorPanel"]
 offset_left = 164.0
 offset_top = 452.0
 offset_right = 320.0
 offset_bottom = 488.0
+text = "重做"
+disabled = true
+
+[node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 548.0
+offset_right = 320.0
+offset_bottom = 584.0
+text = "返回主菜单"
+
+[node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
+offset_left = 16.0
+offset_top = 500.0
+offset_right = 320.0
+offset_bottom = 536.0
 text = "删除地图"
 disabled = true
 

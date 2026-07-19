@@ -13,9 +13,10 @@ See `../docs/路线/Godot移植方案.md` for the broader port context.
 > join/convert, team switching, save management, movement/attack/skill/
 > claim/recruit/wait/end-turn, dynamic action bubbles, CO HUD/power, BGM
 > selection, commander selection, mainline lifecycle with auto-abandon retry,
-> dialogue scenes, portrait assets, Chinese UI text, and a basic map editor.
+> dialogue scenes, portrait assets, Chinese UI text, and a map editor with
+> undo/redo history.
 > Remaining gaps are mostly advanced parity and release polish: editor
-> undo/fill/line/select, help/reference panels, AI commentary UI,
+> fill/line/select, help/reference panels, AI commentary UI,
 > phase-aware polling/diagnostics, export-safe asset loading, and dynamic
 > backend data localization polish.
 
@@ -40,6 +41,15 @@ options instead of a fixed five-button layout:
 
 The client only uses these checks to keep the UI honest. The backend remains
 authoritative for action validation and battle results.
+
+## 2026-07-19 editor history status
+
+The map editor now has Chinese "撤销" and "重做" buttons plus Ctrl+Z/Ctrl+Y
+shortcuts. Terrain painting, unit placement, unit erase, new-map creation, and
+map resizing push undo history; loading or saving a backend map resets that
+history so edits from one map cannot leak into another. The smoke test covers
+button presence, undo availability after painting, terrain rollback, redo
+availability, and redo reapply behavior.
 
 ---
 
