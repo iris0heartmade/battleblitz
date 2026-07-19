@@ -1188,7 +1188,7 @@ func _refresh_co_roster() -> void:
 		row_inner.offset_top = 2.0
 		row_inner.offset_right = -4.0
 		row_inner.offset_bottom = -2.0
-		row_inner.theme_override_constants/separation = 4
+		row_inner.add_theme_constant_override("separation", 4)
 		row.add_child(row_inner)
 		# 1) 阵营色块(16x16)
 		var swatch := ColorRect.new()
