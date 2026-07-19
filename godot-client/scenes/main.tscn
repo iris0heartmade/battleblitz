@@ -476,8 +476,11 @@ theme_override_font_sizes/font_size = 11
 
 [node name="LobbyDualCol" type="HBoxContainer" parent="Lobby/LobbyFrame"]
 anchor_right = 1.0
+anchor_bottom = 1.0
 offset_left = 24.0
 offset_top = 112.0
+offset_right = -24.0
+offset_bottom = -16.0
 
 ; ===== 自由模式二层选择(创建房间 / 加入房间) =====
 [node name="ChoosePanel" type="VBoxContainer" parent="Lobby/LobbyFrame"]
