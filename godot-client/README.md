@@ -11,12 +11,35 @@ See `../docs/路线/Godot移植方案.md` for the broader port context.
 > has been removed; users enter through mainline or the online lobby. It
 > covers room browsing and creation, lobby host controls, spectator
 > join/convert, team switching, save management, movement/attack/skill/
-> claim/recruit/wait/end-turn, CO HUD/power, BGM selection, commander
-> selection, mainline lifecycle with auto-abandon retry, dialogue scenes,
-> portrait assets, and a basic map editor. Remaining gaps are mostly
-> advanced parity and release polish: editor undo/fill/line/select,
-> help/reference panels, AI commentary UI,
-> phase-aware polling/diagnostics, and export-safe asset loading.
+> claim/recruit/wait/end-turn, dynamic action bubbles, CO HUD/power, BGM
+> selection, commander selection, mainline lifecycle with auto-abandon retry,
+> dialogue scenes, portrait assets, Chinese UI text, and a basic map editor.
+> Remaining gaps are mostly advanced parity and release polish: editor
+> undo/fill/line/select, help/reference panels, AI commentary UI,
+> phase-aware polling/diagnostics, export-safe asset loading, and dynamic
+> backend data localization polish.
+
+## 2026-07-19 localization and action bubble status
+
+The current static Godot UI is localized to Chinese across the home screen,
+mainline flow, online lobby, room creation, settings, save manager, map
+editor, battle HUD, unit info, combat forecast, commander/power labels,
+recruit panel, action log, and common error/status text. A strict checker is
+available at `tools/check_chinese_ui.py`; it scans scene text and UI-facing
+script assignments so future English text does not quietly return.
+
+The battle action bubble now separates the first unit click from the
+post-move/post-action state. Buttons are shown from the unit's current legal
+options instead of a fixed five-button layout:
+
+- initial click: move, attack, active skill, capture, wait as applicable;
+- after moving: continue movement, attack, active skill, capture, wait as
+  applicable;
+- after attacking or using an action: wait, plus continue movement only for
+  unit types or data flags that allow move-after-action.
+
+The client only uses these checks to keep the UI honest. The backend remains
+authoritative for action validation and battle results.
 
 ---
 

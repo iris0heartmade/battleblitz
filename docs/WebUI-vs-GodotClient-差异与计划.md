@@ -44,7 +44,7 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 & 'D:\Python\godot\Godot_v4.7-stable_win64_console.exe' --headless --path godot-client res://tools/smoke_test.tscn
 ```
 
-结果：退出码 0，`Passed: 189 Failed: 0`。
+结果：退出码 0，`Passed: 198 Failed: 0`。
 
 ```powershell
 & 'D:\Python\godot\Godot_v4.7-stable_win64_console.exe' --headless --path godot-client res://tools/entry_flow_e2e.tscn
@@ -68,3 +68,25 @@ Godot 客户端已经接近替代原 Web UI 的日常主客户端。当前首页
 ## Godot 参考项目说明
 
 `godot-client/godot-ref/` 中的开源 Godot 项目只作为结构、UI、资源组织参考。Godot 导入当前项目时会跳过其中嵌套的 `project.godot`，这不是 BattleBlitz 客户端语法错误。
+
+---
+
+## 2026-07-19 补充：汉化与动态指令气泡
+
+本轮继续对齐 Web UI 的可玩性和可交付状态，重点完成了两类之前容易影响实机体验的内容：
+
+1. 静态可见 UI 已完成全局汉化。覆盖首页、主线模式、联机大厅、创建房间、设置、存档、地图编辑器、战斗 HUD、右侧单位信息栏、战斗预测、招募、指挥官技、常见状态提示和错误提示。新增 `godot-client/tools/check_chinese_ui.py`，用于扫描 `.tscn` 和 UI 相关 `.gd` 赋值，防止新增英文文案回流。
+2. 战斗中的指令气泡已改为按单位当前能力动态展示，不再固定显示五个按钮。初始点击单位时展示当前可执行的移动、攻击、主动技能、占领、待命；移动后会切到移动后语境，继续显示攻击、技能、占领、待命等仍可用动作；攻击或行动后只保留待命，以及少数允许行动后继续移动的单位的继续移动按钮。
+
+需要注意的边界：
+
+- 指令气泡只负责 UI 层筛选，最终动作合法性仍以后端 REST 接口返回为准。
+- 汉化扫描覆盖静态 UI 文案和常见动态赋值。后端返回的玩家名、地图 ID、房间名、BGM 轨道名、调试字段、未来新增数据字段仍可能含英文或原始 ID，后续应按展示入口逐步增加映射。
+- Godot 导入和 smoke test 均已覆盖本轮动态按钮逻辑。当前 smoke test 为 `Passed: 198 Failed: 0`，额外包含初始指令气泡、移动后气泡、攻击可用状态、主动治疗技能、占领按钮等断言。
+
+当前剩余缺口应按以下顺序继续：
+
+1. 地图编辑器高级工具：undo/redo、fill、line、select/move/recolor。
+2. 帮助/参考面板：地形、单位、技能、胜利条件、CO power。
+3. AI commentary UI：消费 `commentary.text/audio` 并接入战报或聊天面板。
+4. 网络诊断和发布 polish：阶段感知轮询、WS 软刷新、连接诊断 HUD、PNG 导出 warning、SFX/crossfade、地块 tooltip、动态后端数据汉化映射。

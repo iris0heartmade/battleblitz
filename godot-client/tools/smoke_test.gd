@@ -177,6 +177,29 @@ func _ready() -> void:
 		"attack confirm text should be testable without posting an action")
 	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
 		"attack forecast should render in the right-side information panel")
+	_setup_action_bubble_state(main_check)
+	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
+	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,
+		"fresh unit should be offered movement")
+	_assert_action_button("Initial bubble hides attack without target", main_check, "AttackBtn", false,
+		"fresh unit should not show attack when no enemy is in current range")
+	_assert_action_button("Initial bubble shows active skill with target", main_check, "SkillBtn", true,
+		"fresh healer should show skill when a wounded ally is adjacent")
+	_assert_action_button("Initial bubble shows claim on foreign building", main_check, "ClaimBtn", true,
+		"fresh unit standing on a claimable foreign building should show claim")
+	main_check.call("_show_post_action_bubble", 10, "移动")
+	_assert_action_button("Post-move bubble keeps continue move", main_check, "MoveBtn", true,
+		"post-move menu should allow continued movement when MP remains")
+	var post_move_btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/MoveBtn")
+	_assert_true("Post-move bubble relabels move", post_move_btn.text.contains("继续"),
+		"post-move menu should distinguish continuing movement from initial movement")
+	_assert_action_button("Post-move bubble still shows skill", main_check, "SkillBtn", true,
+		"post-move menu should keep legal active skills")
+	_assert_action_button("Post-move bubble keeps claim", main_check, "ClaimBtn", true,
+		"post-move menu should keep legal claim")
+	main_check.call("_show_action_bubble", 11, Vector2(320, 240))
+	_assert_action_button("Attack-ready bubble shows attack", main_check, "AttackBtn", true,
+		"unit with an enemy in range should show attack")
 	var room_select: OptionButton = main_check.get_node(lobby_join_col + "/RoomSelectOption")
 	var room_list: RichTextLabel = main_check.get_node(lobby_join_col + "/RoomList")
 	main_check.call("_on_room_list_response", [
@@ -334,8 +357,8 @@ func _ready() -> void:
 		"description": "Alice 招募了弓箭手",
 	}, 200)
 	var main_status_label: Label = main_check.get_node("StatusLabel")
-	_assert_true("Recruit response status names unit", main_status_label.text.contains("archer"),
-		"recruit success status should include the recruited unit type")
+	_assert_true("Recruit response status names unit", main_status_label.text.contains("弓箭手"),
+		"recruit success status should include the recruited unit name in Chinese")
 	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
 		"recruit success status should include remaining gold")
 
@@ -375,14 +398,14 @@ func _ready() -> void:
 	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
 	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(2, "")), "yun",
 		"room creation should map the selected AI commander to seat 2")
-	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("yun"),
-		"commander response should show the selected commander")
+	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("云"),
+		"commander response should show the selected commander in Chinese")
 	main_check.call("_on_select_mainline_commander_response", {
 		"mainline_id": "chapter_01_steel_rebellion",
 		"commander_id": "anna",
 	}, 200)
-	_assert_true("Mainline commander select response updates status", commander_status.text.contains("anna"),
-		"commander select response should show the applied commander")
+	_assert_true("Mainline commander select response updates status", commander_status.text.contains("安娜"),
+		"commander select response should show the applied commander in Chinese")
 	main_check.call("_on_audio_tracks_response", {
 		"tracks": [
 			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
@@ -559,8 +582,8 @@ func _ready() -> void:
 		"abandon should update status")
 	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
 	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
-	_assert_true("Lobby team response updates status", lobby_status.text.contains("red"),
-		"team update response should show selected team")
+	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
+		"team update response should show selected team in Chinese")
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])
@@ -623,6 +646,114 @@ func _preset_options_contain(options: Array, preset_id: String) -> bool:
 		if option is Dictionary and str(option.get("id", "")) == preset_id:
 			return true
 	return false
+
+
+func _setup_action_bubble_state(main_check: Node) -> void:
+	main_check.set("_player_id", 1)
+	GameState.local_player_id = 1
+	var tiles: Array = []
+	for y in range(5):
+		for x in range(5):
+			tiles.append({"x": x, "y": y, "terrain": "plain", "owner_id": null})
+	tiles.append({"x": 1, "y": 1, "terrain": "village", "owner_id": 2})
+	GameState.ingest_snapshot({
+		"game": {"id": 900, "status": "playing"},
+		"current_player_id": 1,
+		"tiles": tiles,
+		"players": [
+			{
+				"id": 1,
+				"gold": 500,
+				"units": [
+					{
+						"id": 10,
+						"player_id": 1,
+						"unit_type": "healer",
+						"name": "治疗师",
+						"x": 1,
+						"y": 1,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": ["heal"],
+						"has_acted": false,
+						"has_moved": false,
+					},
+					{
+						"id": 12,
+						"player_id": 1,
+						"unit_type": "swordsman",
+						"name": "剑士",
+						"x": 2,
+						"y": 1,
+						"hp": 10,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+					{
+						"id": 11,
+						"player_id": 1,
+						"unit_type": "swordsman",
+						"name": "剑士",
+						"x": 3,
+						"y": 3,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+				],
+			},
+			{
+				"id": 2,
+				"gold": 500,
+				"units": [
+					{
+						"id": 20,
+						"player_id": 2,
+						"unit_type": "swordsman",
+						"name": "敌方剑士",
+						"x": 4,
+						"y": 3,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+				],
+			},
+		],
+	})
+	var board: Node = main_check.get_node("GameView/Board")
+	board.set("map_size", Vector2i(5, 5))
+	var lookup: Dictionary = {}
+	for t in tiles:
+		lookup[Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))] = t
+	board.set("tile_lookup", lookup)
+
+
+func _assert_action_button(label: String, main_check: Node, button_name: String, expected_visible: bool, msg: String) -> void:
+	var btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/" + button_name)
+	_assert_eq(label, btn.visible, expected_visible, msg)
 
 
 func _map_path_for_id(map_id: String) -> String:

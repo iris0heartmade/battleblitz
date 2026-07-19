@@ -44,6 +44,9 @@ var _pending_attack_target_id: int = -1
 var _skill_mode_unit_id: int = -1
 var _skill_targets: Dictionary = {}
 var _pending_skill_id: String = ""
+const _ACTION_CONTEXT_INITIAL := "initial"
+const _ACTION_CONTEXT_POST_MOVE := "post_move"
+const _ACTION_CONTEXT_POST_ACTION := "post_action"
 # M4.5 招募状态机(unit_type → name 也在用)
 const _RECRUIT_OPTIONS := [
 	{"type": "swordsman", "name": "剑士",   "cost": 200},
@@ -448,9 +451,9 @@ func _ready() -> void:
 		settings_yellow_btn.pressed.connect(_on_yellow_color_pressed)
 	if settings_theme_dropdown != null and is_instance_valid(settings_theme_dropdown):
 		# 填充 3 主题(web CSS 主题)
-		settings_theme_dropdown.add_item("深绿 GBA", 0)
-		settings_theme_dropdown.add_item("金属银 silver", 1)
-		settings_theme_dropdown.add_item("极简 light", 2)
+		settings_theme_dropdown.add_item("深绿像素", 0)
+		settings_theme_dropdown.add_item("金属银", 1)
+		settings_theme_dropdown.add_item("极简明亮", 2)
 		settings_theme_dropdown.item_selected.connect(_on_theme_dropdown_item_selected)
 	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
@@ -507,10 +510,10 @@ func _ready() -> void:
 	# NetworkClient status
 	NetworkClient.ws_connected.connect(func():
 		_update_status("已连接到服务器")
-		connecting_label.text = "已连接,等待 state.snapshot..."
+		connecting_label.text = "已连接,等待战场同步..."
 	)
 	NetworkClient.ws_disconnected.connect(func(reason):
-		_update_status("WS 断开: %s" % reason)
+		_update_status("连接断开: %s" % reason)
 	)
 	NetworkClient.api_response.connect(func(method, path, body, code):
 		# Lobby and mainline flows use explicit callbacks. Keep this legacy
@@ -534,7 +537,7 @@ func _ready() -> void:
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
 	# to validate the WS pipeline end-to-end without manual clicks.
 	if _dev_auto_play_enabled():
-		_update_status("DEV auto-play: 自动开始自由模式")
+		_update_status("测试自动流程: 自动开始对局")
 		call_deferred("_on_lobby_pressed")
 	# BB_AUTO_QUIT=N — quit after N seconds (for headless e2e runs).
 	# 注意:_maybe_screenshot_menu() 必须在 BB_AUTO_QUIT await 之前,因为
@@ -550,7 +553,7 @@ func _ready() -> void:
 		await _maybe_screenshot_views()
 	if quit_sec > 0.0:
 		await get_tree().create_timer(quit_sec).timeout
-		_update_status("DEV auto-quit 触发,退出")
+		_update_status("测试自动流程结束,退出")
 		get_tree().quit(0)
 	# V2 第 6 轮:游戏视图下启用菜单"设置"按钮(直接打开 SettingsPanel)
 	if settings_button != null and is_instance_valid(settings_button):
@@ -682,7 +685,7 @@ func _on_create_game_response(body: Dictionary) -> void:
 		# Some FastAPI shapes put the id under `game_id`.
 		_game_id = int(body.get("game_id", 0))
 	if _game_id <= 0:
-		_update_status("创建失败: 响应无 id 字段")
+		_update_status("创建失败: 响应缺少对局编号")
 		_show_view("menu")
 		return
 	UserSettings.set_value("session.v1.last_game_id", _game_id)
@@ -706,7 +709,7 @@ func _on_join_game_response(body: Dictionary) -> void:
 		if p is Dictionary:
 			_player_id = int(p.get("id", 0))
 	if _player_id <= 0:
-		_update_status("加入失败: 响应无 player_id 字段")
+		_update_status("加入失败: 响应缺少玩家编号")
 		_show_view("menu")
 		return
 	GameState.local_player_id = _player_id
@@ -714,12 +717,12 @@ func _on_join_game_response(body: Dictionary) -> void:
 	if _entry_flow != "free":
 		_show_view("lobby")
 		if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-			lobby_game_id_label.text = "Game #%d" % _game_id
+			lobby_game_id_label.text = "对局 #%d" % _game_id
 		_start_lobby_polling()
 		_refresh_room_list()
 		_show_lobby_in_room()
 		return
-	connecting_label.text = "已加入(玩家 #%d),添 AI 中..." % _player_id
+	connecting_label.text = "已加入(玩家 #%d),添加电脑对手中..." % _player_id
 	# 3) Add an AI opponent. M3 will let the user pick kind/personality.
 	NetworkClient.request(
 		"POST",
@@ -752,7 +755,7 @@ func _start_dev_ai_game() -> void:
 	_entry_flow = "dev_ai"
 	_show_view("connecting")
 	if connecting_label != null and is_instance_valid(connecting_label):
-		connecting_label.text = "DEV: creating AI game..."
+		connecting_label.text = "测试流程: 正在创建电脑对局..."
 	NetworkClient.create_game(
 		"%s dev room" % _user_name,
 		"balanced_2p_15",
@@ -767,7 +770,7 @@ func _start_dev_ai_game() -> void:
 
 func _on_dev_ai_created(body: Variant, code: int = 0) -> void:
 	if code < 200 or code >= 300 or not (body is Dictionary):
-		_update_status("DEV AI create failed")
+		_update_status("测试电脑对局创建失败")
 		return
 	_game_id = int(body.get("id", body.get("game_id", 0)))
 	UserSettings.set_value("session.v1.last_game_id", _game_id)
@@ -776,7 +779,7 @@ func _on_dev_ai_created(body: Variant, code: int = 0) -> void:
 
 func _on_dev_ai_joined(body: Variant, code: int = 0) -> void:
 	if code < 200 or code >= 300 or not (body is Dictionary):
-		_update_status("DEV AI join failed")
+		_update_status("测试电脑对局加入失败")
 		return
 	_player_id = int(body.get("id", body.get("player_id", 0)))
 	if _player_id <= 0:
@@ -1148,7 +1151,7 @@ func _refresh_hud_from_state() -> void:
 	var phase_text: String = str(summary.get("phase", "player"))
 	match phase_text:
 		"player": phase_badge_label.text = "🟢 你的阶段"
-		"ai": phase_badge_label.text = "🤖 AI 阶段"
+		"ai": phase_badge_label.text = "🤖 电脑阶段"
 		"animating": phase_badge_label.text = "✨ 动画中"
 		"spectator": phase_badge_label.text = "👀 观战"
 		_: phase_badge_label.text = "阶段:%s" % phase_text
@@ -1251,7 +1254,7 @@ func _refresh_co_roster() -> void:
 		bar.custom_minimum_size = Vector2(56, 12)
 		bar.value = pct
 		bar.show_percentage = false
-		bar.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
+		bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
 		row_inner.add_child(bar)
 		# 4) 状态标签 / 发动按钮
 		if is_active:
@@ -1265,7 +1268,7 @@ func _refresh_co_roster() -> void:
 			btn.text = "发动"
 			btn.custom_minimum_size = Vector2(36, 20)
 			btn.add_theme_font_size_override("font_size", 10)
-			btn.tooltip_text = "激活 CO Power(消耗全部能量)"
+			btn.tooltip_text = "激活指挥官技(消耗全部能量)"
 			# 用 Callable.bind 把 pid 绑到 pressed 信号
 			btn.pressed.connect(_on_co_power_pressed.bind(pid))
 			row_inner.add_child(btn)
@@ -1370,7 +1373,7 @@ func _refresh_commander_section() -> void:
 	var pct: float = float(meter) / float(threshold) * 100.0
 	if commander_co_bar != null and is_instance_valid(commander_co_bar):
 		commander_co_bar.value = pct
-		commander_co_bar.tooltip_text = "CO 能量: %d / %d" % [meter, threshold]
+		commander_co_bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
 
 
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
@@ -1415,7 +1418,8 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
-			owners[k] = int(t.get("owner_id", 0))
+			var owner_v = t.get("owner_id", null)
+			owners[k] = int(owner_v) if owner_v != null else 0
 	var terrain: Dictionary = {}
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -1433,22 +1437,21 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	board.show_path_marks(path_dots, reach_tiles)
 
 
-# 简化:沿用现有 5-button action_bubble(移动/攻击/技能/待命/占领)
-# 由 can_move_after_action 决定可见动作。
 func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
 	if action_bubble == null or not is_instance_valid(action_bubble):
-		return
-	if unit_id != _player_id:
-		# 不在本玩家身上 → 不弹
 		return
 	_selected_unit_id = unit_id
 	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
 	if ud.is_empty():
 		return
+	var owner_pid: int = int(ud.get("player_id", int(ud.get("owner_id", -1))))
+	if owner_pid != _player_id:
+		return
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
-	_show_action_bubble(unit_id, marker_pos)
-	_update_status("已 %s — 可继续操作(攻击/技能/占领/待命)" % action_name)
+	var context := _ACTION_CONTEXT_POST_MOVE if action_name == "移动" else _ACTION_CONTEXT_POST_ACTION
+	_show_action_bubble(unit_id, marker_pos, context)
+	_update_status("已%s,请选择后续指令" % ("移动" if action_name == "移动" else "行动"))
 
 
 func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int, _cost: int) -> void:
@@ -1465,12 +1468,12 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	# 弹气泡让玩家可选 "再次移动 / 攻击 / 待命"
 	if unit_id != _player_id and _selected_unit_id != unit_id:
 		return
-	_show_post_action_bubble(unit_id, "move")
+	_show_post_action_bubble(unit_id, "移动")
 	_schedule_board_refresh()
 
 
 func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
-	action_log.append_text("[color=#f0c75e]⚔ #%d → #%d: %d dmg%s%s[/color]\n" % [
+	action_log.append_text("[color=#f0c75e]⚔ #%d → #%d: %d 伤害%s%s[/color]\n" % [
 		attacker_id, target_id, damage,
 		" (暴击!)" if is_crit else "",
 		" (击杀)" if is_kill else "",
@@ -1487,7 +1490,7 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 			board.spawn_floating_text_at_cell(cell, text, color_hex, "damage")
 	# M4.14:post-attack bubble — 若目标未死 + can_move_after_action 还能再行动
 	if not is_kill:
-		_show_post_action_bubble(attacker_id, "attack")
+		_show_post_action_bubble(attacker_id, "攻击")
 	_schedule_board_refresh()
 
 
@@ -1535,7 +1538,7 @@ func _on_co_power_pressed(pid: int) -> void:
 	if _game_id <= 0:
 		return
 	NetworkClient.action_co_power(_game_id, pid)
-	_update_status("⚡ CO Power 激活中 (#%d)..." % pid)
+	_update_status("⚡ 指挥官技激活中 (#%d)..." % pid)
 	# 视觉反馈:屏幕中央大飘字 + 屏幕震动
 	_play_co_power_fx()
 
@@ -1548,7 +1551,7 @@ func _play_co_power_fx() -> void:
 	# 1) 中央大飘字(用 hud_layer CanvasLayer,避免受 Camera2D 影响)
 	if hud_layer != null and is_instance_valid(hud_layer):
 		var lbl := Label.new()
-		lbl.text = "⚡ CO Power 已激活!"
+		lbl.text = "⚡ 指挥官技已激活!"
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.30))
 		lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 		lbl.add_theme_constant_override("shadow_offset_x", 3)
@@ -1652,13 +1655,13 @@ func show_help() -> void:
 			"[color=#f4e8c1][b]基础回合[/b][/color]\n"
 			+ "1. 点己方单位 → 弹 5 个动作(移动/攻击/技能/待命/占领)\n"
 			+ "2. 蓝框为可移动范围;红框为攻击范围\n"
-			+ "3. 单位可移动后还能再行动(post-attack/post-move)\n\n"
+			+ "3. 单位移动后可能继续攻击、施法或待命\n\n"
 			+ "[color=#f4e8c1][b]伤害公式(简化)[/b][/color]\n"
-			+ "  ATK × (ATK/(ATK + DEF)) × 类型倍率 × 暴击系数\n\n"
-			+ "[color=#f4e8c1][b]CO 系统[/b][/color]\n"
-			+ "  每回合能量累计到 100 可发动 Power(瞬间加 buff)\n\n"
+			+ "  攻击力 × 攻防比 × 类型倍率 × 暴击系数\n\n"
+			+ "[color=#f4e8c1][b]指挥官系统[/b][/color]\n"
+			+ "  每回合能量累计到 100 可发动指挥官技\n\n"
 			+ "[color=#f4e8c1][b]胜利条件[/b][/color]\n"
-			+ "  消灭所有敌方单位,或占领对方 HQ(通用规则)"
+			+ "  消灭所有敌方单位,或占领对方总部(通用规则)"
 		)
 		_help_panel.add_child(body)
 		var close := Button.new()
@@ -2070,7 +2073,7 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	_selected_unit_id = unit_id
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
-	_show_action_bubble(unit_id, marker_pos)
+	_show_action_bubble(unit_id, marker_pos, _ACTION_CONTEXT_INITIAL)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
 	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
@@ -2101,7 +2104,8 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
-			owners[k] = int(t.get("owner_id", 0))
+			var owner_v = t.get("owner_id", null)
+			owners[k] = int(owner_v) if owner_v != null else 0
 	var terrain: Dictionary = {}
 	if board != null and board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -2136,7 +2140,8 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
 			terrain[k] = str(t.get("terrain", "plain"))
-			owners[k] = int(t.get("owner_id", 0))
+			var owner_v = t.get("owner_id", null)
+			owners[k] = int(owner_v) if owner_v != null else 0
 	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
 	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, size)
 	var result: Dictionary = MapLogic.compute_reachable(
@@ -2893,7 +2898,7 @@ func _on_editor_pressed() -> void:
 		_editor_map = _build_blank_editor_map()
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Map editor ready."
+		editor_status.text = "地图编辑器已就绪。"
 	NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
 
 
@@ -2901,7 +2906,7 @@ func _setup_editor_options() -> void:
 	if editor_biome_option != null and is_instance_valid(editor_biome_option):
 		editor_biome_option.clear()
 		for biome in ["grass", "snow", "desert"]:
-			editor_biome_option.add_item(biome)
+			editor_biome_option.add_item(_editor_biome_label(biome))
 		editor_biome_option.select(0)
 	if editor_terrain_option != null and is_instance_valid(editor_terrain_option):
 		editor_terrain_option.clear()
@@ -2910,68 +2915,124 @@ func _setup_editor_options() -> void:
 		editor_terrain_option.select(0)
 	if editor_mode_option != null and is_instance_valid(editor_mode_option):
 		editor_mode_option.clear()
-		editor_mode_option.add_item("Terrain")
-		editor_mode_option.add_item("Unit")
+		editor_mode_option.add_item("地形")
+		editor_mode_option.add_item("单位")
 		editor_mode_option.select(0)
 	if editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option):
 		editor_unit_tool_option.clear()
-		editor_unit_tool_option.add_item("Place")
-		editor_unit_tool_option.add_item("Erase")
+		editor_unit_tool_option.add_item("放置")
+		editor_unit_tool_option.add_item("擦除")
 		editor_unit_tool_option.select(0)
 	if editor_unit_option != null and is_instance_valid(editor_unit_option):
 		editor_unit_option.clear()
 		for unit_type in _editor_unit_types:
-			editor_unit_option.add_item(unit_type.capitalize())
+			editor_unit_option.add_item(_unit_type_cn(unit_type))
 		editor_unit_option.select(0)
 	if editor_unit_color_option != null and is_instance_valid(editor_unit_color_option):
 		editor_unit_color_option.clear()
 		for color in _editor_unit_colors:
-			editor_unit_color_option.add_item(color.capitalize())
+			editor_unit_color_option.add_item(_color_name_cn(color))
 		editor_unit_color_option.select(0)
 	if editor_unit_level_option != null and is_instance_valid(editor_unit_level_option):
 		editor_unit_level_option.clear()
 		for level in range(1, 11):
-			editor_unit_level_option.add_item("Lv %d" % level)
+			editor_unit_level_option.add_item("等级 %d" % level)
 		editor_unit_level_option.select(0)
 	if editor_width_option != null and is_instance_valid(editor_width_option):
 		editor_width_option.clear()
 		for size in _editor_size_choices:
-			editor_width_option.add_item("%d w" % size)
+			editor_width_option.add_item("宽 %d" % size)
 		editor_width_option.select(0)
 	if editor_height_option != null and is_instance_valid(editor_height_option):
 		editor_height_option.clear()
 		for size in _editor_size_choices:
-			editor_height_option.add_item("%d h" % size)
+			editor_height_option.add_item("高 %d" % size)
 		editor_height_option.select(0)
 	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
 		if editor_map_name_input.text.strip_edges() == "":
-			editor_map_name_input.text = "Godot custom map"
+			editor_map_name_input.text = "自定义地图"
 
 
 func _editor_terrain_label(terrain_char: String) -> String:
 	match terrain_char:
 		"P":
-			return "Plain"
+			return "平原"
 		"F":
-			return "Forest"
+			return "森林"
 		"M":
-			return "Mountain"
+			return "山地"
 		"R":
-			return "River"
+			return "河流"
 		"C":
-			return "Castle"
+			return "城堡"
 		"v":
-			return "Village"
+			return "村庄"
 		"b":
-			return "Barracks"
+			return "兵营"
 		"r":
-			return "Road"
+			return "道路"
 		"g":
-			return "Gate"
+			return "城门"
 		"S":
-			return "Snow peak"
+			return "雪峰"
 		_:
 			return terrain_char
+
+
+func _editor_biome_label(biome: String) -> String:
+	match biome:
+		"grass":
+			return "草原"
+		"snow":
+			return "雪地"
+		"desert":
+			return "沙漠"
+		_:
+			return biome
+
+
+func _unit_type_cn(unit_type: String) -> String:
+	match unit_type:
+		"swordsman":
+			return "剑士"
+		"archer":
+			return "弓箭手"
+		"knight":
+			return "骑士"
+		"warlock":
+			return "术士"
+		"healer":
+			return "治疗师"
+		_:
+			return unit_type
+
+
+func _skill_cn(skill_id: String) -> String:
+	match skill_id:
+		"heal":
+			return "治疗"
+		"snipe":
+			return "狙击"
+		"double_strike":
+			return "连击"
+		"arcane_strike":
+			return "奥术冲击"
+		_:
+			return skill_id
+
+
+func _color_name_cn(color_name: String) -> String:
+	match color_name:
+		"red":
+			return "红色"
+		"blue":
+			return "蓝色"
+		"green":
+			return "绿色"
+		"yellow":
+			return "黄色"
+		_:
+			return color_name
 
 
 func _selected_editor_biome() -> String:
@@ -3049,7 +3110,7 @@ func _build_blank_editor_map() -> Dictionary:
 	var rows: Array[String] = []
 	for _y in range(15):
 		rows.append("P".repeat(15))
-	var name := "Godot custom map"
+	var name := "自定义地图"
 	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
 		var typed := editor_map_name_input.text.strip_edges()
 		if typed != "":
@@ -3090,7 +3151,7 @@ func _paint_editor_tile(tile: Vector2i) -> void:
 	_editor_map["layout"] = layout
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Painted %s at %d,%d" % [terrain_char, tile.x, tile.y]
+		editor_status.text = "已在 %d,%d 绘制 %s" % [tile.x, tile.y, _editor_terrain_label(terrain_char)]
 
 
 func _on_editor_tile_clicked(tile: Vector2i) -> void:
@@ -3120,7 +3181,7 @@ func _erase_editor_unit(tile: Vector2i) -> void:
 	if removed:
 		_render_editor_map()
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Removed unit at %d,%d" % [tile.x, tile.y]
+			editor_status.text = "已移除 %d,%d 的单位" % [tile.x, tile.y]
 
 
 func _place_editor_unit(tile: Vector2i) -> void:
@@ -3149,14 +3210,16 @@ func _place_editor_unit(tile: Vector2i) -> void:
 	_editor_map["initial_units"] = next_units
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Placed %s at %d,%d" % [_selected_editor_unit_type(), tile.x, tile.y]
+		editor_status.text = "已在 %d,%d 放置%s" % [
+			tile.x, tile.y, _unit_type_cn(_selected_editor_unit_type())
+		]
 
 
 func _on_editor_new_pressed() -> void:
 	_editor_map = _build_blank_editor_map()
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "New 15x15 map."
+		editor_status.text = "已新建 15×15 地图。"
 
 
 func _on_editor_resize_pressed() -> void:
@@ -3185,26 +3248,26 @@ func _on_editor_resize_pressed() -> void:
 	_editor_map["initial_units"] = kept_units
 	_render_editor_map()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Resized to %dx%d" % [new_width, new_height]
+		editor_status.text = "已调整为 %d×%d" % [new_width, new_height]
 
 
 func _on_editor_load_pressed() -> void:
 	if _selected_editor_map_id == "":
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Choose a saved map first."
+			editor_status.text = "请先选择已保存地图。"
 		return
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Loading %s..." % _selected_editor_map_id
+		editor_status.text = "正在加载 %s..." % _selected_editor_map_id
 	NetworkClient.load_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_load_response"))
 
 
 func _on_editor_delete_pressed() -> void:
 	if _selected_editor_map_id == "":
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Choose a saved map first."
+			editor_status.text = "请先选择已保存地图。"
 		return
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Deleting %s..." % _selected_editor_map_id
+		editor_status.text = "正在删除 %s..." % _selected_editor_map_id
 	NetworkClient.delete_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_delete_response"))
 
 
@@ -3219,7 +3282,7 @@ func _on_editor_save_pressed() -> void:
 	_editor_map["name"] = name
 	_editor_map["biome"] = _selected_editor_biome()
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Saving map..."
+		editor_status.text = "正在保存地图..."
 	NetworkClient.save_editor_map(_editor_map, Callable(self, "_on_editor_save_response"))
 
 
@@ -3234,7 +3297,7 @@ func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
 	_editor_map_ids = []
 	_selected_editor_map_id = ""
 	if code < 200 or code >= 300 or not (body is Array):
-		editor_map_select_option.add_item("No saved maps")
+		editor_map_select_option.add_item("暂无已保存地图")
 		if editor_load_btn != null and is_instance_valid(editor_load_btn):
 			editor_load_btn.disabled = true
 		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
@@ -3242,7 +3305,7 @@ func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
 		return
 	var maps: Array = body
 	if maps.is_empty():
-		editor_map_select_option.add_item("No saved maps")
+		editor_map_select_option.add_item("暂无已保存地图")
 		if editor_load_btn != null and is_instance_valid(editor_load_btn):
 			editor_load_btn.disabled = true
 		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
@@ -3280,7 +3343,7 @@ func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 	if code >= 200 and code < 300 and body is Dictionary:
 		_editor_map = body
 		if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-			editor_map_name_input.text = str(body.get("name", "Godot custom map"))
+			editor_map_name_input.text = str(body.get("name", "自定义地图"))
 		var biome := str(body.get("biome", "grass"))
 		if editor_biome_option != null and is_instance_valid(editor_biome_option):
 			match biome:
@@ -3295,10 +3358,10 @@ func _on_editor_load_response(body: Variant, code: int = 0) -> void:
 		_select_editor_size_option(editor_height_option, int(size.get("height", 15)))
 		_render_editor_map()
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Loaded: %s" % str(body.get("id", "custom map"))
+			editor_status.text = "已加载: %s" % str(body.get("id", "自定义地图"))
 		return
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Load failed"
+		editor_status.text = "加载失败"
 
 
 func _upsert_editor_map_as_lobby_preset(map_data: Dictionary) -> void:
@@ -3328,17 +3391,17 @@ func _on_editor_delete_response(_body: Variant, code: int = 0) -> void:
 		_editor_map_ids = []
 		if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
 			editor_map_select_option.clear()
-			editor_map_select_option.add_item("No saved maps")
+			editor_map_select_option.add_item("暂无已保存地图")
 		if editor_load_btn != null and is_instance_valid(editor_load_btn):
 			editor_load_btn.disabled = true
 		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
 			editor_delete_btn.disabled = true
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Deleted map."
+			editor_status.text = "已删除地图。"
 		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
 		return
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Delete failed"
+		editor_status.text = "删除失败"
 
 
 func _on_editor_save_response(body: Variant, code: int = 0) -> void:
@@ -3347,11 +3410,11 @@ func _on_editor_save_response(body: Variant, code: int = 0) -> void:
 		_render_editor_map()
 		_upsert_editor_map_as_lobby_preset(body)
 		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "Saved: %s" % str(body.get("id", "custom map"))
+			editor_status.text = "已保存: %s" % str(body.get("id", "自定义地图"))
 		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
 		return
 	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "Save failed"
+		editor_status.text = "保存失败"
 
 
 func _on_lobby_pressed() -> void:
@@ -3599,7 +3662,7 @@ func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
 		GameState.local_player_id = _player_id
 		UserSettings.set_value("session.v1.last_player_id", _player_id)
 	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-		lobby_game_id_label.text = "Game #%d" % _game_id
+		lobby_game_id_label.text = "对局 #%d" % _game_id
 	_show_lobby_in_room()
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
@@ -3630,16 +3693,16 @@ func _on_auto_add_ai_response(_body: Variant, _code: int, _expect_more: bool = f
 func _setup_lobby_join_options() -> void:
 	if join_mode_option != null and is_instance_valid(join_mode_option):
 		join_mode_option.clear()
-		join_mode_option.add_item("Join as player")
-		join_mode_option.add_item("Join as spectator")
+		join_mode_option.add_item("作为玩家加入")
+		join_mode_option.add_item("作为观战者加入")
 		join_mode_option.select(0)
 	if team_option != null and is_instance_valid(team_option):
 		team_option.clear()
-		team_option.add_item("Auto team")
-		team_option.add_item("Team red")
-		team_option.add_item("Team blue")
-		team_option.add_item("Team green")
-		team_option.add_item("Team yellow")
+		team_option.add_item("自动分队")
+		team_option.add_item("红队")
+		team_option.add_item("蓝队")
+		team_option.add_item("绿队")
+		team_option.add_item("黄队")
 		team_option.select(0)
 	_on_join_mode_changed(0)
 
@@ -3673,15 +3736,29 @@ func _selected_join_team() -> String:
 			return ""
 
 
+func _team_cn(team: String) -> String:
+	match team:
+		"red":
+			return "红队"
+		"blue":
+			return "蓝队"
+		"green":
+			return "绿队"
+		"yellow":
+			return "黄队"
+		_:
+			return team
+
+
 func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 	_lobby_commander_ids = [""]
 	_lobby_ai_commander_ids = [""]
 	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 		lobby_commander_option.clear()
-		lobby_commander_option.add_item("No commander")
+		lobby_commander_option.add_item("不选择指挥官")
 	if ai_commander_option != null and is_instance_valid(ai_commander_option):
 		ai_commander_option.clear()
-		ai_commander_option.add_item("AI auto commander")
+		ai_commander_option.add_item("电脑自动选择指挥官")
 	for item in unlocked:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
@@ -3691,7 +3768,7 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 		if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 			lobby_commander_option.add_item(_commander_label(commander_id))
 		if ai_commander_option != null and is_instance_valid(ai_commander_option):
-			ai_commander_option.add_item("AI: %s" % _commander_label(commander_id))
+			ai_commander_option.add_item("电脑: %s" % _commander_label(commander_id))
 	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
 		lobby_commander_option.select(0)
 		lobby_commander_option.disabled = _lobby_commander_ids.size() <= 1
@@ -3738,7 +3815,7 @@ func _setup_lobby_win_condition_options() -> void:
 	if win_condition_option == null or not is_instance_valid(win_condition_option):
 		return
 	win_condition_option.clear()
-	win_condition_option.add_item("消灭所有敌方单位,或占领对方 HQ", 0)
+	win_condition_option.add_item("消灭所有敌方单位,或占领对方总部", 0)
 	win_condition_option.select(0)
 
 
@@ -3746,7 +3823,7 @@ func _setup_lobby_bgm_options(tracks: Array = []) -> void:
 	_lobby_bgm_track_ids = [""]
 	if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
 		lobby_bgm_option.clear()
-		lobby_bgm_option.add_item("No BGM")
+		lobby_bgm_option.add_item("不播放背景音乐")
 	for item in tracks:
 		if not item is Dictionary:
 			continue
@@ -3789,20 +3866,20 @@ func _on_audio_tracks_response(body: Variant, code: int = 0) -> void:
 func _setup_lobby_ai_options() -> void:
 	if ai_difficulty_option != null and is_instance_valid(ai_difficulty_option):
 		ai_difficulty_option.clear()
-		ai_difficulty_option.add_item("AI normal")
-		ai_difficulty_option.add_item("AI easy")
-		ai_difficulty_option.add_item("AI hard")
+		ai_difficulty_option.add_item("电脑普通")
+		ai_difficulty_option.add_item("电脑简单")
+		ai_difficulty_option.add_item("电脑困难")
 		ai_difficulty_option.select(0)
 	if ai_kind_option != null and is_instance_valid(ai_kind_option):
 		ai_kind_option.clear()
-		ai_kind_option.add_item("Rules")
-		ai_kind_option.add_item("LLM")
+		ai_kind_option.add_item("规则电脑")
+		ai_kind_option.add_item("大模型电脑")
 		ai_kind_option.select(0)
 	if ai_personality_option != null and is_instance_valid(ai_personality_option):
 		ai_personality_option.clear()
-		ai_personality_option.add_item("Balanced")
-		ai_personality_option.add_item("Aggressive")
-		ai_personality_option.add_item("Conservative")
+		ai_personality_option.add_item("均衡")
+		ai_personality_option.add_item("激进")
+		ai_personality_option.add_item("保守")
 		ai_personality_option.select(0)
 
 
@@ -3840,7 +3917,7 @@ func _load_lobby_presets() -> void:
 	if map_preset_option == null or not is_instance_valid(map_preset_option):
 		return
 	map_preset_option.clear()
-	map_preset_option.add_item("balanced_2p_15")
+	map_preset_option.add_item("标准双人图")
 	_preset_options = [{"id": "balanced_2p_15", "biome": "grass"}]
 	NetworkClient.list_presets(Callable(self, "_on_lobby_presets_response"))
 
@@ -3869,17 +3946,17 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 			players = int(raw_players)
 		var label := name
 		if players > 0:
-			label = "%s (%dp)" % [name, players]
+			label = "%s (%d 人)" % [name, players]
 		map_preset_option.add_item(label)
 		_preset_options.append({"id": id, "biome": biome})
 
 
 func _refresh_room_list() -> void:
 	if room_list != null and is_instance_valid(room_list):
-		room_list.text = "Loading rooms..."
+		room_list.text = "正在加载房间..."
 	if room_select_option != null and is_instance_valid(room_select_option):
 		room_select_option.clear()
-		room_select_option.add_item("Loading rooms...")
+		room_select_option.add_item("正在加载房间...")
 		room_select_option.disabled = true
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.disabled = true
@@ -3898,10 +3975,10 @@ func _on_room_list_response(body: Variant, _code: int = 0) -> void:
 		_lobby_rooms.append(g)
 	if _lobby_rooms.is_empty():
 		if room_list != null and is_instance_valid(room_list):
-			room_list.text = "(No waiting rooms. Create one on the right.)"
+			room_list.text = "暂无等待中的房间。可在右侧创建新房间。"
 		if room_select_option != null and is_instance_valid(room_select_option):
 			room_select_option.clear()
-			room_select_option.add_item("No waiting rooms")
+			room_select_option.add_item("暂无等待房间")
 			room_select_option.disabled = true
 		if join_selected_btn != null and is_instance_valid(join_selected_btn):
 			join_selected_btn.disabled = true
@@ -3948,7 +4025,7 @@ func _render_room_list() -> void:
 	if room_list != null and is_instance_valid(room_list):
 		room_list.text = "\n".join(lines)
 	if lobby_status_label != null and is_instance_valid(lobby_status_label) and _selected_room_id > 0:
-		lobby_status_label.text = "Selected room #%d: %s (cap %d)" % [_selected_room_id, selected_name, selected_cap]
+		lobby_status_label.text = "已选择房间 #%d: %s (上限 %d 人)" % [_selected_room_id, selected_name, selected_cap]
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.disabled = _selected_room_id <= 0
 
@@ -3970,7 +4047,7 @@ func _on_create_room_pressed() -> void:
 		preset_id = str(selected.get("id", preset_id))
 		biome = str(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Creating room..."
+		lobby_status_label.text = "正在创建房间..."
 	NetworkClient.create_game(
 		room_name,
 		preset_id,
@@ -3989,7 +4066,7 @@ func _on_join_selected_pressed() -> void:
 	_entry_flow = "lobby_join"
 	_game_id = _selected_room_id
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Joining room #%d..." % _game_id
+		lobby_status_label.text = "正在加入房间 #%d..." % _game_id
 	NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role(), Callable(self, "_on_lobby_join_response"))
 
 
@@ -4112,7 +4189,7 @@ func _on_lobby_add_ai_pressed() -> void:
 	if _game_id <= 0: return
 	# POST /games/{id}/add-ai(走 NetworkClient.request)
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Adding AI..."
+		lobby_status_label.text = "正在添加电脑玩家..."
 	NetworkClient.add_ai_player(
 		_game_id,
 		_selected_ai_difficulty(),
@@ -4131,7 +4208,7 @@ func _on_lobby_remove_ai_pressed() -> void:
 	if _game_id <= 0 or _selected_ai_player_id <= 0:
 		return
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Removing AI #%d..." % _selected_ai_player_id
+		lobby_status_label.text = "正在移除电脑玩家 #%d..." % _selected_ai_player_id
 	NetworkClient.remove_player(_game_id, _selected_ai_player_id, Callable(self, "_on_lobby_remove_ai_response"))
 
 
@@ -4146,7 +4223,7 @@ func _on_lobby_apply_team_pressed() -> void:
 		return
 	var team := _selected_join_team()
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Updating team..."
+		lobby_status_label.text = "正在更新队伍..."
 	NetworkClient.update_player_team(_game_id, _player_id, _player_id, team, Callable(self, "_on_lobby_team_response"))
 
 
@@ -4160,7 +4237,7 @@ func _on_lobby_team_response(body: Variant, code: int = 0) -> void:
 		return
 	var team := str(body.get("team", ""))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "Team updated: %s" % (team if team != "" else "free")
+		lobby_status_label.text = "队伍已更新: %s" % (_team_cn(team) if team != "" else "自由分队")
 	_refresh_lobby_view()
 
 
@@ -4338,7 +4415,7 @@ func _setup_mainline_commander_options(unlocked: Array = [], current: String = "
 	_mainline_commander_ids = [""]
 	if ml_commander_option != null and is_instance_valid(ml_commander_option):
 		ml_commander_option.clear()
-		ml_commander_option.add_item("No commander")
+		ml_commander_option.add_item("不选择指挥官")
 	for item in unlocked:
 		var commander_id := str(item)
 		if commander_id == "" or _mainline_commander_ids.has(commander_id):
@@ -4357,9 +4434,9 @@ func _setup_mainline_commander_options(unlocked: Array = [], current: String = "
 func _commander_label(commander_id: String) -> String:
 	match commander_id:
 		"yun":
-			return "Yun"
+			return "云"
 		"anna":
-			return "Anna"
+			return "安娜"
 		_:
 			return commander_id
 
@@ -4376,7 +4453,7 @@ func _selected_mainline_commander() -> String:
 func _on_commanders_response(body: Variant, code: int = 0) -> void:
 	if code < 200 or code >= 300 or not (body is Dictionary):
 		if ml_commander_status != null and is_instance_valid(ml_commander_status):
-			ml_commander_status.text = "Commander: unavailable"
+			ml_commander_status.text = "指挥官: 暂不可用"
 		_setup_mainline_commander_options()
 		_setup_lobby_commander_options()
 		return
@@ -4386,17 +4463,17 @@ func _on_commanders_response(body: Variant, code: int = 0) -> void:
 	_setup_mainline_commander_options(unlocked, current)
 	_setup_lobby_commander_options(unlocked)
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "Commander: %s" % (current if current != "" else "none")
+		ml_commander_status.text = "指挥官: %s" % (_commander_label(current) if current != "" else "未选择")
 
 
 func _on_apply_mainline_commander_pressed() -> void:
 	if _selected_mainline_id == "":
 		if ml_commander_status != null and is_instance_valid(ml_commander_status):
-			ml_commander_status.text = "Commander: choose a chapter first"
+			ml_commander_status.text = "指挥官: 请先选择章节"
 		return
 	var commander_id := _selected_mainline_commander()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "Commander: applying..."
+		ml_commander_status.text = "指挥官: 正在应用..."
 	NetworkClient.select_mainline_commander(_selected_mainline_id, _user_name, commander_id, Callable(self, "_on_select_mainline_commander_response"))
 
 
@@ -4411,7 +4488,7 @@ func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> voi
 	var commander_id := str(body.get("commander_id", ""))
 	_setup_mainline_commander_options(_mainline_commander_ids.slice(1), commander_id)
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "Commander: %s" % (commander_id if commander_id != "" else "none")
+		ml_commander_status.text = "指挥官: %s" % (_commander_label(commander_id) if commander_id != "" else "未选择")
 
 
 # T:96 — MainlineView 章节列表 + 入口
@@ -4423,7 +4500,7 @@ func _on_mainline_pressed() -> void:
 		child.queue_free()
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "Commander: loading..."
+		ml_commander_status.text = "指挥官: 正在加载..."
 	if _hero_speaker_map.is_empty():
 		NetworkClient.list_heroes(Callable(self, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
@@ -4563,7 +4640,7 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
 		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
 		var btn := Button.new()
-		btn.text = "%s · %d battles" % [title, battles]
+		btn.text = "%s · %d 场战斗" % [title, battles]
 		btn.tooltip_text = desc
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(_on_ml_card_pressed.bind(id))
@@ -4612,7 +4689,7 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	_game_id = int(body.get("game_id", 0))
 	_player_id = int(body.get("player_id", 0))
 	if _game_id <= 0 or _player_id <= 0:
-		_update_status("主线启动失败: 响应缺少 game_id/player_id")
+		_update_status("主线启动失败: 响应缺少对局或玩家编号")
 		_show_view("mainline")
 		return
 	GameState.local_player_id = _player_id
@@ -4761,8 +4838,9 @@ func _on_war_report_close_pressed() -> void:
 # V2 第 4 轮:行动气泡 — 显示/隐藏 + 5 个 action
 # ============================================================
 
-func _show_action_bubble(unit_id: int, viewport_pos: Vector2) -> void:
+func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = _ACTION_CONTEXT_INITIAL) -> void:
 	_selected_unit_id = unit_id
+	_refresh_action_bubble_buttons(unit_id, context)
 	# 浮在选中单位右侧(若空间不够则左侧)
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
 	var bubble_size: Vector2 = action_bubble.size
@@ -4775,6 +4853,100 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2) -> void:
 		pos.y = 32.0
 	action_bubble.position = pos
 	action_bubble.visible = true
+
+
+func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
+	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+	var has_unit := not ud.is_empty()
+	var can_attack := has_unit and _compute_attack_targets(ud).size() > 0 and not bool(ud.get("has_acted", false))
+	var active_skill := _available_active_skill(ud) if has_unit and not bool(ud.get("has_acted", false)) else ""
+	var can_skill := active_skill != ""
+	var can_claim := has_unit and context != _ACTION_CONTEXT_POST_ACTION and _can_claim_here(ud)
+	var can_move := false
+	if has_unit:
+		if context == _ACTION_CONTEXT_INITIAL:
+			can_move = _can_initial_move(ud)
+			move_btn.text = "移动"
+		elif context == _ACTION_CONTEXT_POST_MOVE:
+			can_move = _can_continue_move(ud)
+			move_btn.text = "继续移动"
+		else:
+			can_move = _can_continue_move_after_action(ud)
+			move_btn.text = "继续移动"
+	if context == _ACTION_CONTEXT_POST_ACTION:
+		can_attack = false
+		can_skill = false
+		can_claim = false
+	_set_action_button(move_btn, can_move)
+	_set_action_button(attack_btn, can_attack)
+	_set_action_button(skill_btn, can_skill)
+	_set_action_button(wait_btn, has_unit)
+	_set_action_button(claim_btn, can_claim)
+	if skill_btn != null and is_instance_valid(skill_btn):
+		skill_btn.text = _skill_cn(active_skill) if active_skill != "" else "技能"
+	if claim_btn != null and is_instance_valid(claim_btn):
+		claim_btn.text = "占领"
+
+
+func _set_action_button(btn: Button, can_show: bool) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	btn.visible = can_show
+	btn.disabled = not can_show
+
+
+func _can_initial_move(ud: Dictionary) -> bool:
+	if bool(ud.get("has_moved", false)):
+		return false
+	if int(ud.get("mp", int(ud.get("mov", 0)))) <= 0:
+		return false
+	return _compute_reachable_tiles_full(ud).size() > 1
+
+
+func _can_continue_move(ud: Dictionary) -> bool:
+	return int(ud.get("mp", 0)) > 0
+
+
+func _can_continue_move_after_action(ud: Dictionary) -> bool:
+	return int(ud.get("mp", 0)) > 0 and _unit_can_move_after_action(ud)
+
+
+func _unit_can_move_after_action(ud: Dictionary) -> bool:
+	if ud.has("can_move_after_action"):
+		return bool(ud.get("can_move_after_action", false))
+	var unit_type := str(ud.get("unit_type", ""))
+	return unit_type == "archer" or unit_type == "knight"
+
+
+func _can_claim_here(ud: Dictionary) -> bool:
+	if bool(ud.get("has_acted", false)):
+		return false
+	var pos := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var tile: Dictionary = {}
+	if board != null and board.tile_lookup != null:
+		tile = board.tile_lookup.get(pos, {})
+	if tile.is_empty() and GameState != null:
+		tile = GameState.get_tile(pos.x, pos.y)
+	if tile.is_empty():
+		return false
+	var terrain := str(tile.get("terrain", ""))
+	var subtype := str(tile.get("subtype", ""))
+	var claimable := terrain == "village" or terrain == "barracks" or terrain == "castle_vault" or terrain == "castle" or subtype == "castle_vault"
+	if not claimable:
+		return false
+	var owner_id := int(tile.get("owner_id", -1)) if tile.get("owner_id", null) != null else -1
+	return owner_id != _player_id
+
+
+func _available_active_skill(ud: Dictionary) -> String:
+	var skill_id := _active_skill_of(ud)
+	if skill_id == "":
+		return ""
+	if skill_id == "arcane_strike":
+		return skill_id if _arcane_targets(ud).size() > 0 else ""
+	if skill_id == "heal":
+		return skill_id if _heal_targets(ud).size() > 0 else ""
+	return ""
 
 
 func _hide_action_bubble() -> void:
@@ -5023,23 +5195,14 @@ func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary
 
 func _unit_cn_name(unit: Dictionary, fallback: String = "单位") -> String:
 	var unit_type := str(unit.get("unit_type", unit.get("type", "")))
-	match unit_type:
-		"swordsman":
-			return "剑士"
-		"archer":
-			return "弓箭手"
-		"knight":
-			return "骑士"
-		"warlock":
-			return "术士"
-		"healer":
-			return "治疗师"
-		_:
-			if unit.has("display_cn"):
-				return str(unit.get("display_cn"))
-			if unit.has("name_cn"):
-				return str(unit.get("name_cn"))
-			return fallback
+	var mapped := _unit_type_cn(unit_type)
+	if mapped != unit_type:
+		return mapped
+	if unit.has("display_cn"):
+		return str(unit.get("display_cn"))
+	if unit.has("name_cn"):
+		return str(unit.get("name_cn"))
+	return fallback
 
 
 func _hide_attack_confirm() -> void:
@@ -5094,8 +5257,7 @@ func _active_skill_of(ud: Dictionary) -> String:
 	return ""
 
 
-func _enter_arcane_mode(ud: Dictionary) -> void:
-	# arcane_strike: Manhattan 距离 1-2 内的敌方存活单位
+func _arcane_targets(ud: Dictionary) -> Dictionary:
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var me_pid2: int = int(_player_id)
 	var out: Dictionary = {}
@@ -5113,6 +5275,35 @@ func _enter_arcane_mode(ud: Dictionary) -> void:
 			"hp": int(uu.get("hp", 0)),
 			"max_hp": int(uu.get("max_hp", 0)),
 		}
+	return out
+
+
+func _heal_targets(ud: Dictionary) -> Dictionary:
+	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
+	var me_pid2: int = int(_player_id)
+	var out: Dictionary = {}
+	for uu in _all_units_including_self():
+		var dx: int = abs(int(uu.get("x", 0)) - pos_h.x)
+		var dy: int = abs(int(uu.get("y", 0)) - pos_h.y)
+		var cheb: int = max(dx, dy)
+		if cheb != 1: continue
+		if int(uu.get("player_id", -1)) != me_pid2: continue
+		var hp_i: int = int(uu.get("hp", 0))
+		var max_hp_i: int = int(uu.get("max_hp", hp_i + 1))
+		if hp_i >= max_hp_i: continue
+		out[int(uu.get("id", -1))] = {
+			"x": int(uu.get("x", 0)),
+			"y": int(uu.get("y", 0)),
+			"name": str(uu.get("name", uu.get("unit_type", "?"))),
+			"hp": hp_i,
+			"max_hp": max_hp_i,
+		}
+	return out
+
+
+func _enter_arcane_mode(ud: Dictionary) -> void:
+	# arcane_strike: Manhattan 距离 1-2 内的敌方存活单位
+	var out: Dictionary = _arcane_targets(ud)
 	if out.is_empty():
 		_update_status("奥术冲击: 1-2 格内无敌方目标")
 		return
@@ -5146,25 +5337,7 @@ func _on_skill_pressed() -> void:
 		_enter_arcane_mode(ud)
 		return
 	# 计算 8-邻接范围内 HP<max_hp 的友军
-	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
-	var me_pid2: int = int(_player_id)
-	var out: Dictionary = {}
-	for uu in _all_units_including_self():
-		var dx: int = abs(int(uu.get("x", 0)) - pos_h.x)
-		var dy: int = abs(int(uu.get("y", 0)) - pos_h.y)
-		var cheb: int = max(dx, dy)
-		if cheb != 1: continue
-		if int(uu.get("player_id", -1)) != me_pid2: continue
-		var hp_i: int = int(uu.get("hp", 0))
-		var max_hp_i: int = int(uu.get("max_hp", hp_i + 1))
-		if hp_i >= max_hp_i: continue
-		out[int(uu.get("id", -1))] = {
-			"x": int(uu.get("x", 0)),
-			"y": int(uu.get("y", 0)),
-			"name": str(uu.get("name", uu.get("unit_type", "?"))),
-			"hp": hp_i,
-			"max_hp": max_hp_i,
-		}
+	var out: Dictionary = _heal_targets(ud)
 	if out.is_empty():
 		_update_status("治疗: 8-邻内无伤兵")
 		return
@@ -5185,7 +5358,7 @@ func _on_skill_pressed() -> void:
 # (game/app/routes/actions.py:recruit_unit)。这里只发。
 func _recruit_unit_to(tile_x: int, tile_y: int, unit_type: String) -> void:
 	if _game_id <= 0 or _player_id <= 0: return
-	_update_status("正在招募 %s 到 (%d, %d)..." % [unit_type, tile_x, tile_y])
+	_update_status("正在招募%s到 (%d, %d)..." % [_unit_type_cn(unit_type), tile_x, tile_y])
 	NetworkClient.action_recruit(_game_id, _player_id, tile_x, tile_y, unit_type, Callable(self, "_on_recruit_response"))
 	_hide_action_bubble()
 
@@ -5201,12 +5374,13 @@ func _on_recruit_response(body: Variant, code: int = 0) -> void:
 		_update_status("招募完成")
 		return
 	var unit_type := str(body.get("new_unit_type", "unit"))
+	var unit_name := _unit_type_cn(unit_type)
 	var cost := int(body.get("cost", 0))
 	var gold_remaining := int(body.get("gold_remaining", -1))
 	if gold_remaining >= 0:
-		_update_status("招募成功: %s · -%d 金币 · 剩余 %d" % [unit_type, cost, gold_remaining])
+		_update_status("招募成功: %s · -%d 金币 · 剩余 %d" % [unit_name, cost, gold_remaining])
 	else:
-		_update_status("招募成功: %s · -%d 金币" % [unit_type, cost])
+		_update_status("招募成功: %s · -%d 金币" % [unit_name, cost])
 	if _game_id > 0:
 		NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_response"))
 
@@ -5226,7 +5400,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	if unit_info == null or not is_instance_valid(unit_info):
 		return
 	unit_info.bbcode_enabled = true
-	var name: String = str(ud.get("name", ud.get("unit_type", "?")))
+	var name: String = _unit_cn_name(ud, "单位")
 	var lvl: int = int(ud.get("level", 1))
 	var hp: int = int(ud.get("hp", 0))
 	var max_hp: int = max(1, int(ud.get("max_hp", 1)))
@@ -5250,13 +5424,16 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
 	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.text = "⚔ %s · Lv.%d" % [name, lvl]
+		unit_info_title.text = "⚔ %s · 等级 %d" % [name, lvl]
+	var skill_names: Array[String] = []
+	for skill in skills:
+		skill_names.append(_skill_cn(str(skill)))
 	var lines: Array = [
 		"[color=#a89878]⛓ 位置[/color]  (%d, %d)   %s" % [pos.x, pos.y, owner_str],
-		("[color=#f4e8c1]❤ HP[/color]  %d / %d   [color=#5fa8e8]⚡ MP[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ HP[/color]  %d / %d" % [hp, max_hp]),
-		"[color=#c9a14a]⚔ ATK[/color] %d  [color=#c9a14a]🛡 DEF[/color] %d  [color=#c9a14a]✨ MATK[/color] %d  [color=#c9a14a]🔮 MDEF[/color] %d" % [atk, def, matk, mdef],
-		"[color=#a89878]👣 MOV[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
-		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skills) if skills.size() > 0 else "—"],
+		("[color=#f4e8c1]❤ 生命[/color]  %d / %d   [color=#5fa8e8]⚡ 能量[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ 生命[/color]  %d / %d" % [hp, max_hp]),
+		"[color=#c9a14a]⚔ 攻击[/color] %d  [color=#c9a14a]🛡 防御[/color] %d  [color=#c9a14a]✨ 魔攻[/color] %d  [color=#c9a14a]🔮 魔防[/color] %d" % [atk, def, matk, mdef],
+		"[color=#a89878]👣 移动力[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
+		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skill_names) if skill_names.size() > 0 else "—"],
 	]
 	if not is_mine:
 		lines.append("[color=#c63a3a]⚠ 敌方单位·无法操作[/color]")
@@ -5281,7 +5458,7 @@ func _use_skill_on_target(skill_id: String, unit_id: int, target_id: int) -> voi
 	if _game_id <= 0 or _player_id <= 0: return
 	var info: Dictionary = _skill_targets.get(target_id, {})
 	var name: String = str(info.get("name", "单位 #%d" % target_id))
-	_update_status("技能 %s #%d→ #%d (%s)..." % [skill_id, unit_id, target_id, name])
+	_update_status("技能 %s #%d→ #%d (%s)..." % [_skill_cn(skill_id), unit_id, target_id, name])
 	NetworkClient.action_skill(_game_id, _player_id, unit_id, skill_id, target_id)
 	_skill_mode_unit_id = -1
 	_skill_targets = {}
