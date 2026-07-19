@@ -86,6 +86,17 @@ class PlayerProfile(Base):
     mainline_progress: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    # 2026-07-19: hero / mercenary persistence (columns migrated in
+    # database.py). Default ``{}`` so INSERT always satisfies NOT NULL.
+    hero_campaign_states: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    hero_inventory: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    mercenary_roster_state: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_utcnow
     )
