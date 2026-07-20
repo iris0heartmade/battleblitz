@@ -93,7 +93,7 @@ static func _apply_layer_cell(layer: TileMapLayer, x: int, y: int, terrain_key: 
 	if source_id < 0:
 		push_warning("MapLoader: no source for %s (%s)" % [terrain_key, biome])
 		return
-	if Config.FE8_TILE_COORDS.has(terrain_key):
+	if TileSetBuilder.uses_fe8_atlas() and Config.FE8_TILE_COORDS.has(terrain_key):
 		var atlas_coord: Vector2i = Config.FE8_TILE_COORDS[terrain_key]
 		layer.set_cell(Vector2i(x, y), source_id, atlas_coord, 0)
 		return

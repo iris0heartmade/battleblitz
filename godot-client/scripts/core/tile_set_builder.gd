@@ -32,6 +32,7 @@ const TILES_DIR := "res://assets/tiles"
 
 # Populated by `build()`. Keyed by "{terrain}|{biome}" → source_id.
 static var SOURCE_IDS: Dictionary = {}
+static var _using_fe8_atlas := false
 
 # Cache the built TileSet across calls so we don't rebuild every frame.
 static var _cached: TileSet = null
@@ -46,6 +47,7 @@ static func build() -> TileSet:
 	if _cached != null:
 		return _cached
 	SOURCE_IDS.clear()
+	_using_fe8_atlas = false
 
 	var ts := TileSet.new()
 	ts.tile_size = TILE_SIZE
@@ -58,6 +60,7 @@ static func build() -> TileSet:
 	#    wire them into a `TileSetTerrain` with bitmask autotiling.
 	var fe8_source := _build_fe8_atlas_source(ts)
 	if fe8_source != null:
+		_using_fe8_atlas = true
 		var fe8_source_id := ts.add_source(fe8_source)
 		# The FE8 atlas is biome-agnostic (the master tilemap doesn't
 		# have separate biome palettes). Register under "" AND every
@@ -71,7 +74,7 @@ static func build() -> TileSet:
 	#    Config.TERRAIN_VARIANT_COUNTS order so the source IDs are
 	#    deterministic.
 	for terrain in Config.TERRAIN_VARIANT_COUNTS.keys():
-		if terrain in Config.FE8_TILE_COORDS:
+		if _using_fe8_atlas and terrain in Config.FE8_TILE_COORDS:
 			continue  # already handled by the FE8 atlas
 		for biome in MAP_THEME_SCRIPT.source_registration_biomes(String(terrain)):
 			var source := _build_legacy_source_for(terrain, String(biome))
@@ -86,6 +89,9 @@ static func build() -> TileSet:
 ## Look up the source_id for (terrain, biome). Returns -1 if unknown.
 static func source_id_for(terrain: String, biome: String) -> int:
 	return int(SOURCE_IDS.get("%s|%s" % [terrain, biome], -1))
+
+static func uses_fe8_atlas() -> bool:
+	return _using_fe8_atlas
 
 ## Returns the atlas coord for a terrain when the FE8 atlas is the
 ## source. Pulls the (col, row) lookup from `Config.FE8_TILE_COORDS`.
