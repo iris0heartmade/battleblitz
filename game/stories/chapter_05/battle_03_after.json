@@ -1,0 +1,42 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "乌格在混乱中逃走。卡尔德被围困在王座厅外的台阶上,身边只剩下十二个亲卫。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "卡尔德",
+      "speaker_color": "#883333",
+      "text": "云,你要亲手杀我吗？"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "不是我要杀你。是你自己把剑举向国王的那一刻，就注定死在今天。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "卡尔德",
+      "speaker_color": "#883333",
+      "text": "哈……从边境的雪原到这座王城,我走了整整一年。原来一切都是徒劳。"
+    },
+    {
+      "type": "narration",
+      "text": "卡尔德举剑自刎。王都之战结束。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "结束了。从山口到王都，从王都到北境，再从北境回到王都——十场仗。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "国王还在昏迷。太子殿下要继承王位——但他更需要一位能打仗的大将军。"
+    }
+  ]
+}

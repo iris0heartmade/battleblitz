@@ -1,0 +1,44 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王都内乱平定。太子代理朝政，国王仍在昏迷中。三皇子去向不明，只留下'北境那扇门'的谜语。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "太子",
+      "speaker_color": "#d0d0d0",
+      "text": "云，这次王都能保住，全赖你们。但北境的形势比王都更凶险——那里已经几十年没有打过仗了。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "殿下给我北境节度使的印信，我明日就启程。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "我研究过古籍。北境异族的力量来自一座祭坛——捣毁祭坛，他们就会不战自溃。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "那就去找祭坛。云、安娜，我们老搭档——山口、边境、王都，再加一场北境之战，这故事够写一本书了。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团三度出征，迎来最大的考验。北境雪原之上，异族大军已集结——这场战斗将决定整个王朝的命运。"
+    },
+    {
+      "type": "choice",
+      "question": "王都暗影告一段落，下一步：",
+      "choices": [
+        { "text": "回大厅领取奖励", "value": "lobby" },
+        { "text": "立即北上迎战异族", "value": "go_north" }
+      ]
+    }
+  ]
+}

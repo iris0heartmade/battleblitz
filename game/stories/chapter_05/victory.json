@@ -1,0 +1,44 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王都之战结束后的第三天。国王在安娜的祈祷中苏醒。太子正式加冕为新王。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "新王",
+      "speaker_color": "#d0d0d0",
+      "text": "云，没有你和你的同伴，这个王朝早已不在。我封你为北境大都督，统辖全军。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "陛下，这十场仗不是我一个人打的。是红、安娜、所有为这个王朝流血的将士打的。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "云，从山口的松林到王都的城墙，我一路跟着你。这一路我从未后悔。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "每一场仗都有死亡。但每一场仗后我们都还在。这本身就是奇迹。"
+    },
+    {
+      "type": "narration",
+      "text": "BattleBlitz 主线 · 钢铁起义 → 边境烽火 → 王都暗影 → 异族入侵 → 王朝统一 —— 完。新王朝开启，但故事不会结束——东边的岛国正在集结舰队，南方的沙漠部落在蠢蠢欲动，王朝的下一段历史，等待新的英雄书写。"
+    },
+    {
+      "type": "choice",
+      "question": "王朝统一已达成。你想：",
+      "choices": [
+        { "text": "回大厅观赏通关纪念", "value": "lobby" },
+        { "text": "开启下一段征程 (新档案)", "value": "new_game_plus" }
+      ]
+    }
+  ]
+}

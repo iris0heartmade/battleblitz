@@ -1,0 +1,120 @@
+{
+  "id": "chapter_05_crown_united",
+  "title": "王朝统一",
+  "synopsis": "异族祭坛被捣毁后，乌格残部与卡尔德勾结，集结最后兵力反扑王都。这是决定王朝命运的最后一战——王都若破，万事皆休。",
+  "cover_art": null,
+  "required_classes": ["blade_master", "dragon_rider", "sage"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 12,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red"
+    },
+    {
+      "class_id": "healer",
+      "level": 12,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red",
+      "x": 3,
+      "y": 10
+    },
+    {
+      "class_id": "dragon_rider",
+      "level": 12,
+      "name": "红"
+    },
+    {
+      "class_id": "paladin",
+      "level": 10,
+      "name": "王城禁卫统领"
+    },
+    {
+      "class_id": "sniper",
+      "level": 9,
+      "name": "猎户弓手"
+    },
+    {
+      "class_id": "knight",
+      "level": 9,
+      "name": "老兵甲"
+    }
+  ],
+  "dialogues": {
+    "intro":           "stories/chapter_05/intro.json",
+    "battle_01_after": "stories/chapter_05/battle_01_after.json",
+    "battle_02_after": "stories/chapter_05/battle_02_after.json",
+    "battle_03_after": "stories/chapter_05/battle_03_after.json",
+    "victory":         "stories/chapter_05/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "王都保卫战",
+      "map_id": "balanced_3p_15",
+      "map_seed": 999,
+      "win_condition": "defend",
+      "teams": {"ally": ["red"], "enemy": ["blue", "green"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "三色地图:红=王都守卫,蓝=卡尔德叛军,绿=异族残部。需 defend 7 回合。",
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01"
+          }
+        }
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "王朝会战",
+      "map_id": "balanced_3p_15",
+      "map_seed": 1110,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue", "green"]},
+      "notes": "在王都外围平原会战。需 rout 敌军两方。spawn_overrides 加大 boss 强度。",
+      "spawn_overrides": {
+        "add": [
+          {"x": 10, "y": 5, "type": "warlock", "color": "green", "level": 9},
+          {"x": 10, "y": 9, "type": "blade_master", "color": "blue", "level": 10}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    },
+    {
+      "id": "battle_03",
+      "title": "终局对决",
+      "map_id": "balanced_2p_15",
+      "map_seed": 2220,
+      "win_condition": "boss",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "卡尔德+乌格联手出战。最终 boss 战。胜利条件:在限定回合内击倒卡尔德。",
+      "spawn_overrides": {
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 12, "y": 8},
+            "unit": {"type": "blade_master", "color": "blue", "level": 12}
+          }
+        ],
+        "add": [
+          {"x": 11, "y": 7, "type": "warlock", "color": "blue", "level": 11},
+          {"x": 13, "y": 6, "type": "blade_master", "color": "blue", "level": 10}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_03_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 3000,
+    "unlock_class": "saint",
+    "exp_per_unit": 600
+  },
+  "art_assets": {}
+}

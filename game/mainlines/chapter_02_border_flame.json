@@ -1,0 +1,85 @@
+{
+  "id": "chapter_02_border_flame",
+  "title": "边境烽火",
+  "synopsis": "山口一战后，卡尔德残部退到东境要塞，联合异族雇佣兵重整旗鼓。王城命令必须在入冬前切断其补给线，否则边境三镇将无粮过冬。",
+  "cover_art": null,
+  "required_classes": ["swordsman", "archer", "healer"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 3,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red"
+    },
+    {
+      "class_id": "healer",
+      "level": 3,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red",
+      "x": 2,
+      "y": 9
+    },
+    {
+      "class_id": "sniper",
+      "level": 3,
+      "name": "红"
+    },
+    {
+      "class_id": "knight",
+      "level": 2,
+      "name": "老兵甲"
+    }
+  ],
+  "dialogues": {
+    "intro":           "stories/chapter_02/intro.json",
+    "battle_01_after": "stories/chapter_02/battle_01_after.json",
+    "battle_02_after": "stories/chapter_02/battle_02_after.json",
+    "victory":         "stories/chapter_02/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "补给线守卫",
+      "map_id": "balanced_2p_15",
+      "map_seed": 101,
+      "win_condition": "defend",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "主角需要坚守补给车队 5 回合。敌军是卡尔德残部+异族弓手混合。",
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01"
+          }
+        }
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "东境攻城战",
+      "map_id": "balanced_2p_15",
+      "map_seed": 211,
+      "win_condition": "seize",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "卡尔德残部最后据点,需 seize 王座。spawn_overrides 加入异族 warlock 作为援军。",
+      "spawn_overrides": {
+        "add": [
+          {"x": 13, "y": 2, "type": "warlock", "color": "blue", "level": 3}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 800,
+    "unlock_class": "paladin",
+    "exp_per_unit": 200
+  },
+  "art_assets": {}
+}

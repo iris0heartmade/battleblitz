@@ -1,0 +1,106 @@
+{
+  "id": "chapter_03_crown_shadow",
+  "title": "王都暗影",
+  "synopsis": "边境战事刚刚平定，王都却传来噩耗——国王在宫廷宴会上中毒昏迷。三皇子被指为幕后黑手，被迫出逃。主角奉太子之命回师勤王，却在路上接连遭遇两波不明刺客。",
+  "cover_art": null,
+  "required_classes": ["paladin", "sniper", "healer"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 5,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red"
+    },
+    {
+      "class_id": "healer",
+      "level": 5,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red",
+      "x": 3,
+      "y": 10
+    },
+    {
+      "class_id": "sniper",
+      "level": 5,
+      "name": "红"
+    },
+    {
+      "class_id": "knight",
+      "level": 4,
+      "name": "王城禁卫"
+    }
+  ],
+  "dialogues": {
+    "intro":           "stories/chapter_03/intro.json",
+    "battle_01_after": "stories/chapter_03/battle_01_after.json",
+    "battle_02_after": "stories/chapter_03/battle_02_after.json",
+    "battle_03_after": "stories/chapter_03/battle_03_after.json",
+    "victory":         "stories/chapter_03/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "王城外围遭遇战",
+      "map_id": "balanced_2p_15",
+      "map_seed": 333,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "回师路上在王城郊外遭遇不明刺客。win_condition rout,清掉所有敌方单位。",
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01"
+          }
+        }
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "王城内战",
+      "map_id": "balanced_2p_15",
+      "map_seed": 444,
+      "win_condition": "seize",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "三皇子叛军占据王城内城,需 seize 王座。",
+      "spawn_overrides": {
+        "add": [
+          {"x": 11, "y": 11, "type": "warlock", "color": "blue", "level": 4},
+          {"x": 12, "y": 11, "type": "warlock", "color": "blue", "level": 4}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    },
+    {
+      "id": "battle_03",
+      "title": "刺杀反攻",
+      "map_id": "balanced_2p_15",
+      "map_seed": 555,
+      "win_condition": "boss",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "三皇子的贴身刺客头目亲自出战,boss 战,需要在限定回合内击倒 boss 单位。",
+      "spawn_overrides": {
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 12, "y": 8},
+            "unit": {"type": "blade_master", "color": "blue", "level": 6}
+          }
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_03_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 1200,
+    "unlock_class": "sage",
+    "exp_per_unit": 300
+  },
+  "art_assets": {}
+}

@@ -1,0 +1,42 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王都城下。卡尔德与乌格联军三万,分两路逼近城南、城北。城墙上的禁卫军已经连续站岗三天。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团从北门进城,直奔王座厅。太子亲自在城门口迎接——他已经一夜未眠。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "太子",
+      "speaker_color": "#d0d0d0",
+      "text": "云，你们来了。这一仗——整个王朝的存亡——就拜托了。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "殿下，从山口到这里，我们已经打了八场仗。这一仗是最后一场。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "三万对五千加我们三千。八千对三万。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "守城七回合——只要撑过七日,他们的粮草就会耗尽。这是他们最后的赌注。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "那就守住。所有人,上城墙。"
+    }
+  ]
+}

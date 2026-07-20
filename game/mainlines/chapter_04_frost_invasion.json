@@ -1,0 +1,114 @@
+{
+  "id": "chapter_04_frost_invasion",
+  "title": "异族入侵",
+  "synopsis": "王都政变后北境守军空虚，乌格率领的北境异族乘虚南下，焚毁三镇。卡尔德残部投敌成为异族先锋。安娜研究古籍发现北境祭坛是异族力量之源——若能捣毁祭坛，可一战定乾坤。",
+  "cover_art": null,
+  "required_classes": ["blade_master", "sniper", "healer"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 8,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red"
+    },
+    {
+      "class_id": "healer",
+      "level": 8,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red",
+      "x": 3,
+      "y": 10
+    },
+    {
+      "class_id": "dragon_rider",
+      "level": 8,
+      "name": "红"
+    },
+    {
+      "class_id": "knight",
+      "level": 6,
+      "name": "王城禁卫"
+    },
+    {
+      "class_id": "sniper",
+      "level": 6,
+      "name": "猎户弓手"
+    }
+  ],
+  "dialogues": {
+    "intro":           "stories/chapter_04/intro.json",
+    "battle_01_after": "stories/chapter_04/battle_01_after.json",
+    "battle_02_after": "stories/chapter_04/battle_02_after.json",
+    "battle_03_after": "stories/chapter_04/battle_03_after.json",
+    "victory":         "stories/chapter_04/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "雪地伏击",
+      "map_id": "balanced_2p_15",
+      "map_seed": 666,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "在雪地伏击卡尔德残部侦察队。地形效果:森林+3 DEF,雪地-1 MOV。",
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01"
+          }
+        }
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "桥头阻击",
+      "map_id": "balanced_2p_15",
+      "map_seed": 777,
+      "win_condition": "defend",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "在石桥阻击异族主力,需 defend 5 回合。spawn_overrides 加入异族 dragon_rider。",
+      "spawn_overrides": {
+        "add": [
+          {"x": 13, "y": 5, "type": "warlock", "color": "blue", "level": 7}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    },
+    {
+      "id": "battle_03",
+      "title": "异族祭坛对决",
+      "map_id": "balanced_2p_15",
+      "map_seed": 888,
+      "win_condition": "seize",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "突袭异族祭坛,seize 中央祭坛。乌格 boss 战,需先击杀其护卫。",
+      "spawn_overrides": {
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 12, "y": 8},
+            "unit": {"type": "warlock", "color": "blue", "level": 9}
+          }
+        ],
+        "add": [
+          {"x": 11, "y": 7, "type": "blade_master", "color": "blue", "level": 8},
+          {"x": 13, "y": 6, "type": "warlock", "color": "blue", "level": 7}
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_03_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 1800,
+    "unlock_class": "dragon_rider",
+    "exp_per_unit": 400
+  },
+  "art_assets": {}
+}

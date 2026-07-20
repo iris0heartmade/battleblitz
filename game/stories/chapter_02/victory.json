@@ -1,0 +1,38 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "东境要塞收复的第二天，主角团收到王城急报——国王在宫廷宴会上中毒昏迷。三皇子被指为幕后黑手，被迫出逃。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "边境战事刚平，王都就出事了。这不是巧合。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，卡尔德三日前逃往王都——那时候正是宴会前夜。我担心……"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "太子殿下的信使已经到了，让我们立刻回师勤王。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团拔营启程，朝王都方向急行军。山口一战、边境烽火两场战事的磨练，让云、红、安娜都脱胎换骨——云已具备晋升 paladin 的资格，红的箭术可以挑战狙击王的称号。"
+    },
+    {
+      "type": "choice",
+      "question": "边境烽火告一段落，回师王都前你想做什么？",
+      "choices": [
+        { "text": "回大厅领取奖励并准备晋升", "value": "lobby" },
+        { "text": "立即拔营启程追三皇子", "value": "rush_capital" }
+      ]
+    }
+  ]
+}

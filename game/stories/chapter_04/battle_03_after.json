@@ -1,0 +1,36 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "祭坛在火光中崩塌。红色的结晶被安娜用圣器击碎，异族大军的咒语同步消散。乌格重伤遁逃，他的护卫全部战死。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "祭坛破了。但乌格还活着——他带走了祭坛的咒文残片。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "他跑不远。但他需要时间恢复，我们也需要。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a06",
+      "text": "等等——斥候来报。卡尔德和乌格合流了。他们在北境山口整军，要南下反扑王都。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "他们想趁王都空虚报仇。立刻传令全军南下——这一仗，必须在王都城下决出胜负。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团三战北境：雪地伏击、桥头阻击、祭坛奇袭。如今最大规模的战争即将到来——卡尔德+乌格联手，三万兵力对三千。"
+    }
+  ]
+}

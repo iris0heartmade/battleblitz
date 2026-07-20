@@ -1,0 +1,44 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "祭坛决战的第二天，主角团南下。一路上王都告急文书雪片般飞来——卡尔德叛军和异族残部合流，正朝王都急进。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "太子",
+      "speaker_color": "#d0d0d0",
+      "text": "云，三万兵力。我只有五千禁卫军守王都。你们必须赶在他们之前回到王城。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "殿下放心。我们三天走完七天的路。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，这是我们一起打的第四场战事了。山口的伏击、边境的补给、王都的暗影、北境的雪原——每一场我都记得。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "还有最后一场。王都城下，所有恩怨了结。"
+    },
+    {
+      "type": "narration",
+      "text": "从边境到王都，从王都到北境，再从北境回到王都——这场战争持续了整个冬夏两季。山口、围城、补给、王座、刺客、雪地、桥头、祭坛，八场战事磨练出铁一般的军团。如今，决战在即。"
+    },
+    {
+      "type": "choice",
+      "question": "异族入侵告一段落，王朝统一在即：",
+      "choices": [
+        { "text": "回大厅领取奖励并休整", "value": "lobby" },
+        { "text": "立即南下奔赴王都决战", "value": "final_battle" }
+      ]
+    }
+  ]
+}

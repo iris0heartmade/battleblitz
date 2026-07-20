@@ -1,0 +1,40 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王城内城被三皇子叛军占领，水道出口处的禁卫军全部换成叛军嫡系。主角团在太子接应下杀穿内城，夺回王座厅。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "太子",
+      "speaker_color": "#d0d0d0",
+      "text": "云，你们来得及时。三皇子已经疯了——他不仅毒害父王，还联络北境异族，要把整个王朝卖给外人。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "殿下，三皇子本人呢？"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "太子",
+      "speaker_color": "#d0d0d0",
+      "text": "他跑了。但他最信任的刺客头目还在城里——那人号称'暗影',剑法在云之上。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "在云之上？云，这次让我先开一箭。"
+    },
+    {
+      "type": "choice",
+      "question": "对决暗影前的战术选择：",
+      "choices": [
+        { "text": "红先手远程压制，云近战切入", "value": "red_first" },
+        { "text": "云正面牵制，红伺机爆头", "value": "yun_front" }
+      ]
+    }
+  ]
+}

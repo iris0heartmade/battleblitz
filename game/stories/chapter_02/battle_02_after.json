@@ -1,0 +1,32 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "城墙上的白旗在夜风中颤抖。东境要塞破城，异族雇佣兵被俘过半，余者逃入北境深山。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "卡尔德本人不在城里。情报说他三天前就动身了，去向不明。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "往王都方向去了。我从俘虏口中听到一个名字——三皇子。他和卡尔德似乎早就认识。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "三皇子？王都那位从不涉政的皇子？他怎么可能和边境叛军有联系。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "明天动身回王都。先弄清楚这件事。"
+    }
+  ]
+}

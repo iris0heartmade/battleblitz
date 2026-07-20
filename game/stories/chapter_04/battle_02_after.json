@@ -1,0 +1,38 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "桥头血战五日。异族三次冲锋都被打退。最后一次冲锋中，云斩杀了异族先锋队的头目——那是乌格的外甥。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，你杀了乌格外甥——他会发疯的。但祭坛就在三里外。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "今夜动身。乌格还在桥头那边集结主力——他们以为我们还在守桥。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "安娜，祭坛怎么破？"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "我带圣器，破坏祭坛中央的红色结晶即可。但乌格肯定会亲自守——他是异族大祭司的继承人。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "乌格必须死。否则明年他们还会再来。"
+    }
+  ]
+}

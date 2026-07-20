@@ -1,0 +1,38 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "北境。雪原。风从山脊上刮下来，刀子一样割脸。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团到达北境要塞时，城墙已经塌了一半。三万异族大军就在三十里外的山口。乌格——异族首领——亲自督战。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "三十里。三万兵力。我们只有三千。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "硬守守不住。祭坛在异族营地后方二十里，必须绕道奇袭。但卡尔德残部在前方——他们会通风报信。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "那就在他们通风报信之前先下手。雪地伏击——用他们的侦察队作诱饵。"
+    },
+    {
+      "type": "choice",
+      "question": "北境第一战的战术选择：",
+      "choices": [
+        { "text": "红带队雪地伏击，云迂回断后", "value": "snow_ambush" },
+        { "text": "全员正面强攻，以战逼降", "value": "frontal_assault" }
+      ]
+    }
+  ]
+}

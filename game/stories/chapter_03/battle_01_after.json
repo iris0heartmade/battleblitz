@@ -1,0 +1,32 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "刺客的尸体被搜出禁卫军令牌和三皇子府的暗记。这不是意外——是一场蓄谋已久的拦截。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "三皇子府的暗记。那小子果然没逃远。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "卡尔德和边境战事刚平，王都就出事——这一切都是他布的局。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，太子殿下还活着。他派人来接我们，从内城水道进王城。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "走。在三皇子反应过来之前，先见到太子。"
+    }
+  ]
+}

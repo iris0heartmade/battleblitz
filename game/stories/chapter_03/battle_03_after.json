@@ -1,0 +1,42 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "暗影倒在王座厅的台阶上。他的面具脱落，露出一张出乎意料年轻的脸——不过二十出头。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "暗影",
+      "speaker_color": "#444444",
+      "text": "呵……云。你比传说中更强。可惜这次你赢的不是我，是下一个会来的人。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "什么意思？"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "暗影",
+      "speaker_color": "#444444",
+      "text": "北境……已经在动了。等三皇子把那扇门打开，你们谁都挡不住……"
+    },
+    {
+      "type": "narration",
+      "text": "暗影咽气。王座厅外传来急报——北境斥候发现异族大军南下的痕迹。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，我们必须立刻巩固北境。三皇子的事先放一放——外敌比内患更急。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "传令全军，明日拔营北上。"
+    }
+  ]
+}

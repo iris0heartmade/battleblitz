@@ -1,0 +1,36 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王都的清晨不像往常。城门紧闭，街道上只有零星的禁卫军巡逻。远处的皇宫飘着白幡——那是为昏迷中的国王准备的。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "从边境赶回来三天的路，王都却像换了一座城。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "禁卫军换了一批人。新面孔都不认识我们，眼神也不对。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，太子殿下的信到了。他说今晨出宫来接应，让我们从南门进王城。"
+    },
+    {
+      "type": "narration",
+      "text": "主角团从南门入城时，遭遇了一队不明刺客——他们身穿禁卫军铠甲，却在三息之内拔刀相向。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "不是禁卫军！是刺客！保护安娜！"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "王都平原会战。两军三万余人在原野上对峙。日暮时分，卡尔德与乌格同时出战——他们要亲自决战。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "卡尔德",
+      "speaker_color": "#883333",
+      "text": "云！从边境追到这里，你阴魂不散！"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "卡尔德，山口一战你败了，王都一战你又败了。这一次，你没有退路。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "乌格",
+      "speaker_color": "#556b2f",
+      "text": "卡尔德，先杀那个女人——没有她的圣器，我们早就拿下王都了。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "想动安娜？先问过我的箭。"
+    },
+    {
+      "type": "narration",
+      "text": "红的一箭正中乌格肩头,乌格身形一晃。云抓住这一瞬机,剑光一闪——乌格的咒文杖被斩断。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "乌格,你的咒语没了。投降,或者死。"
+    }
+  ]
+}

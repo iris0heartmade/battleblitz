@@ -1,0 +1,38 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "山口一战之后，卡尔德的残部向东撤退，越过三道山岭退入东境要塞。他们在那里与一支异族雇佣兵会合，整顿旗鼓，准备反扑。"
+    },
+    {
+      "type": "narration",
+      "text": "王城的命令来得很快：必须在入冬前切断他们的补给线，否则边境三镇的存粮撑不过十二月。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "红，这一仗和山口不一样。他们有了异族弓手，正面冲锋我们吃亏。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "补给车队在山道口，必须守住五回合。等他们弓手阵脚一乱，我们就反冲。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，红，这次别再像山口那样冲到最前面。你们的命比一辆补给车重要。"
+    },
+    {
+      "type": "choice",
+      "question": "补给线守卫战的战术选择：",
+      "choices": [
+        { "text": "红带队埋伏左翼，等异族弓手靠近再射", "value": "ambush_left" },
+        { "text": "云正面压住车阵，让红自由输出", "value": "frontal_hold" }
+      ]
+    }
+  ]
+}

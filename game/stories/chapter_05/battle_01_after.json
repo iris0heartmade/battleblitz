@@ -1,0 +1,32 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "七日血战。王都城墙下堆满攻城塔的残骸。卡尔德三次亲自登城,三次被云击退。乌格的咒语在安娜的圣器面前失效。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "他们退了。但还没撤。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "斥候来报——他们在王都外围五里处重新集结。这是诱我们出城。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "但我们必须出去。否则他们会绕道西边，攻击粮道。我们不能被动等死。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "明日清晨，全军出城。在王都平原上决一死战。"
+    }
+  ]
+}

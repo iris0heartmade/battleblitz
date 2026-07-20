@@ -1,0 +1,26 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "补给车队完整无损。异族弓手留下一地箭矢和三具尸体，退入山林。卡尔德的辎重官被俘，押在马车前。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "云，我刚才在战场东侧看到一道烟柱——那是卡尔德残部的主营，离这里不到两里。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "趁他们士气低落，立刻拔营攻城。今夜子时动身，不能让他们有时间再调援军。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "我先去侦察地形。子时在南坡汇合，别迟到。"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "卡尔德残部侦察队被全歼于雪松林中。他们的尸体被堆成路障，让后续的异族信使无法通过。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "这一仗打得干净。乌格还没收到消息。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "红",
+      "speaker_color": "#e85a6a",
+      "text": "但这只是开始。他们的主力明天就会压上来。我们得先到桥头——那是去祭坛的必经之路。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "speaker_color": "#7ed8ff",
+      "text": "我昨夜研究过地图。桥头是狭地，一次只能过二十人。我们在那里坚守五日，等主力绕道祭坛。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "speaker_color": "#ffb84d",
+      "text": "那就走。先到桥头，先占阵地。"
+    }
+  ]
+}
