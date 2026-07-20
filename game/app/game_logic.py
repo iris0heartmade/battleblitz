@@ -674,19 +674,45 @@ def _team_of(player: Player) -> str:
 
 
 async def _alive_teams(session: AsyncSession, game: Game) -> list:
-    """Return the sorted list of teams that still have at least one
-    unit with hp > 0 in this game. Used by all 4 win conditions."""
-    from sqlalchemy import func, select as _sel
-    rows = (await session.execute(
-        _sel(Player.team_id, Player.color, func.count(Unit.id))
-        .join(Unit, Unit.player_id == Player.id)
-        .join(Game, Game.id == Player.game_id)
-        .where(Game.id == game.id, Unit.hp > 0)
-        .group_by(Player.id)
+    """Return teams that still have at least one undefeated member faction.
+
+    A color faction is defeated when all of its units are gone OR it has lost
+    every HQ it owns. Maps without HQ tiles keep the legacy rout-only behavior.
+    """
+    players = (await session.execute(
+        select(Player).where(
+            Player.game_id == game.id,
+            Player.is_spectator.is_(False),
+        )
+    )).scalars().all()
+    if not players:
+        return []
+
+    player_ids = [p.id for p in players]
+    alive_unit_rows = (await session.execute(
+        select(Unit.player_id).where(
+            Unit.player_id.in_(player_ids),
+            Unit.hp > 0,
+        )
     )).all()
+    players_with_units = {pid for (pid,) in alive_unit_rows}
+
+    hq_rows = (await session.execute(
+        select(Tile.owner_id).where(
+            Tile.game_id == game.id,
+            Tile.terrain == TERRAIN_CASTLE,
+            Tile.owner_id.in_(player_ids),
+        )
+    )).all()
+    players_with_hq = {pid for (pid,) in hq_rows}
+    game_has_player_hqs = bool(players_with_hq)
+
     teams = set()
-    for team_id, color, _count in rows:
-        teams.add(team_id or color or "neutral")
+    for player in players:
+        has_units = player.id in players_with_units
+        has_required_hq = (player.id in players_with_hq) if game_has_player_hqs else True
+        if has_units and has_required_hq:
+            teams.add(_team_of(player))
     return sorted(teams)
 
 
@@ -942,6 +968,9 @@ async def check_pending_claims(
         ))
         await session.delete(cs)
 
+    if flipped:
+        await session.flush()
+
     # P0.5 — seize check is UNIVERSAL (works on any game, not just
     # those with win_condition=="seize"). Any HQ-ownership flip between
     # different teams is an instant win. We do this AFTER all the
@@ -964,19 +993,11 @@ async def check_pending_claims(
             # flip as 'no win' (defensive coding).
             winner_team = _team_of(new_player) if new_player else None
             if winner_team:
-                # Rout fallback: only 1 team left alive?
                 alive = await _alive_teams(session, game)
                 if len(alive) == 1 and alive[0] == winner_team:
                     _finish_game(game, winner_team, "seize")
                 elif len(alive) == 0:
                     _finish_game(game, None, "draw")
-                else:
-                    # Multiple teams still alive — seize wins outright
-                    # (the owner just lost their HQ; surviving that
-                    # is the "you have to retake it" path, but the
-                    # owner-rule for Seize is "seize = win", so we
-                    # end the match here).
-                    _finish_game(game, winner_team, "seize")
                 if game.status == "finished":
                     session.add(ActionLog(
                         game_id=game.id,

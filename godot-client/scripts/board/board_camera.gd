@@ -3,10 +3,9 @@ class_name BoardCamera
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const _FIT_MARGIN := 16.0
-# UI V2 第 3 轮:棋盘 fit 中央剩余空间,留出左侧 30% 给 info panel
-# + 右侧 22% 给 HUD 留白。
-const _UI_LEFT_FRACTION := 0.30
-const _UI_RIGHT_FRACTION := 0.00
+# Fit the board into the playable area and reserve the right-side info panel.
+const _UI_LEFT_FRACTION := 0.00
+const _UI_RIGHT_FRACTION := 0.45
 
 var _metrics = null
 var _user_positioned: bool = false
@@ -22,7 +21,7 @@ func apply_metrics(metrics) -> void:
 	if _user_positioned:
 		pass
 	else:
-		_refresh_from_metrics(true)
+		_refresh_from_metrics(false)
 	enabled = true
 
 
@@ -62,7 +61,7 @@ func _refresh_from_metrics(position_only: bool = false) -> void:
 	var ui_left_px: float = viewport_size.x * _UI_LEFT_FRACTION
 	var center_offset_x: float = (ui_left_px + usable_w * 0.5) - viewport_size.x * 0.5
 	var board_center := _board_center_for(_metrics, board_rect)
-	position = Vector2(board_center.x + center_offset_x, board_center.y)
+	position = Vector2(board_center.x - center_offset_x, board_center.y)
 
 	var zoom_x: float = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
 	var zoom_y: float = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)

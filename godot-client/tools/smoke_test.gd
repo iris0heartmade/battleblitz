@@ -2,6 +2,7 @@ extends Node
 ## Headless smoke test for the 48x48 layer-aware map presentation baseline.
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
+const MAP_PREVIEW_SUMMARY_SCRIPT := preload("res://scripts/ui/map_preview_summary.gd")
 
 const TEST_MAP_IDS := [
 	"balanced_2p_15",
@@ -43,6 +44,7 @@ func _ready() -> void:
 
 	for map_id in TEST_MAP_IDS:
 		_test_one_map(map_id)
+	_test_map_preview_for_all_map_files()
 
 	var board_scene: PackedScene = load("res://scenes/board.tscn")
 	var board_check = board_scene.instantiate()
@@ -57,6 +59,40 @@ func _ready() -> void:
 		var fcheck := FileAccess.open(map_path_check, FileAccess.READ)
 		var parsed_check: Variant = JSON.parse_string(fcheck.get_as_text())
 		fcheck.close()
+		var preview_summary: Dictionary = MAP_PREVIEW_SUMMARY_SCRIPT.summarize_map(parsed_check)
+		var preview_factions: Dictionary = preview_summary.get("factions", {})
+		var red_preview: Dictionary = preview_factions.get("red", {})
+		var blue_preview: Dictionary = preview_factions.get("blue", {})
+		_assert_eq("Map preview recommended players", int(preview_summary.get("recommended_players", 0)), 2,
+			"preview summary should expose player count filters")
+		_assert_eq("Map preview red HQ count", int(red_preview.get("hq", 0)), 1,
+			"red starting faction should include one HQ")
+		_assert_eq("Map preview blue HQ count", int(blue_preview.get("hq", 0)), 1,
+			"blue starting faction should include one HQ")
+		_assert_eq("Map preview red initial units", int(red_preview.get("units", 0)), 5,
+			"red starting faction should count initial units")
+		_assert_eq("Map preview blue initial units", int(blue_preview.get("units", 0)), 5,
+			"blue starting faction should count initial units")
+		_assert_gte("Map preview red village count", int(red_preview.get("village", 0)), 1,
+			"red starting faction should claim nearby villages in the preview")
+		_assert_gte("Map preview blue barracks count", int(blue_preview.get("barracks", 0)), 1,
+			"blue starting faction should claim nearby barracks in the preview")
+		_assert_true("Map preview has neutral building summary", preview_summary.has("neutral_buildings"),
+			"preview summary should expose neutral building counts")
+		var preview_lines: String = MAP_PREVIEW_SUMMARY_SCRIPT.build_faction_lines(preview_summary)
+		_assert_true("Map preview text mentions neutral buildings", preview_lines.contains("中立"),
+			"preview text should include neutral building distribution")
+		var map4_path := _map_path_for_id("balanced_4p_20")
+		if map4_path != "":
+			var f4 := FileAccess.open(map4_path, FileAccess.READ)
+			var parsed4: Variant = JSON.parse_string(f4.get_as_text())
+			f4.close()
+			var summary4: Dictionary = MAP_PREVIEW_SUMMARY_SCRIPT.summarize_map(parsed4)
+			var lines4: String = MAP_PREVIEW_SUMMARY_SCRIPT.build_faction_lines(summary4)
+			_assert_true("Map preview 4P text mentions yellow faction", lines4.contains(str(MAP_PREVIEW_SUMMARY_SCRIPT.COLOR_LABELS.get("yellow", "yellow"))),
+				"4P preview text should include every starting faction, including yellow")
+			_assert_true("Map preview 4P text mentions neutral buildings", lines4.contains(str(MAP_PREVIEW_SUMMARY_SCRIPT.NEUTRAL_LABEL)),
+				"4P preview text should include neutral building distribution")
 		var result_raw: Variant = board_check.load_map(parsed_check)
 		var result: Dictionary = result_raw
 		if result.is_empty():
@@ -85,8 +121,21 @@ func _ready() -> void:
 	add_child(main_check)
 	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
 	var lobby_create_col := "Lobby/LobbyFrame/LobbyDualCol/RightCol"
+	var lobby_map_panel := lobby_join_col + "/MapPreviewPanel"
 	var lobby_ai_row := "Lobby/LobbyFrame/AiConfigRow"
 	var lobby_ai_actions := "Lobby/LobbyFrame/AiActionRow"
+	_assert_true("Lobby has MapPlayerCountOption", main_check.get_node_or_null(lobby_join_col + "/MapPickerRow/MapPlayerCountOption") != null,
+		"lobby create flow should filter maps by player count above the preview")
+	_assert_true("Lobby has MapPresetOption in map preview", main_check.get_node_or_null(lobby_join_col + "/MapPickerRow/MapPresetOption") != null,
+		"lobby create flow should choose maps above the preview")
+	_assert_true("Lobby has MapPreviewTexture", main_check.get_node_or_null(lobby_map_panel + "/MapPreviewTexture") != null,
+		"lobby create flow should show a compact visual map preview")
+	_assert_true("Lobby has MapFactionSummary", main_check.get_node_or_null(lobby_map_panel + "/MapFactionSummary") != null,
+		"lobby create flow should summarize starting buildings and units per faction")
+	_assert_true("Lobby has SeatPanel", main_check.get_node_or_null(lobby_create_col + "/SeatPanel") != null,
+		"lobby create flow should show seat cards for the selected map factions")
+	_assert_true("Lobby has SeatGrid", main_check.get_node_or_null(lobby_create_col + "/SeatPanel/SeatGrid") != null,
+		"lobby create flow should render one seat card per starting faction")
 	_assert_true("Lobby has RoomList", main_check.get_node_or_null(lobby_join_col + "/RoomList") != null,
 		"lobby hub should expose a waiting-room list")
 	_assert_true("Lobby has RoomSelectOption", main_check.get_node_or_null(lobby_join_col + "/RoomSelectOption") != null,
@@ -103,8 +152,10 @@ func _ready() -> void:
 		"lobby hub should expose a team update action")
 	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null(lobby_create_col + "/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
-	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null(lobby_create_col + "/MapPresetOption") != null,
-		"lobby hub should expose a map preset dropdown")
+	_assert_true("Lobby can render lobby map preview", main_check.has_method("_render_lobby_map_preview"),
+		"lobby hub should expose a refresh path for map preview and faction summary")
+	_assert_true("Lobby can render lobby seat columns", main_check.has_method("_render_lobby_seat_columns"),
+		"lobby hub should expose a refresh path for map-driven seat cards")
 	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null(lobby_create_col + "/LobbyCommanderOption") != null,
 		"lobby hub should expose commander selection for room creation")
 	_assert_true("Lobby has LobbyBgmOption", main_check.get_node_or_null(lobby_create_col + "/LobbyBgmOption") != null,
@@ -350,6 +401,86 @@ func _ready() -> void:
 		"lobby state should populate removable AI players")
 	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
 		"remove-ai button should enable when there is a selected AI")
+	main_check.call("_on_lobby_presets_response", {
+		"maps": [{"id": "balanced_4p_20", "name": "balanced_4p_20", "biome": "grass", "recommended_players": 4}]
+	}, 200)
+	var seat_grid: GridContainer = main_check.get_node(lobby_create_col + "/SeatPanel/SeatGrid")
+	_assert_eq("Lobby 4P map renders four seat cards", seat_grid.get_child_count(), 4,
+		"seat cards should match selected map player count")
+	var first_seat: Panel = seat_grid.get_child(0) as Panel
+	var first_seat_label: Label = first_seat.get_node("SeatBox/SeatTopRow/SeatStatusBox/SeatName") as Label
+	_assert_true("Lobby first seat uses red faction", first_seat_label.text.contains("红方"),
+		"first seat should map to the red starting faction")
+	_assert_true("Lobby seat has faction portrait", first_seat.get_node_or_null("SeatBox/SeatTopRow/FactionPortrait") != null,
+		"seat card should show a compact faction/portrait block")
+	_assert_true("Lobby seat has action button", first_seat.get_node_or_null("SeatBox/SeatControlRow/SeatActionBtn") != null,
+		"seat card should expose choose-seat or swap-request action")
+	_assert_true("Lobby seat has AI toggle", first_seat.get_node_or_null("SeatBox/SeatControlRow/AiReplaceToggle") != null,
+		"seat card should expose AI replacement as a visible toggle")
+	_assert_true("Lobby seat has commander ability text", first_seat.get_node_or_null("SeatBox/CommanderAbility") != null,
+		"seat card should show the selected commander's basic ability summary")
+	var first_team_side: OptionButton = first_seat.get_node_or_null("SeatBox/SeatControlRow/TeamSideOption") as OptionButton
+	_assert_true("Lobby seat has side selector", first_team_side != null,
+		"seat card should expose Team A/B/C/D independently from faction color")
+	if first_team_side != null:
+		_assert_eq("Lobby side selector lists four sides", first_team_side.item_count, 4,
+			"seat side selector should include Team A/B/C/D")
+	var host_settings: Label = main_check.get_node(lobby_create_col + "/HostSettingsLabel") as Label
+	var create_room_button: Button = main_check.get_node(lobby_create_col + "/CreateRoomBtn") as Button
+	var map_summary_label: RichTextLabel = main_check.get_node(lobby_map_panel + "/MapFactionSummary") as RichTextLabel
+	_assert_true("Lobby 4P summary includes yellow faction", map_summary_label.text.contains(str(MAP_PREVIEW_SUMMARY_SCRIPT.COLOR_LABELS.get("yellow", "yellow"))),
+		"4P lobby preview should not drop the yellow faction line")
+	_assert_true("Lobby 4P summary includes neutral buildings", map_summary_label.text.contains(str(MAP_PREVIEW_SUMMARY_SCRIPT.NEUTRAL_LABEL)),
+		"4P lobby preview should show unowned building distribution")
+	_assert_true("Lobby 4P keeps host settings visible", host_settings.visible,
+		"4P seat cards should not hide the host settings area")
+	_assert_true("Lobby 4P keeps create button visible", create_room_button.visible,
+		"4P seat cards should not push the create action out of the form")
+	_assert_true("Lobby primary action reads start game", create_room_button.text.contains("开启游戏"),
+		"the completed create-room form should present the final action as starting the game")
+	_assert_gte("Lobby 4P seat card has room for text", int(first_seat.custom_minimum_size.y), 150,
+		"4P seat cards should be tall enough that labels do not overlap")
+	main_check.set("_user_name", "Alice")
+	main_check.call("_on_lobby_seat_action_pressed", 0)
+	first_seat = seat_grid.get_child(0) as Panel
+	var first_occupant: Label = first_seat.get_node("SeatBox/SeatTopRow/SeatStatusBox/SeatOccupant") as Label
+	_assert_true("Lobby seat action shows occupant", first_occupant.text.contains("Alice"),
+		"clicking a free seat should update the visible seat card occupant instead of leaving it waiting")
+	main_check.call("_on_lobby_presets_response", {
+		"maps": [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
+	}, 200)
+	_assert_eq("Lobby 2P map renders two seat cards", seat_grid.get_child_count(), 2,
+		"seat cards should shrink when selecting a 2P map")
+	var prev_tiles: Array = GameState.tiles
+	var prev_players: Array = GameState.players
+	var prev_summary: Dictionary = GameState.game_summary
+	var mock_tiles: Array = []
+	for y in range(20):
+		for x in range(20):
+			mock_tiles.append({"x": x, "y": y, "terrain": "plain"})
+	GameState.tiles = mock_tiles
+	GameState.players = []
+	GameState.game_summary = {"map_biome": "grass"}
+	var pseudo_map: Dictionary = main_check.call("_snapshot_to_pseudo_map")
+	GameState.tiles = prev_tiles
+	GameState.players = prev_players
+	GameState.game_summary = prev_summary
+	var pseudo_size: Dictionary = pseudo_map.get("size", {}) if pseudo_map.get("size", {}) is Dictionary else {}
+	_assert_eq("Snapshot pseudo map width uses full state", int(pseudo_size.get("width", 0)), 20,
+		"snapshot adapter should preserve maps larger than 15x15 for the board loader")
+	_assert_eq("Snapshot pseudo map height uses full state", int(pseudo_size.get("height", 0)), 20,
+		"snapshot adapter should preserve maps larger than 15x15 for the board loader")
+	main_check.call("_show_view", "game")
+	var game_board: Node = main_check.get_node("GameView/Board")
+	game_board.set("_panning", false)
+	var pan_press := InputEventMouseButton.new()
+	pan_press.button_index = MOUSE_BUTTON_LEFT
+	pan_press.pressed = true
+	pan_press.position = Vector2(320, 320)
+	pan_press.global_position = Vector2(320, 320)
+	main_check.call("_unhandled_input", pan_press)
+	_assert_true("Main forwards left press to board panning", bool(game_board.get("_panning")),
+		"main click handling should not starve Board's left-drag panning state")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -366,14 +497,16 @@ func _ready() -> void:
 		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
 	_assert_true("NetworkClient update_player_team method", NetworkClient.has_method("update_player_team"),
 		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
+	_assert_true("NetworkClient update_player_seat method", NetworkClient.has_method("update_player_seat"),
+		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/seat")
 	_assert_true("NetworkClient forecast_attack method", NetworkClient.has_method("forecast_attack"),
 		"NetworkClient should expose GET /games/{id}/forecast-attack")
 	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
 		"list_games should accept callback and optional user_name filter")
 	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
 		"join_game should accept game_id, user_name, color, team, role, callback")
-	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 7,
-		"create_game should accept optional commander and BGM ids before callback")
+	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 9,
+		"create_game should accept optional commander, BGM, AI commander, callback, and seat commander arguments")
 	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
 		"NetworkClient should expose DELETE /games/{id}")
 	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
@@ -816,9 +949,57 @@ func _test_one_map(map_id: String) -> void:
 		"tile_lookup should have one entry per cell")
 	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
 		"board camera should be present")
+	if w > 15 or h > 15:
+		_assert_true("%s camera zoom fits large map" % map_id, board.board_camera.zoom.x < 1.0,
+			"large boards should fit into the playable viewport instead of rendering at fixed 15x15 scale")
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()
+
+
+func _test_map_preview_for_all_map_files() -> void:
+	var paths: Array[String] = []
+	var known_map_path := _map_path_for_id("balanced_2p_15")
+	var maps_root := known_map_path.get_base_dir() if known_map_path != "" else ""
+	if maps_root != "":
+		_collect_map_json_paths(ProjectSettings.globalize_path(maps_root), paths)
+	_assert_gte("Map preview scans map files", paths.size(), TEST_MAP_IDS.size(),
+		"preview compatibility should cover every checked-in map file")
+	for path in paths:
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			_fail("preview cannot open %s" % path)
+			continue
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		f.close()
+		if not parsed is Dictionary:
+			_fail("preview map file is not object: %s" % path)
+			continue
+		var summary: Dictionary = MAP_PREVIEW_SUMMARY_SCRIPT.summarize_map(parsed)
+		_assert_true("Map preview summary has factions %s" % path, summary.has("factions"),
+			"preview summary should include faction data for every map file")
+		var texture: ImageTexture = MAP_PREVIEW_SUMMARY_SCRIPT.render_preview_texture(parsed, 4)
+		_assert_true("Map preview texture exists %s" % path, texture != null,
+			"preview texture should render for every map file")
+
+
+func _collect_map_json_paths(root_path: String, out_paths: Array[String]) -> void:
+	var dir := DirAccess.open(root_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var name := dir.get_next()
+		if name == "":
+			break
+		if name.begins_with("."):
+			continue
+		var full_path := "%s/%s" % [root_path, name]
+		if dir.current_is_dir():
+			_collect_map_json_paths(full_path, out_paths)
+		elif name.ends_with(".json"):
+			out_paths.append(full_path)
+	dir.list_dir_end()
 
 
 func _preset_options_contain(options: Array, preset_id: String) -> bool:

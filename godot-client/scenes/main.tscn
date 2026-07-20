@@ -616,7 +616,7 @@ theme_override_constants/separation = 18
 
 [node name="LeftCol" type="VBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol"]
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.2
+size_flags_stretch_ratio = 0.95
 theme_override_constants/separation = 8
 
 [node name="LeftHeader" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
@@ -624,9 +624,42 @@ text = "房间列表"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
 
+[node name="MapPickerRow" type="HBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+theme_override_constants/separation = 8
+
+[node name="MapPlayerCountOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow"]
+custom_minimum_size = Vector2(110, 32)
+
+[node name="MapPresetOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow"]
+custom_minimum_size = Vector2(0, 32)
+size_flags_horizontal = 3
+
+[node name="MapPreviewPanel" type="Panel" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+custom_minimum_size = Vector2(0, 340)
+
+[node name="MapPreviewTexture" type="TextureRect" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel"]
+anchor_right = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 178.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="MapFactionSummary" type="RichTextLabel" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 188.0
+offset_right = -10.0
+offset_bottom = -8.0
+bbcode_enabled = true
+fit_content = false
+scroll_active = false
+text = "正在读取地图情报..."
+
 [node name="RoomList" type="RichTextLabel" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
 custom_minimum_size = Vector2(0, 140)
-size_flags_vertical = 3
 bbcode_enabled = true
 text = "加载中..."
 fit_content = false
@@ -644,16 +677,20 @@ theme_override_constants/separation = 8
 [node name="RefreshRoomsBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow"]
 text = "刷新房间"
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 34)
+custom_minimum_size = Vector2(0, 24)
 
 [node name="JoinSelectedBtn" type="Button" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow"]
 text = "加入选中"
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 34)
+custom_minimum_size = Vector2(0, 24)
 disabled = true
+
+[node name="LeftBottomSpacer" type="Control" parent="Lobby/LobbyFrame/LobbyDualCol/LeftCol"]
+custom_minimum_size = Vector2(0, 28)
 
 [node name="RightCol" type="VBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol"]
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.35
 theme_override_constants/separation = 4
 
 [node name="RightHeader" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
@@ -665,8 +702,35 @@ theme_override_font_sizes/font_size = 14
 placeholder_text = "房间名称"
 custom_minimum_size = Vector2(0, 36)
 
-[node name="MapPresetOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
-custom_minimum_size = Vector2(0, 32)
+[node name="SeatPanel" type="Panel" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 400)
+
+[node name="SeatTitle" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel"]
+anchor_right = 1.0
+offset_left = 10.0
+offset_top = 8.0
+offset_right = -10.0
+offset_bottom = 30.0
+text = "阵营座位"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+
+[node name="SeatGrid" type="GridContainer" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 36.0
+offset_right = -10.0
+offset_bottom = -10.0
+columns = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="HostSettingsLabel" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+custom_minimum_size = Vector2(0, 24)
+text = "房主统一设置"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
 
 [node name="TeamRow" type="HBoxContainer" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
 theme_override_constants/separation = 8
@@ -683,12 +747,13 @@ custom_minimum_size = Vector2(0, 34)
 custom_minimum_size = Vector2(0, 32)
 
 [node name="LobbyBgmOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 30)
 
 [node name="WinConditionOption" type="OptionButton" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 30)
 
 [node name="PlayerCountLabel" type="Label" parent="Lobby/LobbyFrame/LobbyDualCol/RightCol"]
+visible = false
 custom_minimum_size = Vector2(0, 24)
 text = "—"
 horizontal_alignment = 1
@@ -1316,7 +1381,7 @@ custom_minimum_size = Vector2(100, 28)
 anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -384.0
+offset_left = -280.0
 offset_top = 70.0
 offset_right = -8.0
 offset_bottom = -60.0

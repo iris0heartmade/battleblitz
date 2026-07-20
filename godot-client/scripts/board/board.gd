@@ -215,6 +215,14 @@ var _press_start_mouse: Vector2 = Vector2.ZERO
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	_handle_camera_input(event)
+
+
+func handle_camera_input_from_owner(event: InputEvent) -> void:
+	_handle_camera_input(event)
+
+
+func _handle_camera_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:

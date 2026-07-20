@@ -465,7 +465,7 @@ func delete_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}), {}, callback)
 
 
-func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable()) -> void:
+func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable(), seat_commanders: Dictionary = {}) -> void:
 	var body := {
 		"name": room_name,
 		"map_preset": map_preset,
@@ -477,6 +477,8 @@ func create_game(room_name: String, map_preset: String, map_biome: String, win_c
 		battle_config["commander"] = commander_id
 	if not ai_commanders.is_empty():
 		battle_config["ai_commanders"] = ai_commanders
+	if not seat_commanders.is_empty():
+		battle_config["seat_commanders"] = seat_commanders
 	if bgm_track_id != "":
 		battle_config["audio"] = {"bgm": {"track_id": bgm_track_id}}
 	if not battle_config.is_empty():
@@ -488,12 +490,14 @@ func get_game_state(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/state", {}, callback)
 
 
-func join_game(game_id: int, user_name: String, color: String = "", team: String = "", role: String = "", callback: Callable = Callable()) -> void:
+func join_game(game_id: int, user_name: String, color: String = "", team: String = "", role: String = "", callback: Callable = Callable(), seat: int = -1) -> void:
 	var body := {"user_name": user_name, "color": color}
 	if team != "":
 		body["team"] = team
 	if role != "":
 		body["role"] = role
+	if seat >= 0:
+		body["seat"] = seat
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/join", body, callback)
 
 
@@ -525,6 +529,13 @@ func update_player_team(game_id: int, player_id: int, caller_player_id: int, tea
 	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/team" % player_id, {
 		"caller_player_id": caller_player_id,
 		"team": team,
+	}, callback)
+
+
+func update_player_seat(game_id: int, player_id: int, caller_player_id: int, seat: int, callback: Callable = Callable()) -> void:
+	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/seat" % player_id, {
+		"caller_player_id": caller_player_id,
+		"seat": seat,
 	}, callback)
 
 

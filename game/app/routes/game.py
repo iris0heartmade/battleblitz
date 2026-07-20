@@ -60,6 +60,7 @@ from app.schemas import (
     PresetsResponse,
     RejoinGameRequest,
     RejoinGameResponse,
+    UpdateSeatRequest,
     UpdateTeamRequest,
     TileOut,
     UnitOut,
@@ -77,6 +78,20 @@ def _next_color(used_colors: List[str]) -> str:
         if c not in used_colors:
             return c
     raise HTTPException(status.HTTP_409_CONFLICT, "没有可用的颜色")
+
+
+# Seat 0..3 maps to the starting color/faction order used by maps.
+def _color_for_seat(seat: int) -> str:
+    if seat < 0 or seat >= len(DEFAULT_PLAYER_COLORS):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "座位不存在")
+    return DEFAULT_PLAYER_COLORS[seat]
+
+
+def _host_player(players: List[Player]) -> Optional[Player]:
+    real_players = [p for p in players if not p.is_spectator]
+    if not real_players:
+        return None
+    return min(real_players, key=lambda p: p.id)
 
 
 # ============================================================
@@ -807,8 +822,14 @@ async def join_game(
         used_colors = [p.color for p in existing if not p.is_spectator]
         if len([p for p in existing if not p.is_spectator]) >= game.capacity:
             raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
-        color = _next_color(used_colors) if not body.color or body.color in used_colors \
-                else body.color
+        if body.seat is not None:
+            if body.seat >= game.capacity:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "座位不存在")
+            if any(p.seat == body.seat and not p.is_spectator for p in existing):
+                raise HTTPException(status.HTTP_409_CONFLICT, "座位已被占用")
+        color = _color_for_seat(body.seat) if body.seat is not None else (body.color or "")
+        if not color or color in used_colors:
+            color = _next_color(used_colors)
 
     if any(p.user_name == body.user_name for p in existing):
         raise HTTPException(status.HTTP_409_CONFLICT, "此游戏中用户名已被占用")
@@ -825,7 +846,11 @@ async def join_game(
         # real seats back down).
         seat = MAX_PLAYERS + spectator_offset
     else:
-        seat = len([p for p in existing if not p.is_spectator])
+        if body.seat is not None:
+            seat = body.seat
+        else:
+            used_real_seats = {p.seat for p in existing if not p.is_spectator}
+            seat = next((s for s in range(game.capacity) if s not in used_real_seats), len(used_real_seats))
 
     # P2.3 — team_id resolution. Spectators don't pick a team.
     if is_spectator:
@@ -914,7 +939,7 @@ async def update_player_team(
     all_players = (await session.execute(
         select(Player).where(Player.game_id == game_id)
     )).scalars().all()
-    host = next((p for p in all_players if p.seat == 0), None)
+    host = _host_player(all_players)
 
     # The caller identifies themselves in the request body.
     # (In a LAN game without real auth, the frontend gates the UI;
@@ -924,7 +949,7 @@ async def update_player_team(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法识别请求者")
 
     # Permission check
-    is_host = caller.seat == 0
+    is_host = host is not None and caller.id == host.id
     is_self = caller.id == target.id
     if not (is_host or is_self):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "只有房主可以修改其他玩家的队伍")
@@ -933,6 +958,58 @@ async def update_player_team(
     await session.flush()
 
     return {"ok": True, "player_id": player_id, "team": target.team_id}
+
+
+@router.patch("/{game_id}/players/{player_id}/seat", response_model=GameStateOut)
+async def update_player_seat(
+    game_id: int,
+    player_id: int,
+    body: UpdateSeatRequest,
+    session: AsyncSession = Depends(get_session),
+) -> GameStateOut:
+    """Move a waiting-room player to a seat, swapping occupants for the host."""
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+    if game.status != "waiting":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始，无法修改座位")
+    if body.seat >= game.capacity:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "座位不存在")
+
+    target = await session.get(Player, player_id)
+    if target is None or target.game_id != game_id or target.is_spectator:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
+
+    all_players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    caller = next((p for p in all_players if p.id == body.caller_player_id), None)
+    if caller is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法识别请求者")
+    host = _host_player(all_players)
+    is_host = host is not None and caller.id == host.id
+    is_self = caller.id == target.id
+    if not (is_host or is_self):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "只有房主可以移动其他玩家")
+
+    occupant = next(
+        (p for p in all_players if not p.is_spectator and p.seat == body.seat and p.id != target.id),
+        None,
+    )
+    if occupant is not None and not is_host:
+        raise HTTPException(status.HTTP_409_CONFLICT, "座位已被占用")
+
+    old_seat = target.seat
+    if occupant is not None:
+        target.seat = -1 - target.id
+        target.color = f"seat_swap_{target.id}"
+        await session.flush()
+        occupant.seat = old_seat
+        occupant.color = _color_for_seat(old_seat)
+    target.seat = body.seat
+    target.color = _color_for_seat(body.seat)
+    await session.flush()
+    return await _build_state(session, game)
 
 
 @router.post("/{game_id}/rejoin", response_model=RejoinGameResponse)
@@ -1046,12 +1123,15 @@ async def start_game(
     battle_config = game.battle_config or {}
     host_commander = battle_config.get("commander")
     ai_commanders = battle_config.get("ai_commanders") or {}
+    seat_commanders = battle_config.get("seat_commanders") or {}
     for player in players:
         commander_id = None
+        if not player.is_spectator:
+            commander_id = seat_commanders.get(player.seat) or seat_commanders.get(str(player.seat))
         if not player.is_spectator and player.seat == 0:
-            commander_id = host_commander
+            commander_id = commander_id or host_commander
         if player.is_ai:
-            commander_id = ai_commanders.get(player.seat) or ai_commanders.get(str(player.seat)) or commander_id
+            commander_id = commander_id or ai_commanders.get(player.seat) or ai_commanders.get(str(player.seat))
         if commander_id:
             player.commander_id = commander_id
             player.co_state = {

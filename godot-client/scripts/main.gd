@@ -1,5 +1,6 @@
 extends Node
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -278,7 +279,13 @@ const _EDITOR_HISTORY_LIMIT := 50
 @onready var refresh_rooms_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow/RefreshRoomsBtn
 @onready var join_selected_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow/JoinSelectedBtn
 @onready var lobby_name_input: LineEdit = $Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateNameInput
-@onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/MapPresetOption
+@onready var lobby_seat_panel: Panel = $Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel
+@onready var lobby_seat_grid: GridContainer = $Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel/SeatGrid
+@onready var map_player_count_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow/MapPlayerCountOption
+@onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow/MapPresetOption
+@onready var map_preview_panel: Panel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel
+@onready var map_preview_texture: TextureRect = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel/MapPreviewTexture
+@onready var map_faction_summary: RichTextLabel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel/MapFactionSummary
 @onready var team_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow/TeamOption
 @onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow/LobbyApplyTeamBtn
 # P1#8 房主行级队伍控制 + P1#7 切换观战(转换自己为观战者)
@@ -300,6 +307,8 @@ var _lobby_rooms: Array = []
 var _selected_room_id: int = 0
 var _selected_ai_player_id: int = 0
 var _preset_options: Array = []
+var _all_preset_options: Array = []
+var _lobby_preset_filter_players: int = 0
 var _lobby_commander_ids: Array[String] = [""]
 var _lobby_ai_commander_ids: Array[String] = [""]
 var _lobby_bgm_track_ids: Array[String] = [""]
@@ -311,6 +320,14 @@ var _lobby_host_target_id: int = 0
 var _lobby_host_team_ids: Array[String] = [""]
 var _lobby_last_players: Array = []
 var _lobby_host_player_sig: String = ""
+var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d"]
+var _lobby_seat_ai_replacements: Array[bool] = [false, true, true, true]
+var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
+var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
+var _selected_lobby_seat_index: int = 0
+var _pending_lobby_start_after_create: bool = false
+var _pending_lobby_ai_seats: Array[int] = []
+var _pending_lobby_team_updates: Array[Dictionary] = []
 # 大厅轮询(2s)— 与 web app.js:918 一致
 var _lobby_poll_timer: Timer = null
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
@@ -421,7 +438,12 @@ func _ready() -> void:
 		refresh_rooms_btn.pressed.connect(_refresh_room_list)
 	if join_selected_btn != null and is_instance_valid(join_selected_btn):
 		join_selected_btn.pressed.connect(_on_join_selected_pressed)
+	if map_player_count_option != null and is_instance_valid(map_player_count_option):
+		map_player_count_option.item_selected.connect(_on_lobby_map_player_count_selected)
+	if map_preset_option != null and is_instance_valid(map_preset_option):
+		map_preset_option.item_selected.connect(_on_lobby_map_preset_selected)
 	if create_room_btn != null and is_instance_valid(create_room_btn):
+		create_room_btn.text = "开启游戏"
 		create_room_btn.pressed.connect(_on_create_room_pressed)
 	# Lobby 二层菜单导航
 	if create_card_btn != null and is_instance_valid(create_card_btn):
@@ -1319,6 +1341,7 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 			})
 	return {
 		"__id": _game_id,
+		"size": {"width": w, "height": h},
 		"width": w,
 		"height": h,
 		"biome": GameState.game_summary.get("map_biome", "grass"),
@@ -2059,13 +2082,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if board == null:
 			return
+		if board.has_method("handle_camera_input_from_owner"):
+			board.call("handle_camera_input_from_owner", event)
 		# 关 pause/settings 后再处理
 		if (settings_panel != null and settings_panel.visible) \
 				or (pause_panel != null and pause_panel.visible) \
 				or (war_report_panel != null and war_report_panel.visible):
 			return
 		var unit_id: int = board.pick_unit_at_screen(event.global_position)
-		print("[CLICK] _unhandled_input LMB: unit_id=%d move_mode=%d atk_mode=%d" % [unit_id, _move_mode_unit_id, _attack_mode_unit_id])
 		if unit_id > 0:
 			board.emit_unit_clicked(unit_id)
 		else:
@@ -3897,9 +3921,18 @@ func _show_lobby_create_view() -> void:
 		choose_panel.visible = false
 	_set_lobby_detail_visible(false)
 	_set_lobby_dualcol_visible(true)
-	_set_lobby_leftcol_visible(false)
+	_set_lobby_leftcol_visible(true)
 	_set_lobby_rightcol_visible(true)
+	_set_lobby_join_controls_visible(false)
+	_set_lobby_map_controls_visible(true)
+	_set_lobby_left_header_text("地图预览")
+	_set_lobby_global_team_controls_visible(false)
+	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
+		lobby_commander_option.visible = false
+	if create_room_btn != null and is_instance_valid(create_room_btn):
+		create_room_btn.text = "开启游戏"
 	_restore_lobby_default_layout()
+	_layout_lobby_entry_form()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -3912,7 +3945,14 @@ func _show_lobby_join_view() -> void:
 	_set_lobby_dualcol_visible(true)
 	_set_lobby_leftcol_visible(true)
 	_set_lobby_rightcol_visible(false)
+	_set_lobby_join_controls_visible(true)
+	_set_lobby_map_controls_visible(false)
+	_set_lobby_left_header_text("房间列表")
+	_set_lobby_global_team_controls_visible(true)
+	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
+		lobby_commander_option.visible = true
 	_restore_lobby_default_layout()
+	_layout_lobby_entry_form()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -4049,6 +4089,15 @@ func _restore_lobby_default_layout() -> void:
 		start_game_inline_btn.visible = false
 
 
+func _layout_lobby_entry_form() -> void:
+	if lobby_view == null:
+		return
+	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
+	if dual_col != null:
+		dual_col.offset_top = 24.0
+		dual_col.offset_bottom = -48.0
+
+
 func _set_lobby_dualcol_visible(v: bool) -> void:
 	if lobby_view == null:
 		return
@@ -4073,6 +4122,44 @@ func _set_lobby_rightcol_visible(v: bool) -> void:
 		right_col.visible = v
 
 
+func _set_lobby_join_controls_visible(v: bool) -> void:
+	for node in [room_list, room_select_option, join_mode_option, refresh_rooms_btn, join_selected_btn]:
+		if node != null and is_instance_valid(node):
+			node.visible = v
+	var row := lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow") if lobby_view != null else null
+	if row != null:
+		row.visible = v
+	var spacer := lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftBottomSpacer") if lobby_view != null else null
+	if spacer != null:
+		spacer.visible = v
+
+
+func _set_lobby_map_controls_visible(v: bool) -> void:
+	if lobby_view == null:
+		return
+	var picker: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow") as Control
+	if picker != null:
+		picker.visible = v
+	if map_preview_panel != null and is_instance_valid(map_preview_panel):
+		map_preview_panel.visible = v
+
+
+func _set_lobby_left_header_text(text: String) -> void:
+	if lobby_view == null:
+		return
+	var header: Label = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftHeader") as Label
+	if header != null:
+		header.text = text
+
+
+func _set_lobby_global_team_controls_visible(v: bool) -> void:
+	if lobby_view == null:
+		return
+	var team_row: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/RightCol/TeamRow") as Control
+	if team_row != null:
+		team_row.visible = v
+
+
 func _on_create_card_pressed() -> void:
 	_show_lobby_create_view()
 
@@ -4086,12 +4173,15 @@ func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
 	_game_id = int(body.get("id", 0))
 	if _game_id <= 0:
 		lobby_status_label.text = "创建失败"
+		_pending_lobby_start_after_create = false
 		return
 	UserSettings.set_value("session.v1.last_game_id", _game_id)
 	lobby_game_id_label.text = "对局 #%d · 等待中" % _game_id
 	# 自动 join
-	NetworkClient.join_game(_game_id, _user_name, "red",
-		"", "", Callable(self, "_on_lobby_join_response"))
+	var seat_index := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
+	var seat_color := str(MapPreviewSummary.SEAT_COLORS[seat_index])
+	NetworkClient.join_game(_game_id, _user_name, seat_color,
+		_selected_lobby_seat_team(seat_index), "", Callable(self, "_on_lobby_join_response"), seat_index)
 
 
 # 创建房间后自动加 AI(等同 webui app.js 的默认行为)
@@ -4113,9 +4203,8 @@ func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
 	_show_lobby_in_room()
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
-	# 自动加 AI(仅 free / lobby_create 流程)
-	if _entry_flow == "lobby_create" and _game_id > 0:
-		_auto_add_ai_after_lobby_create()
+	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
+		_continue_lobby_create_pipeline()
 
 
 func _auto_add_ai_after_lobby_create() -> void:
@@ -4133,6 +4222,109 @@ func _auto_add_ai_after_lobby_create() -> void:
 
 func _on_auto_add_ai_response(_body: Variant, _code: int, _expect_more: bool = false) -> void:
 	pass  # 这里只触发,可以扩展添加多个 AI
+
+
+func _selected_lobby_player_count() -> int:
+	var selected: Dictionary = _selected_lobby_map_data()
+	if selected.is_empty():
+		return 2
+	return clampi(int(selected.get("recommended_players", 2)), 2, MapPreviewSummary.SEAT_COLORS.size())
+
+
+func _selected_lobby_seat_commanders() -> Dictionary:
+	var result: Dictionary = {}
+	for seat_index in range(_selected_lobby_player_count()):
+		var commander_id := _lobby_seat_commander_id(seat_index)
+		if commander_id != "":
+			result[seat_index] = commander_id
+	return result
+
+
+func _continue_lobby_create_pipeline() -> void:
+	_pending_lobby_ai_seats.clear()
+	_pending_lobby_team_updates.clear()
+	var host_seat := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
+	if _player_id > 0:
+		_pending_lobby_team_updates.append({
+			"player_id": _player_id,
+			"team": _selected_lobby_seat_team(host_seat),
+		})
+	var player_count := _selected_lobby_player_count()
+	for seat_index in range(player_count):
+		if seat_index != host_seat and _lobby_ai_replacement_for_seat(seat_index):
+			_pending_lobby_ai_seats.append(seat_index)
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "正在应用座位、AI 与队伍设置..."
+	_continue_lobby_ai_creation()
+
+
+func _continue_lobby_ai_creation() -> void:
+	if _pending_lobby_ai_seats.is_empty():
+		_continue_lobby_team_updates()
+		return
+	var seat_index: int = int(_pending_lobby_ai_seats.pop_front())
+	NetworkClient.add_ai_player(
+		_game_id,
+		_selected_ai_difficulty(),
+		_selected_ai_kind(),
+		_selected_ai_personality(),
+		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index)
+	)
+
+
+func _on_lobby_configured_ai_added(body: Variant, code: int = 0, seat_index: int = 0) -> void:
+	if code >= 200 and code < 300 and body is Dictionary:
+		var pid := int(body.get("id", body.get("player_id", 0)))
+		var player: Variant = body.get("player", {})
+		if pid <= 0 and player is Dictionary:
+			pid = int(player.get("id", 0))
+		if pid > 0:
+			NetworkClient.update_player_seat(
+				_game_id,
+				pid,
+				_player_id,
+				seat_index,
+				Callable(self, "_on_lobby_configured_ai_seated").bind(pid, seat_index)
+			)
+			return
+	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "AI 座位配置失败，继续尝试开启游戏..."
+	_continue_lobby_ai_creation()
+
+
+func _on_lobby_configured_ai_seated(_body: Variant, _code: int = 0, pid: int = 0, seat_index: int = 0) -> void:
+	if pid > 0:
+		_pending_lobby_team_updates.append({
+			"player_id": pid,
+			"team": _selected_lobby_seat_team(seat_index),
+		})
+	_continue_lobby_ai_creation()
+
+
+func _continue_lobby_team_updates() -> void:
+	if _pending_lobby_team_updates.is_empty():
+		_start_configured_lobby_game()
+		return
+	var update: Dictionary = _pending_lobby_team_updates.pop_front()
+	NetworkClient.update_player_team(
+		_game_id,
+		int(update.get("player_id", 0)),
+		_player_id,
+		str(update.get("team", "")),
+		Callable(self, "_on_lobby_configured_team_updated")
+	)
+
+
+func _on_lobby_configured_team_updated(_body: Variant, _code: int = 0) -> void:
+	_continue_lobby_team_updates()
+
+
+func _start_configured_lobby_game() -> void:
+	if not _pending_lobby_start_after_create:
+		return
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "配置完成，正在开启游戏..."
+	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
 
 
 
@@ -4363,9 +4555,12 @@ func _selected_ai_personality() -> String:
 func _load_lobby_presets() -> void:
 	if map_preset_option == null or not is_instance_valid(map_preset_option):
 		return
+	_setup_lobby_map_player_count_options()
 	map_preset_option.clear()
 	map_preset_option.add_item("标准双人图")
-	_preset_options = [{"id": "balanced_2p_15", "biome": "grass"}]
+	_all_preset_options = [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
+	_render_lobby_map_picker_options()
+	_render_lobby_map_preview()
 	NetworkClient.list_presets(Callable(self, "_on_lobby_presets_response"))
 
 
@@ -4376,9 +4571,10 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 	if body is Dictionary:
 		maps = (body as Dictionary).get("maps", [])
 	if maps.is_empty():
+		_render_lobby_map_preview()
 		return
 	map_preset_option.clear()
-	_preset_options = []
+	_all_preset_options = []
 	for item in maps:
 		if not item is Dictionary:
 			continue
@@ -4394,8 +4590,364 @@ func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
 		var label := name
 		if players > 0:
 			label = "%s (%d 人)" % [name, players]
+		var record: Dictionary = {"id": id, "name": name, "biome": biome, "recommended_players": players}
+		for key in item.keys():
+			if not record.has(key):
+				record[key] = item[key]
+		_all_preset_options.append(record)
+	_render_lobby_map_picker_options()
+	_render_lobby_map_preview()
+
+
+func _setup_lobby_map_player_count_options() -> void:
+	if map_player_count_option == null or not is_instance_valid(map_player_count_option):
+		return
+	map_player_count_option.clear()
+	map_player_count_option.add_item("全部地图")
+	for players in [2, 3, 4]:
+		map_player_count_option.add_item("%d人地图" % players)
+	map_player_count_option.select(0)
+
+
+func _on_lobby_map_player_count_selected(index: int) -> void:
+	_lobby_preset_filter_players = index + 1 if index > 0 else 0
+	_render_lobby_map_picker_options()
+	_render_lobby_map_preview()
+
+
+func _on_lobby_map_preset_selected(_index: int) -> void:
+	_render_lobby_map_preview()
+
+
+func _render_lobby_map_picker_options() -> void:
+	if map_preset_option == null or not is_instance_valid(map_preset_option):
+		return
+	map_preset_option.clear()
+	_preset_options = []
+	for item in _all_preset_options:
+		if not item is Dictionary:
+			continue
+		var record: Dictionary = item
+		var players := int(record.get("recommended_players", 0))
+		if _lobby_preset_filter_players > 0 and players != _lobby_preset_filter_players:
+			continue
+		_preset_options.append(record)
+		var name := str(record.get("name", record.get("id", "map")))
+		var label := name
+		if players > 0:
+			label = "%s (%d人)" % [name, players]
 		map_preset_option.add_item(label)
-		_preset_options.append({"id": id, "biome": biome})
+	if _preset_options.is_empty():
+		map_preset_option.add_item("暂无该人数地图")
+		map_preset_option.disabled = true
+	else:
+		map_preset_option.disabled = false
+		map_preset_option.select(0)
+
+
+func _render_lobby_map_preview() -> void:
+	if map_faction_summary == null or not is_instance_valid(map_faction_summary):
+		return
+	var map_data := _selected_lobby_map_data()
+	if map_data.is_empty():
+		map_faction_summary.text = "请选择地图查看初始部署。"
+		if map_preview_texture != null and is_instance_valid(map_preview_texture):
+			map_preview_texture.texture = null
+		_render_lobby_seat_columns({})
+		return
+	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
+	var title := str(summary.get("name", summary.get("id", "Map")))
+	var size_text := "%dx%d" % [int(summary.get("width", 0)), int(summary.get("height", 0))]
+	var players := int(summary.get("recommended_players", 0))
+	map_faction_summary.text = "[b]%s[/b]  %s  %dP\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
+	if map_preview_texture != null and is_instance_valid(map_preview_texture):
+		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
+	_render_lobby_seat_columns(summary)
+
+
+func _selected_lobby_map_data() -> Dictionary:
+	var selected := _selected_lobby_preset_record()
+	if selected.is_empty():
+		return {}
+	var map_id := str(selected.get("id", ""))
+	var map_data := selected.duplicate(true)
+	if map_data.has("layout") and map_data.has("size"):
+		return map_data
+	var disk_map := _load_lobby_map_from_disk(map_id)
+	if not disk_map.is_empty():
+		for key in disk_map.keys():
+			map_data[key] = disk_map[key]
+	return map_data
+
+
+func _selected_lobby_preset_record() -> Dictionary:
+	var idx := 0
+	if map_preset_option != null and is_instance_valid(map_preset_option):
+		idx = map_preset_option.selected
+	if idx >= 0 and idx < _preset_options.size():
+		return (_preset_options[idx] as Dictionary)
+	return {}
+
+
+func _load_lobby_map_from_disk(map_id: String) -> Dictionary:
+	if map_id.begins_with("custom:"):
+		return {}
+	for path in ["res://../game/maps/%s.json" % map_id, "res://../../game/maps/%s.json" % map_id, "res://../../../game/maps/%s.json" % map_id]:
+		if not FileAccess.file_exists(path):
+			continue
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		file.close()
+		if parsed is Dictionary:
+			return parsed
+	return {}
+
+
+func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
+	if lobby_seat_grid == null or not is_instance_valid(lobby_seat_grid):
+		return
+	for child in lobby_seat_grid.get_children():
+		lobby_seat_grid.remove_child(child)
+		child.free()
+	if summary.is_empty():
+		var map_data := _selected_lobby_map_data()
+		if not map_data.is_empty():
+			summary = MapPreviewSummary.summarize_map(map_data)
+	var factions: Dictionary = summary.get("factions", {})
+	var players := int(summary.get("recommended_players", factions.size()))
+	players = mini(maxi(players, 0), MapPreviewSummary.SEAT_COLORS.size())
+	for i in range(players):
+		var color_id: String = MapPreviewSummary.SEAT_COLORS[i]
+		lobby_seat_grid.add_child(_build_lobby_seat_card(i, color_id))
+
+
+func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
+	var card := Panel.new()
+	card.name = "Seat%d" % (index + 1)
+	card.custom_minimum_size = Vector2(0, 160)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	MenuTheme.apply_panel_theme(card, Color(0.08, 0.13, 0.1, 0.96))
+	var box := VBoxContainer.new()
+	box.name = "SeatBox"
+	box.anchor_right = 1.0
+	box.anchor_bottom = 1.0
+	box.offset_left = 8.0
+	box.offset_top = 6.0
+	box.offset_right = -8.0
+	box.offset_bottom = -6.0
+	box.add_theme_constant_override("separation", 3)
+	card.add_child(box)
+	var top_row := HBoxContainer.new()
+	top_row.name = "SeatTopRow"
+	top_row.add_theme_constant_override("separation", 6)
+	box.add_child(top_row)
+	var portrait := ColorRect.new()
+	portrait.name = "FactionPortrait"
+	portrait.custom_minimum_size = Vector2(34, 34)
+	portrait.color = _seat_display_color(color_id)
+	top_row.add_child(portrait)
+	var status_box := VBoxContainer.new()
+	status_box.name = "SeatStatusBox"
+	status_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.add_child(status_box)
+	var seat_name := Label.new()
+	seat_name.name = "SeatName"
+	seat_name.text = "%d席  %s" % [index + 1, _seat_color_label(color_id)]
+	seat_name.add_theme_color_override("font_color", _seat_display_color(color_id))
+	status_box.add_child(seat_name)
+	var occupant := Label.new()
+	occupant.name = "SeatOccupant"
+	var occupant_name := _lobby_seat_occupant_name(index)
+	occupant.text = "等待玩家入座" if occupant_name == "" else "%s 已入座" % occupant_name
+	occupant.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	status_box.add_child(occupant)
+	var control_row := HBoxContainer.new()
+	control_row.name = "SeatControlRow"
+	control_row.add_theme_constant_override("separation", 6)
+	box.add_child(control_row)
+	var action_btn := Button.new()
+	action_btn.name = "SeatActionBtn"
+	action_btn.text = "入座"
+	action_btn.custom_minimum_size = Vector2(50, 26)
+	MenuTheme.apply_button_theme(action_btn, 12)
+	action_btn.pressed.connect(_on_lobby_seat_action_pressed.bind(index))
+	control_row.add_child(action_btn)
+	var side_option := OptionButton.new()
+	side_option.name = "TeamSideOption"
+	side_option.custom_minimum_size = Vector2(78, 26)
+	for side_name in ["Team A", "Team B", "Team C", "Team D"]:
+		side_option.add_item(side_name)
+	side_option.select(_lobby_team_index_for_seat(index))
+	side_option.item_selected.connect(_on_lobby_seat_team_selected.bind(index))
+	control_row.add_child(side_option)
+	var ai_toggle := CheckBox.new()
+	ai_toggle.name = "AiReplaceToggle"
+	ai_toggle.text = "AI替补"
+	ai_toggle.custom_minimum_size = Vector2(80, 26)
+	ai_toggle.button_pressed = _lobby_ai_replacement_for_seat(index)
+	ai_toggle.toggled.connect(_on_lobby_seat_ai_toggled.bind(index))
+	ai_toggle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+	control_row.add_child(ai_toggle)
+	var commander_row := HBoxContainer.new()
+	commander_row.name = "CommanderRow"
+	commander_row.add_theme_constant_override("separation", 4)
+	box.add_child(commander_row)
+	var prev_btn := Button.new()
+	prev_btn.name = "PrevCommanderBtn"
+	prev_btn.text = "<"
+	prev_btn.custom_minimum_size = Vector2(28, 22)
+	MenuTheme.apply_button_theme(prev_btn, 12)
+	prev_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, -1))
+	commander_row.add_child(prev_btn)
+	var commander_label := Label.new()
+	commander_label.name = "CommanderName"
+	commander_label.text = _lobby_seat_commander_label(index)
+	commander_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	commander_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+	commander_row.add_child(commander_label)
+	var next_btn := Button.new()
+	next_btn.name = "NextCommanderBtn"
+	next_btn.text = ">"
+	next_btn.custom_minimum_size = Vector2(28, 22)
+	MenuTheme.apply_button_theme(next_btn, 12)
+	next_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, 1))
+	commander_row.add_child(next_btn)
+	var ability := Label.new()
+	ability.name = "CommanderAbility"
+	ability.text = _lobby_seat_commander_ability_text(index)
+	ability.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+	box.add_child(ability)
+	return card
+
+
+func _lobby_team_index_for_seat(seat_index: int) -> int:
+	if seat_index >= 0 and seat_index < _lobby_seat_team_ids.size():
+		match _lobby_seat_team_ids[seat_index]:
+			"team_b": return 1
+			"team_c": return 2
+			"team_d": return 3
+			_: return 0
+	return mini(maxi(seat_index, 0), 3)
+
+
+func _lobby_team_id_for_index(index: int) -> String:
+	match index:
+		1: return "team_b"
+		2: return "team_c"
+		3: return "team_d"
+		_: return "team_a"
+
+
+func _selected_lobby_seat_team(seat_index: int) -> String:
+	if seat_index >= 0 and seat_index < _lobby_seat_team_ids.size():
+		return _lobby_seat_team_ids[seat_index]
+	return _lobby_team_id_for_index(seat_index)
+
+
+func _lobby_ai_replacement_for_seat(seat_index: int) -> bool:
+	if seat_index >= 0 and seat_index < _lobby_seat_ai_replacements.size():
+		return bool(_lobby_seat_ai_replacements[seat_index])
+	return false
+
+
+func _lobby_seat_occupant_name(seat_index: int) -> String:
+	if seat_index >= 0 and seat_index < _lobby_seat_occupants.size():
+		return str(_lobby_seat_occupants[seat_index])
+	return ""
+
+
+func _lobby_seat_commander_id(seat_index: int) -> String:
+	if _lobby_commander_ids.is_empty():
+		return ""
+	var idx := 0
+	if seat_index >= 0 and seat_index < _lobby_seat_commander_indices.size():
+		idx = int(_lobby_seat_commander_indices[seat_index])
+	idx = clampi(idx, 0, _lobby_commander_ids.size() - 1)
+	return _lobby_commander_ids[idx]
+
+
+func _lobby_seat_commander_label(seat_index: int) -> String:
+	var commander_id := _lobby_seat_commander_id(seat_index)
+	return "未选择" if commander_id == "" else _commander_label(commander_id)
+
+
+func _lobby_seat_commander_ability_text(seat_index: int) -> String:
+	var commander_id := _lobby_seat_commander_id(seat_index)
+	match commander_id:
+		"yun": return "能力：稳健推进"
+		"anna": return "能力：快速抢点"
+		"": return "能力：默认规则"
+		_: return "能力：专属指挥"
+
+
+func _on_lobby_seat_team_selected(option_index: int, seat_index: int) -> void:
+	while _lobby_seat_team_ids.size() <= seat_index:
+		_lobby_seat_team_ids.append("team_a")
+	_lobby_seat_team_ids[seat_index] = _lobby_team_id_for_index(option_index)
+
+
+func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
+	while _lobby_seat_ai_replacements.size() <= seat_index:
+		_lobby_seat_ai_replacements.append(false)
+	_lobby_seat_ai_replacements[seat_index] = pressed
+
+
+func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
+	if _lobby_commander_ids.is_empty():
+		return
+	while _lobby_seat_commander_indices.size() <= seat_index:
+		_lobby_seat_commander_indices.append(0)
+	_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) + delta, _lobby_commander_ids.size())
+	_render_lobby_seat_columns()
+
+
+func _on_lobby_seat_action_pressed(seat_index: int) -> void:
+	_selected_lobby_seat_index = clampi(seat_index, 0, MapPreviewSummary.SEAT_COLORS.size() - 1)
+	while _lobby_seat_occupants.size() <= seat_index:
+		_lobby_seat_occupants.append("")
+	_lobby_seat_occupants[seat_index] = _user_name
+	while _lobby_seat_ai_replacements.size() <= seat_index:
+		_lobby_seat_ai_replacements.append(false)
+	_lobby_seat_ai_replacements[seat_index] = false
+	if lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "%s 已入座 %d席。" % [_user_name, seat_index + 1]
+	_render_lobby_seat_columns()
+	if _game_id > 0 and _player_id > 0:
+		NetworkClient.update_player_seat(
+			_game_id,
+			_player_id,
+			_player_id,
+			_selected_lobby_seat_index,
+			Callable(self, "_on_lobby_seat_update_response")
+		)
+
+
+func _on_lobby_seat_update_response(_body: Variant, code: int = 0) -> void:
+	if code >= 200 and code < 300:
+		_refresh_lobby_view()
+	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
+		lobby_status_label.text = "座位调整失败，请刷新房间后重试。"
+
+
+func _seat_color_label(color_id: String) -> String:
+	match color_id:
+		"red": return "红方"
+		"blue": return "蓝方"
+		"green": return "绿方"
+		"yellow": return "黄方"
+		_: return color_id
+
+
+func _seat_display_color(color_id: String) -> Color:
+	match color_id:
+		"red": return Color(0.95, 0.32, 0.24)
+		"blue": return Color(0.36, 0.56, 1.0)
+		"green": return Color(0.3, 0.8, 0.38)
+		"yellow": return Color(0.95, 0.78, 0.25)
+		_: return MenuTheme.C_TEXT_WARM
 
 
 func _refresh_room_list() -> void:
@@ -4494,7 +5046,8 @@ func _on_create_room_pressed() -> void:
 		preset_id = str(selected.get("id", preset_id))
 		biome = str(selected.get("biome", biome))
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在创建房间..."
+		lobby_status_label.text = "正在创建并开启游戏..."
+	_pending_lobby_start_after_create = true
 	NetworkClient.create_game(
 		room_name,
 		preset_id,
@@ -4503,7 +5056,8 @@ func _on_create_room_pressed() -> void:
 		_selected_lobby_commander(),
 		_selected_lobby_bgm_track(),
 		_selected_lobby_ai_commanders(),
-		Callable(self, "_on_lobby_create_response")
+		Callable(self, "_on_lobby_create_response"),
+		_selected_lobby_seat_commanders()
 	)
 
 
@@ -4547,6 +5101,17 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	var players: Array = body.get("players", []) if body.get("players", []) is Array else []
 	var max_spec: int = int(game.get("max_spectators", 8))
 	_lobby_last_players = players
+	for i in range(_lobby_seat_occupants.size()):
+		_lobby_seat_occupants[i] = ""
+	var host_player_id := 0
+	for p in players:
+		if p is Dictionary and not bool(p.get("is_spectator", false)):
+			var pid_for_host := int(p.get("id", 0))
+			if pid_for_host > 0 and (host_player_id <= 0 or pid_for_host < host_player_id):
+				host_player_id = pid_for_host
+			var pseat := int(p.get("seat", -1))
+			if pseat >= 0 and pseat < _lobby_seat_occupants.size():
+				_lobby_seat_occupants[pseat] = str(p.get("user_name", ""))
 	# 自己的 seat / 观战标记(房主 = seat 0)
 	var self_seat: int = -1
 	var self_is_spec: bool = false
@@ -4555,8 +5120,11 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 			self_seat = int(p.get("seat", -1))
 			self_is_spec = bool(p.get("is_spectator", false))
 			break
-	_lobby_is_host = (self_seat == 0)
+	if self_seat >= 0:
+		_selected_lobby_seat_index = self_seat
+	_lobby_is_host = (_player_id > 0 and _player_id == host_player_id)
 	_lobby_self_is_spectator = self_is_spec
+	_render_lobby_seat_columns()
 	# 渲染逐玩家列表(含 seat / 队伍 / 观战标记)
 	var lines: Array = []
 	var spec_count: int = 0
@@ -4820,6 +5388,12 @@ func _on_lobby_start_pressed() -> void:
 
 
 func _on_lobby_start_response(_body: Dictionary, _code: int = 0) -> void:
+	if _code < 200 or _code >= 300:
+		_pending_lobby_start_after_create = false
+		if lobby_status_label != null and is_instance_valid(lobby_status_label):
+			lobby_status_label.text = "开启失败"
+		return
+	_pending_lobby_start_after_create = false
 	# 启动游戏 — 切到 game 视图,接 WS
 	_show_view("game")
 	NetworkClient.connect_to_game(_game_id, _player_id)

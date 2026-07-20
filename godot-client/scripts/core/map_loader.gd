@@ -72,6 +72,11 @@ static func _decode_cell(char_a: String, char_b: String) -> Dictionary:
 
 
 static func _size_dict(map_json: Dictionary) -> Dictionary:
+	if map_json.has("width") or map_json.has("height"):
+		return {
+			"width": int(map_json.get("width", Config.MAP_SIZE_DEFAULT)),
+			"height": int(map_json.get("height", Config.MAP_SIZE_DEFAULT)),
+		}
 	var size_raw: Variant = map_json.get("size", Config.MAP_SIZE_DEFAULT)
 	if typeof(size_raw) == TYPE_INT:
 		return {"width": int(size_raw), "height": int(size_raw)}

@@ -43,6 +43,7 @@ class BattleConfig(BaseModel):
     audio: Optional[BattleAudioConfig] = None
     commander: Optional[str] = None
     ai_commanders: Optional[Dict[int, str]] = None
+    seat_commanders: Optional[Dict[int, str]] = None
 
 
 # ============================================================
@@ -70,6 +71,7 @@ class CreateGameRequest(BaseModel):
 class JoinGameRequest(BaseModel):
     user_name: str = Field(min_length=1, max_length=64)
     color: Optional[str] = None  # auto-assigned if missing
+    seat: Optional[int] = Field(default=None, ge=0)
     # P2.3 — team grouping. None falls back to `color` (1V1 free-for-all
     # behaviour preserved). Multiple players with the same team_id are
     # treated as one logical side for win-condition checks.
@@ -88,6 +90,12 @@ class UpdateTeamRequest(BaseModel):
     """Update a player's team in the lobby."""
     team: Optional[str] = Field(None, max_length=32)
     caller_player_id: int  # who is making this request (permission check)
+
+
+class UpdateSeatRequest(BaseModel):
+    """Move or swap a player's lobby seat."""
+    seat: int = Field(ge=0)
+    caller_player_id: int
 
 
 class RejoinGameRequest(BaseModel):
