@@ -1,0 +1,160 @@
+# BattleBlitz Godot Client
+
+Godot 4.7 frontend for BattleBlitz. The Python backend stays unchanged;
+this client replaces the old HTML/CSS/JS board renderer with a native
+`TileMapLayer`-based tactics board.
+
+See `../docs/路线/Godot移植方案.md` for the broader port context.
+
+> **Status as of 2026-07-19:** the Godot client is now close to replacing
+> the old Web UI for normal play. The old home-page "free play vs AI" entry
+> has been removed; users enter through mainline or the online lobby. It
+> covers room browsing and creation, lobby host controls, spectator
+> join/convert, team switching, save management, movement/attack/skill/
+> claim/recruit/wait/end-turn, dynamic action bubbles, CO HUD/power, BGM
+> selection, commander selection, mainline lifecycle with auto-abandon retry,
+> dialogue scenes, portrait assets, Chinese UI text, and a map editor with
+> terrain/surface/unit deployment modes, ownership metadata, and undo/redo
+> history.
+> Remaining gaps are mostly advanced parity and release polish: editor
+> fill/line/select, help/reference panels, AI commentary UI,
+> phase-aware polling/diagnostics, export-safe asset loading, and dynamic
+> backend data localization polish.
+
+## 2026-07-19 localization and action bubble status
+
+The current static Godot UI is localized to Chinese across the home screen,
+mainline flow, online lobby, room creation, settings, save manager, map
+editor, battle HUD, unit info, combat forecast, commander/power labels,
+recruit panel, action log, and common error/status text. A strict checker is
+available at `tools/check_chinese_ui.py`; it scans scene text and UI-facing
+script assignments so future English text does not quietly return.
+
+The battle action bubble now separates the first unit click from the
+post-move/post-action state. Buttons are shown from the unit's current legal
+options instead of a fixed five-button layout:
+
+- initial click: move, attack, active skill, capture, wait as applicable;
+- after moving: continue movement, attack, active skill, capture, wait as
+  applicable;
+- after attacking or using an action: wait, plus continue movement only for
+  unit types or data flags that allow move-after-action.
+
+The client only uses these checks to keep the UI honest. The backend remains
+authoritative for action validation and battle results.
+
+## 2026-07-19 editor history status
+
+The map editor now has Chinese "撤销" and "重做" buttons plus Ctrl+Z/Ctrl+Y
+shortcuts. Terrain painting, unit placement, unit erase, new-map creation, and
+map resizing push undo history; loading or saving a backend map resets that
+history so edits from one map cannot leak into another. The smoke test covers
+button presence, undo availability after painting, terrain rollback, redo
+availability, and redo reapply behavior.
+
+## 2026-07-19 editor deployment modes
+
+The editor mode selector is now split into "地形部署", "地表部署", and
+"单位部署". Terrain deployment paints natural/base terrain, surface
+deployment paints buildings such as castles, villages, barracks, and gates
+with optional ownership, and unit deployment places/removes starting units
+with red/blue/green/yellow team ownership.
+
+Owned surface buildings are saved as `tile_owners`, using color ids rather
+than database player ids. When a custom map starts, the backend resolves those
+colors to the actual joined players and applies `Tile.owner_id`.
+
+---
+
+## First-run setup
+
+Tile pixel art lives in `../game/app/web/assets/tiles/`. Sync it once into
+the Godot project before opening the editor:
+
+```bash
+python godot-client/tools/sync_assets.py
+```
+
+Then open
+`D:\PyCharm Community Edition 2024.3.3\PycharmProjects\Godot_v4.7-stable_win64\Godot_v4.7-stable_win64.exe`,
+choose `Import`, and point it at `godot-client/`.
+
+---
+
+## Headless sanity check
+
+Import assets without opening the editor:
+
+```bash
+"<godot_exe>" --headless --path godot-client --import --quit
+```
+
+Run the smoke test:
+
+```bash
+"<godot_exe>" --headless --path godot-client res://tools/smoke_test.tscn
+```
+
+Verify the two critical GUI entry flows against a running backend:
+
+```bash
+"<godot_exe>" --headless --path godot-client res://tools/entry_flow_e2e.tscn
+```
+
+Launch the demo board scene:
+
+```bash
+"<godot_exe>" --path godot-client
+```
+
+---
+
+## Project layout
+
+```text
+godot-client/
+├── project.godot
+├── README.md
+├── assets/
+│   └── tiles/                 # synced from game/app/web/assets/tiles/
+├── scripts/
+│   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings
+│   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, types
+│   ├── board/                 # board, board_camera, highlights, unit_node
+│   └── main.gd
+├── scenes/
+│   ├── main.tscn
+│   └── board.tscn
+└── tools/
+    ├── sync_assets.py
+    ├── smoke_test.gd
+    └── entry_flow_e2e.gd
+```
+
+---
+
+## Milestones
+
+- [x] **M0 - Skeleton.** `project.godot`, autoloads, config mirrors, and shared types.
+- [x] **M1 - 48x48 map presentation baseline.** `MapMetrics` owns board scale,
+      `MapTheme` routes terrain into ground / structure / decor layers,
+      `MapLoader` reads `game/maps/*.json`, and `Board` renders tiles,
+      highlights, static units, and camera bounds.
+- [x] **M2 - Online play core.** WebSocket subscription, REST action wrappers,
+      move/attack/claim/recruit/end-turn paths, action log, HUD refresh, and
+      reconnect/resume hooks are present.
+- [x] **M3 - Main feature parity slices.** Lobby room browsing, create/join,
+      spectator join option, team switching, add/remove AI, AI personality,
+      BGM selection, commander selection, save manager, combat confirmation,
+      CO meter/power, dialogue, and mainline lifecycle controls are present.
+- [ ] **M3.5 - Web UI parity polish.** Remaining work: full map editor,
+      help/reference panels, commentary UI, diagnostics, and full integration/e2e coverage against
+      a running backend.
+- [ ] **M4 - Touch + mobile export.** Android + iOS input remap, gesture camera.
+- [ ] **M5 - Backend deploy + Web export.** WSS on a public host, HTML5 export.
+
+For the current gap list, see
+`../docs/WebUI-vs-GodotClient-差异与计划.md`.
+
+For the backend contract used by this client, see
+`../docs/参考/Godot客户端后端接口.md`.

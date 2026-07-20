@@ -246,6 +246,27 @@ class TestStartMainline:
         assert body["pre_battle_dialogue_url"] and \
             body["pre_battle_dialogue_url"].endswith("intro.json")
 
+    async def test_start_respects_disabled_prepare_unit_indices(self, ml_client):
+        client, SessionLocal = ml_client
+        await _create_profile(client, "alice")
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/start",
+            json={"user_name": "alice", "skip_intro": True, "disabled_unit_indices": [2]},
+        )
+        assert r.status_code == 201, r.text
+
+        from app.models import Game, Player, Unit
+        async with SessionLocal() as s:
+            game = (await s.execute(select(Game))).scalar_one()
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game.id, Player.user_name == "alice")
+            )).scalar_one()
+            units = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id)
+            )).scalars().all()
+            assert len(units) == 4
+            assert "archer" not in sorted(unit.unit_type for unit in units)
+
     async def test_start_writes_mainline_progress(self, ml_client):
         client, _ = ml_client
         await _create_profile(client, "alice")
@@ -267,6 +288,260 @@ class TestStartMainline:
             # 'scene_id' should be 'intro' or the first dialogue key
             assert row.mainline_progress["scene_id"]
             assert row.mainline_progress["started_at"] is not None
+
+    async def test_start_initializes_and_applies_hero_campaign_states(self, ml_client):
+        client, SessionLocal = ml_client
+        await _create_profile(client, "alice")
+
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            row.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "warlock",
+                    "level": 7,
+                    "exp": 33,
+                    "base_stats": {
+                        "hp": 61,
+                        "atk": 29,
+                        "def": 15,
+                        "matk": 36,
+                        "mdef": 18,
+                        "mov": 5,
+                        "mp": 11,
+                    },
+                    "weapon_ranks": {},
+                    "learned_skills": ["arcane_strike", "veteran_focus"],
+                    "promoted": False,
+                    "equipment": {},
+                }
+            }
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/start",
+            json={"user_name": "alice", "skip_intro": True},
+        )
+        assert r.status_code == 201, r.text
+
+        from app.models import Game, Player, Unit
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            assert "yun" in row.hero_campaign_states
+            assert "anna" in row.hero_campaign_states
+
+            game = (await s.execute(select(Game))).scalar_one()
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game.id, Player.user_name == "alice")
+            )).scalar_one()
+            units = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id)
+            )).scalars().all()
+            yun = next(unit for unit in units if unit.hero_id == "yun")
+            anna = next(unit for unit in units if unit.hero_id == "anna")
+
+            assert yun.level == 7
+            assert yun.exp == 33
+            assert yun.unit_type == "warlock"
+            assert yun.hp == 61
+            assert yun.max_hp == 61
+            assert yun.atk == 29
+            assert yun.def_ == 15
+            assert yun.matk == 36
+            assert yun.mdef == 18
+            assert yun.mov == 5
+            assert yun.mp == 11
+            assert "veteran_focus" in yun.skills
+
+            assert anna.level == 1
+            assert anna.hero_id == "anna"
+
+    async def test_prepare_surfaces_hero_growth_and_inventory(self, ml_client):
+        client, SessionLocal = ml_client
+        await _create_profile(client, "alice")
+
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            row.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "warlock",
+                    "level": 20,
+                    "exp": 88,
+                    "base_stats": {
+                        "hp": 63,
+                        "atk": 30,
+                        "def": 16,
+                        "matk": 39,
+                        "mdef": 19,
+                        "mov": 5,
+                        "mp": 12,
+                    },
+                    "weapon_ranks": {},
+                    "learned_skills": ["arcane_strike"],
+                    "promoted": False,
+                    "equipment": {},
+                }
+            }
+            row.hero_inventory = {"hero_crest": 1}
+            await s.commit()
+
+        r = await client.get(
+            "/mainlines/chapter_01_steel_rebellion/prepare",
+            params={"user_name": "alice"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["mainline_id"] == "chapter_01_steel_rebellion"
+        assert body["battle_id"] == "battle_01"
+        assert body["inventory"]["hero_crest"] == 1
+        assert len(body["heroes"]) >= 2
+        assert len(body["roster_units"]) >= 2
+
+        yun = next(hero for hero in body["heroes"] if hero["hero_id"] == "yun")
+        anna = next(hero for hero in body["heroes"] if hero["hero_id"] == "anna")
+        assert yun["level"] == 20
+        assert yun["exp"] == 88
+        assert yun["can_promote"] is True
+        assert "sage" in yun["promotion_options"]
+        assert anna["level"] >= 1
+
+    async def test_prepare_marks_an_active_campaign_for_resume(self, ml_client):
+        client, SessionLocal = ml_client
+        profile_id = await _create_profile(client, "alice")
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            profile = await s.get(PlayerProfile, profile_id)
+            profile.active_mainline = "chapter_01_steel_rebellion"
+            profile.mainline_progress = {"battle_index": 1, "scene_id": "battle_01_after"}
+            await s.commit()
+
+        response = await client.get(
+            "/mainlines/chapter_01_steel_rebellion/prepare",
+            params={"user_name": "alice"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["is_active"] is True
+        assert response.json()["battle_index"] == 1
+
+    async def test_prepare_promote_consumes_crest_and_updates_hero_state(self, ml_client):
+        client, SessionLocal = ml_client
+        await _create_profile(client, "alice")
+
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            row.active_mainline = "chapter_01_steel_rebellion"
+            row.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "warlock",
+                    "level": 20,
+                    "exp": 88,
+                    "base_stats": {
+                        "hp": 63,
+                        "atk": 30,
+                        "def": 16,
+                        "matk": 39,
+                        "mdef": 19,
+                        "mov": 5,
+                        "mp": 12,
+                    },
+                    "weapon_ranks": {},
+                    "learned_skills": ["arcane_strike"],
+                    "promoted": False,
+                    "equipment": {},
+                }
+            }
+            row.hero_inventory = {"hero_crest": 1}
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/prepare/promote",
+            json={
+                "user_name": "alice",
+                "hero_id": "yun",
+                "target_class_id": "sage",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["class_id"] == "sage"
+        assert body["promoted"] is True
+        assert body["hero_crest_left"] == 0
+
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            assert row.hero_campaign_states["yun"]["class_id"] == "sage"
+            assert row.hero_campaign_states["yun"]["promoted"] is True
+            assert row.hero_campaign_states["yun"]["level"] == 1
+            assert row.hero_inventory == {}
+
+    async def test_start_applies_promoted_hero_campaign_class(self, ml_client):
+        client, SessionLocal = ml_client
+        await _create_profile(client, "alice")
+
+        from app.progression.models import PlayerProfile
+        async with SessionLocal() as s:
+            row = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            row.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "sage",
+                    "level": 4,
+                    "exp": 12,
+                    "base_stats": {
+                        "hp": 58,
+                        "atk": 23,
+                        "def": 14,
+                        "matk": 38,
+                        "mdef": 19,
+                        "mov": 5,
+                        "mp": 12,
+                    },
+                    "weapon_ranks": {},
+                    "learned_skills": ["arcane_strike"],
+                    "promoted": True,
+                    "equipment": {},
+                }
+            }
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/start",
+            json={"user_name": "alice", "skip_intro": True},
+        )
+        assert r.status_code == 201, r.text
+
+        from app.models import Game, Player, Unit
+        async with SessionLocal() as s:
+            game = (await s.execute(select(Game))).scalar_one()
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game.id, Player.user_name == "alice")
+            )).scalar_one()
+            units = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id)
+            )).scalars().all()
+            yun = next(unit for unit in units if unit.hero_id == "yun")
+
+            assert yun.unit_type == "sage"
+            assert yun.level == 4
+            assert yun.matk == 38
+            assert yun.mp == 12
 
 
 # ============================================================
@@ -395,6 +670,161 @@ class TestAdvance:
             body["post_battle_dialogue_url"].endswith("battle_01_after.json")
         assert body["rewards"] is None  # not the last battle
         assert body["battle_index"] == 1  # cursor advanced
+
+    async def test_advance_persists_hero_campaign_growth_from_finished_battle(self, ml_client):
+        client, _ = ml_client
+        await _create_profile(client, "alice")
+        game_id, _ = await _start_then_finish_battle(client, _, "alice")
+
+        from app.database import AsyncSessionLocal
+        from app.models import Player, Unit
+        from app.progression.models import PlayerProfile
+        async with AsyncSessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            profile.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "warlock",
+                    "level": 2,
+                    "exp": 10,
+                    "base_stats": {
+                        "hp": 50,
+                        "atk": 20,
+                        "def": 11,
+                        "matk": 27,
+                        "mdef": 12,
+                        "mov": 4,
+                        "mp": 8,
+                    },
+                    "weapon_ranks": {"anima": 2},
+                    "learned_skills": ["arcane_strike"],
+                    "promoted": False,
+                    "equipment": {"weapon": "oak_staff"},
+                }
+            }
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game_id, Player.user_name == "alice")
+            )).scalar_one()
+            yun = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id, Unit.hero_id == "yun")
+            )).scalar_one()
+            yun.level = 8
+            yun.exp = 77
+            yun.hp = 17
+            yun.max_hp = 68
+            yun.atk = 31
+            yun.def_ = 18
+            yun.matk = 40
+            yun.mdef = 21
+            yun.mov = 6
+            yun.mp = 1
+            yun.skills = ["arcane_strike", "veteran_focus"]
+            # Battle progression now updates a separate naked-stat snapshot;
+            # simulate that authoritative combat progression rather than
+            # treating the equipment-modified Unit fields as persistent data.
+            yun.campaign_base_stats = {
+                "hp": 68,
+                "atk": 31,
+                "def": 18,
+                "matk": 40,
+                "mdef": 21,
+                "mov": 6,
+                "mp": 8,
+            }
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/advance",
+            json={"user_name": "alice", "game_id": game_id},
+        )
+        assert r.status_code == 200, r.text
+
+        async with AsyncSessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            saved = profile.hero_campaign_states["yun"]
+            assert saved["level"] == 8
+            assert saved["exp"] == 77
+            assert saved["class_id"] == "warlock"
+            assert saved["base_stats"]["hp"] == 68
+            assert saved["base_stats"]["atk"] == 31
+            assert saved["base_stats"]["def"] == 18
+            assert saved["base_stats"]["matk"] == 40
+            assert saved["base_stats"]["mdef"] == 21
+            assert saved["base_stats"]["mov"] == 6
+            # Current-battle MP is temporary and should not overwrite long-term pool.
+            assert saved["base_stats"]["mp"] == 8
+            assert saved["learned_skills"] == ["arcane_strike", "veteran_focus"]
+            assert saved["weapon_ranks"] == {"anima": 2}
+            assert saved["equipment"] == {"weapon": "oak_staff"}
+
+    async def test_advance_marks_promoted_hero_state_for_promoted_class(self, ml_client):
+        client, _ = ml_client
+        await _create_profile(client, "alice")
+        game_id, _ = await _start_then_finish_battle(client, _, "alice")
+
+        from app.database import AsyncSessionLocal
+        from app.models import Player, Unit
+        from app.progression.models import PlayerProfile
+        async with AsyncSessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            profile.hero_campaign_states = {
+                "yun": {
+                    "hero_id": "yun",
+                    "class_id": "warlock",
+                    "level": 20,
+                    "exp": 0,
+                    "base_stats": {
+                        "hp": 50,
+                        "atk": 20,
+                        "def": 11,
+                        "matk": 27,
+                        "mdef": 12,
+                        "mov": 4,
+                        "mp": 8,
+                    },
+                    "weapon_ranks": {},
+                    "learned_skills": ["arcane_strike"],
+                    "promoted": False,
+                    "equipment": {},
+                }
+            }
+            human = (await s.execute(
+                select(Player).where(Player.game_id == game_id, Player.user_name == "alice")
+            )).scalar_one()
+            yun = (await s.execute(
+                select(Unit).where(Unit.player_id == human.id, Unit.hero_id == "yun")
+            )).scalar_one()
+            yun.unit_type = "sage"
+            yun.level = 3
+            yun.exp = 15
+            yun.max_hp = 58
+            yun.atk = 23
+            yun.def_ = 14
+            yun.matk = 38
+            yun.mdef = 19
+            yun.mov = 5
+            yun.skills = ["arcane_strike"]
+            await s.commit()
+
+        r = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/advance",
+            json={"user_name": "alice", "game_id": game_id},
+        )
+        assert r.status_code == 200, r.text
+
+        from app.progression.models import PlayerProfile
+        async with AsyncSessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            assert profile.hero_campaign_states["yun"]["class_id"] == "sage"
+            assert profile.hero_campaign_states["yun"]["promoted"] is True
 
     async def test_advance_unfinished_game_rejected(self, ml_client):
         client, _ = ml_client
@@ -620,7 +1050,52 @@ class TestAbandon:
 
 
 # ============================================================
-# 10. Dialogue file service
+# 10. Post-battle shop
+# ============================================================
+
+@pytest.mark.integration
+class TestPostBattleShop:
+    async def test_shop_lists_json_stock_and_purchases_inventory(self, ml_client):
+        client, _ = ml_client
+        profile_id = await _create_profile(client, "alice")
+        from app.database import AsyncSessionLocal
+        from app.progression.models import PlayerProfile
+        async with AsyncSessionLocal() as session:
+            profile = await session.get(PlayerProfile, profile_id)
+            profile.gold = 500
+            await session.commit()
+
+        shop = await client.get(
+            "/mainlines/chapter_01_steel_rebellion/shop",
+            params={"user_name": "alice"},
+        )
+        assert shop.status_code == 200, shop.text
+        body = shop.json()
+        assert body["gold"] == 500
+        by_id = {item["item_id"]: item for item in body["items"]}
+        assert by_id["iron_sword"]["price"] == 120
+        assert by_id["iron_sword"]["icon_path"].endswith("iron_sword.png")
+
+        purchased = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/shop/purchase",
+            json={"user_name": "alice", "item_id": "hero_crest", "quantity": 1},
+        )
+        assert purchased.status_code == 200, purchased.text
+        assert purchased.json()["gold_remaining"] == 200
+        assert purchased.json()["inventory_count"] == 1
+
+    async def test_shop_rejects_purchase_without_gold(self, ml_client):
+        client, _ = ml_client
+        await _create_profile(client, "alice")
+        result = await client.post(
+            "/mainlines/chapter_01_steel_rebellion/shop/purchase",
+            json={"user_name": "alice", "item_id": "iron_sword", "quantity": 1},
+        )
+        assert result.status_code == 409
+
+
+# ============================================================
+# 11. Dialogue file service
 # ============================================================
 
 @pytest.mark.integration

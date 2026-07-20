@@ -236,6 +236,11 @@ class Unit(Base):
     # art (sprite / portrait / crest), and any stat overrides the
     # designer baked into the hero template. NULL for vanilla units.
     hero_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Bare campaign attributes captured before temporary battle modifiers
+    # (currently equipment) are applied.  This lets mainline settlement
+    # persist permanent progression without baking equipment bonuses into a
+    # hero's long-term base stats.  NULL keeps legacy/non-hero units intact.
+    campaign_base_stats: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     player: Mapped["Player"] = relationship("Player", back_populates="units")
 

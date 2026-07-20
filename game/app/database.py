@@ -230,6 +230,14 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN hero_id VARCHAR(64)"
         ))
         logger.info("Migration: added units.hero_id")
+    # 2026-07-18: mainline heroes retain their bare campaign attributes on
+    # the battle Unit.  Equipment is applied afterwards and must never be
+    # written back as permanent progression at battle settlement.
+    if "campaign_base_stats" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN campaign_base_stats JSON"
+        ))
+        logger.info("Migration: added units.campaign_base_stats")
     # 2026-07-10: commander persistence for Player and PlayerProfile.
     profile_rows = sync_conn.execute(text(
         "PRAGMA table_info(player_profiles)"
@@ -245,6 +253,41 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE player_profiles ADD COLUMN mainline_commanders JSON NOT NULL DEFAULT '{}'"
         ))
         logger.info("Migration: added player_profiles.mainline_commanders")
+    if "hero_campaign_states" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN hero_campaign_states JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.hero_campaign_states")
+    if "hero_inventory" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN hero_inventory JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.hero_inventory")
+    if "mercenary_roster_state" not in profile_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE player_profiles ADD COLUMN mercenary_roster_state JSON NOT NULL DEFAULT '{}'"
+        ))
+        logger.info("Migration: added player_profiles.mercenary_roster_state")
+
+    # 2026-07-13: save / suspend system. Two new tables:
+    #   game_save_slots — formal mainline saves (3 manual + 1 auto)
+    #   suspend_states  — single mid-battle interrupt slot
+    # New tables are auto-created by ``Base.metadata.create_all`` below
+    # (we don't need an ALTER for fresh DBs). For already-existing DBs
+    # the same ``create_all`` will create them as long as the models
+    # are imported (see app.main: `from app.save import models`).
+
+    # Defensive check: if the tables don't exist (legacy DB), log so
+    # ops can confirm create_all ran.
+    table_rows = sync_conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )).fetchall()
+    existing_tables = {r[0] for r in table_rows}
+    for tbl in ("game_save_slots", "suspend_states"):
+        if tbl not in existing_tables:
+            logger.info(
+                "Migration note: %s not present; create_all will add it", tbl,
+            )
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

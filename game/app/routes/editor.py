@@ -4,6 +4,7 @@ Maps are stored as JSON files under game/maps/custom/. Each map includes:
   - id, name, size (width/height), biome
   - layout: List[str] (each row = width chars from P/F/M/R/C)
   - initial_units: List[{x, y, type, color, level}]
+  - tile_owners: List[{x, y, color}] for owned surface buildings
 
 Size constraints: width 15–35, height 15–40.
 
@@ -34,9 +35,9 @@ _CUSTOM_DIR = Path(__file__).resolve().parent.parent.parent / "maps" / "custom"
 _CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
 
 # Valid terrain chars (single-char per cell)
-# P=plain F=forest M=mountain R=river C=castle
+# P=plain F=forest M=mountain S=snow_peak R=river C=castle
 # v=village b=barracks r=road g=gate  (added 2026-06-30 P0.4)
-_VALID_TERRAINS = set("PFMRCvbrg")
+_VALID_TERRAINS = set("PFMSRCvbrg")
 _VALID_UNIT_TYPES = {"swordsman", "archer", "knight", "warlock", "healer"}
 _VALID_COLORS = {"red", "blue", "green", "yellow"}
 
@@ -77,6 +78,19 @@ class InitialUnit(BaseModel):
         return v
 
 
+class TileOwner(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    color: str
+
+    @field_validator("color")
+    @classmethod
+    def _check_color(cls, v: str) -> str:
+        if v not in _VALID_COLORS:
+            raise ValueError(f"Invalid color: {v}")
+        return v
+
+
 class CustomMapSave(BaseModel):
     """Body for POST /editor/maps"""
     id: Optional[str] = None  # omit for new map; server assigns if missing
@@ -85,6 +99,7 @@ class CustomMapSave(BaseModel):
     biome: str = Field(default="grass")  # grass | snow | desert
     layout: List[str]
     initial_units: List[InitialUnit] = []
+    tile_owners: List[TileOwner] = []
 
     @field_validator("biome")
     @classmethod
@@ -101,6 +116,7 @@ class CustomMapOut(BaseModel):
     biome: str
     layout: List[str]
     initial_units: List[Dict[str, Any]]
+    tile_owners: List[Dict[str, Any]] = []
     created_at: float
     updated_at: float
 
@@ -158,6 +174,24 @@ def _validate_units(units: List[InitialUnit], width: int, height: int) -> None:
             )
 
 
+def _validate_tile_owners(tile_owners: List[TileOwner], width: int, height: int) -> None:
+    """Check owner markers are within map bounds and unique per tile."""
+    seen = set()
+    for owner in tile_owners:
+        if not (0 <= owner.x < width and 0 <= owner.y < height):
+            raise HTTPException(
+                status_code=400,
+                detail=f"tile owner at ({owner.x},{owner.y}) is out of bounds ({width}x{height})",
+            )
+        key = (owner.x, owner.y)
+        if key in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate tile owner at ({owner.x},{owner.y})",
+            )
+        seen.add(key)
+
+
 def _map_path(map_id: str) -> Path:
     return _CUSTOM_DIR / f"{map_id}.json"
 
@@ -166,7 +200,9 @@ def _read_map(map_id: str) -> Dict[str, Any]:
     path = _map_path(map_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"map {map_id!r} not found")
-    return _json.loads(path.read_text(encoding="utf-8"))
+    data = _json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("tile_owners", [])
+    return data
 
 
 def _write_map(map_id: str, data: Dict[str, Any]) -> None:
@@ -233,6 +269,7 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
     _validate_layout(body.layout, body.size.width, body.size.height)
     # Validate units in bounds (any terrain, including castle tiles).
     _validate_units(body.initial_units, body.size.width, body.size.height)
+    _validate_tile_owners(body.tile_owners, body.size.width, body.size.height)
 
     now = time.time()
 
@@ -257,6 +294,7 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
         "biome": body.biome,
         "layout": body.layout,
         "initial_units": [u.model_dump() for u in body.initial_units],
+        "tile_owners": [o.model_dump() for o in body.tile_owners],
         "created_at": created_at,
         "updated_at": now,
     }

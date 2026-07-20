@@ -6,14 +6,19 @@ All functions are pure (no DB) so they're easy to unit-test.
 from __future__ import annotations
 
 import logging
-from collections import deque
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from app.config import (
     MAP_SIZE,
     TERRAIN_CASTLE,
-    TERRAIN_MOVE_COST,
     TERRAIN_RIVER,
+)
+from app.movement import (
+    DEFAULT_MOVEMENT_PROFILE,
+    MovementProfile,
+    can_end_on_terrain,
+    can_traverse_terrain,
+    terrain_cost_x2,
 )
 
 
@@ -87,20 +92,13 @@ def terrain_passable(
     """Whether a unit may stand on this terrain.
 
     Rules:
-      - castle and gate: only passable for the owner (or unowned).
+      - castles are passable so a unit can enter an enemy HQ and seize it.
       - castle_wall, gate, and any terrain missing from TERRAIN_MOVE_COST
         are impassable for everyone.
       - everything else: passable.
     """
-    # Impassable blockers — explicitly listed to avoid relying on missing
-    # keys, and to keep the rule self-documenting.
-    if terrain in ("castle_wall", "gate"):
-        return False
-    if terrain == TERRAIN_CASTLE:
-        return owner_id is None or owner_id == viewer_owner_id
-    # River, mountain, village, barracks, road, and all castle sub-features
-    # are passable; their cost is handled by the BFS (cost=2, road=1).
-    return terrain in TERRAIN_MOVE_COST
+    del owner_id, viewer_owner_id  # ownership does not affect terrain movement.
+    return can_end_on_terrain(DEFAULT_MOVEMENT_PROFILE, terrain)
 
 
 def bfs_reachable(
@@ -111,6 +109,7 @@ def bfs_reachable(
     *,
     viewer_owner_id: Optional[int],
     blocked_units: Optional[Set[Coord]] = None,
+    movement_profile: Optional[MovementProfile] = None,
     size: int = MAP_SIZE,
 ) -> Dict[Coord, int]:
     """BFS with terrain cost; returns {coord: cost_so_far} for tiles reachable within `mov`.
@@ -122,16 +121,22 @@ def bfs_reachable(
     that want to compare to MP should divide by 2.
     """
     blocked_units = blocked_units or set()
+    movement_profile = movement_profile or DEFAULT_MOVEMENT_PROFILE
     if start not in terrain:
         return {}
 
     budget = mov * 2
     dist: Dict[Coord, int] = {start: 0}
-    queue: deque[Coord] = deque([start])
+    # Dijkstra is required because terrain costs are not uniform.
+    import heapq
+    queue: list[tuple[int, int, Coord]] = [(0, 0, start)]
+    counter = 0
+    reachable: Dict[Coord, int] = {start: 0}
 
     while queue:
-        x, y = queue.popleft()
-        cur = dist[(x, y)]
+        cur, _, (x, y) = heapq.heappop(queue)
+        if cur != dist.get((x, y)):
+            continue
         if cur >= budget:
             continue
         for nx, ny in neighbors(x, y):
@@ -140,20 +145,25 @@ def bfs_reachable(
             t = terrain.get((nx, ny))
             if t is None:
                 continue
-            owner = owners.get((nx, ny))
-            if not terrain_passable(t, owner_id=owner, viewer_owner_id=viewer_owner_id):
+            if not can_traverse_terrain(movement_profile, t):
                 continue
             if (nx, ny) in blocked_units:
                 continue
-            new_cost = cur + TERRAIN_MOVE_COST[t]
+            step_cost = terrain_cost_x2(movement_profile, t)
+            if step_cost is None:
+                continue
+            new_cost = cur + step_cost
             if new_cost > budget:
                 continue
             key = (nx, ny)
             if key not in dist or new_cost < dist[key]:
                 dist[key] = new_cost
-                queue.append(key)
+                counter += 1
+                heapq.heappush(queue, (new_cost, counter, key))
+                if can_end_on_terrain(movement_profile, t):
+                    reachable[key] = new_cost
 
-    return dist
+    return reachable
 
 
 def pathfind(
@@ -165,6 +175,7 @@ def pathfind(
     *,
     viewer_owner_id: Optional[int],
     blocked_units: Optional[Set[Coord]] = None,
+    movement_profile: Optional[MovementProfile] = None,
     size: int = MAP_SIZE,
 ) -> Optional[List[Coord]]:
     """Cheapest path from start to goal within `mov` movement points.
@@ -176,6 +187,7 @@ def pathfind(
     if start == goal:
         return [start]
     blocked_units = (blocked_units or set()) - {start}  # allow standing on own tile
+    movement_profile = movement_profile or DEFAULT_MOVEMENT_PROFILE
     budget = mov * 2
 
     # Dijkstra over integer costs.
@@ -193,7 +205,7 @@ def pathfind(
         # P2.5 — must check budget BEFORE accepting the goal, otherwise
         # `_ai_move` lets a unit teleport across the map (pathfind
         # returned a path even when the cost was > mov).
-        if node == goal and cost <= budget:
+        if node == goal and cost <= budget and can_end_on_terrain(movement_profile, terrain[goal]):
             # Reconstruct path
             path = [node]
             while path[-1] in came_from:
@@ -208,12 +220,13 @@ def pathfind(
             t = terrain.get((nx, ny))
             if t is None:
                 continue
-            owner = owners.get((nx, ny))
-            if not terrain_passable(t, owner_id=owner, viewer_owner_id=viewer_owner_id):
+            if not can_traverse_terrain(movement_profile, t):
                 continue
             if (nx, ny) in blocked_units:
                 continue
-            step_cost = TERRAIN_MOVE_COST[t]
+            step_cost = terrain_cost_x2(movement_profile, t)
+            if step_cost is None:
+                continue
             new_cost = cost + step_cost
             if new_cost > budget:
                 continue

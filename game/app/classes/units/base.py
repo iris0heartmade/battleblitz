@@ -16,8 +16,8 @@ To add a new unit type:
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass
-from typing import ClassVar, Dict, FrozenSet, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 
 # ----------------------------------------------------------------
@@ -45,6 +45,7 @@ class UnitClassProfile:
     attack_kind: str = "physical"  # "physical" | "magic" — drives damage formula
     base_matk: int = 0
     base_mdef: int = 0
+    terrain_movement: Mapping[str, Mapping[str, int | bool]] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------
@@ -90,6 +91,9 @@ class BaseUnitClass(ABC):
 
     # ── Type advantage ─────────────────────────────────────────
     strong_against: ClassVar[List[str]] = []  # e.g. ["knight"]  (used by compile() default)
+    # Per-terrain movement modifiers.  The movement engine interprets this
+    # data; class implementations must not add terrain-specific code paths.
+    terrain_movement: ClassVar[Mapping[str, Mapping[str, int | bool]]] = {}
 
     @classmethod
     def compile(cls) -> UnitClassProfile:
@@ -113,4 +117,8 @@ class BaseUnitClass(ABC):
             attack_kind=cls.attack_kind,
             base_matk=cls.base_matk,
             base_mdef=cls.base_mdef,
+            terrain_movement={
+                terrain: dict(rule)
+                for terrain, rule in cls.terrain_movement.items()
+            },
         )

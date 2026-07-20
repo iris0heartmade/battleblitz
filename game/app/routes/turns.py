@@ -159,19 +159,13 @@ async def end_turn(
     player = next((p for p in players if p.id == body.player_id), None)
     if player is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
-    # P2.4 — spectators are always considered "alive" because they
-    # can't be eliminated by combat — they have no units to lose and
-    # never get marked dead. We ignore their is_alive bit entirely;
-    # even if a defensive code path flipped it, the spectator is
-    # still allowed to confirm turns.
-    if not player.is_alive and not player.is_spectator:
+    if player.is_spectator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "观战者不能结束回合")
+    if not player.is_alive:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "你已被淘汰")
 
-    # P2.4 — spectators slot in ABOVE MAX_PLAYERS so they appear at
-    # the END of the turn cycle. Real players' seats stay dense
-    # (0..N-1) so alive_seats sorts them first and spectators ride
-    # along after every real player has had a go.
-    alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+    # Spectators never participate in the action or round-turn cycles.
+    alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
     if not alive_seats:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
 
@@ -386,7 +380,7 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
                     select(Player).where(Player.game_id == game_id)
                 )
             ).scalars().all()
-            alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+            alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
             if not alive_seats:
                 return
             idx = next(
@@ -396,20 +390,11 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
             )
             expected_seat = alive_seats[idx % len(alive_seats)]
             current = next((p for p in players if p.seat == expected_seat), None)
-            if current is None or (not current.is_ai and not current.is_spectator):
+            if current is None or not current.is_ai:
                 # Reached a human player — hand control back.
                 game.phase = "player"
                 await session.commit()
                 return
-            if current.is_spectator:
-                # P2.4 — spectator turn chain runs separately; do NOT
-                # auto-end for the spectator. Hand control to phase =
-                # "spectator" so the front-end knows to render the
-                # "confirm turn" prompt for the audience.
-                game.phase = "spectator"
-                await session.commit()
-                return
-
             # Re-read persisted meter/active state immediately before the
             # decision so a stale chain cannot emit a duplicate activation.
             await session.refresh(current, ["co_state", "units"])
@@ -484,20 +469,14 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
                     game.current_player_index = next_seat
                     await session.refresh(next_player, ["units"])
                     on_player_turn_start(next_player, game.turn_number)
-                    # Phase decision: if next is AI, keep phase=ai; if spectator
-                    # hand control to the front-end for human confirmation;
-                    # otherwise it's a regular player's turn.
+                    # AI turns run in the background; otherwise hand control
+                    # to the next real human player.
                     if next_player.is_ai:
                         game.phase = "ai"
-                    elif next_player.is_spectator:
-                        game.phase = "spectator"
                     else:
                         game.phase = "player"
                 await session.commit()
                 # If next player is still AI, continue the chain.
-                # P2.4 — we never recurse for spectators; their turn is
-                # resolved exclusively by the spectator's manual
-                # `end_turn` click from the browser.
                 if game.status == "playing":
                     is_next_ai = next(
                         (p.is_ai for p in players if p.seat == game.current_player_index),
@@ -652,7 +631,7 @@ async def _check_stale_turns() -> None:
             players = (
                 await session.execute(select(Player).where(Player.game_id == game.id))
             ).scalars().all()
-            alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+            alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
             if not alive_seats:
                 continue
             expected_seat = next(
@@ -692,10 +671,7 @@ async def _check_stale_turns() -> None:
                     "result=SUCCESS | reason=timeout | user_name=%s | seat=%d",
                     current.id, game.id, current.user_name, current.seat,
                 )
-                # If everyone has ended, resolve the turn. Spectators
-                # count as "alive" for cycle math; they go through the
-                # same has_ended_turn gate.
-                if all(p.has_ended_turn or (not p.is_alive and not p.is_spectator) for p in players):
+                if all(p.is_spectator or p.has_ended_turn or not p.is_alive for p in players):
                     await apply_end_of_turn(session, game)
                     for p in players:
                         p.has_ended_turn = False
@@ -728,8 +704,6 @@ async def _check_stale_turns() -> None:
                     on_player_turn_start(next_player, game.turn_number)
                     if next_player.is_ai:
                         game.phase = "ai"
-                    elif next_player.is_spectator:
-                        game.phase = "spectator"
                     else:
                         game.phase = "player"
         await session.commit()

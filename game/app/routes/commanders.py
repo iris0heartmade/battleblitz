@@ -129,7 +129,7 @@ async def fire_co_power_endpoint(
     players = (await session.scalars(
         select(Player).options(selectinload(Player.units)).where(Player.game_id == game_id)
     )).all()
-    alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+    alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
     expected_seat = next(
         (seat for seat in alive_seats if seat >= game.current_player_index),
         alive_seats[0] if alive_seats else None,

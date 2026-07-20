@@ -1,0 +1,28 @@
+# Godot 4.7 generated/import files
+# (These live in `.godot/` next to `project.godot` once the editor opens
+# the project for the first time. Safe to delete + regenerate.)
+.godot/
+.import/
+*.import
+# Godot 4.5+ resource UID files - auto-generated next to each .gd/.tres/.tscn, safe to delete + regenerate.
+*.uid
+
+# Imported translations (none today; reserved for future i18n).
+*.translation
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Local build outputs (none today; reserved for CI).
+build/
+dist/
+*.log
+
+# Cloned Godot reference games (for studying 2D map implementations).
+# Top-down 2D game projects cloned via `git clone` into ref/games/ so we
+# can read their TileMap + Camera + Decor patterns without polluting git.
+ref/games/

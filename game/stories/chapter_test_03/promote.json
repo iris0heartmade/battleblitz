@@ -1,0 +1,23 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "转职仪式 — 战前播放。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "（转职仪式开始…）"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "安娜",
+      "text": "云，冷静。转职后你的能力值会重置，但 MATK 会大幅提升。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "明白。开打。"
+    }
+  ]
+}

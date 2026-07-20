@@ -1,0 +1,1004 @@
+extends Node
+## Headless smoke test for the 48x48 layer-aware map presentation baseline.
+
+const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
+
+const TEST_MAP_IDS := [
+	"balanced_2p_15",
+	"balanced_3p_15",
+	"balanced_4p_20",
+	"realistic_grass_2p_20",
+	"realistic_desert_2p_25",
+	"realistic_snow_2p_20",
+]
+
+var _failed: int = 0
+var _passed: int = 0
+var _last_recruit_event: Array = []
+
+
+func _ready() -> void:
+	_write_result("START", "Smoke test booted")
+	print("=== BattleBlitz Godot Client - 48px smoke test ===")
+	await get_tree().process_frame
+
+	_assert_eq("MapMetrics tile size x", MAP_METRICS_SCRIPT.TILE_SIZE.x, 48,
+		"tile width must stay locked to the 48px spec")
+	_assert_eq("MapMetrics tile size y", MAP_METRICS_SCRIPT.TILE_SIZE.y, 48,
+		"tile height must stay locked to the 48px spec")
+
+	var ts := TileSetBuilder.build()
+	var source_count := ts.get_source_count()
+	_assert_gte("source_count", source_count, 1,
+		"TileSet should expose at least one source")
+	_assert_lte("source_count sanity cap", source_count, 50,
+		"TileSet has too many sources")
+
+	for terrain in Config.FE8_TILE_COORDS.keys():
+		var sid: int = TileSetBuilder.source_id_for(String(terrain), "")
+		_assert_gte("fe8 source_id(%s,)" % terrain, sid, 0,
+			"missing FE8 source for %s" % terrain)
+
+	for map_id in TEST_MAP_IDS:
+		_test_one_map(map_id)
+
+	var board_scene: PackedScene = load("res://scenes/board.tscn")
+	var board_check = board_scene.instantiate()
+	add_child(board_check)
+	_assert_true("Board has DecorLayer", board_check.get_node_or_null("DecorLayer") != null,
+		"board scene must expose a dedicated decor layer")
+	_assert_true("Board has BoardCamera", board_check.get_node_or_null("BoardCamera") != null,
+		"board scene must expose the dedicated camera node")
+
+	var map_path_check := _map_path_for_id("balanced_2p_15")
+	if map_path_check != "":
+		var fcheck := FileAccess.open(map_path_check, FileAccess.READ)
+		var parsed_check: Variant = JSON.parse_string(fcheck.get_as_text())
+		fcheck.close()
+		var result_raw: Variant = board_check.load_map(parsed_check)
+		var result: Dictionary = result_raw
+		if result.is_empty():
+			_fail("Board returned empty result for balanced_2p_15")
+		else:
+			var centre := Vector2i(7, 7)
+			var hq := Vector2i(2, 7)
+			_assert_gte("ground layer source at centre", board_check.ground_layer.get_cell_source_id(centre), 0,
+				"ground layer should receive terrain cells")
+			_assert_gte("ground layer source at HQ", board_check.ground_layer.get_cell_source_id(hq), 0,
+				"ground layer should always receive a terrain source")
+			_assert_gte("structure layer source at HQ", board_check.structure_layer.get_cell_source_id(hq), 0,
+				"structure layer should receive castle/building overlays")
+			_assert_gte("unit layer child count", board_check.units.get_child_count(), 1,
+				"maps with initial_units should spawn static unit presenters")
+			_assert_true("highlight node exists", board_check.highlights != null,
+				"board should expose the highlight layer after refactor")
+			_assert_true("camera limit right positive", board_check.board_camera.limit_right > 0,
+				"camera bounds should be derived from board metrics")
+			_assert_eq("loaded map width", int(result.get("width", 0)), 15,
+				"balanced_2p_15 should remain a 15x15 map")
+	board_check.queue_free()
+
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	var main_check = main_scene.instantiate()
+	add_child(main_check)
+	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
+	var lobby_create_col := "Lobby/LobbyFrame/LobbyDualCol/RightCol"
+	var lobby_ai_row := "Lobby/LobbyFrame/AiConfigRow"
+	var lobby_ai_actions := "Lobby/LobbyFrame/AiActionRow"
+	_assert_true("Lobby has RoomList", main_check.get_node_or_null(lobby_join_col + "/RoomList") != null,
+		"lobby hub should expose a waiting-room list")
+	_assert_true("Lobby has RoomSelectOption", main_check.get_node_or_null(lobby_join_col + "/RoomSelectOption") != null,
+		"lobby hub should expose a selectable room dropdown")
+	_assert_true("Lobby has RefreshRoomsBtn", main_check.get_node_or_null(lobby_join_col + "/LeftBtnRow/RefreshRoomsBtn") != null,
+		"lobby hub should expose a room refresh button")
+	_assert_true("Lobby has JoinSelectedBtn", main_check.get_node_or_null(lobby_join_col + "/LeftBtnRow/JoinSelectedBtn") != null,
+		"lobby hub should expose a join-selected button")
+	_assert_true("Lobby has JoinModeOption", main_check.get_node_or_null(lobby_join_col + "/JoinModeOption") != null,
+		"lobby hub should expose player/spectator join mode")
+	_assert_true("Lobby has TeamOption", main_check.get_node_or_null(lobby_create_col + "/TeamRow/TeamOption") != null,
+		"lobby hub should expose a team selection option")
+	_assert_true("Lobby has LobbyApplyTeamBtn", main_check.get_node_or_null(lobby_create_col + "/TeamRow/LobbyApplyTeamBtn") != null,
+		"lobby hub should expose a team update action")
+	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null(lobby_create_col + "/CreateNameInput") != null,
+		"lobby hub should expose a room name input")
+	_assert_true("Lobby has MapPresetOption", main_check.get_node_or_null(lobby_create_col + "/MapPresetOption") != null,
+		"lobby hub should expose a map preset dropdown")
+	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null(lobby_create_col + "/LobbyCommanderOption") != null,
+		"lobby hub should expose commander selection for room creation")
+	_assert_true("Lobby has LobbyBgmOption", main_check.get_node_or_null(lobby_create_col + "/LobbyBgmOption") != null,
+		"lobby hub should expose BGM selection for room creation")
+	_assert_true("Lobby has CreateRoomBtn", main_check.get_node_or_null(lobby_create_col + "/CreateRoomBtn") != null,
+		"lobby hub should expose a create room button")
+	_assert_true("Lobby has AiDifficultyOption", main_check.get_node_or_null(lobby_ai_row + "/AiDifficultyOption") != null,
+		"lobby hub should expose AI difficulty selection")
+	_assert_true("Lobby has AiKindOption", main_check.get_node_or_null(lobby_ai_row + "/AiKindOption") != null,
+		"lobby hub should expose AI backend selection")
+	_assert_true("Lobby has AiPersonalityOption", main_check.get_node_or_null(lobby_ai_row + "/AiPersonalityOption") != null,
+		"lobby hub should expose AI personality selection")
+	_assert_true("Lobby has AiCommanderOption", main_check.get_node_or_null("Lobby/LobbyFrame/AiCommanderOption") != null,
+		"lobby hub should expose a commander preset for AI seats created with the room")
+	_assert_true("Lobby has AiPlayerOption", main_check.get_node_or_null(lobby_ai_actions + "/AiPlayerOption") != null,
+		"lobby hub should expose an AI player selector")
+	_assert_true("Lobby has LobbyRemoveAiBtn", main_check.get_node_or_null(lobby_ai_actions + "/LobbyRemoveAiBtn") != null,
+		"lobby hub should expose AI removal")
+	_assert_true("Menu has SavesButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/SavesButton") != null,
+		"main menu should expose save management")
+	_assert_true("Menu has no FreePlayButton", main_check.get_node_or_null("Menu/CenterContainer/GroupRow/SoloCard/FreePlayButton") == null,
+		"the obsolete home free-play vs AI entry should stay removed")
+	_assert_true("Menu has EditorButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/EditorButton") != null,
+		"main menu should expose the map editor")
+	_assert_true("EditorView exists", main_check.get_node_or_null("EditorView") != null,
+		"map editor should have a dedicated Godot view")
+	_assert_true("EditorView has EditorBoard", main_check.get_node_or_null("EditorView/EditorBoard") != null,
+		"map editor should reuse the board renderer for preview/editing")
+	_assert_true("EditorView has EditorMapNameInput", main_check.get_node_or_null("EditorView/EditorPanel/EditorMapNameInput") != null,
+		"map editor should expose a map name input")
+	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorTerrainOption") != null,
+		"map editor should expose a terrain brush selector")
+	_assert_true("EditorView has EditorSurfaceOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOption") != null,
+		"map editor should expose a surface/building brush selector")
+	_assert_true("EditorView has EditorSurfaceOwnerOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOwnerOption") != null,
+		"map editor should expose surface/building ownership selection")
+	_assert_true("EditorView has EditorApplyBiomeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorApplyBiomeBtn") != null,
+		"map editor should expose one-click biome branch switching")
+	_assert_true("EditorView has EditorModeOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorModeOption") != null,
+		"map editor should expose terrain/surface/unit edit modes")
+	_assert_true("EditorView has EditorUnitOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitOption") != null,
+		"map editor should expose a unit type selector")
+	_assert_true("EditorView has EditorUnitToolOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitToolOption") != null,
+		"map editor should expose place/erase unit tools")
+	_assert_true("EditorView has EditorUnitColorOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitColorOption") != null,
+		"map editor should expose a unit color selector")
+	_assert_true("EditorView has EditorUnitLevelOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitLevelOption") != null,
+		"map editor should expose a unit level selector")
+	_assert_true("EditorView has EditorWidthOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorWidthOption") != null,
+		"map editor should expose a width selector")
+	_assert_true("EditorView has EditorHeightOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorHeightOption") != null,
+		"map editor should expose a height selector")
+	_assert_true("EditorView has EditorResizeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorResizeBtn") != null,
+		"map editor should expose a resize action")
+	_assert_true("EditorView has EditorUndoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorUndoBtn") != null,
+		"map editor should expose undo for editing mistakes")
+	_assert_true("EditorView has EditorRedoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorRedoBtn") != null,
+		"map editor should expose redo after undo")
+	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
+		"map editor should expose a save action")
+	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
+		"map editor should expose a load-selected action")
+	_assert_true("EditorView has EditorDeleteBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorDeleteBtn") != null,
+		"map editor should expose a delete-selected action")
+	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
+		"save management should expose selectable saves")
+	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
+		"save management should expose delete action")
+	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
+		"attack flow should expose a confirm panel before POSTing")
+	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
+		"attack confirm panel should expose a confirm action")
+	_assert_true("BattleResult has MainlineNextBtn", main_check.get_node_or_null("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn") != null,
+		"mainline results should expose a next-battle action")
+	_assert_true("MainlineView has MLAbandonBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLAbandonBtn") != null,
+		"mainline view should expose an abandon action")
+	_assert_true("MainlineView has CommanderOption", main_check.get_node_or_null("MainlineView/MLFrame/CommanderOption") != null,
+		"mainline view should expose commander selection")
+	_assert_true("MainlineView has ApplyCommanderBtn", main_check.get_node_or_null("MainlineView/MLFrame/ApplyCommanderBtn") != null,
+		"mainline view should expose commander apply action")
+	_assert_true("MainlineView has MLPrepSummary", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSummary") != null,
+		"mainline view should expose a preparation summary panel")
+	_assert_true("MainlineView has MLPrepTabs", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepTabs") != null,
+		"mainline view should expose tactical preparation tabs")
+	_assert_true("MainlineView has MLPrepContent", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepContent") != null,
+		"mainline view should expose preparation content")
+	_assert_true("MainlineView has MLPrepStartBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepStartBtn") != null,
+		"mainline view should require an explicit start battle action")
+	_assert_true("MainlineView has MLPrepRefreshBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepRefreshBtn") != null,
+		"mainline view should expose a preparation refresh action")
+	_assert_true("MainlineView has MLPrepActionBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepActionBtn") != null,
+		"mainline view should expose a context preparation action")
+	_assert_true("MainlineView has MLPrepAltActionBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepAltActionBtn") != null,
+		"mainline view should expose a secondary preparation action")
+	_assert_true("MainlineView has MLPrepHeroSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepHeroSelect") != null,
+		"preparation UI should expose a concrete hero selector")
+	_assert_true("MainlineView has MLPrepEquipmentSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepEquipmentSelect") != null,
+		"preparation UI should expose an equipment warehouse selector")
+	_assert_true("MainlineView has MLPrepMercUnitSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect") != null,
+		"preparation UI should expose a mercenary unit selector")
+	_assert_true("MainlineView has MLPrepMercStatSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect") != null,
+		"preparation UI should expose a mercenary stat selector")
+	_assert_true("MainlineView has MLPrepShopSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect") != null,
+		"preparation UI should expose a shop item selector")
+	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
+		"attack confirm text should be testable without posting an action")
+	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
+		"attack forecast should render in the right-side information panel")
+	main_check.call("_show_view", "mainline")
+	main_check.call("_on_mainline_prepare_response", {
+		"battle_index": 0,
+		"total_battles": 2,
+		"inventory": {"gold": 320, "iron_sword": 1},
+		"heroes": [{
+			"hero_id": "anna",
+			"name": "Anna",
+			"class_id": "swordsman",
+			"level": 4,
+			"exp": 32,
+			"base_stats": {"hp": 25, "atk": 8, "def": 5, "spd": 7},
+			"learned_skills": ["guard"],
+			"equipment": {"weapon": "iron_sword"},
+			"can_promote": true,
+			"promotion_options": ["blade_master"],
+		}, {
+			"hero_id": "yun",
+			"name": "Yun",
+			"class_id": "archer",
+			"level": 3,
+			"exp": 12,
+			"base_stats": {"hp": 22, "atk": 7, "def": 3, "spd": 9},
+			"learned_skills": ["focus"],
+			"equipment": {},
+			"can_promote": false,
+			"promotion_options": [],
+		}],
+		"roster_units": [{"name": "Anna", "hero_id": "anna", "class_id": "swordsman", "level": 4}],
+		"equipment_catalog": [{
+			"equipment_id": "iron_sword",
+			"name": "Iron Sword",
+			"slot": "weapon",
+			"stat_bonuses": {"atk": 2},
+		}],
+	}, 200, "chapter_test")
+	var prep_content: RichTextLabel = main_check.get_node("MainlineView/MLFrame/MLPrepContent")
+	var prep_summary: RichTextLabel = main_check.get_node("MainlineView/MLFrame/MLPrepSummary")
+	var prep_start: Button = main_check.get_node("MainlineView/MLFrame/MLPrepStartBtn")
+	_assert_true("Prepare response renders hero", prep_content.text.contains("Anna"),
+		"mainline prepare response should render hero details instead of auto-starting")
+	_assert_true("Prepare summary renders gold", prep_summary.text.contains("金币 320"),
+		"mainline prepare summary should expose inventory gold")
+	_assert_true("Prepare start button enabled", not prep_start.disabled,
+		"battle start should become explicit and available after prepare loads")
+	var prep_hero_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepHeroSelect")
+	var prep_equipment_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepEquipmentSelect")
+	_assert_gte("Prepare hero selector lists heroes", prep_hero_select.item_count, 2,
+		"hero selector should list every prepared hero")
+	_assert_gte("Prepare equipment selector lists catalog", prep_equipment_select.item_count, 1,
+		"equipment selector should list warehouse items")
+	prep_hero_select.select(1)
+	main_check.call("_on_prepare_hero_selected", 1)
+	_assert_true("Prepare hero selector changes sheet", prep_content.text.contains("Yun"),
+		"selecting another hero should update the hero paper sheet")
+	main_check.call("_on_prepare_shop_response", {
+		"mainline_id": "chapter_test",
+		"gold": 320,
+		"items": [{"item_id": "hero_crest", "name": "Hero Crest", "price": 100, "description": "Promote a hero"}],
+	}, 200)
+	main_check.call("_on_prepare_tab_pressed", "shop")
+	var prep_shop_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect")
+	_assert_gte("Prepare shop selector lists stock", prep_shop_select.item_count, 1,
+		"shop selector should list buyable stock")
+	_assert_true("Prepare shop renders item", prep_content.text.contains("Hero Crest"),
+		"shop tab should render post-battle shop stock")
+	main_check.call("_on_prepare_mercenary_response", {
+		"mainline_id": "chapter_test",
+		"balance": {
+			"allowed_unit_types": ["swordsman"],
+			"stat_rules": {"atk": {"cost": 1, "cap": 3}},
+		},
+		"allocation": {"unit_type_upgrades": {"swordsman": {"atk": 1}}},
+		"mercenary_points": 2,
+	}, 200)
+	main_check.call("_on_prepare_tab_pressed", "mercenary")
+	var prep_merc_unit_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect")
+	var prep_merc_stat_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect")
+	_assert_gte("Prepare mercenary unit selector lists types", prep_merc_unit_select.item_count, 1,
+		"mercenary unit selector should list configurable unit types")
+	_assert_gte("Prepare mercenary stat selector lists stats", prep_merc_stat_select.item_count, 1,
+		"mercenary stat selector should list configurable stats")
+	_assert_true("Prepare mercenary renders points", prep_content.text.contains("可用点数 2"),
+		"mercenary tab should render spendable points")
+	var hero_node := UnitNode.new()
+	add_child(hero_node)
+	hero_node.setup({"unit_type": "swordsman", "hero_id": "anna", "name": "Anna", "hp": 20, "max_hp": 20}, Color(0.8, 0.1, 0.1))
+	_assert_true("UnitNode exposes hero badge", hero_node.has_method("has_hero_badge") and bool(hero_node.call("has_hero_badge")),
+		"battlefield hero units should render a visible hero badge")
+	hero_node.queue_free()
+	_setup_action_bubble_state(main_check)
+	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
+	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,
+		"fresh unit should be offered movement")
+	_assert_action_button("Initial bubble hides attack without target", main_check, "AttackBtn", false,
+		"fresh unit should not show attack when no enemy is in current range")
+	_assert_action_button("Initial bubble shows active skill with target", main_check, "SkillBtn", true,
+		"fresh healer should show skill when a wounded ally is adjacent")
+	_assert_action_button("Initial bubble shows claim on foreign building", main_check, "ClaimBtn", true,
+		"fresh unit standing on a claimable foreign building should show claim")
+	main_check.call("_show_post_action_bubble", 10, "移动")
+	_assert_action_button("Post-move bubble keeps continue move", main_check, "MoveBtn", true,
+		"post-move menu should allow continued movement when MP remains")
+	var post_move_btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/MoveBtn")
+	_assert_true("Post-move bubble relabels move", post_move_btn.text.contains("继续"),
+		"post-move menu should distinguish continuing movement from initial movement")
+	_assert_action_button("Post-move bubble still shows skill", main_check, "SkillBtn", true,
+		"post-move menu should keep legal active skills")
+	_assert_action_button("Post-move bubble keeps claim", main_check, "ClaimBtn", true,
+		"post-move menu should keep legal claim")
+	main_check.call("_show_action_bubble", 11, Vector2(320, 240))
+	_assert_action_button("Attack-ready bubble shows attack", main_check, "AttackBtn", true,
+		"unit with an enemy in range should show attack")
+	var room_select: OptionButton = main_check.get_node(lobby_join_col + "/RoomSelectOption")
+	var room_list: RichTextLabel = main_check.get_node(lobby_join_col + "/RoomList")
+	main_check.call("_on_room_list_response", [
+		{"id": 101, "name": "Alpha", "status": "waiting", "map_preset": "balanced_2p_15", "capacity": 2},
+		{"id": 202, "name": "Beta", "status": "waiting", "map_preset": "balanced_3p_15", "capacity": 3},
+	], 200)
+	room_select.select(1)
+	main_check.call("_on_room_selected", 1)
+	_assert_true("Lobby room selection marker moves", room_list.text.contains("> #202"),
+		"selecting a different room should move the visible marker")
+	main_check.call("_on_lobby_state", {
+		"status": "waiting",
+		"player_count": 2,
+		"players": [
+			{"id": 1, "user_name": "Alice", "color": "red", "is_ai": false},
+			{"id": 9, "user_name": "Bot", "color": "blue", "is_ai": true},
+		],
+	}, 200)
+	var ai_player_option: OptionButton = main_check.get_node(lobby_ai_actions + "/AiPlayerOption")
+	var remove_ai_btn: Button = main_check.get_node(lobby_ai_actions + "/LobbyRemoveAiBtn")
+	_assert_gte("Lobby AI selector lists AI", ai_player_option.item_count, 1,
+		"lobby state should populate removable AI players")
+	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
+		"remove-ai button should enable when there is a selected AI")
+	main_check.queue_free()
+
+	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
+		"Unit.def_ must keep its Python-keyword underscore in JSON wire format")
+	_assert_true("GameState autoload", GameState != null,
+		"GameState autoload not registered")
+	_assert_true("InputState autoload", InputState != null,
+		"InputState autoload not registered")
+	_assert_true("NetworkClient autoload", NetworkClient != null,
+		"NetworkClient autoload not registered")
+	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
+		"NetworkClient should expose a typed add-ai wrapper for the lobby")
+	_assert_true("NetworkClient remove_player method", NetworkClient.has_method("remove_player"),
+		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
+	_assert_true("NetworkClient update_player_team method", NetworkClient.has_method("update_player_team"),
+		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
+	_assert_true("NetworkClient forecast_attack method", NetworkClient.has_method("forecast_attack"),
+		"NetworkClient should expose GET /games/{id}/forecast-attack")
+	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
+		"list_games should accept callback and optional user_name filter")
+	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
+		"join_game should accept game_id, user_name, color, team, role, callback")
+	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 7,
+		"create_game should accept optional commander and BGM ids before callback")
+	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
+		"NetworkClient should expose DELETE /games/{id}")
+	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
+		"NetworkClient should expose player_id based rejoin")
+	_assert_true("NetworkClient rejoin_game_by_name method", NetworkClient.has_method("rejoin_game_by_name"),
+		"NetworkClient should expose user_name based rejoin")
+	_assert_true("NetworkClient get_game_state method", NetworkClient.has_method("get_game_state"),
+		"NetworkClient should expose GET /games/{id}/state for refreshes")
+	_assert_gte("NetworkClient action_recruit argument count", _method_arg_count(NetworkClient, "action_recruit"), 6,
+		"action_recruit should accept game_id, player_id, tile, unit_type, callback")
+	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
+		"start_mainline should accept mainline_id, user_name, skip_intro, callback")
+	_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(NetworkClient, "advance_mainline"), 4,
+		"advance_mainline should accept mainline_id, user_name, game_id, callback")
+	_assert_true("NetworkClient fetch_mainline_dialogue method", NetworkClient.has_method("fetch_mainline_dialogue"),
+		"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
+	_assert_true("NetworkClient get_unlocked_commanders method", NetworkClient.has_method("get_unlocked_commanders"),
+		"NetworkClient should expose GET /players/me/commanders")
+	_assert_true("NetworkClient select_mainline_commander method", NetworkClient.has_method("select_mainline_commander"),
+		"NetworkClient should expose POST /mainlines/{id}/select-commander")
+	_assert_true("NetworkClient list_editor_maps method", NetworkClient.has_method("list_editor_maps"),
+		"NetworkClient should expose GET /editor/maps")
+	_assert_true("NetworkClient load_editor_map method", NetworkClient.has_method("load_editor_map"),
+		"NetworkClient should expose GET /editor/maps/{map_id}")
+	_assert_true("NetworkClient save_editor_map method", NetworkClient.has_method("save_editor_map"),
+		"NetworkClient should expose POST /editor/maps")
+	_assert_true("NetworkClient delete_editor_map method", NetworkClient.has_method("delete_editor_map"),
+		"NetworkClient should expose DELETE /editor/maps/{map_id}")
+	_assert_true("UserSettings autoload", UserSettings != null,
+		"UserSettings autoload not registered")
+
+	main_check.set("_user_name", "Alice")
+	main_check.call("_on_list_games_for_resume", [
+		{"id": 88, "name": "Save 88", "status": "playing"},
+	], 200)
+	_assert_eq("Resume picks filtered game summary", int(main_check.get("_resume_game_id")), 88,
+		"resume should trust /games?user_name summaries and not require embedded players")
+	var resume_btn: Button = main_check.get_node("Menu/CenterContainer/FooterRow/ResumeButton")
+	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
+		"resume button should appear when a filtered playable save exists")
+
+	main_check.call("_on_saves_response", [
+		{"id": 88, "name": "Free Save", "status": "playing", "turn_number": 3, "map_seed": 77},
+		{"id": 99, "name": "mainline:chapter_01_steel_rebellion:battle_01", "status": "waiting", "turn_number": 1},
+	], 200)
+	var save_open_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveOpenList")
+	var save_ml_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveMainlineList")
+	var save_select: OptionButton = main_check.get_node("SavesView/SaveFrame/SaveSelectOption")
+	_assert_true("Save manager renders open save", save_open_list.text.contains("Free Save"),
+		"open-mode saves should render in the open save list")
+	_assert_true("Save manager renders mainline save", save_ml_list.text.contains("chapter_01_steel_rebellion"),
+		"mainline saves should render in the mainline save list")
+	_assert_gte("Save manager populates select options", save_select.item_count, 2,
+		"save manager should populate operation selector")
+
+	var confirm_text: String = main_check.call("_build_attack_confirm_text", {
+		"name": "Knight", "unit_type": "knight", "x": 1, "y": 1, "hp": 10
+	}, {
+		"defender_name": "Bandit", "unit_type": "swordsman", "x": 3, "y": 2, "hp": 7
+	})
+	_assert_true("Attack confirm text includes attacker", confirm_text.contains("骑士"),
+		"attack confirm text should use the attacker's Chinese unit name")
+	_assert_true("Attack confirm text includes target", confirm_text.contains("剑士"),
+		"attack confirm text should use the target's Chinese unit name")
+	_assert_true("Attack confirm text includes distance", confirm_text.contains("距离 3"),
+		"attack confirm text should include Manhattan distance")
+	var forecast_text: String = main_check.call("_build_attack_forecast_info_text", {
+		"damage": 8,
+		"target_hp_after": 2,
+		"counter_damage": 3,
+		"attacker_hp_after": 7,
+		"is_kill": false,
+		"counter_will_kill": false,
+		"target_def_bonus": 1,
+	}, {
+		"name": "Knight", "hp": 10, "max_hp": 10
+	}, {
+		"defender_name": "Bandit", "hp": 10, "max_hp": 10
+	})
+	_assert_true("Attack forecast text is Chinese", forecast_text.contains("战斗预测") and forecast_text.contains("预计伤害"),
+		"forecast panel text should be localized")
+	_assert_true("Attack forecast text includes counter", forecast_text.contains("反击 3"),
+		"forecast panel text should include counter damage")
+
+	_last_recruit_event = []
+	GameState.unit_recruited.connect(_capture_recruit_event, CONNECT_ONE_SHOT)
+	GameState.ingest_event({
+		"event_type": "recruit",
+		"actor_unit_id": 44,
+		"context": {
+			"new_unit_id": 44,
+			"unit_type": "archer",
+			"tile_x": 5,
+			"tile_y": 6,
+			"cost": 250,
+		},
+	})
+	_assert_eq("GameState emits recruit unit id", int(_last_recruit_event[0]) if _last_recruit_event.size() > 0 else -1, 44,
+		"recruit event should emit the new unit id")
+	_assert_eq("GameState emits recruit unit type", str(_last_recruit_event[1]) if _last_recruit_event.size() > 1 else "", "archer",
+		"recruit event should emit the unit type")
+
+	main_check.call("_on_recruit_response", {
+		"new_unit_type": "archer",
+		"cost": 250,
+		"gold_remaining": 150,
+		"description": "Alice 招募了弓箭手",
+	}, 200)
+	var main_status_label: Label = main_check.get_node("StatusLabel")
+	_assert_true("Recruit response status names unit", main_status_label.text.contains("弓箭手"),
+		"recruit success status should include the recruited unit name in Chinese")
+	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
+		"recruit success status should include remaining gold")
+
+	main_check.call("_on_ml_list_response", [
+		{
+			"id": "chapter_01_steel_rebellion",
+			"title": "Steel Rebellion",
+			"synopsis": "Opening chapter",
+			"battle_count": 2,
+		},
+	], 200)
+	var ml_list: VBoxContainer = main_check.get_node("MainlineView/MLFrame/MLListContainer")
+	_assert_gte("Mainline list renders one item", ml_list.get_child_count(), 1,
+		"mainline list should create a button for backend summaries")
+	if ml_list.get_child_count() > 0:
+		var ml_btn := ml_list.get_child(0) as Button
+		_assert_true("Mainline list uses backend battle_count", ml_btn.text.contains("2"),
+			"mainline button should render backend battle_count")
+		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
+			"mainline button tooltip should use backend synopsis")
+	main_check.call("_on_commanders_response", {
+		"user_name": "Alice",
+		"unlocked_commanders": ["yun", "anna"],
+		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
+	}, 200)
+	var commander_option: OptionButton = main_check.get_node("MainlineView/MLFrame/CommanderOption")
+	var lobby_commander_option: OptionButton = main_check.get_node(lobby_create_col + "/LobbyCommanderOption")
+	var ai_commander_option: OptionButton = main_check.get_node("Lobby/LobbyFrame/AiCommanderOption")
+	var commander_status: Label = main_check.get_node("MainlineView/MLFrame/CommanderStatus")
+	_assert_gte("Mainline commander selector lists unlocked choices", commander_option.item_count, 3,
+		"commander selector should include none plus unlocked commanders")
+	_assert_gte("Lobby commander selector lists unlocked choices", lobby_commander_option.item_count, 3,
+		"lobby commander selector should include none plus unlocked commanders")
+	_assert_gte("Lobby AI commander selector lists unlocked choices", ai_commander_option.item_count, 3,
+		"AI commander selector should include auto plus unlocked commanders")
+	ai_commander_option.select(1)
+	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
+	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(2, "")), "yun",
+		"room creation should map the selected AI commander to seat 2")
+	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("云"),
+		"commander response should show the selected commander in Chinese")
+	main_check.call("_on_select_mainline_commander_response", {
+		"mainline_id": "chapter_01_steel_rebellion",
+		"commander_id": "anna",
+	}, 200)
+	_assert_true("Mainline commander select response updates status", commander_status.text.contains("安娜"),
+		"commander select response should show the applied commander in Chinese")
+	main_check.call("_on_audio_tracks_response", {
+		"tracks": [
+			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
+		],
+	}, 200)
+	var lobby_bgm_option: OptionButton = main_check.get_node(lobby_create_col + "/LobbyBgmOption")
+	_assert_gte("Lobby BGM selector lists tracks", lobby_bgm_option.item_count, 2,
+		"BGM selector should include none plus backend tracks")
+	main_check.call("_on_editor_pressed")
+	var editor_view: Control = main_check.get_node("EditorView")
+	_assert_true("Editor button switches to editor view", editor_view.visible,
+		"pressing the editor button should show the map editor")
+	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
+	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
+		"terrain selector should expose the initial paint brushes")
+	var editor_surface_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOption")
+	var editor_surface_owner_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOwnerOption")
+	var editor_apply_biome_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorApplyBiomeBtn")
+	var editor_mode_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorModeOption")
+	var editor_unit_tool_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitToolOption")
+	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitOption")
+	var editor_unit_color_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitColorOption")
+	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitLevelOption")
+	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorWidthOption")
+	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorHeightOption")
+	_assert_eq("Editor mode selector lists three deploy modes", editor_mode_option.item_count, 3,
+		"editor mode selector should include terrain, surface, and unit deployment")
+	_assert_eq("Editor terrain deploy mode text", editor_mode_option.get_item_text(0), "地形部署",
+		"first editor mode should be terrain deployment")
+	_assert_eq("Editor surface deploy mode text", editor_mode_option.get_item_text(1), "地表部署",
+		"second editor mode should be surface deployment")
+	_assert_eq("Editor unit deploy mode text", editor_mode_option.get_item_text(2), "单位部署",
+		"third editor mode should be unit deployment")
+	_assert_gte("Editor surface selector lists buildings", editor_surface_option.item_count, 4,
+		"surface selector should include owned buildings and gates")
+	_assert_gte("Editor surface owner selector lists teams", editor_surface_owner_option.item_count, 5,
+		"surface owner selector should include unowned plus four teams")
+	_assert_gte("Editor unit selector lists unit types", editor_unit_option.item_count, 5,
+		"editor unit selector should include deployable unit types")
+	_assert_gte("Editor unit tool selector lists tools", editor_unit_tool_option.item_count, 2,
+		"editor unit tool selector should include place and erase")
+	_assert_gte("Editor width selector lists sizes", editor_width_option.item_count, 4,
+		"editor width selector should expose common map sizes")
+	_assert_gte("Editor height selector lists sizes", editor_height_option.item_count, 4,
+		"editor height selector should expose common map sizes")
+	main_check.call("_on_editor_maps_response", [
+		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
+		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
+	], 200)
+	var editor_map_select: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorMapSelectOption")
+	_assert_eq("Editor map selector stores backend list", editor_map_select.item_count, 2,
+		"editor map response should populate saved maps")
+	var editor_delete_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorDeleteBtn")
+	_assert_true("Editor delete enables with saved map", not editor_delete_btn.disabled,
+		"delete should enable when a saved map is selected")
+	editor_map_select.select(1)
+	main_check.call("_on_editor_map_selected", 1)
+	_assert_eq("Editor selected map id updates", str(main_check.get("_selected_editor_map_id")), "map_beta",
+		"selecting a saved map should store its id")
+	main_check.call("_on_editor_load_response", {
+		"id": "map_beta",
+		"name": "Beta",
+		"size": {"width": 15, "height": 15},
+		"biome": "snow",
+		"layout": ["S".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
+		"initial_units": [],
+	}, 200)
+	var loaded_editor_map: Dictionary = main_check.get("_editor_map")
+	_assert_eq("Editor load response replaces current map", str(loaded_editor_map.get("id", "")), "map_beta",
+		"loading a saved map should replace the editor map")
+	main_check.call("_on_editor_delete_response", {}, 204)
+	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
+		"successful delete should clear the selected map id")
+	editor_mode_option.select(2)
+	editor_unit_option.select(1)
+	editor_unit_color_option.select(1)
+	editor_unit_level_option.select(2)
+	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	var unit_editor_map: Dictionary = main_check.get("_editor_map")
+	var editor_units: Array = unit_editor_map.get("initial_units", [])
+	_assert_eq("Editor unit mode places one unit", editor_units.size(), 1,
+		"unit mode should add an initial unit at the clicked tile")
+	_assert_eq("Editor unit mode stores selected unit type", str((editor_units[0] as Dictionary).get("type", "")), "archer",
+		"unit placement should use the selected unit type")
+	_assert_eq("Editor unit mode stores selected color", str((editor_units[0] as Dictionary).get("color", "")), "blue",
+		"unit placement should use the selected color")
+	_assert_eq("Editor unit mode stores selected level", int((editor_units[0] as Dictionary).get("level", 0)), 3,
+		"unit placement should use the selected level")
+	editor_unit_tool_option.select(1)
+	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	unit_editor_map = main_check.get("_editor_map")
+	editor_units = unit_editor_map.get("initial_units", [])
+	_assert_eq("Editor unit erase removes unit", editor_units.size(), 0,
+		"unit erase mode should remove the unit at the clicked tile")
+	editor_unit_tool_option.select(0)
+	editor_mode_option.select(1)
+	editor_surface_option.select(1)
+	editor_surface_owner_option.select(2)
+	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = main_check.get("_editor_map")
+	var surface_layout: Array = unit_editor_map.get("layout", [])
+	var tile_owners: Array = unit_editor_map.get("tile_owners", [])
+	_assert_true("Editor surface mode paints building", str(surface_layout[3])[3] == "v",
+		"surface deployment should paint the selected building char")
+	_assert_eq("Editor surface mode stores owner", str((tile_owners[0] as Dictionary).get("color", "")), "blue",
+		"surface deployment should store the selected owner color")
+	editor_surface_owner_option.select(0)
+	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = main_check.get("_editor_map")
+	tile_owners = unit_editor_map.get("tile_owners", [])
+	_assert_eq("Editor surface unowned clears owner", tile_owners.size(), 0,
+		"painting an unowned surface should remove ownership metadata")
+	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorBiomeOption")
+	editor_biome_option.select(1)
+	editor_apply_biome_btn.pressed.emit()
+	unit_editor_map = main_check.get("_editor_map")
+	_assert_eq("Editor biome apply updates map", str(unit_editor_map.get("biome", "")), "snow",
+		"one-click biome branch switching should update the editor map immediately")
+	editor_width_option.select(1)
+	editor_height_option.select(0)
+	main_check.call("_on_editor_resize_pressed")
+	unit_editor_map = main_check.get("_editor_map")
+	var editor_size: Dictionary = unit_editor_map.get("size", {})
+	var resized_layout: Array = unit_editor_map.get("layout", [])
+	_assert_eq("Editor resize updates width", int(editor_size.get("width", 0)), 20,
+		"resize should update the saved map width")
+	_assert_eq("Editor resize keeps selected height", int(editor_size.get("height", 0)), 15,
+		"resize should update the saved map height")
+	_assert_eq("Editor resize pads row width", str(resized_layout[0]).length(), 20,
+		"resize should pad layout rows to the selected width")
+	main_check.call("_on_editor_save_response", {
+		"id": "saved_alpha",
+		"name": "Saved Alpha",
+		"size": {"width": 15, "height": 15},
+		"biome": "desert",
+		"layout": ["P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
+		"initial_units": [],
+	}, 201)
+	var preset_options_after_save: Array = main_check.get("_preset_options")
+	_assert_true("Editor save adds custom lobby preset", _preset_options_contain(preset_options_after_save, "custom:saved_alpha"),
+		"saving an editor map should immediately expose custom:{id} in lobby presets")
+	editor_terrain_option.select(1)
+	editor_mode_option.select(0)
+	main_check.call("_paint_editor_tile", Vector2i(1, 1))
+	var editor_map: Dictionary = main_check.get("_editor_map")
+	var editor_layout: Array = editor_map.get("layout", [])
+	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
+		"painting with the forest brush should mutate the editor layout")
+	var editor_undo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorUndoBtn")
+	var editor_redo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorRedoBtn")
+	_assert_true("Editor undo enables after paint", not editor_undo_btn.disabled,
+		"painting should push a history entry that can be undone")
+	_assert_true("Editor redo disabled before undo", editor_redo_btn.disabled,
+		"redo should stay disabled until an undo is performed")
+	main_check.call("_on_editor_undo_pressed")
+	editor_map = main_check.get("_editor_map")
+	editor_layout = editor_map.get("layout", [])
+	_assert_true("Editor undo restores terrain", str(editor_layout[1])[1] == "P",
+		"undo should restore the previous terrain at the painted tile")
+	_assert_true("Editor redo enables after undo", not editor_redo_btn.disabled,
+		"undo should make redo available")
+	main_check.call("_on_editor_redo_pressed")
+	editor_map = main_check.get("_editor_map")
+	editor_layout = editor_map.get("layout", [])
+	_assert_true("Editor redo reapplies terrain", str(editor_layout[1])[1] == "F",
+		"redo should reapply the terrain change")
+
+	main_check.set("_user_name", "Alice")
+	main_check.call("_on_mainline_start_response", {
+		"game_id": 123,
+		"player_id": 456,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 0,
+		"total_battles": 2,
+		"state": "battle",
+	}, 200)
+	_assert_eq("Mainline start stores game id", int(main_check.get("_game_id")), 123,
+		"mainline start should store spawned game id")
+	_assert_eq("Mainline start stores player id", int(main_check.get("_player_id")), 456,
+		"mainline start should store human player id")
+	_assert_true("Mainline start switches to game view", (main_check.get_node("GameView") as Control).visible,
+		"mainline start should enter game view")
+	_assert_true("Mainline start status includes progress", main_status_label.text.contains("1/2"),
+		"mainline start should show battle progress")
+
+	main_check.call("_on_mainline_advance_response", {
+		"state": "dialogue",
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 1,
+		"total_battles": 2,
+		"post_battle_dialogue_url": "dialogue/chapter_01/post_01.json",
+	}, 200)
+	_assert_true("Mainline advance status includes next progress", main_status_label.text.contains("2/2"),
+		"mainline advance should show the next battle progress")
+	var ml_next_btn: Button = main_check.get_node("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn")
+	_assert_true("Mainline advance shows next battle button", ml_next_btn.visible,
+		"non-victory advance should reveal the next-battle button")
+	main_check.call("_on_mainline_next_battle_response", {
+		"game_id": 321,
+		"player_id": 654,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 1,
+		"total_battles": 2,
+		"state": "battle",
+	}, 201)
+	_assert_eq("Mainline next stores game id", int(main_check.get("_game_id")), 321,
+		"next battle should store the spawned game id")
+	main_check.call("_on_mainline_advance_response", {
+		"state": "victory",
+		"mainline_id": "chapter_01_steel_rebellion",
+		"battle_index": 2,
+		"total_battles": 2,
+		"rewards": {"gold": 100},
+	}, 200)
+	_assert_true("Mainline victory status is shown", main_status_label.text.contains("通关"),
+		"mainline victory should show completion status")
+	_assert_true("Mainline victory hides next battle button", not ml_next_btn.visible,
+		"mainline victory should hide the next-battle button")
+	main_check.set("_active_mainline_id", "chapter_01_steel_rebellion")
+	main_check.call("_on_mainline_abandon_response", {
+		"ok": true,
+		"mainline_id": "chapter_01_steel_rebellion",
+		"abandoned_at": "2026-07-16T00:00:00Z",
+	}, 200)
+	_assert_eq("Mainline abandon clears active id", str(main_check.get("_active_mainline_id")), "",
+		"abandon should clear active mainline state")
+	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
+		"abandon should update status")
+	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
+	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
+	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
+		"team update response should show selected team in Chinese")
+
+	print("---")
+	print("Passed: %d   Failed: %d" % [_passed, _failed])
+	if _failed > 0:
+		print("FAIL")
+		_write_result("FAIL", "Passed=%d Failed=%d" % [_passed, _failed])
+		get_tree().quit(1)
+	else:
+		print("PASS")
+		_write_result("PASS", "Passed=%d Failed=%d" % [_passed, _failed])
+		get_tree().quit(0)
+
+
+func _test_one_map(map_id: String) -> void:
+	var board_scene: PackedScene = load("res://scenes/board.tscn")
+	var board = board_scene.instantiate()
+	add_child(board)
+	var map_path := _map_path_for_id(map_id)
+	if map_path == "":
+		_fail("no map file found for %s" % map_id)
+		board.queue_free()
+		return
+	var f := FileAccess.open(map_path, FileAccess.READ)
+	if f == null:
+		_fail("cannot open %s" % map_path)
+		board.queue_free()
+		return
+	var text := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(text)
+	if not parsed is Dictionary:
+		_fail("%s: not a JSON object" % map_path)
+		board.queue_free()
+		return
+	var result_raw: Variant = board.load_map(parsed)
+	var result: Dictionary = result_raw
+	if result.is_empty():
+		_fail("Board returned empty result for %s" % map_id)
+		board.queue_free()
+		return
+	var w: int = int(result["width"])
+	var h: int = int(result["height"])
+	var biome: String = String(result["biome"])
+	var tile_lookup: Dictionary = result["tile_lookup"]
+	_assert_eq("%s tile size x" % map_id, MAP_METRICS_SCRIPT.TILE_SIZE.x, 48,
+		"board metrics should stay 48px wide")
+	_assert_eq("%s tile size y" % map_id, MAP_METRICS_SCRIPT.TILE_SIZE.y, 48,
+		"board metrics should stay 48px tall")
+	_assert_eq("%s tile count" % map_id, tile_lookup.size(), w * h,
+		"tile_lookup should have one entry per cell")
+	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
+		"board camera should be present")
+	print("  %s - %dx%d biome=%s units=%d" % [
+		map_id, w, h, biome, board.units.get_child_count()])
+	board.queue_free()
+
+
+func _preset_options_contain(options: Array, preset_id: String) -> bool:
+	for option in options:
+		if option is Dictionary and str(option.get("id", "")) == preset_id:
+			return true
+	return false
+
+
+func _setup_action_bubble_state(main_check: Node) -> void:
+	main_check.set("_player_id", 1)
+	GameState.local_player_id = 1
+	var tiles: Array = []
+	for y in range(5):
+		for x in range(5):
+			tiles.append({"x": x, "y": y, "terrain": "plain", "owner_id": null})
+	tiles.append({"x": 1, "y": 1, "terrain": "village", "owner_id": 2})
+	GameState.ingest_snapshot({
+		"game": {"id": 900, "status": "playing"},
+		"current_player_id": 1,
+		"tiles": tiles,
+		"players": [
+			{
+				"id": 1,
+				"gold": 500,
+				"units": [
+					{
+						"id": 10,
+						"player_id": 1,
+						"unit_type": "healer",
+						"name": "治疗师",
+						"x": 1,
+						"y": 1,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": ["heal"],
+						"has_acted": false,
+						"has_moved": false,
+					},
+					{
+						"id": 12,
+						"player_id": 1,
+						"unit_type": "swordsman",
+						"name": "剑士",
+						"x": 2,
+						"y": 1,
+						"hp": 10,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+					{
+						"id": 11,
+						"player_id": 1,
+						"unit_type": "swordsman",
+						"name": "剑士",
+						"x": 3,
+						"y": 3,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+				],
+			},
+			{
+				"id": 2,
+				"gold": 500,
+				"units": [
+					{
+						"id": 20,
+						"player_id": 2,
+						"unit_type": "swordsman",
+						"name": "敌方剑士",
+						"x": 4,
+						"y": 3,
+						"hp": 30,
+						"max_hp": 30,
+						"mp": 3,
+						"mov": 3,
+						"attack_range": 1,
+						"min_attack_range": 0,
+						"skills": [],
+						"has_acted": false,
+						"has_moved": false,
+					},
+				],
+			},
+		],
+	})
+	var board: Node = main_check.get_node("GameView/Board")
+	board.set("map_size", Vector2i(5, 5))
+	var lookup: Dictionary = {}
+	for t in tiles:
+		lookup[Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))] = t
+	board.set("tile_lookup", lookup)
+
+
+func _assert_action_button(label: String, main_check: Node, button_name: String, expected_visible: bool, msg: String) -> void:
+	var btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/" + button_name)
+	_assert_eq(label, btn.visible, expected_visible, msg)
+
+
+func _map_path_for_id(map_id: String) -> String:
+	var candidates := [
+		"res://../../game/maps/%s.json" % map_id,
+		"res://../game/maps/%s.json" % map_id,
+		"res://game/maps/%s.json" % map_id,
+	]
+	for c in candidates:
+		if FileAccess.file_exists(c):
+			return c
+	return ""
+
+
+func _assert_eq(label: String, got, expected, msg: String) -> void:
+	if got == expected:
+		_passed += 1
+	else:
+		_failed += 1
+		print("  FAIL  %s: got %s expected %s - %s" % [label, str(got), str(expected), msg])
+
+
+func _assert_gte(label: String, got, minimum, msg: String) -> void:
+	if got >= minimum:
+		_passed += 1
+	else:
+		_failed += 1
+		print("  FAIL  %s: got %s < %s - %s" % [label, str(got), str(minimum), msg])
+
+
+func _assert_lte(label: String, got, maximum, msg: String) -> void:
+	if got <= maximum:
+		_passed += 1
+	else:
+		_failed += 1
+		print("  FAIL  %s: got %s > %s - %s" % [label, str(got), str(maximum), msg])
+
+
+func _assert_true(label: String, cond: bool, msg: String) -> void:
+	if cond:
+		_passed += 1
+	else:
+		_failed += 1
+		print("  FAIL  %s: %s" % [label, msg])
+
+
+func _method_arg_count(target: Object, method_name: String) -> int:
+	for item in target.get_method_list():
+		if String(item.get("name", "")) == method_name:
+			var args: Array = item.get("args", [])
+			return args.size()
+	return -1
+
+
+func _capture_recruit_event(new_unit_id: int, unit_type: String, tile_x: int, tile_y: int, cost: int) -> void:
+	_last_recruit_event = [new_unit_id, unit_type, tile_x, tile_y, cost]
+
+
+func _fail(msg: String) -> void:
+	_failed += 1
+	print("  FAIL  %s" % msg)
+
+
+func _write_result(status: String, details: String) -> void:
+	var path := ProjectSettings.globalize_path("user://smoke_test_result.txt")
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string("%s\n%s\n" % [status, details])
+	file.close()

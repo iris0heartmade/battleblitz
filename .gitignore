@@ -68,6 +68,7 @@ claude --resume *.txt
 *.png
 !game/app/web/assets/tiles/**/*.png
 !game/app/web/assets/**/*.png
+!godot-client/assets/**/*.png
 
 # ===== Todolist ==========
 *todo*.md
@@ -85,4 +86,10 @@ map_previews/*.png
 # Open-source战棋参考项目从 GitHub clone 下来的副本，
 # 不进版本控制。本地手动跑 `cd ref/ && git clone <url>` 即可。
 # README 索引和 .bat 快捷启动脚本仍进版本控制。
-ref/*/
+ref/
+# But keep the following files in version control:
+!ref/README.md
+!ref/*.bat
+!ref/*.md
+godot-client/godot-ref/
+.git-rewrite/

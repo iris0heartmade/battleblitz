@@ -19,18 +19,27 @@ from app.schemas import BattleConfig
 
 
 # ============================================================
-# Valid enums (kept in sync with classes/units/*.py type_id)
+# Valid unit identifiers are discovered from classes/units/*.py. Content
+# schemas must not need a code edit whenever a new data-defined class lands.
 # ============================================================
 
-VALID_CLASS_IDS: tuple[str, ...] = (
-    "swordsman", "archer", "knight", "warlock", "healer",
-)
+CLASS_ID_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
+
+
+def valid_class_ids() -> set[str]:
+    from app.classes.units import type_ids
+    return set(type_ids())
+
+
+# Backward-compatible export for callers that only need a startup snapshot.
+VALID_CLASS_IDS: tuple[str, ...] = tuple(sorted(valid_class_ids()))
+VALID_MERCENARY_UPGRADE_STATS = frozenset({"hp", "atk", "def", "matk", "mdef", "mov"})
 
 WinCondition = Literal["rout", "seize", "defend", "boss"]
 
 
 def _class_id_pattern() -> str:
-    return f"^({'|'.join(VALID_CLASS_IDS)})$"
+    return CLASS_ID_PATTERN
 
 
 # ============================================================
@@ -109,6 +118,10 @@ class SpawnUnit(APIModel):
     type: str = Field(pattern=_class_id_pattern())
     color: str = Field(min_length=1, max_length=16)
     level: int = Field(default=1, ge=1, le=99)
+    # Test fixtures: explicitly set the spawned Unit's starting HP. When
+    # set, the engine overrides both ``hp`` and ``max_hp`` so the unit
+    # spawns wounded. ``None`` (default) keeps the class's ``base_hp``.
+    hp: Optional[int] = Field(default=None, ge=1, le=999)
 
 
 class SpawnReplacementUnit(APIModel):
@@ -117,6 +130,8 @@ class SpawnReplacementUnit(APIModel):
     level: int = Field(default=1, ge=1, le=99)
     x: Optional[int] = Field(default=None, ge=0, le=999)
     y: Optional[int] = Field(default=None, ge=0, le=999)
+    # See ``SpawnUnit.hp`` — same semantics on replacement units.
+    hp: Optional[int] = Field(default=None, ge=1, le=999)
 
 
 class SpawnReplaceSpec(APIModel):
@@ -255,6 +270,42 @@ class MainlineRewards(APIModel):
     exp_per_unit: int = Field(default=0, ge=0, le=10_000)
 
 
+class MercenaryUpgradeRuleSpec(APIModel):
+    """Authorable point cost and cap for one mercenary stat."""
+
+    point_cost: int = Field(ge=1, le=100)
+    max_bonus: int = Field(ge=1, le=100)
+
+
+class MainlineMercenaryBalance(APIModel):
+    """Declarative campaign-side rules for generic, non-hero units.
+
+    Hero progression remains in the hero campaign state.  These values are
+    intentionally scoped to the mainline's expendable mercenary roster.
+    """
+
+    total_points: int = Field(default=100, ge=0, le=10_000)
+    starting_fund: int = Field(default=1000, ge=0, le=1_000_000)
+    allowed_unit_types: Optional[list[str]] = None
+    stat_rules: dict[str, MercenaryUpgradeRuleSpec] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_mercenary_unit_types(self) -> "MainlineMercenaryBalance":
+        if self.allowed_unit_types is not None:
+            known = valid_class_ids()
+            unknown = sorted(set(self.allowed_unit_types) - known)
+            if unknown:
+                raise ValueError(
+                    f"mercenary_balance.allowed_unit_types contains unknown class_ids {unknown!r}"
+                )
+        unknown_stats = sorted(set(self.stat_rules) - VALID_MERCENARY_UPGRADE_STATS)
+        if unknown_stats:
+            raise ValueError(
+                f"mercenary_balance.stat_rules contains unsupported stats {unknown_stats!r}"
+            )
+        return self
+
+
 class Mainline(APIModel):
     """A campaign: a sequence of battles with dialogue framing.
 
@@ -275,6 +326,12 @@ class Mainline(APIModel):
     dialogues: dict[str, str] = Field(default_factory=dict)
     battles: list[BattleSpec] = Field(min_length=1, max_length=32)
     rewards_on_clear: MainlineRewards = Field(default_factory=MainlineRewards)
+    mercenary_balance: MainlineMercenaryBalance = Field(
+        default_factory=MainlineMercenaryBalance
+    )
+    # Optional campaign link. Completion remains an explicit player choice;
+    # this only tells the client which chapter can be entered next.
+    next_mainline_id: Optional[str] = Field(default=None, pattern=r"^[a-z0-9_]{3,64}$")
     art_assets: dict = Field(default_factory=dict)
 
     @property
@@ -290,17 +347,34 @@ class Mainline(APIModel):
 
     @model_validator(mode="after")
     def _validate_classes(self) -> "Mainline":
+        known = valid_class_ids()
         for cid in self.required_classes:
-            if cid not in VALID_CLASS_IDS:
+            if cid not in known:
                 raise ValueError(
                     f"required_classes contains unknown class_id {cid!r}; "
-                    f"valid: {VALID_CLASS_IDS}"
+                    f"valid: {sorted(known)}"
                 )
         for cid in self.starting_units:
-            if cid.class_id not in VALID_CLASS_IDS:
+            if cid.class_id not in known:
                 raise ValueError(
                     f"starting_units contains unknown class_id {cid.class_id!r}"
                 )
+        for battle in self.battles:
+            if battle.spawn_overrides is None:
+                continue
+            spawn_types = [
+                *(entry.type for entry in battle.spawn_overrides.add),
+                *(entry.unit.type for entry in battle.spawn_overrides.replace),
+            ]
+            for class_id in spawn_types:
+                if class_id not in known:
+                    raise ValueError(
+                        f"battle {battle.id!r} contains unknown class_id {class_id!r}"
+                    )
+        if self.rewards_on_clear.unlock_class and self.rewards_on_clear.unlock_class not in known:
+            raise ValueError(
+                f"rewards_on_clear.unlock_class is unknown: {self.rewards_on_clear.unlock_class!r}"
+            )
         # Each BattleSpec.dialogue key must exist in self.dialogues
         for b in self.battles:
             for key_name, key_val in (
@@ -394,6 +468,54 @@ class MainlineDetailOut(_PydanticBaseModel):
     dialogue_keys: list[str]
 
 
+class MainlinePrepareHeroOut(_PydanticBaseModel):
+    hero_id: str
+    name: str
+    class_id: str
+    level: int
+    exp: int
+    promoted: bool
+    can_promote: bool
+    promotion_options: list[str]
+    learned_skills: list[str]
+    base_stats: dict
+    equipment: dict
+    equipment_bonuses: dict = {}
+
+
+class MainlinePrepareUnitOut(_PydanticBaseModel):
+    class_id: str
+    level: int
+    name: Optional[str] = None
+    hero_id: Optional[str] = None
+    color: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+
+class MainlinePrepareOut(_PydanticBaseModel):
+    mainline_id: str
+    # True when the profile already has this campaign active.  The client
+    # must then resume the persisted cursor instead of starting battle zero.
+    is_active: bool = False
+    title: str
+    synopsis: str
+    battle_index: int
+    total_battles: int
+    battle_id: str
+    battle_title: str
+    win_condition: str
+    required_classes: list[str]
+    pre_battle_dialogue_key: Optional[str] = None
+    post_battle_dialogue_key: Optional[str] = None
+    bgm_meta: Optional[BattleBgmMeta] = None
+    inventory: dict[str, int]
+    equipment_catalog: list[dict] = []
+    heroes: list[MainlinePrepareHeroOut]
+    roster_units: list[MainlinePrepareUnitOut]
+    rewards_on_clear: MainlineRewards
+
+
 class MainlineStartRequest(_PydanticBaseModel):
     """`POST /mainlines/{id}/start` body.
 
@@ -403,6 +525,13 @@ class MainlineStartRequest(_PydanticBaseModel):
     user_name: str = _Field(min_length=1, max_length=64)
     # V1 optional: skip the opening dialogue and go straight to battle.
     skip_intro: bool = False
+    disabled_unit_indices: list[int] = _Field(default_factory=list)
+    # When True, allow restarting the SAME mainline (e.g. after
+    # loading a save).  Any in-flight game for the user is
+    # force-aborted before the new battle spawns.  Defaults to
+    # False so the existing "another mainline is active" 409
+    # behaviour is preserved.
+    force: bool = False
 
 
 class MainlineStartOut(_PydanticBaseModel):
@@ -440,11 +569,69 @@ class MainlineAdvanceOut(_PydanticBaseModel):
     post_battle_dialogue_url: Optional[str] = None
     post_battle_dialogue_key: Optional[str] = None
     rewards: Optional[MainlineRewards] = None
+    victory_dialogue_url: Optional[str] = None
+    victory_dialogue_key: Optional[str] = None
+    # Present only when the completed chapter declares a linked successor.
+    next_mainline_id: Optional[str] = None
+    next_mainline_title: Optional[str] = None
+    # Auto-save checkpoint written at chapter end.  None if the
+    # advance did not produce an auto-save (e.g. mid-battle advance
+    # that just bumped the cursor).  The FE renders
+    # "自动存档中…… 自动存档完毕" when this is non-null.
+    auto_save: Optional[dict] = None
 
 
 class MainlineNextBattleRequest(_PydanticBaseModel):
     """`POST /mainlines/{id}/next-battle` body."""
     user_name: str = _Field(min_length=1, max_length=64)
+    disabled_unit_indices: list[int] = _Field(default_factory=list)
+
+
+class MainlinePreparePromoteRequest(_PydanticBaseModel):
+    user_name: str = _Field(min_length=1, max_length=64)
+    hero_id: str = _Field(min_length=1, max_length=64)
+    target_class_id: str = _Field(min_length=1, max_length=64)
+
+
+class MainlinePreparePromoteOut(_PydanticBaseModel):
+    ok: bool = True
+    hero_id: str
+    class_id: str
+    level: int
+    promoted: bool
+    hero_crest_left: int
+
+
+class MainlinePrepareEquipmentRequest(_PydanticBaseModel):
+    user_name: str
+    hero_id: str
+    slot: str
+    equipment_id: Optional[str] = None
+
+
+class MainlinePrepareEquipmentOut(_PydanticBaseModel):
+    hero_id: str
+    equipment: dict
+    equipment_bonuses: dict
+
+
+class MainlineShopPurchaseRequest(_PydanticBaseModel):
+    user_name: str = _Field(min_length=1, max_length=64)
+    item_id: str = _Field(min_length=1, max_length=64)
+    quantity: int = _Field(default=1, ge=1, le=99)
+
+
+class MainlineShopPurchaseOut(_PydanticBaseModel):
+    item_id: str
+    quantity: int
+    inventory_count: int
+    gold_remaining: int
+
+
+class MainlineShopOut(_PydanticBaseModel):
+    mainline_id: str
+    gold: int
+    items: list[dict]
 
 
 class MainlineNextBattleOut(MainlineStartOut):
@@ -477,6 +664,67 @@ class MainlineStepOut(_PydanticBaseModel):
     rewards: Optional[MainlineRewards] = None
 
 
+# ============================================================
+# Mercenary domain wire formats
+# ============================================================
+
+
+class ChapterBalanceConfigOut(_PydanticBaseModel):
+    """Chapter-wide enemy / resource modifiers for mercenary battles.
+
+    Mirrors ``app.mercenary_domain.ChapterBalanceConfig`` — kept as a
+    separate Pydantic model so the wire format is stable even if the
+    in-memory dataclass gains private fields.
+    """
+    enemy_modifiers: dict[str, int]
+    max_recruit_count: int
+    starting_fund: int
+    total_points: int
+    allowed_unit_types: list[str]
+    stat_rules: dict[str, dict[str, int]]
+
+
+class CommanderAllocationOut(_PydanticBaseModel):
+    """Per-profile mercenary point allocation.
+
+    The frontend uses this to render the pre-battle upgrade panel
+    (spend 100 points across infantry / archer / knight …).
+    """
+    total_points: int
+    spent_points: int
+    unit_type_upgrades: dict[str, dict[str, int]]
+
+
+class MainlineMercenaryConfigOut(_PydanticBaseModel):
+    """Response shape for ``GET /mainlines/{id}/mercenary/config``.
+
+    The mainline JSON can optionally override ``balance`` with a
+    ``chapter_balance`` block; until that ships, the endpoint returns
+    the dataclass defaults so the FE can render the panel without a
+    second round-trip.
+    """
+    mainline_id: str
+    balance: ChapterBalanceConfigOut
+    allocation: CommanderAllocationOut
+    # total - spent, recomputed for FE convenience.
+    mercenary_points: int
+
+
+class MainlineMercenaryAllocateRequest(_PydanticBaseModel):
+    """Body for ``POST /mainlines/{id}/mercenary/allocate``."""
+    user_name: str = _Field(min_length=1, max_length=64)
+    unit_type: str = _Field(min_length=1, max_length=16)
+    stat: str = _Field(min_length=1, max_length=16)
+    value: int = _Field(ge=1, le=10)
+
+
+class MainlineMercenaryAllocateOut(_PydanticBaseModel):
+    ok: bool = True
+    spent_points: int
+    remaining_points: int
+    unit_type_upgrades: dict[str, dict[str, int]]
+
+
 __all__ = [
     "VALID_CLASS_IDS",
     "WinCondition",
@@ -489,13 +737,29 @@ __all__ = [
     "BattleBgmMeta",
     "BattlePreview",
     "MainlineDetailOut",
+    "MainlinePrepareHeroOut",
+    "MainlinePrepareUnitOut",
+    "MainlinePrepareOut",
     "MainlineStartRequest",
     "MainlineStartOut",
     "MainlineAdvanceRequest",
     "MainlineAdvanceOut",
     "MainlineNextBattleRequest",
     "MainlineNextBattleOut",
+    "MainlinePreparePromoteRequest",
+    "MainlinePreparePromoteOut",
+    "MainlinePrepareEquipmentRequest",
+    "MainlinePrepareEquipmentOut",
+    "MainlineShopPurchaseRequest",
+    "MainlineShopPurchaseOut",
+    "MainlineShopOut",
     "MainlineAbandonRequest",
     "MainlineAbandonOut",
     "MainlineStepOut",
+    # Mercenary domain wire formats
+    "ChapterBalanceConfigOut",
+    "CommanderAllocationOut",
+    "MainlineMercenaryConfigOut",
+    "MainlineMercenaryAllocateRequest",
+    "MainlineMercenaryAllocateOut",
 ]

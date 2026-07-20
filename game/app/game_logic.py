@@ -40,6 +40,7 @@ UNIT_HEALER = "healer"
 UNIT_KNIGHT = "knight"
 
 from app.models import ActionLog, ClaimSession, Game, Player, Tile, Unit
+from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
 from app.utils import bfs_reachable, has_line_of_sight, manhattan, pathfind
 
 
@@ -503,16 +504,36 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     unit.exp -= EXP_TO_LEVEL
     unit.level += 1
     factor = 1.0 + LEVEL_UP_STAT_BONUS  # 1.05
-    new_max_hp = int(round(unit.max_hp * factor))
-    hp_gain = new_max_hp - unit.max_hp
-    unit.max_hp = new_max_hp
-    unit.hp = min(unit.max_hp, unit.hp + hp_gain)
-    unit.atk = int(round(unit.atk * factor))
-    unit.def_ = int(round(unit.def_ * factor))
+    campaign_base = dict(unit.campaign_base_stats or {})
+    if campaign_base:
+        # Hero battle Units hold naked campaign stats separately from their
+        # effective equipment-modified values.  Level the naked values, then
+        # apply only their delta to combat values so equipment stays a
+        # temporary modifier instead of becoming permanent progression.
+        old_base_hp = int(campaign_base.get("hp", unit.max_hp))
+        old_base_atk = int(campaign_base.get("atk", unit.atk))
+        old_base_def = int(campaign_base.get("def", unit.def_))
+        campaign_base["hp"] = int(round(old_base_hp * factor))
+        campaign_base["atk"] = int(round(old_base_atk * factor)) + 1
+        campaign_base["def"] = int(round(old_base_def * factor)) + 1
+        unit.max_hp += campaign_base["hp"] - old_base_hp
+        unit.hp = min(unit.max_hp, unit.hp + campaign_base["hp"] - old_base_hp)
+        unit.atk += campaign_base["atk"] - old_base_atk
+        unit.def_ += campaign_base["def"] - old_base_def
+        unit.campaign_base_stats = campaign_base
+    else:
+        # Non-heroes and battles created before the snapshot migration retain
+        # the legacy effective-stat behaviour.
+        new_max_hp = int(round(unit.max_hp * factor))
+        hp_gain = new_max_hp - unit.max_hp
+        unit.max_hp = new_max_hp
+        unit.hp = min(unit.max_hp, unit.hp + hp_gain)
+        unit.atk = int(round(unit.atk * factor))
+        unit.def_ = int(round(unit.def_ * factor))
 
-    # Auto-allocate bonus points
-    unit.atk += 1
-    unit.def_ += 1
+        # Auto-allocate bonus points
+        unit.atk += 1
+        unit.def_ += 1
 
     return LevelUpResult(
         new_level=unit.level,
@@ -1511,7 +1532,7 @@ async def _load_ai_snapshot(session: AsyncSession, game: Game, ai_player: Player
     tiles = (
         await session.execute(select(Tile).where(Tile.game_id == game.id))
     ).scalars().all()
-    terrain = {(t.x, t.y): t.terrain for t in tiles}
+    terrain = {(t.x, t.y): movement_key(t) for t in tiles}
     owners = {(t.x, t.y): t.owner_id for t in tiles}
     occ = {(t.x, t.y): t.occupied_unit_id for t in tiles}
     players = (
@@ -1727,9 +1748,10 @@ def _ai_pick_move_target(
         start=(unit.x, unit.y),
         terrain=snap.terrain,
         owners=snap.owners,
-        mov=unit.mov,
+        mov=unit.mp,
         viewer_owner_id=None,  # AI shouldn't be blocked from entering enemy castles
         blocked_units=blocked,
+        movement_profile=resolve_movement_profile(unit),
     )
     if not reachable:
         return None
@@ -1820,7 +1842,7 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     tile_rows = (
         await session.execute(select(Tile).where(Tile.game_id == game.id))
     ).scalars().all()
-    terrain = {(t.x, t.y): t.terrain for t in tile_rows}
+    terrain = {(t.x, t.y): movement_key(t) for t in tile_rows}
     owners = {(t.x, t.y): t.owner_id for t in tile_rows}
     # Build blocked set from currently-alive units
     all_units = (
@@ -1833,7 +1855,8 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     blocked = {(u.x, u.y) for u in all_units if u.id != unit.id and u.hp > 0}
     path = pathfind(
         start=(unit.x, unit.y), goal=dest, terrain=terrain, owners=owners,
-        mov=unit.mov, viewer_owner_id=unit.player_id, blocked_units=blocked,
+        mov=unit.mp, viewer_owner_id=unit.player_id, blocked_units=blocked,
+        movement_profile=resolve_movement_profile(unit),
     )
     if not path or path[-1] != dest:
         return False
@@ -1843,12 +1866,10 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
             t.occupied_unit_id = None
         if (t.x, t.y) == dest:
             t.occupied_unit_id = unit.id
-            if t.terrain == TERRAIN_CASTLE:
-                claim_castle_if_present(t, unit)
     unit.x, unit.y = dest
     # Deduct movement cost — same logic as the human route (actions.py).
-    from app.config import TERRAIN_MOVE_COST
-    cost_x2 = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
+    movement_profile = resolve_movement_profile(unit)
+    cost_x2 = sum(terrain_cost_x2(movement_profile, terrain[c]) or 0 for c in path[1:])
     spent_mp = cost_x2 // 2
     unit.mp = max(0, unit.mp - spent_mp)
     # AI: a unit that has moved may still attack this turn (matches the
@@ -2237,8 +2258,9 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
             }
             reachable = bfs_reachable(
                 start=(unit.x, unit.y), terrain=snap.terrain,
-                owners=snap.owners, mov=unit.mov,
+                owners=snap.owners, mov=unit.mp,
                 viewer_owner_id=None, blocked_units=blocked,
+                movement_profile=resolve_movement_profile(unit),
             )
             if reachable:
                 # Score each reachable tile by distance-to-castle
@@ -2339,8 +2361,9 @@ async def ai_take_one_action(
         }
         reachable = bfs_reachable(
             start=(unit.x, unit.y), terrain=snap.terrain,
-            owners=snap.owners, mov=unit.mov,
+            owners=snap.owners, mov=unit.mp,
             viewer_owner_id=None, blocked_units=blocked,
+            movement_profile=resolve_movement_profile(unit),
         )
         if reachable:
             def flee_score(t):

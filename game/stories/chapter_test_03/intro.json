@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 3：转职事件 + 残血战 — 章前对话。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "我已到 20 级。检查 hero_inventory 是否有 hero_crest 后，去 prepare 面板转职为 sage。"
+    }
+  ]
+}

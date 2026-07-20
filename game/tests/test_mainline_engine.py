@@ -268,3 +268,57 @@ class TestSceneId:
     def test_total_battles_property(self, sample_mainline):
         eng = MainlineEngine(session=None, profile=_profile(), mainline=sample_mainline)
         assert eng.total_battles == 2
+
+
+@pytest.mark.asyncio
+async def test_apply_victory_awards_exp_without_lazy_loading_profile_units(monkeypatch):
+    """Campaign clear must query unit ids instead of touching ``profile.units``."""
+    awarded = []
+
+    class _ScalarResult:
+        def all(self):
+            return [101, 102]
+
+    class _Session:
+        async def flush(self):
+            pass
+
+        async def refresh(self, _profile):
+            pass
+
+        async def scalars(self, _statement):
+            return _ScalarResult()
+
+    class _ProgressionService:
+        def __init__(self, _session):
+            pass
+
+        async def advance_mainline_progress(self, *_args, **_kwargs):
+            return None
+
+        async def award_xp(self, unit_id, amount, *, reason):
+            awarded.append((unit_id, amount, reason))
+
+    class _Profile:
+        id = 7
+        user_name = "alice"
+        gold = 0
+        unlocked_classes = []
+        unlocked_commanders = []
+
+        @property
+        def units(self):
+            raise AssertionError("profile.units must not lazy-load in async code")
+
+    monkeypatch.setattr("app.progression.service.ProgressionService", _ProgressionService)
+    mainline = SimpleNamespace(
+        id="chapter_test",
+        dialogues={},
+        battles=[],
+        rewards_on_clear=MainlineRewards(gold=0, unlock_class=None, exp_per_unit=50),
+    )
+    engine = MainlineEngine(_Session(), _Profile(), mainline)
+
+    await engine.apply_victory()
+
+    assert awarded == [(101, 50, "mainline_clear"), (102, 50, "mainline_clear")]

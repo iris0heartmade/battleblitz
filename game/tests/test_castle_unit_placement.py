@@ -25,6 +25,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+from sqlalchemy import select
+
 # Make sure we can import the app package on a bare sys.path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent))
@@ -32,6 +35,13 @@ sys.path.insert(0, str(_HERE.parent))
 
 class TestEditorAcceptsUnitsOnCastle(unittest.TestCase):
     """Pydantic-level: editor save accepts a unit whose (x, y) is a 'C' tile."""
+
+    def test_snow_peak_tiles_pass_layout_validation(self):
+        from app.routes.editor import _validate_layout
+
+        layout = ["S" * 15 for _ in range(15)]
+
+        _validate_layout(layout, 15, 15)
 
     def test_units_on_castle_tiles_pass_validation(self):
         from app.routes.editor import CustomMapSave, MapSize, InitialUnit
@@ -123,6 +133,59 @@ class TestEditorSaveHTTP(unittest.IsolatedAsyncioTestCase):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.delete(f"/editor/maps/{saved['id']}")
 
+    async def test_post_preserves_tile_owners(self):
+        from httpx import ASGITransport, AsyncClient
+        from app.main import app
+
+        body = {
+            "name": "HttpTileOwnerTest",
+            "size": {"width": 15, "height": 15},
+            "biome": "grass",
+            "layout": [
+                "C" + "P" * 14,
+                *["P" * 15 for _ in range(13)],
+                "P" * 14 + "C",
+            ],
+            "initial_units": [],
+            "tile_owners": [
+                {"x": 7, "y": 7, "color": "blue"},
+            ],
+        }
+        saved = None
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/editor/maps", json=body)
+            try:
+                self.assertEqual(r.status_code, 201, msg=r.text)
+                saved = r.json()
+                self.assertEqual(saved["tile_owners"], [{"x": 7, "y": 7, "color": "blue"}])
+                loaded = await client.get(f"/editor/maps/{saved['id']}")
+                self.assertEqual(loaded.status_code, 200, msg=loaded.text)
+                self.assertEqual(loaded.json()["tile_owners"], [{"x": 7, "y": 7, "color": "blue"}])
+            finally:
+                if saved:
+                    await client.delete(f"/editor/maps/{saved['id']}")
+
+    async def test_saved_map_appears_in_presets_as_custom_map(self):
+        from httpx import ASGITransport, AsyncClient
+        from app.main import app
+
+        body = {
+            "name": "HttpPresetVisibilityTest",
+            "size": {"width": 15, "height": 15},
+            "biome": "desert",
+            "layout": ["P" * 15 for _ in range(15)],
+            "initial_units": [],
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post("/editor/maps", json=body)
+            self.assertEqual(created.status_code, 201, msg=created.text)
+            saved = created.json()
+            presets = await client.get("/games/presets")
+            self.assertEqual(presets.status_code, 200, msg=presets.text)
+            preset_ids = {m["id"] for m in presets.json()["maps"]}
+            self.assertIn(f"custom:{saved['id']}", preset_ids)
+            await client.delete(f"/editor/maps/{saved['id']}")
+
 
 class TestEditorUnitFieldShapeMatchesBuiltin(unittest.TestCase):
     """Sanity: editor output uses the SAME 5-field unit schema as built-in maps.
@@ -150,6 +213,77 @@ class TestEditorUnitFieldShapeMatchesBuiltin(unittest.TestCase):
             editor_keys, builtin_keys,
             f"editor unit schema {editor_keys} diverges from builtin {builtin_keys}",
         )
+
+
+@pytest.fixture
+async def game_client():
+    from httpx import ASGITransport, AsyncClient
+    from app.database import Base, dispose_db, engine, init_db
+    from app.main import app
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await init_db()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await dispose_db()
+
+
+@pytest.mark.asyncio
+async def test_custom_map_tile_owners_apply_when_game_starts(game_client):
+    from app.database import AsyncSessionLocal
+    from app.models import Player, Tile
+
+    layout = [
+        "C" + "P" * 14,
+        *["P" * 15 for _ in range(6)],
+        "P" * 7 + "v" + "P" * 7,
+        *["P" * 15 for _ in range(6)],
+        "P" * 14 + "C",
+    ]
+    created = await game_client.post("/editor/maps", json={
+        "name": "TileOwnerStartTest",
+        "size": {"width": 15, "height": 15},
+        "biome": "grass",
+        "layout": layout,
+        "initial_units": [
+            {"x": 0, "y": 1, "type": "swordsman", "color": "red", "level": 1},
+            {"x": 14, "y": 13, "type": "swordsman", "color": "blue", "level": 1},
+        ],
+        "tile_owners": [
+            {"x": 7, "y": 7, "color": "blue"},
+        ],
+    })
+    assert created.status_code == 201, created.text
+    custom_id = created.json()["id"]
+    try:
+        game = await game_client.post("/games", json={
+            "name": "tile-owner-start",
+            "map_preset": f"custom:{custom_id}",
+            "capacity": 2,
+            "win_condition": "rout",
+        })
+        assert game.status_code == 201, game.text
+        game_id = game.json()["id"]
+        red = await game_client.post(f"/games/{game_id}/join", json={"user_name": "red", "color": "red"})
+        assert red.status_code == 201, red.text
+        blue = await game_client.post(f"/games/{game_id}/join", json={"user_name": "blue", "color": "blue"})
+        assert blue.status_code == 201, blue.text
+        started = await game_client.post(f"/games/{game_id}/start")
+        assert started.status_code == 200, started.text
+
+        async with AsyncSessionLocal() as session:
+            blue_player = (await session.execute(
+                select(Player).where(Player.game_id == game_id, Player.color == "blue")
+            )).scalar_one()
+            village = (await session.execute(
+                select(Tile).where(Tile.game_id == game_id, Tile.x == 7, Tile.y == 7)
+            )).scalar_one()
+        assert village.owner_id == blue_player.id
+    finally:
+        await game_client.delete(f"/editor/maps/{custom_id}")
 
 
 if __name__ == "__main__":

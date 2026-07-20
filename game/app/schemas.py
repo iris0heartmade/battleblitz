@@ -190,6 +190,7 @@ class UnitOut(APIModel):
     # already been baked into the atk/def/matk/mdef/mov fields
     # above by the spawn helper.
     hero_id: Optional[str] = None
+    terrain_movement: Dict[str, Dict[str, int | bool]] = {}
 
 
 class PlayerOut(APIModel):
@@ -423,6 +424,21 @@ class AttackResult(BaseModel):
     assist_unit_ids: List[int] = []
     counter_damage: int = 0
     attacker_hp_after: int
+    description: str
+
+
+class AttackForecastOut(BaseModel):
+    ok: bool = True
+    attacker_unit_id: int
+    target_unit_id: int
+    damage: int
+    crit_damage: int
+    is_kill: bool
+    target_hp_after: int
+    target_def_bonus: int
+    counter_damage: int = 0
+    attacker_hp_after: int
+    counter_will_kill: bool = False
     description: str
 
 

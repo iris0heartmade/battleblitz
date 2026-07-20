@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/board/board.gd" id="1_board"]
+[ext_resource type="Script" path="res://scripts/board/highlights.gd" id="2_highlights"]
+[ext_resource type="Script" path="res://scripts/board/board_camera.gd" id="3_board_camera"]
+
+[node name="Board" type="Node2D"]
+script = ExtResource("1_board")
+
+[node name="GroundLayer" type="TileMapLayer" parent="."]
+
+[node name="StructureLayer" type="TileMapLayer" parent="."]
+
+[node name="DecorLayer" type="TileMapLayer" parent="."]
+
+[node name="HighlightLayer" type="Node2D" parent="."]
+script = ExtResource("2_highlights")
+
+[node name="UnitLayer" type="Node2D" parent="."]
+
+[node name="EffectsLayer" type="Node2D" parent="."]
+
+[node name="BoardCamera" type="Camera2D" parent="."]
+script = ExtResource("3_board_camera")
+enabled = false
+position_smoothing_enabled = true

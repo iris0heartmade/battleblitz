@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 1：单场残血战 — 章前对话。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "前面只有一个残血敌人。这一战用来回归手感。"
+    }
+  ]
+}

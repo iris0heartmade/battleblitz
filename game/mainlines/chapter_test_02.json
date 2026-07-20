@@ -1,0 +1,93 @@
+{
+  "id": "chapter_test_02",
+  "title": "测试章节 2：双场残血战（推进流程）",
+  "synopsis": "临时测试章节。两场战斗，敌人各 1 个残血单位。验证 /advance + /next-battle 推进循环。",
+  "cover_art": null,
+  "required_classes": ["swordsman", "archer", "healer"],
+  "starting_units": [
+    {
+      "class_id": "warlock",
+      "level": 1,
+      "name": "云",
+      "hero_id": "yun",
+      "color": "red",
+      "x": 2,
+      "y": 8
+    },
+    {
+      "class_id": "healer",
+      "level": 1,
+      "name": "安娜",
+      "hero_id": "anna",
+      "color": "red",
+      "x": 2,
+      "y": 9
+    },
+    {"class_id": "swordsman", "level": 1, "name": "红刀"}
+  ],
+  "dialogues": {
+    "intro":            "stories/chapter_test_02/intro.json",
+    "battle_01_after":  "stories/chapter_test_02/battle_01_after.json",
+    "battle_02_after":  "stories/chapter_test_02/battle_02_after.json",
+    "victory":          "stories/chapter_test_02/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "测试战 A：弓箭手残血",
+      "map_id": "balanced_2p_15",
+      "map_seed": 2001,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "留下 (13,8) 的 archer，其余 remove，hp=1。",
+      "spawn_overrides": {
+        "remove": [
+          {"color": "blue", "x": 12, "y": 8},
+          {"color": "blue", "x": 13, "y": 7},
+          {"color": "blue", "x": 14, "y": 7},
+          {"color": "blue", "x": 12, "y": 9}
+        ],
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 13, "y": 8},
+            "unit":  {"type": "archer", "color": "blue", "level": 1, "hp": 1}
+          }
+        ]
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after"
+    },
+    {
+      "id": "battle_02",
+      "title": "测试战 B：剑士残血",
+      "map_id": "balanced_2p_15",
+      "map_seed": 2002,
+      "win_condition": "rout",
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "notes": "留下 (13,7) 的 swordsman，hp=1。",
+      "spawn_overrides": {
+        "remove": [
+          {"color": "blue", "x": 12, "y": 8},
+          {"color": "blue", "x": 13, "y": 8},
+          {"color": "blue", "x": 14, "y": 7},
+          {"color": "blue", "x": 12, "y": 9}
+        ],
+        "replace": [
+          {
+            "match": {"color": "blue", "x": 13, "y": 7},
+            "unit":  {"type": "swordsman", "color": "blue", "level": 1, "hp": 1}
+          }
+        ]
+      },
+      "pre_battle_dialogue": null,
+      "post_battle_dialogue": "battle_02_after"
+    }
+  ],
+  "rewards_on_clear": {
+    "gold": 200,
+    "unlock_class": "knight",
+    "exp_per_unit": 80
+  },
+  "next_mainline_id": "chapter_test_03",
+  "art_assets": {}
+}

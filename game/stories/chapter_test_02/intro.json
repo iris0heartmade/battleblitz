@@ -1,0 +1,13 @@
+{
+  "scenes": [
+    {
+      "type": "narration",
+      "text": "测试章节 2：双场残血战 — 章前对话。"
+    },
+    {
+      "type": "dialogue",
+      "speaker": "云",
+      "text": "两场战斗，每场都只面对 1 个残血敌人。用于测试 /advance + /next-battle 推进。"
+    }
+  ]
+}

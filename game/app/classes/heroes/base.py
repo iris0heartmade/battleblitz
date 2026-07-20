@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from typing import ClassVar, List, Optional, Tuple
+from typing import ClassVar, List, Mapping, Optional, Tuple
 
 from app.commanders import CommanderPassive, CommanderPower
 
@@ -60,6 +60,7 @@ class HeroProfile:
     # have asymmetric mobility / resource budgets, e.g. a slow
     # caster with deep MP).
     mp_pool_override: Optional[int]
+    terrain_movement: Mapping[str, Mapping[str, int | bool]]
 
     # ── Skill bindings (P2.6+ reservation) ────────────────────
     # Character-specific skills ON TOP OF the base class's
@@ -128,6 +129,9 @@ class BaseHero(ABC):
     mov_override: ClassVar[Optional[int]] = None
     # MP pool per turn.  None = inherit from base class's mp_pool.
     mp_pool_override: ClassVar[Optional[int]] = None
+    # Hero entries override only the specified keys of their base class's
+    # terrain movement profile (for example, a river-crossing talent).
+    terrain_movement: ClassVar[Mapping[str, Mapping[str, int | bool]]] = {}
 
     # ── Skill bindings (P2.6+ reservation) ────────────────────
     # IDs of skills this hero gets ON TOP of its base class's
@@ -172,6 +176,10 @@ class BaseHero(ABC):
             mdef_override=cls.mdef_override,
             mov_override=cls.mov_override,
             mp_pool_override=cls.mp_pool_override,
+            terrain_movement={
+                terrain: dict(rule)
+                for terrain, rule in cls.terrain_movement.items()
+            },
             active_skills=tuple(cls.active_skills),
             passive_skills=tuple(cls.passive_skills),
             sprite_path=cls.sprite_path,
