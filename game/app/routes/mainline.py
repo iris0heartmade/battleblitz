@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -1212,7 +1212,7 @@ async def start_mainline(
                 body.user_name, aborted,
             )
     try:
-        await svc.set_active_mainline(
+        progress_summary = await svc.set_active_mainline(
             body.user_name, mainline_id, force=body.force,
         )
     except MainlineAlreadyActive as exc:
@@ -1236,14 +1236,26 @@ async def start_mainline(
             },
         )
 
+    profile.active_mainline = progress_summary.active_mainline
+    profile.mainline_progress = dict(progress_summary.mainline_progress)
     await session.flush()
-    await session.refresh(profile)
 
     # Spawn the first battle (always index 0 on /start).
     game, human, total_battles = await _spawn_battle_for_index(
         session, profile, mainline_id, 0,
         disabled_unit_indices=body.disabled_unit_indices,
     )
+    profile.active_mainline = progress_summary.active_mainline
+    profile.mainline_progress = dict(progress_summary.mainline_progress)
+    await session.execute(
+        update(PlayerProfile)
+        .where(PlayerProfile.user_name == body.user_name)
+        .values(
+            active_mainline=progress_summary.active_mainline,
+            mainline_progress=dict(progress_summary.mainline_progress),
+        )
+    )
+    await session.flush()
 
     # Determine whether to expose a pre-battle dialogue URL.
     pre_key = ml.battles[0].pre_battle_dialogue

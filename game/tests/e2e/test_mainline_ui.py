@@ -126,6 +126,10 @@ def _api_json(base_url: str, path: str, payload: dict) -> dict:
         return json.loads(response.read())
 
 
+def _create_profile(base_url: str, user_name: str) -> dict:
+    return _api_json(base_url, "/progression/profiles", {"user_name": user_name})
+
+
 def _profile(base_url: str, user_name: str) -> dict:
     with urllib.request.urlopen(
         f"{base_url}/profile/{urllib.parse.quote(user_name)}", timeout=15
@@ -146,15 +150,25 @@ def _open_mainline_list(page: Page, base_url: str, user_name: str) -> None:
         user_name,
     )
     page.reload()
-    page.locator('[data-action="goto-mainline-list"]').click()
+    page.get_by_role("button", name="📖 主线模式").click()
     page.locator("#view-mainline-list:not([hidden])").wait_for()
-    page.locator('#mainline-list [data-mainline-id="chapter_test_01"]').wait_for()
+    _chapter_start_button(page, "chapter_test_01").wait_for()
 
 
 def _chapter_start_button(page: Page, mainline_id: str):
     return page.locator(
         f'#mainline-list [data-mainline-id="{mainline_id}"] '
         '[data-action="mainline-card-click"]'
+    )
+
+
+def _wait_for_assignment_count(page: Page, count: int) -> None:
+    page.wait_for_function(
+        """(expected) => {
+            const row = document.querySelector('[data-action="mainline-prepare-focus-hero"]');
+            return !!row && (row.textContent || "").includes(`已分配 ${expected}`);
+        }""",
+        arg=count,
     )
 
 
@@ -174,10 +188,12 @@ def test_prepare_start_enters_battle_map(page: Page, mainline_server: str) -> No
     page.locator('[data-action="mainline-prepare-tab"][data-tab="items"]').click()
     hero_row = page.locator('[data-action="mainline-prepare-focus-hero"]').first
     assert "已分配 2" in hero_row.text_content()
-    page.locator('[data-action="mainline-prepare-equip"][data-slot="accessory"]:not([data-equipment-id])').click()
-    assert "已分配 1" in hero_row.text_content()
-    page.locator('[data-action="mainline-prepare-equip"][data-equipment-id="ruby_ring"]').click()
-    assert "已分配 2" in hero_row.text_content()
+    page.locator(".mainline-prepare-inventory").last.locator(
+        '[data-action="mainline-prepare-equip"][data-slot="weapon"]:not([data-equipment-id])'
+    ).click()
+    _wait_for_assignment_count(page, 1)
+    page.locator('[data-action="mainline-prepare-equip"][data-equipment-id="iron_sword"]').click()
+    _wait_for_assignment_count(page, 2)
 
     # Dialogue playback is independently tested.  Bypassing it here keeps
     # this regression focused on the preparation -> map hand-off.
@@ -191,6 +207,7 @@ def test_prepare_start_enters_battle_map(page: Page, mainline_server: str) -> No
 def test_selecting_other_chapter_requires_confirmation(page: Page, mainline_server: str) -> None:
     """Cancel keeps the active chapter; accept opens the clicked chapter's prep."""
     user_name = "e2e_selected_chapter"
+    _create_profile(mainline_server, user_name)
     _api_json(
         mainline_server,
         "/mainlines/chapter_test_02/start",
@@ -201,13 +218,15 @@ def test_selecting_other_chapter_requires_confirmation(page: Page, mainline_serv
     _open_mainline_list(page, mainline_server, user_name)
     start_first = _chapter_start_button(page, "chapter_test_01")
 
-    page.once("dialog", lambda dialog: dialog.dismiss())
-    start_first.click()
+    with page.expect_event("dialog") as cancel_dialog:
+        start_first.click()
+    cancel_dialog.value.dismiss()
     page.locator("#view-mainline-list:not([hidden])").wait_for()
     assert _profile(mainline_server, user_name)["active_mainline"] == "chapter_test_02"
 
-    page.once("dialog", lambda dialog: dialog.accept())
-    start_first.click()
+    with page.expect_event("dialog") as accept_dialog:
+        start_first.click()
+    accept_dialog.value.accept()
     page.locator("#view-mainline-prepare:not([hidden])").wait_for()
     assert "测试章节 1" in page.locator("#mainline-prepare-title").text_content()
     assert _profile(mainline_server, user_name)["active_mainline"] is None
