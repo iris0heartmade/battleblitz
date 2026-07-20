@@ -2546,6 +2546,7 @@ const _DIALOG_CHOICE := 2   # 选项(底部按钮)
 var _dialog_queue: Array = []  # [{character, text, kind, choices?}]
 var _hero_speaker_map: Dictionary = {}
 var _dialog_portrait_tex: TextureRect = null
+var _unit_info_portrait_tex: TextureRect = null
 var _dialog_active: bool = false
 var _dialog_full_text: String = ""
 var _dialog_visible_text: String = ""
@@ -6598,6 +6599,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
 	var hero_id := str(ud.get("hero_id", ""))
+	_set_unit_info_portrait(hero_id)
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
 	var skill_names: Array[String] = []
@@ -6617,6 +6619,35 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		lines.append("[color=#a89878]💤 已结束本回合行动[/color]")
 	lines = lines.filter(func(line): return str(line) != "")
 	unit_info.text = "\n".join(lines)
+
+
+func _set_unit_info_portrait(hero_id: String) -> void:
+	if info_panel == null or not is_instance_valid(info_panel):
+		return
+	if _unit_info_portrait_tex == null:
+		_unit_info_portrait_tex = TextureRect.new()
+		_unit_info_portrait_tex.size = Vector2(86, 118)
+		_unit_info_portrait_tex.position = Vector2(282, 108)
+		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		info_panel.add_child(_unit_info_portrait_tex)
+	if hero_id == "":
+		_unit_info_portrait_tex.visible = false
+		if unit_info != null and is_instance_valid(unit_info):
+			unit_info.offset_right = -12.0
+		return
+	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
+	if not FileAccess.file_exists(portrait_path):
+		_unit_info_portrait_tex.visible = false
+		if unit_info != null and is_instance_valid(unit_info):
+			unit_info.offset_right = -12.0
+		return
+	var tex := _load_portrait(portrait_path)
+	_unit_info_portrait_tex.texture = tex
+	_unit_info_portrait_tex.visible = tex != null
+	if unit_info != null and is_instance_valid(unit_info):
+		unit_info.offset_right = -108.0 if tex != null else -12.0
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)

@@ -29,6 +29,14 @@ const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const MAP_THEME_SCRIPT := preload("res://scripts/core/map_theme.gd")
 const TILE_SIZE := MAP_METRICS_SCRIPT.TILE_SIZE
 const TILES_DIR := "res://assets/tiles"
+const _TERRAIN_ASSET_FALLBACKS := {
+	"bridge": ["road", "river"],
+	"snow_peak": ["mountain"],
+	"castle": ["castle_floor"],
+	"gate": ["castle_door", "road"],
+	"village": ["plain"],
+	"barracks": ["plain"],
+}
 
 # Populated by `build()`. Keyed by "{terrain}|{biome}" → source_id.
 static var SOURCE_IDS: Dictionary = {}
@@ -58,7 +66,7 @@ static func build() -> TileSet:
 	#    one tile per terrain (the CENTER of the 4×4 autotile block);
 	#    batch 2 will register the surrounding 15 transition tiles and
 	#    wire them into a `TileSetTerrain` with bitmask autotiling.
-	var fe8_source := _build_fe8_atlas_source(ts)
+	var fe8_source := _build_fe8_atlas_source(ts) if Config.USE_FE8_ATLAS else null
 	if fe8_source != null:
 		_using_fe8_atlas = true
 		var fe8_source_id := ts.add_source(fe8_source)
@@ -76,12 +84,14 @@ static func build() -> TileSet:
 	for terrain in Config.TERRAIN_VARIANT_COUNTS.keys():
 		if _using_fe8_atlas and terrain in Config.FE8_TILE_COORDS:
 			continue  # already handled by the FE8 atlas
-		for biome in MAP_THEME_SCRIPT.source_registration_biomes(String(terrain)):
+		for biome in _legacy_registration_biomes(String(terrain)):
 			var source := _build_legacy_source_for(terrain, String(biome))
 			if source == null:
 				continue
 			var source_id := ts.add_source(source)
 			SOURCE_IDS["%s|%s" % [terrain, biome]] = source_id
+			if String(biome) == Config.DEFAULT_BIOME:
+				SOURCE_IDS["%s|" % terrain] = source_id
 
 	_cached = ts
 	return ts
@@ -92,6 +102,11 @@ static func source_id_for(terrain: String, biome: String) -> int:
 
 static func uses_fe8_atlas() -> bool:
 	return _using_fe8_atlas
+
+static func _legacy_registration_biomes(terrain: String) -> Array:
+	if terrain in Config.BIOME_AWARE_TERRAINS:
+		return Config.BIOMES.duplicate()
+	return [""]
 
 ## Returns the atlas coord for a terrain when the FE8 atlas is the
 ## source. Pulls the (col, row) lookup from `Config.FE8_TILE_COORDS`.
@@ -218,21 +233,44 @@ static func _load_atlas_image(terrain: String, biome: String, n_variants: int) -
 	var h := TILE_SIZE.y * n_variants
 	var atlas := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	for v in range(n_variants):
-		var basename := Config.tile_asset_basename(terrain, biome, 0, v)
-		if basename == "":
-			_fill_magenta(atlas, v)
-			continue
-		var path := "%s/%s.png" % [TILES_DIR, basename]
-		var img := _try_load_image(path)
+		var img := _load_tile_variant_image(terrain, biome, v)
 		if img == null:
-			push_warning("TileSetBuilder: missing %s — filling magenta" % path)
-			_fill_magenta(atlas, v)
+			push_warning("TileSetBuilder: missing tile asset for %s/%s v%d; using plain fallback" % [terrain, biome, v])
+			img = _load_tile_variant_image("plain", "", 0)
+		if img == null:
+			_fill_plain_color(atlas, terrain, v)
 			continue
 		if img.get_format() != Image.FORMAT_RGBA8:
 			img.convert(Image.FORMAT_RGBA8)
-		var rect := Rect2i(0, 0, min(img.get_width(), w), min(img.get_height(), TILE_SIZE.y))
+		if img.get_width() != w or img.get_height() != TILE_SIZE.y:
+			img.resize(w, TILE_SIZE.y, Image.INTERPOLATE_NEAREST)
+		var rect := Rect2i(0, 0, w, TILE_SIZE.y)
 		atlas.blit_rect(img, rect, Vector2i(0, v * TILE_SIZE.y))
 	return atlas
+
+static func _load_tile_variant_image(terrain: String, biome: String, variant_index: int) -> Image:
+	for candidate in _tile_asset_candidates(terrain, biome):
+		var candidate_terrain: String = String(candidate.get("terrain", terrain))
+		var candidate_biome: String = String(candidate.get("biome", ""))
+		var basename := Config.tile_asset_basename(candidate_terrain, candidate_biome, 0, variant_index)
+		if basename == "":
+			continue
+		var path := "%s/%s.png" % [TILES_DIR, basename]
+		var img := _try_load_image(path)
+		if img != null:
+			return img
+	return null
+
+static func _tile_asset_candidates(terrain: String, biome: String) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = [{"terrain": terrain, "biome": biome}]
+	if biome != "":
+		candidates.append({"terrain": terrain, "biome": ""})
+	for fallback in _TERRAIN_ASSET_FALLBACKS.get(terrain, []):
+		candidates.append({"terrain": String(fallback), "biome": biome})
+		if biome != "":
+			candidates.append({"terrain": String(fallback), "biome": ""})
+	candidates.append({"terrain": "plain", "biome": ""})
+	return candidates
 
 static func _try_load_image(path: String) -> Image:
 	if not FileAccess.file_exists(path):
@@ -245,8 +283,9 @@ static func _try_load_image(path: String) -> Image:
 				return tex.get_image()
 	return Image.load_from_file(path)
 
-static func _fill_magenta(atlas: Image, variant_index: int) -> void:
+static func _fill_plain_color(atlas: Image, terrain: String, variant_index: int) -> void:
 	var y0 := variant_index * TILE_SIZE.y
+	var color: Color = Config.TERRAIN_COLORS.get(terrain, Config.TERRAIN_COLORS.get("plain", Color("#79b66a")))
 	for x in TILE_SIZE.x:
 		for y in TILE_SIZE.y:
-			atlas.set_pixel(x, y0 + y, Color.MAGENTA)
+			atlas.set_pixel(x, y0 + y, color)

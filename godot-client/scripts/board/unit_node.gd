@@ -24,6 +24,7 @@ class_name UnitNode
 ## `unit_type`。这解释了为什么之前 unit 都是 "?"。
 
 const _SPRITE_DIR := "res://assets/classic/"
+const _HERO_CREST_DIR := "res://assets/heroes/"
 # 镜像 game/app/web/assets/classic/ 7 类 sprite
 const _KNOWN_TYPES := [
 	"archer", "healer", "heavy_armor", "knight",
@@ -57,6 +58,7 @@ var _hp_bar_bg: ColorRect = null
 var _mp_badge: ColorRect = null
 var _mp_badge_label: Label = null
 var _hero_badge: ColorRect = null
+var _hero_crest: TextureRect = null
 var _hero_badge_label: Label = null
 var _acted_overlay: ColorRect = null
 
@@ -80,13 +82,55 @@ func _clear_children() -> void:
 # 同时缩到 marker 大小(40×40)再生成 ImageTexture,这样 TextureRect
 # 不需要 stretch_mode,就能在 1 tile(48px)里清晰显示。
 static func _load_png(res_path: String, target_size: int = 40) -> Texture2D:
-	var img := Image.new()
-	var err := img.load(res_path)
-	if err != OK:
-		return null
-	if img.get_width() != target_size or img.get_height() != target_size:
-		img.resize(target_size, target_size, Image.INTERPOLATE_NEAREST)
-	return ImageTexture.create_from_image(img)
+	var img: Image = null
+	if ResourceLoader.exists(res_path):
+		var res: Resource = load(res_path)
+		if res is Texture2D:
+			var tex: Texture2D = res
+			img = tex.get_image()
+	if img == null:
+		img = Image.new()
+		var err := img.load(res_path)
+		if err != OK:
+			return null
+	return _fit_image_to_square(img, target_size)
+
+
+static func _fit_image_to_square(img: Image, target_size: int) -> Texture2D:
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	var crop_rect: Rect2i = _alpha_crop_rect(img)
+	if crop_rect.size.x > 0 and crop_rect.size.y > 0:
+		var cropped: Image = Image.create(crop_rect.size.x, crop_rect.size.y, false, Image.FORMAT_RGBA8)
+		cropped.fill(Color(0, 0, 0, 0))
+		cropped.blit_rect(img, crop_rect, Vector2i.ZERO)
+		img = cropped
+	var scale: float = min(float(target_size) / float(max(1, img.get_width())), float(target_size) / float(max(1, img.get_height())))
+	var out_w: int = max(1, int(round(float(img.get_width()) * scale)))
+	var out_h: int = max(1, int(round(float(img.get_height()) * scale)))
+	img.resize(out_w, out_h, Image.INTERPOLATE_LANCZOS)
+	var canvas: Image = Image.create(target_size, target_size, false, Image.FORMAT_RGBA8)
+	canvas.fill(Color(0, 0, 0, 0))
+	canvas.blit_rect(img, Rect2i(0, 0, out_w, out_h), Vector2i((target_size - out_w) / 2, (target_size - out_h) / 2))
+	return ImageTexture.create_from_image(canvas)
+
+
+static func _alpha_crop_rect(img: Image) -> Rect2i:
+	var min_x := img.get_width()
+	var min_y := img.get_height()
+	var max_x := -1
+	var max_y := -1
+	for y in range(img.get_height()):
+		for x in range(img.get_width()):
+			if img.get_pixel(x, y).a <= 0.05:
+				continue
+			min_x = min(min_x, x)
+			min_y = min(min_y, y)
+			max_x = max(max_x, x)
+			max_y = max(max_y, y)
+	if max_x < min_x or max_y < min_y:
+		return Rect2i(0, 0, img.get_width(), img.get_height())
+	return Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
 
 func _unit_type() -> String:
@@ -118,6 +162,7 @@ func _build_pieces(team_color: Color) -> void:
 			_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(_sprite)
 	# fallback 单字母标签(sprite 缺失时显示,sprite 在时隐藏)
+	_marker.visible = (_sprite == null)
 	_type_label = Label.new()
 	_type_label.text = String(_FALLBACK_GLYPH.get(ut, "?")) if ut != "" else "?"
 	_type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -169,22 +214,32 @@ func _build_pieces(team_color: Color) -> void:
 	# ---- Hero badge(右上角金色徽记):素材未覆盖的 hero 也能被识别 ----
 	var hero_id := str(unit_data.get("hero_id", ""))
 	if hero_id != "":
-		_hero_badge = ColorRect.new()
-		_hero_badge.size = Vector2(14, 14)
-		_hero_badge.position = Vector2(10, -24)
-		_hero_badge.color = Color(0.95, 0.72, 0.24, 0.95)
-		_hero_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_hero_badge)
-		_hero_badge_label = Label.new()
-		_hero_badge_label.size = Vector2(18, 14)
-		_hero_badge_label.position = Vector2(8, -25)
-		_hero_badge_label.text = "H"
-		_hero_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_hero_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_hero_badge_label.add_theme_font_size_override("font_size", 9)
-		_hero_badge_label.add_theme_color_override("font_color", Color(0.08, 0.05, 0.02))
-		_hero_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_hero_badge_label)
+		var crest_path := _HERO_CREST_DIR + "crest_" + hero_id + ".png"
+		var crest_tex := _load_png(crest_path, 18)
+		if crest_tex != null:
+			_hero_crest = TextureRect.new()
+			_hero_crest.texture = crest_tex
+			_hero_crest.size = Vector2(18, 18)
+			_hero_crest.position = Vector2(8, -26)
+			_hero_crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_hero_crest)
+		else:
+			_hero_badge = ColorRect.new()
+			_hero_badge.size = Vector2(14, 14)
+			_hero_badge.position = Vector2(10, -24)
+			_hero_badge.color = Color(0.95, 0.72, 0.24, 0.95)
+			_hero_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_hero_badge)
+			_hero_badge_label = Label.new()
+			_hero_badge_label.size = Vector2(18, 14)
+			_hero_badge_label.position = Vector2(8, -25)
+			_hero_badge_label.text = "H"
+			_hero_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_hero_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			_hero_badge_label.add_theme_font_size_override("font_size", 9)
+			_hero_badge_label.add_theme_color_override("font_color", Color(0.08, 0.05, 0.02))
+			_hero_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_hero_badge_label)
 
 	# ---- 士气星(左上,小角) ----
 	_star_label = Label.new()
@@ -245,4 +300,6 @@ func _refresh() -> void:
 
 
 func has_hero_badge() -> bool:
+	if _hero_crest != null and is_instance_valid(_hero_crest) and _hero_crest.visible:
+		return true
 	return _hero_badge != null and is_instance_valid(_hero_badge) and _hero_badge.visible

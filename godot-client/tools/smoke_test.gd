@@ -38,6 +38,8 @@ func _ready() -> void:
 		var sid: int = TileSetBuilder.source_id_for(String(terrain), "")
 		_assert_gte("fe8 source_id(%s,)" % terrain, sid, 0,
 			"missing FE8 source for %s" % terrain)
+	_assert_tiles_fill_48px_regions(ts)
+	_assert_unit_sprite_preserves_aspect()
 
 	for map_id in TEST_MAP_IDS:
 		_test_one_map(map_id)
@@ -944,6 +946,86 @@ func _map_path_for_id(map_id: String) -> String:
 		if FileAccess.file_exists(c):
 			return c
 	return ""
+
+
+func _assert_tiles_fill_48px_regions(ts: TileSet) -> void:
+	for terrain in Config.TERRAIN_VARIANT_COUNTS.keys():
+		var biome := Config.DEFAULT_BIOME if terrain in Config.BIOME_AWARE_TERRAINS else ""
+		var sid: int = TileSetBuilder.source_id_for(String(terrain), biome)
+		if sid < 0:
+			sid = TileSetBuilder.source_id_for(String(terrain), "")
+		_assert_gte("tile source exists(%s)" % terrain, sid, 0,
+			"each terrain should resolve to a committed 48px source")
+		if sid < 0:
+			continue
+		var source: TileSetSource = ts.get_source(sid)
+		if not (source is TileSetAtlasSource):
+			_fail("tile source for %s is not an atlas source" % terrain)
+			continue
+		var atlas_source: TileSetAtlasSource = source
+		var tex: Texture2D = atlas_source.texture
+		var img: Image = tex.get_image() if tex != null else null
+		_assert_true("tile image exists(%s)" % terrain, img != null and not img.is_empty(),
+			"terrain source should expose an image")
+		if img == null or img.is_empty():
+			continue
+		_assert_gte("tile image width(%s)" % terrain, img.get_width(), 48,
+			"terrain texture must cover a 48px cell")
+		_assert_gte("tile image height(%s)" % terrain, img.get_height(), 48,
+			"terrain texture must cover a 48px cell")
+		var bottom_right: Color = img.get_pixel(47, 47)
+		_assert_true("tile fills bottom-right(%s)" % terrain, bottom_right.a > 0.05,
+			"48px tile region should not leave transparent padding")
+		var center: Color = img.get_pixel(24, 24)
+		_assert_true("tile avoids debug fill(%s)" % terrain, not _is_debug_magenta(center),
+			"missing tile assets should fall back to real terrain art, not debug color")
+
+
+func _assert_unit_sprite_preserves_aspect() -> void:
+	var tex: Texture2D = UnitNode._load_png("res://assets/classic/archer.png", 48)
+	_assert_true("unit sprite texture loads", tex != null, "classic unit sprite should load")
+	if tex == null:
+		return
+	var img: Image = tex.get_image()
+	_assert_eq("unit sprite canvas width", img.get_width(), 48, "sprite canvas should match one tile")
+	_assert_eq("unit sprite canvas height", img.get_height(), 48, "sprite canvas should match one tile")
+	var bounds := _alpha_bounds(img)
+	_assert_true("unit sprite has alpha bounds", bounds.size != Vector2i.ZERO,
+		"sprite should contain visible pixels")
+	if bounds.size != Vector2i.ZERO:
+		_assert_true("unit sprite preserves tall silhouette", bounds.size.y > bounds.size.x,
+			"classic unit portraits should be fit proportionally, not stretched square")
+	var unit := UnitNode.new()
+	unit.setup({"unit_type": "archer", "hp": 10, "max_hp": 10}, Color.RED)
+	var marker: ColorRect = unit.get("_marker")
+	_assert_true("unit sprite hides square marker", marker != null and not marker.visible,
+		"units with committed sprite art should not show a pure team-color square")
+	unit.queue_free()
+
+
+func _alpha_bounds(img: Image) -> Dictionary:
+	var min_x := img.get_width()
+	var min_y := img.get_height()
+	var max_x := -1
+	var max_y := -1
+	for y in range(img.get_height()):
+		for x in range(img.get_width()):
+			if img.get_pixel(x, y).a <= 0.05:
+				continue
+			min_x = min(min_x, x)
+			min_y = min(min_y, y)
+			max_x = max(max_x, x)
+			max_y = max(max_y, y)
+	if max_x < min_x or max_y < min_y:
+		return {"position": Vector2i.ZERO, "size": Vector2i.ZERO}
+	return {
+		"position": Vector2i(min_x, min_y),
+		"size": Vector2i(max_x - min_x + 1, max_y - min_y + 1),
+	}
+
+
+func _is_debug_magenta(color: Color) -> bool:
+	return color.r > 0.95 and color.g < 0.05 and color.b > 0.95 and color.a > 0.95
 
 
 func _assert_eq(label: String, got, expected, msg: String) -> void:
