@@ -176,6 +176,19 @@ var _mainline_auto_retry_pending: bool = false
 @onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
 @onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
 @onready var ml_slots_container: VBoxContainer = $MainlineView/MLFrame/MLSlotsContainer
+@onready var ml_prep_summary: RichTextLabel = $MainlineView/MLFrame/MLPrepSummary
+@onready var ml_prep_tabs: HBoxContainer = $MainlineView/MLFrame/MLPrepTabs
+@onready var ml_prep_content: RichTextLabel = $MainlineView/MLFrame/MLPrepContent
+@onready var ml_prep_start_btn: Button = $MainlineView/MLFrame/MLPrepStartBtn
+@onready var ml_prep_refresh_btn: Button = $MainlineView/MLFrame/MLPrepRefreshBtn
+@onready var ml_prep_action_btn: Button = $MainlineView/MLFrame/MLPrepActionBtn
+@onready var ml_prep_alt_action_btn: Button = $MainlineView/MLFrame/MLPrepAltActionBtn
+@onready var ml_prep_heroes_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/HeroesTabBtn
+@onready var ml_prep_roster_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/RosterTabBtn
+@onready var ml_prep_equipment_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/EquipmentTabBtn
+@onready var ml_prep_mercenary_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/MercenaryTabBtn
+@onready var ml_prep_shop_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/ShopTabBtn
+@onready var ml_prep_saves_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/SavesTabBtn
 var _ml_slot_records: Array = []
 @onready var lobby_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/LobbyButton
 @onready var saves_button: Button = $Menu/CenterContainer/FooterRow/SavesButton
@@ -318,6 +331,10 @@ var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
 var _mainline_commander_ids: Array[String] = [""]
 var _mainline_prepare_payload: Dictionary = {}
+var _mainline_prepare_tab: String = "heroes"
+var _selected_prepare_hero_id: String = ""
+var _mainline_shop_payload: Dictionary = {}
+var _mainline_mercenary_payload: Dictionary = {}
 
 
 func _ready() -> void:
@@ -347,6 +364,26 @@ func _ready() -> void:
 		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
 	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
 		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
+	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
+		ml_prep_start_btn.pressed.connect(_on_prepare_start_pressed)
+	if ml_prep_refresh_btn != null and is_instance_valid(ml_prep_refresh_btn):
+		ml_prep_refresh_btn.pressed.connect(_on_prepare_refresh_pressed)
+	if ml_prep_action_btn != null and is_instance_valid(ml_prep_action_btn):
+		ml_prep_action_btn.pressed.connect(_on_prepare_primary_action_pressed)
+	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+		ml_prep_alt_action_btn.pressed.connect(_on_prepare_secondary_action_pressed)
+	if ml_prep_heroes_tab_btn != null and is_instance_valid(ml_prep_heroes_tab_btn):
+		ml_prep_heroes_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("heroes"))
+	if ml_prep_roster_tab_btn != null and is_instance_valid(ml_prep_roster_tab_btn):
+		ml_prep_roster_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("roster"))
+	if ml_prep_equipment_tab_btn != null and is_instance_valid(ml_prep_equipment_tab_btn):
+		ml_prep_equipment_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("equipment"))
+	if ml_prep_mercenary_tab_btn != null and is_instance_valid(ml_prep_mercenary_tab_btn):
+		ml_prep_mercenary_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("mercenary"))
+	if ml_prep_shop_tab_btn != null and is_instance_valid(ml_prep_shop_tab_btn):
+		ml_prep_shop_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("shop"))
+	if ml_prep_saves_tab_btn != null and is_instance_valid(ml_prep_saves_tab_btn):
+		ml_prep_saves_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("saves"))
 	if ai_player_option != null and is_instance_valid(ai_player_option):
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
@@ -4885,6 +4922,12 @@ func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> voi
 func _on_mainline_pressed() -> void:
 	_show_view("mainline")
 	ml_title.text = "主线章节 · 加载中..."
+	_mainline_prepare_payload = {}
+	_mainline_shop_payload = {}
+	_mainline_mercenary_payload = {}
+	_mainline_prepare_tab = "heroes"
+	_selected_prepare_hero_id = ""
+	_render_mainline_prepare()
 	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
 	for child in ml_list_container.get_children():
 		child.queue_free()
@@ -5084,7 +5127,477 @@ func _on_mainline_prepare_response(body: Variant, code: int = 0, mainline_id: St
 	_update_status("战前准备: 第 %d/%d 战 · 英雄 %d · 可部署 %d · 金币 %d" % [
 		battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
 	])
-	NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))
+	if _selected_prepare_hero_id == "" and not heroes.is_empty() and heroes[0] is Dictionary:
+		_selected_prepare_hero_id = str((heroes[0] as Dictionary).get("hero_id", ""))
+	_mainline_prepare_tab = "heroes"
+	_render_mainline_prepare()
+
+
+func _on_prepare_tab_pressed(tab: String) -> void:
+	_mainline_prepare_tab = tab
+	if tab == "shop" and _selected_mainline_id != "" and _mainline_shop_payload.is_empty():
+		_set_prepare_content("[color=#a69a73]正在加载战后商店...[/color]")
+		NetworkClient.get_post_battle_shop(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_shop_response"))
+		return
+	if tab == "mercenary" and _selected_mainline_id != "" and _mainline_mercenary_payload.is_empty():
+		_set_prepare_content("[color=#a69a73]正在加载佣兵配置...[/color]")
+		NetworkClient.get_mercenary_config(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_mercenary_response"))
+		return
+	_render_mainline_prepare()
+
+
+func _on_prepare_start_pressed() -> void:
+	if _selected_mainline_id == "":
+		_update_status("请先选择主线章节")
+		return
+	if _mainline_prepare_payload.is_empty():
+		_update_status("请先载入战前整备")
+		NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
+		return
+	_update_status("主线: 创建战斗...")
+	NetworkClient.start_mainline(_selected_mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))
+
+
+func _on_prepare_refresh_pressed() -> void:
+	if _selected_mainline_id == "":
+		_update_status("请先选择主线章节")
+		return
+	_mainline_shop_payload = {}
+	_mainline_mercenary_payload = {}
+	_update_status("正在刷新战前整备...")
+	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
+
+
+func _render_mainline_prepare() -> void:
+	if ml_prep_summary == null or not is_instance_valid(ml_prep_summary):
+		return
+	_update_prepare_tab_buttons()
+	_update_prepare_action_buttons()
+	if _mainline_prepare_payload.is_empty():
+		ml_prep_summary.text = "[b]战前整备[/b]\n[color=#a69a73]选择章节后载入英雄、装备、佣兵和商店。[/color]"
+		_set_prepare_content("[color=#a69a73]尚未载入整备资料。[/color]")
+		if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
+			ml_prep_start_btn.disabled = true
+		_update_prepare_action_buttons()
+		return
+	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
+		ml_prep_start_btn.disabled = false
+	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
+	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
+	var roster_units: Array = _mainline_prepare_payload.get("roster_units", []) if _mainline_prepare_payload.get("roster_units", []) is Array else []
+	var battle_index: int = int(_mainline_prepare_payload.get("battle_index", 0)) + 1
+	var total_battles: int = int(_mainline_prepare_payload.get("total_battles", 1))
+	ml_prep_summary.text = "[b]%s[/b]\n第 %d/%d 战 · 英雄 %d · 部队 %d · 金币 %d" % [
+		_bb_escape(_selected_mainline_id), battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
+	]
+	match _mainline_prepare_tab:
+		"roster":
+			_set_prepare_content(_build_prepare_roster_text(_mainline_prepare_payload))
+		"equipment":
+			_set_prepare_content(_build_prepare_equipment_text(_mainline_prepare_payload))
+		"mercenary":
+			_set_prepare_content(_build_prepare_mercenary_text())
+		"shop":
+			_set_prepare_content(_build_prepare_shop_text())
+		"saves":
+			_set_prepare_content(_build_prepare_saves_text())
+		_:
+			_set_prepare_content(_build_prepare_heroes_text(_mainline_prepare_payload))
+
+
+func _set_prepare_content(text: String) -> void:
+	if ml_prep_content != null and is_instance_valid(ml_prep_content):
+		ml_prep_content.text = text
+
+
+func _update_prepare_tab_buttons() -> void:
+	var map := {
+		"heroes": ml_prep_heroes_tab_btn,
+		"roster": ml_prep_roster_tab_btn,
+		"equipment": ml_prep_equipment_tab_btn,
+		"mercenary": ml_prep_mercenary_tab_btn,
+		"shop": ml_prep_shop_tab_btn,
+		"saves": ml_prep_saves_tab_btn,
+	}
+	for key in map.keys():
+		var btn: Button = map[key]
+		if btn == null or not is_instance_valid(btn):
+			continue
+		btn.disabled = key == _mainline_prepare_tab
+
+
+func _update_prepare_action_buttons() -> void:
+	if ml_prep_action_btn == null or not is_instance_valid(ml_prep_action_btn):
+		return
+	var has_prepare := not _mainline_prepare_payload.is_empty()
+	ml_prep_action_btn.visible = true
+	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+		ml_prep_alt_action_btn.visible = true
+	ml_prep_action_btn.disabled = not has_prepare
+	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+		ml_prep_alt_action_btn.disabled = not has_prepare
+	match _mainline_prepare_tab:
+		"heroes":
+			ml_prep_action_btn.text = "转职"
+			ml_prep_action_btn.disabled = not _focused_prepare_hero_can_promote()
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "刷新英雄"
+				ml_prep_alt_action_btn.disabled = not has_prepare
+		"equipment":
+			ml_prep_action_btn.text = "装备首件"
+			ml_prep_action_btn.disabled = not _find_first_equippable_item().has("slot")
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "卸下武器"
+				ml_prep_alt_action_btn.disabled = _focused_prepare_hero().is_empty()
+		"mercenary":
+			ml_prep_action_btn.text = "分配一点"
+			ml_prep_action_btn.disabled = not has_prepare
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "刷新佣兵"
+				ml_prep_alt_action_btn.disabled = not has_prepare
+		"shop":
+			ml_prep_action_btn.text = "购买首件"
+			ml_prep_action_btn.disabled = _mainline_shop_payload.is_empty()
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "刷新商店"
+				ml_prep_alt_action_btn.disabled = not has_prepare
+		"saves":
+			ml_prep_action_btn.text = "刷新存档"
+			ml_prep_action_btn.disabled = false
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "返回列表"
+				ml_prep_alt_action_btn.disabled = false
+		_:
+			ml_prep_action_btn.text = "查看部队"
+			ml_prep_action_btn.disabled = not has_prepare
+			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+				ml_prep_alt_action_btn.text = "刷新整备"
+				ml_prep_alt_action_btn.disabled = not has_prepare
+
+
+func _on_prepare_primary_action_pressed() -> void:
+	match _mainline_prepare_tab:
+		"heroes":
+			_promote_focused_prepare_hero()
+		"equipment":
+			var item := _find_first_equippable_item()
+			if item.has("slot"):
+				_equip_focused_prepare_hero(str(item.get("slot", "")), item.get("equipment_id", item.get("item_id", "")))
+		"mercenary":
+			_allocate_first_mercenary_point()
+		"shop":
+			_purchase_first_shop_item()
+		"saves":
+			NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
+			_update_status("正在刷新主线存档...")
+		_:
+			_mainline_prepare_tab = "roster"
+			_render_mainline_prepare()
+
+
+func _on_prepare_secondary_action_pressed() -> void:
+	match _mainline_prepare_tab:
+		"equipment":
+			_equip_focused_prepare_hero("weapon", null)
+		"mercenary":
+			_mainline_mercenary_payload = {}
+			_on_prepare_tab_pressed("mercenary")
+		"shop":
+			_mainline_shop_payload = {}
+			_on_prepare_tab_pressed("shop")
+		"saves":
+			_mainline_prepare_tab = "heroes"
+			_render_mainline_prepare()
+		_:
+			_on_prepare_refresh_pressed()
+
+
+func _build_prepare_heroes_text(payload: Dictionary) -> String:
+	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
+	if heroes.is_empty():
+		return "[b]英雄[/b]\n[color=#a69a73]本章暂无英雄资料。[/color]"
+	var lines: Array[String] = ["[b]英雄[/b]  选择英雄后可在装备页配置装备。"]
+	for h in heroes:
+		if not (h is Dictionary): continue
+		var hero: Dictionary = h
+		var hero_id := str(hero.get("hero_id", ""))
+		var selected := "▶ " if hero_id == _selected_prepare_hero_id else "  "
+		var promo := "可转职" if bool(hero.get("can_promote", false)) else ("已转职" if bool(hero.get("promoted", false)) else "未满足转职")
+		lines.append("%s[b]%s[/b] · %s · Lv.%d · EXP %d · %s" % [
+			selected,
+			_bb_escape(str(hero.get("name", hero_id))),
+			_bb_escape(str(hero.get("class_id", "?"))),
+			int(hero.get("level", 1)),
+			int(hero.get("exp", 0)),
+			_bb_escape(promo),
+		])
+		var stats: Dictionary = hero.get("base_stats", {}) if hero.get("base_stats", {}) is Dictionary else {}
+		if not stats.is_empty():
+			lines.append("    HP %s / ATK %s / DEF %s / SPD %s" % [
+				str(stats.get("hp", "-")), str(stats.get("atk", "-")), str(stats.get("def", "-")), str(stats.get("spd", "-"))
+			])
+		var skills: Array = hero.get("learned_skills", []) if hero.get("learned_skills", []) is Array else []
+		if not skills.is_empty():
+			lines.append("    技能: %s" % _bb_escape(", ".join(skills)))
+	return "\n".join(lines)
+
+
+func _build_prepare_roster_text(payload: Dictionary) -> String:
+	var roster_units: Array = payload.get("roster_units", []) if payload.get("roster_units", []) is Array else []
+	if roster_units.is_empty():
+		return "[b]部队[/b]\n[color=#a69a73]暂无可部署单位。[/color]"
+	var lines: Array[String] = ["[b]部队[/b]  英雄固定出战，佣兵将在后续支持待命切换。"]
+	for i in range(roster_units.size()):
+		var u: Variant = roster_units[i]
+		if not (u is Dictionary): continue
+		var unit: Dictionary = u
+		var role := "英雄" if str(unit.get("hero_id", "")) != "" else "佣兵"
+		lines.append("%02d. [b]%s[/b] · %s · %s · Lv.%d" % [
+			i + 1,
+			_bb_escape(str(unit.get("name", unit.get("hero_id", unit.get("class_id", "?"))))),
+			_bb_escape(role),
+			_bb_escape(str(unit.get("class_id", "?"))),
+			int(unit.get("level", 1)),
+		])
+	return "\n".join(lines)
+
+
+func _build_prepare_equipment_text(payload: Dictionary) -> String:
+	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
+	var catalog: Array = payload.get("equipment_catalog", []) if payload.get("equipment_catalog", []) is Array else []
+	var inventory: Dictionary = payload.get("inventory", {}) if payload.get("inventory", {}) is Dictionary else {}
+	var focused: Dictionary = _focused_prepare_hero()
+	var lines: Array[String] = ["[b]装备[/b]  当前英雄: %s" % _bb_escape(str(focused.get("name", focused.get("hero_id", "未选择"))))]
+	if focused.is_empty():
+		lines.append("[color=#a69a73]没有可配置装备的英雄。[/color]")
+		return "\n".join(lines)
+	var equipment: Dictionary = focused.get("equipment", {}) if focused.get("equipment", {}) is Dictionary else {}
+	for slot in ["weapon", "armor", "accessory"]:
+		lines.append("%s: %s" % [slot, _bb_escape(str(equipment.get(slot, "未装备")))])
+	if catalog.is_empty():
+		lines.append("\n[color=#a69a73]暂无装备目录。[/color]")
+		return "\n".join(lines)
+	lines.append("\n[b]库存[/b]")
+	for item in catalog:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
+		var count := int(inventory.get(item_id, 0))
+		var bonuses: Dictionary = it.get("stat_bonuses", {}) if it.get("stat_bonuses", {}) is Dictionary else {}
+		lines.append("%s · %s · x%d · %s" % [
+			_bb_escape(str(it.get("name", item_id))),
+			_bb_escape(str(it.get("slot", "item"))),
+			count,
+			_bb_escape(str(bonuses)),
+		])
+	return "\n".join(lines)
+
+
+func _build_prepare_saves_text() -> String:
+	var lines: Array[String] = ["[b]存档[/b]  主线存档格"]
+	if _ml_slot_records.is_empty():
+		lines.append("[color=#a69a73]暂无主线存档。[/color]")
+		return "\n".join(lines)
+	for record in _ml_slot_records:
+		if record is Dictionary:
+			lines.append(_bb_escape(_save_option_label(record)))
+	return "\n".join(lines)
+
+
+func _build_prepare_shop_text() -> String:
+	if _mainline_shop_payload.is_empty():
+		return "[b]商店[/b]\n[color=#a69a73]切换到商店时会加载商品。[/color]"
+	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
+	var lines: Array[String] = ["[b]商店[/b]  金币 %d" % int(_mainline_shop_payload.get("gold", 0))]
+	if items.is_empty():
+		lines.append("[color=#a69a73]本次商店暂无商品。[/color]")
+		return "\n".join(lines)
+	for item in items:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		lines.append("%s · %dG · %s" % [
+			_bb_escape(str(it.get("name", it.get("item_id", "?")))),
+			int(it.get("price", 0)),
+			_bb_escape(str(it.get("description", ""))),
+		])
+	return "\n".join(lines)
+
+
+func _build_prepare_mercenary_text() -> String:
+	if _mainline_mercenary_payload.is_empty():
+		return "[b]佣兵[/b]\n[color=#a69a73]切换到佣兵时会加载配置。[/color]"
+	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
+	var allocation: Dictionary = _mainline_mercenary_payload.get("allocation", {}) if _mainline_mercenary_payload.get("allocation", {}) is Dictionary else {}
+	var lines: Array[String] = ["[b]佣兵[/b]  可用点数 %d" % int(_mainline_mercenary_payload.get("mercenary_points", 0))]
+	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
+	var upgrades: Dictionary = allocation.get("unit_type_upgrades", {}) if allocation.get("unit_type_upgrades", {}) is Dictionary else {}
+	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
+	lines.append("可用兵种: %s" % _bb_escape(", ".join(allowed)))
+	for unit_type in allowed:
+		var per_unit: Dictionary = upgrades.get(str(unit_type), {}) if upgrades.get(str(unit_type), {}) is Dictionary else {}
+		lines.append("%s · %s" % [_bb_escape(str(unit_type)), _bb_escape(str(per_unit))])
+	if not stat_rules.is_empty():
+		lines.append("规则: %s" % _bb_escape(str(stat_rules)))
+	return "\n".join(lines)
+
+
+func _on_prepare_shop_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_mainline_shop_payload = {}
+		_set_prepare_content("[b]商店[/b]\n[color=#d36b5f]商店加载失败。[/color]")
+		_update_prepare_action_buttons()
+		return
+	_mainline_shop_payload = (body as Dictionary).duplicate(true)
+	_render_mainline_prepare()
+
+
+func _on_prepare_mercenary_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_mainline_mercenary_payload = {}
+		_set_prepare_content("[b]佣兵[/b]\n[color=#d36b5f]佣兵配置加载失败。[/color]")
+		_update_prepare_action_buttons()
+		return
+	_mainline_mercenary_payload = (body as Dictionary).duplicate(true)
+	_render_mainline_prepare()
+
+
+func _promote_focused_prepare_hero() -> void:
+	var hero := _focused_prepare_hero()
+	if hero.is_empty() or not _focused_prepare_hero_can_promote():
+		_update_status("当前英雄不可转职")
+		return
+	var options: Array = hero.get("promotion_options", []) if hero.get("promotion_options", []) is Array else []
+	if options.is_empty():
+		_update_status("当前英雄没有可用转职")
+		return
+	var hero_id := str(hero.get("hero_id", ""))
+	var target_class_id := str(options[0])
+	_update_status("正在将 %s 转职为 %s..." % [str(hero.get("name", hero_id)), target_class_id])
+	NetworkClient.promote_mainline_hero(_selected_mainline_id, _user_name, hero_id, target_class_id, Callable(self, "_on_prepare_mutation_response").bind("转职"))
+
+
+func _equip_focused_prepare_hero(slot: String, equipment_id: Variant) -> void:
+	var hero := _focused_prepare_hero()
+	if hero.is_empty():
+		_update_status("请先选择英雄")
+		return
+	var hero_id := str(hero.get("hero_id", ""))
+	_update_status("正在配置装备...")
+	NetworkClient.equip_mainline_hero(_selected_mainline_id, _user_name, hero_id, slot, equipment_id, Callable(self, "_on_prepare_mutation_response").bind("装备"))
+
+
+func _purchase_first_shop_item() -> void:
+	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
+	if items.is_empty() or not (items[0] is Dictionary):
+		_update_status("商店暂无可购买商品")
+		return
+	var item: Dictionary = items[0]
+	var item_id := str(item.get("item_id", ""))
+	if item_id == "":
+		_update_status("商品缺少 item_id")
+		return
+	_update_status("购买 %s..." % str(item.get("name", item_id)))
+	NetworkClient.purchase_post_battle_shop_item(_selected_mainline_id, _user_name, item_id, 1, Callable(self, "_on_prepare_shop_purchase_response"))
+
+
+func _allocate_first_mercenary_point() -> void:
+	if _mainline_mercenary_payload.is_empty():
+		_on_prepare_tab_pressed("mercenary")
+		return
+	var choice := _first_mercenary_allocation_choice()
+	if choice.is_empty():
+		_update_status("没有可分配的佣兵点")
+		return
+	_update_status("分配佣兵点: %s %s" % [choice.get("unit_type", ""), choice.get("stat", "")])
+	NetworkClient.allocate_mercenary_points(
+		_selected_mainline_id,
+		_user_name,
+		str(choice.get("unit_type", "")),
+		str(choice.get("stat", "")),
+		int(choice.get("value", 1)),
+		Callable(self, "_on_prepare_mercenary_allocate_response")
+	)
+
+
+func _on_prepare_mutation_response(body: Variant, code: int, label: String) -> void:
+	if code < 200 or code >= 300:
+		_update_status("%s失败" % label)
+		return
+	_update_status("%s完成，正在刷新整备..." % label)
+	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
+
+
+func _on_prepare_shop_purchase_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		_update_status("购买失败")
+		return
+	if body is Dictionary:
+		_update_status("购买完成，剩余金币 %d" % int((body as Dictionary).get("gold_remaining", 0)))
+	_mainline_shop_payload = {}
+	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
+	NetworkClient.get_post_battle_shop(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_shop_response"))
+
+
+func _on_prepare_mercenary_allocate_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		_update_status("佣兵点分配失败")
+		return
+	_update_status("佣兵点已分配")
+	_mainline_mercenary_payload = {}
+	NetworkClient.get_mercenary_config(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_mercenary_response"))
+
+
+func _focused_prepare_hero_can_promote() -> bool:
+	var hero := _focused_prepare_hero()
+	if hero.is_empty():
+		return false
+	var options: Array = hero.get("promotion_options", []) if hero.get("promotion_options", []) is Array else []
+	return bool(hero.get("can_promote", false)) and not options.is_empty()
+
+
+func _find_first_equippable_item() -> Dictionary:
+	var focused := _focused_prepare_hero()
+	if focused.is_empty():
+		return {}
+	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
+	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
+	for item in catalog:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
+		if item_id == "" or int(inventory.get(item_id, 0)) <= 0:
+			continue
+		var out := it.duplicate(true)
+		out["equipment_id"] = item_id
+		return out
+	return {}
+
+
+func _first_mercenary_allocation_choice() -> Dictionary:
+	var points := int(_mainline_mercenary_payload.get("mercenary_points", 0))
+	if points <= 0:
+		return {}
+	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
+	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
+	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
+	if allowed.is_empty() or stat_rules.is_empty():
+		return {}
+	var stat := str(stat_rules.keys()[0])
+	return {"unit_type": str(allowed[0]), "stat": stat, "value": 1}
+
+
+func _focused_prepare_hero() -> Dictionary:
+	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
+	for h in heroes:
+		if h is Dictionary and str((h as Dictionary).get("hero_id", "")) == _selected_prepare_hero_id:
+			return h
+	if not heroes.is_empty() and heroes[0] is Dictionary:
+		return heroes[0]
+	return {}
+
+
+func _bb_escape(value: String) -> String:
+	return value.replace("[", "\\[").replace("]", "\\]")
 
 
 func _on_mainline_start_response(body: Variant, code: int = 0) -> void:

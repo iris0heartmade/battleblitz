@@ -183,10 +183,78 @@ func _ready() -> void:
 		"mainline view should expose commander selection")
 	_assert_true("MainlineView has ApplyCommanderBtn", main_check.get_node_or_null("MainlineView/MLFrame/ApplyCommanderBtn") != null,
 		"mainline view should expose commander apply action")
+	_assert_true("MainlineView has MLPrepSummary", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSummary") != null,
+		"mainline view should expose a preparation summary panel")
+	_assert_true("MainlineView has MLPrepTabs", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepTabs") != null,
+		"mainline view should expose tactical preparation tabs")
+	_assert_true("MainlineView has MLPrepContent", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepContent") != null,
+		"mainline view should expose preparation content")
+	_assert_true("MainlineView has MLPrepStartBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepStartBtn") != null,
+		"mainline view should require an explicit start battle action")
+	_assert_true("MainlineView has MLPrepRefreshBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepRefreshBtn") != null,
+		"mainline view should expose a preparation refresh action")
+	_assert_true("MainlineView has MLPrepActionBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepActionBtn") != null,
+		"mainline view should expose a context preparation action")
+	_assert_true("MainlineView has MLPrepAltActionBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepAltActionBtn") != null,
+		"mainline view should expose a secondary preparation action")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
 	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
 		"attack forecast should render in the right-side information panel")
+	main_check.call("_show_view", "mainline")
+	main_check.call("_on_mainline_prepare_response", {
+		"battle_index": 0,
+		"total_battles": 2,
+		"inventory": {"gold": 320, "iron_sword": 1},
+		"heroes": [{
+			"hero_id": "anna",
+			"name": "Anna",
+			"class_id": "swordsman",
+			"level": 4,
+			"exp": 32,
+			"base_stats": {"hp": 25, "atk": 8, "def": 5, "spd": 7},
+			"learned_skills": ["guard"],
+			"equipment": {"weapon": "iron_sword"},
+			"can_promote": true,
+			"promotion_options": ["blade_master"],
+		}],
+		"roster_units": [{"name": "Anna", "hero_id": "anna", "class_id": "swordsman", "level": 4}],
+		"equipment_catalog": [{
+			"equipment_id": "iron_sword",
+			"name": "Iron Sword",
+			"slot": "weapon",
+			"stat_bonuses": {"atk": 2},
+		}],
+	}, 200, "chapter_test")
+	var prep_content: RichTextLabel = main_check.get_node("MainlineView/MLFrame/MLPrepContent")
+	var prep_summary: RichTextLabel = main_check.get_node("MainlineView/MLFrame/MLPrepSummary")
+	var prep_start: Button = main_check.get_node("MainlineView/MLFrame/MLPrepStartBtn")
+	_assert_true("Prepare response renders hero", prep_content.text.contains("Anna"),
+		"mainline prepare response should render hero details instead of auto-starting")
+	_assert_true("Prepare summary renders gold", prep_summary.text.contains("金币 320"),
+		"mainline prepare summary should expose inventory gold")
+	_assert_true("Prepare start button enabled", not prep_start.disabled,
+		"battle start should become explicit and available after prepare loads")
+	main_check.call("_on_prepare_shop_response", {
+		"mainline_id": "chapter_test",
+		"gold": 320,
+		"items": [{"item_id": "hero_crest", "name": "Hero Crest", "price": 100, "description": "Promote a hero"}],
+	}, 200)
+	main_check.call("_on_prepare_tab_pressed", "shop")
+	_assert_true("Prepare shop renders item", prep_content.text.contains("Hero Crest"),
+		"shop tab should render post-battle shop stock")
+	main_check.call("_on_prepare_mercenary_response", {
+		"mainline_id": "chapter_test",
+		"balance": {
+			"allowed_unit_types": ["swordsman"],
+			"stat_rules": {"atk": {"cost": 1, "cap": 3}},
+		},
+		"allocation": {"unit_type_upgrades": {"swordsman": {"atk": 1}}},
+		"mercenary_points": 2,
+	}, 200)
+	main_check.call("_on_prepare_tab_pressed", "mercenary")
+	_assert_true("Prepare mercenary renders points", prep_content.text.contains("可用点数 2"),
+		"mercenary tab should render spendable points")
 	_setup_action_bubble_state(main_check)
 	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
 	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,

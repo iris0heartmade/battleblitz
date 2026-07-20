@@ -54,6 +54,27 @@ def test_godot_save_views_use_save_api_not_game_delete_api():
 def test_godot_mainline_start_passes_prepare_compatible_arguments():
     source = _read(MAIN_GD)
     assert "NetworkClient.get_mainline_prepare(" in source
-    assert 'NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))' in source
+    assert "func _on_prepare_start_pressed() -> void:" in source
+    assert 'NetworkClient.start_mainline(_selected_mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))' in source
     assert 'NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"), true)' in source
     assert 'NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, [], Callable(self, "_on_mainline_next_battle_response"))' in source
+    assert "NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, \"_on_mainline_start_response\"))" not in source
+
+
+def test_godot_prepare_ui_uses_hero_backend_actions():
+    source = _read(MAIN_GD)
+    required_snippets = [
+        "func _render_mainline_prepare() -> void:",
+        "func _build_prepare_heroes_text(payload: Dictionary) -> String:",
+        "func _build_prepare_equipment_text(payload: Dictionary) -> String:",
+        "func _build_prepare_mercenary_text() -> String:",
+        "func _build_prepare_shop_text() -> String:",
+        "NetworkClient.promote_mainline_hero(",
+        "NetworkClient.equip_mainline_hero(",
+        "NetworkClient.get_post_battle_shop(",
+        "NetworkClient.purchase_post_battle_shop_item(",
+        "NetworkClient.get_mercenary_config(",
+        "NetworkClient.allocate_mercenary_points(",
+    ]
+    for snippet in required_snippets:
+        assert snippet in source

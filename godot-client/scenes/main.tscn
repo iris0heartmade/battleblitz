@@ -952,9 +952,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -380.0
-offset_top = -280.0
-offset_right = 380.0
-offset_bottom = 280.0
+offset_top = -330.0
+offset_right = 500.0
+offset_bottom = 330.0
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="MLBorder" type="ReferenceRect" parent="MainlineView/MLFrame"]
@@ -973,31 +973,121 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
 [node name="MLSlotsContainer" type="VBoxContainer" parent="MainlineView/MLFrame"]
-anchor_right = 1.0
 offset_left = 24.0
 offset_top = 50.0
-offset_right = -24.0
+offset_right = 330.0
 offset_bottom = 150.0
 theme_override_constants/separation = 4
 
 [node name="MLListContainer" type="VBoxContainer" parent="MainlineView/MLFrame"]
-anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
 offset_top = 158.0
-offset_right = -24.0
+offset_right = 330.0
 offset_bottom = -142.0
 theme_override_constants/separation = 8
 scroll_following = true
+
+[node name="MLPrepSummary" type="RichTextLabel" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+offset_left = 354.0
+offset_top = 50.0
+offset_right = -24.0
+offset_bottom = 116.0
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = "[b]战前整备[/b]\n[color=#a69a73]选择章节后载入英雄、装备、佣兵和商店。[/color]"
+
+[node name="MLPrepTabs" type="HBoxContainer" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+offset_left = 354.0
+offset_top = 124.0
+offset_right = -24.0
+offset_bottom = 162.0
+theme_override_constants/separation = 6
+
+[node name="HeroesTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "英雄"
+
+[node name="RosterTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "部队"
+
+[node name="EquipmentTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "装备"
+
+[node name="MercenaryTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "佣兵"
+
+[node name="ShopTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "商店"
+
+[node name="SavesTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
+text = "存档"
+
+[node name="MLPrepContent" type="RichTextLabel" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 354.0
+offset_top = 174.0
+offset_right = -24.0
+offset_bottom = -116.0
+bbcode_enabled = true
+scroll_active = true
+text = "[color=#a69a73]尚未载入整备资料。[/color]"
+
+[node name="MLPrepStartBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -102.0
+offset_right = -168.0
+offset_bottom = -66.0
+text = "开始战斗"
+
+[node name="MLPrepRefreshBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -156.0
+offset_top = -102.0
+offset_right = -24.0
+offset_bottom = -66.0
+text = "刷新整备"
+
+[node name="MLPrepActionBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -52.0
+offset_right = -168.0
+offset_bottom = -16.0
+text = "整备操作"
+
+[node name="MLPrepAltActionBtn" type="Button" parent="MainlineView/MLFrame"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -156.0
+offset_top = -52.0
+offset_right = -24.0
+offset_bottom = -16.0
+text = "辅助操作"
 
 [node name="CommanderStatus" type="Label" parent="MainlineView/MLFrame"]
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -340.0
+offset_left = -416.0
 offset_top = -132.0
-offset_right = 340.0
+offset_right = -110.0
 offset_bottom = -110.0
 text = "指挥官: 加载中..."
 horizontal_alignment = 1
@@ -1009,9 +1099,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -340.0
+offset_left = -416.0
 offset_top = -102.0
-offset_right = 116.0
+offset_right = -220.0
 offset_bottom = -66.0
 
 [node name="ApplyCommanderBtn" type="Button" parent="MainlineView/MLFrame"]
@@ -1019,9 +1109,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 136.0
+offset_left = -210.0
 offset_top = -102.0
-offset_right = 340.0
+offset_right = -110.0
 offset_bottom = -66.0
 text = "选定指挥官"
 
