@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.battle_config import battle_bgm_meta, expand_battle_config
 from app.config import MAINLINE_INITIAL_GOLD
-from app.game_logic import build_ai_player
+from app.game_logic import MAP_PRESETS, build_ai_player
 from app.mainline import (
     MainlineNotFound,
     MainlineValidationError,
@@ -58,12 +58,43 @@ from app.mainline.engine import (
 from app.mainline.schemas import (
     BattleBgmMeta,
     BattlePreview,
+    ChapterBalanceConfigOut,
+    CommanderAllocationOut,
     MainlineAbandonOut,
     MainlineAdvanceOut,
     MainlineDetailOut,
+    MainlineMercenaryAllocateOut,
+    MainlineMercenaryAllocateRequest,
+    MainlineMercenaryConfigOut,
     MainlineNextBattleOut,
+    MainlinePrepareHeroOut,
+    MainlinePrepareEquipmentOut,
+    MainlinePrepareEquipmentRequest,
+    MainlinePrepareOut,
+    MainlinePreparePromoteOut,
+    MainlinePrepareUnitOut,
+    MainlineShopOut,
+    MainlineShopPurchaseOut,
+    MainlineShopPurchaseRequest,
     MainlineStartOut,
 )
+from app.hero_domain import (
+    build_campaign_spawn_payload,
+    build_hero_character_template,
+    build_hero_class_template,
+    build_initial_campaign_state,
+    can_promote_hero,
+    hero_campaign_state_from_dict,
+    hero_campaign_state_to_dict,
+    promote_hero,
+    EQUIPMENT_SLOTS,
+    catalog_payload,
+    default_equipment_for_class,
+    equipped_stat_bonuses,
+    get_equipment,
+)
+from app.hero_domain.promotion import HeroPromotionError
+from app.mainline.spawn_overrides import apply_spawn_overrides
 from app.models import ActionLog, Game, Player, Unit
 from app.progression import (
     MainlineAlreadyActive,
@@ -73,7 +104,13 @@ from app.progression import (
     ProgressionService,
 )
 from app.routes.game import _start_battle_internal
+from app.routes.save import auto_save_checkpoint
+from app.save import (
+    AutoSaveCheckpointOut,
+    PrepCompleteRequest,
+)
 from app.commanders.registry import get_power_threshold
+from app.item_catalog import get_item, load_shop
 
 logger = logging.getLogger(__name__)
 # USER_ACTION audit lines per §15 of the logging standard
@@ -95,6 +132,243 @@ _GAME_ROOT: Path = Path(__file__).resolve().parents[2]
 def game_root() -> Path:
     """Absolute path to the ``game/`` directory. Exposed for tests."""
     return _GAME_ROOT
+
+
+async def _build_prepare_payload(
+    session: AsyncSession,
+    profile: PlayerProfile,
+    mainline_id: str,
+) -> MainlinePrepareOut:
+    ml = load_mainline(mainline_id)
+    battle_index = int((profile.mainline_progress or {}).get("battle_index", 0))
+    if not (0 <= battle_index < len(ml.battles)):
+        battle_index = 0
+    battle = ml.battles[battle_index]
+    svc = ProgressionService(session)
+    inventory = await svc.ensure_hero_equipment_starters(profile.user_name)
+    crest_count = int(inventory.get("hero_crest", 0))
+
+    heroes: list[MainlinePrepareHeroOut] = []
+    roster_units: list[MainlinePrepareUnitOut] = []
+    for spec in ml.starting_units:
+        roster_units.append(MainlinePrepareUnitOut(
+            class_id=spec.class_id,
+            level=spec.level,
+            name=spec.name,
+            hero_id=spec.hero_id,
+            color=spec.color,
+            x=spec.x,
+            y=spec.y,
+        ))
+        if not spec.hero_id:
+            continue
+        stored_state = await svc.get_hero_campaign_state(profile.user_name, spec.hero_id)
+        if stored_state is None:
+            initial_state = build_initial_campaign_state(spec.hero_id)
+            stored_state = hero_campaign_state_to_dict(initial_state)
+            await svc.set_hero_campaign_state(
+                profile.user_name,
+                spec.hero_id,
+                stored_state,
+            )
+        state = hero_campaign_state_from_dict(stored_state)
+        # One-time migration for campaign saves created before equipment
+        # existed.  Thereafter an empty loadout is a deliberate player
+        # choice and must stay empty.
+        if not state.equipment_initialized:
+            state.equipment = default_equipment_for_class(state.class_id)
+            state.equipment_initialized = True
+            stored_state = hero_campaign_state_to_dict(state)
+            await svc.set_hero_campaign_state(
+                profile.user_name, spec.hero_id, stored_state,
+            )
+        current_class = build_hero_class_template(state.class_id)
+        heroes.append(MainlinePrepareHeroOut(
+            hero_id=state.hero_id,
+            name=spec.name or build_hero_character_template(spec.hero_id).hero_id,
+            class_id=state.class_id,
+            level=state.level,
+            exp=state.exp,
+            promoted=state.promoted,
+            can_promote=(crest_count > 0 and can_promote_hero(state, current_class)),
+            promotion_options=list(current_class.promotion_options),
+            learned_skills=list(state.learned_skills),
+            base_stats=dict(state.base_stats),
+            equipment=dict(state.equipment),
+            equipment_bonuses=equipped_stat_bonuses(state.equipment),
+        ))
+
+    return MainlinePrepareOut(
+        mainline_id=ml.id,
+        is_active=getattr(profile, "active_mainline", None) == ml.id,
+        title=ml.title,
+        synopsis=ml.synopsis,
+        battle_index=battle_index,
+        total_battles=len(ml.battles),
+        battle_id=battle.id,
+        battle_title=battle.title,
+        win_condition=battle.win_condition,
+        required_classes=list(ml.required_classes),
+        pre_battle_dialogue_key=battle.pre_battle_dialogue,
+        post_battle_dialogue_key=battle.post_battle_dialogue,
+        bgm_meta=BattleBgmMeta.model_validate(battle_bgm_meta(_battle_track_id(battle)))
+        if _battle_track_id(battle) else None,
+        inventory={k: int(v) for k, v in inventory.items()},
+        equipment_catalog=catalog_payload(),
+        heroes=heroes,
+        roster_units=roster_units,
+        rewards_on_clear=ml.rewards_on_clear,
+    )
+
+
+async def _persist_mainline_hero_results(
+    session: AsyncSession,
+    profile: PlayerProfile,
+    game_id: int,
+) -> None:
+    """Write long-term Hero progression fields back into profile storage."""
+
+    players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    human = next(
+        (
+            player for player in players
+            if not player.is_ai
+            and not player.is_spectator
+            and player.user_name == profile.user_name
+        ),
+        None,
+    )
+    if human is None:
+        logger.warning(
+            "mainline hero persist skipped: user=%s game=%d reason=no_human_player",
+            profile.user_name,
+            game_id,
+        )
+        return
+
+    units = (await session.execute(
+        select(Unit).where(Unit.player_id == human.id)
+    )).scalars().all()
+    svc = ProgressionService(session)
+    persisted_count = 0
+    for unit in units:
+        if not unit.hero_id:
+            continue
+        stored_state = await svc.get_hero_campaign_state(profile.user_name, unit.hero_id)
+        if stored_state is None:
+            stored_state = hero_campaign_state_to_dict(
+                build_initial_campaign_state(unit.hero_id)
+            )
+        prior = hero_campaign_state_from_dict(stored_state)
+        campaign_base_stats = dict(unit.campaign_base_stats or {})
+        if not campaign_base_stats:
+            # Legacy in-flight battles predate Unit.campaign_base_stats.
+            # This is a one-time best-effort recovery; new games always use
+            # the explicit snapshot above.  Log so an operator can identify
+            # saves whose equipment may already have been persisted wrongly.
+            equipment_bonuses = equipped_stat_bonuses(prior.equipment)
+            logger.warning(
+                "mainline hero persist using legacy stat fallback: user=%s game=%d hero=%s",
+                profile.user_name,
+                game_id,
+                unit.hero_id,
+            )
+            campaign_base_stats = {
+                "hp": int(unit.max_hp) - int(equipment_bonuses.get("hp", 0)),
+                "atk": int(unit.atk) - int(equipment_bonuses.get("atk", 0)),
+                "def": int(unit.def_) - int(equipment_bonuses.get("def", 0)),
+                "matk": int(unit.matk) - int(equipment_bonuses.get("matk", 0)),
+                "mdef": int(unit.mdef) - int(equipment_bonuses.get("mdef", 0)),
+                "mov": int(unit.mov) - int(equipment_bonuses.get("mov", 0)),
+            }
+        updated = {
+            "hero_id": unit.hero_id,
+            "class_id": unit.unit_type,
+            "level": int(unit.level),
+            "exp": int(unit.exp),
+            "base_stats": {
+                "hp": int(campaign_base_stats["hp"]),
+                "atk": int(campaign_base_stats["atk"]),
+                "def": int(campaign_base_stats["def"]),
+                "matk": int(campaign_base_stats["matk"]),
+                "mdef": int(campaign_base_stats["mdef"]),
+                "mov": int(campaign_base_stats["mov"]),
+                # MP is temporary battle state; keep the stored long-term pool.
+                "mp": int(prior.base_stats.get("mp", build_initial_campaign_state(unit.hero_id).base_stats["mp"])),
+            },
+            "weapon_ranks": dict(prior.weapon_ranks),
+            "learned_skills": list(unit.skills or []),
+            "promoted": build_hero_class_template(unit.unit_type).tier >= 2,
+            "equipment": dict(prior.equipment),
+            "equipment_initialized": prior.equipment_initialized,
+        }
+        await svc.set_hero_campaign_state(profile.user_name, unit.hero_id, updated)
+        persisted_count += 1
+
+    if persisted_count:
+        logger.info(
+            "mainline hero persist ok: user=%s game=%d heroes=%d",
+            profile.user_name,
+            game_id,
+            persisted_count,
+        )
+
+
+def _build_disabled_unit_spawn_overrides(
+    ml,
+    battle,
+    disabled_unit_indices: list[int] | None,
+) -> dict | None:
+    disabled_indices = sorted({
+        int(idx) for idx in (disabled_unit_indices or [])
+        if isinstance(idx, int) or (isinstance(idx, str) and str(idx).isdigit())
+    })
+    if not disabled_indices:
+        return None
+
+    base_units = list((MAP_PRESETS.get(battle.map_id) or {}).get("initial_units", []))
+    resolved_units = apply_spawn_overrides(
+        base_units,
+        battle.spawn_overrides.model_dump(exclude_none=True)
+        if battle.spawn_overrides is not None
+        else None,
+    )
+    used_coords: set[tuple[str, int, int]] = set()
+    remove_entries: list[dict] = []
+
+    for idx in disabled_indices:
+        if idx < 0 or idx >= len(ml.starting_units):
+            continue
+        spec = ml.starting_units[idx]
+        if spec.hero_id:
+            continue
+        target_color = spec.color or "red"
+        matched = None
+        for entry in resolved_units:
+            key = (str(entry["color"]), int(entry["x"]), int(entry["y"]))
+            if key in used_coords:
+                continue
+            if str(entry.get("color")) != target_color:
+                continue
+            if str(entry.get("type")) != spec.class_id:
+                continue
+            matched = entry
+            break
+        if matched is None:
+            continue
+        key = (str(matched["color"]), int(matched["x"]), int(matched["y"]))
+        used_coords.add(key)
+        remove_entries.append({
+            "color": str(matched["color"]),
+            "x": int(matched["x"]),
+            "y": int(matched["y"]),
+        })
+
+    if not remove_entries:
+        return None
+    return {"remove": remove_entries}
 
 
 # ============================================================
@@ -234,6 +508,8 @@ async def _spawn_battle_for_index(
     profile: PlayerProfile,
     mainline_id: str,
     battle_index: int,
+    *,
+    disabled_unit_indices: list[int] | None = None,
 ) -> tuple[Game, Player, int]:
     """Build + persist the (Game, players, tiles, units) for one battle.
 
@@ -287,7 +563,7 @@ async def _spawn_battle_for_index(
         color="red",
         seat=0,
         is_ai=False,
-        gold=MAINLINE_INITIAL_GOLD,
+        gold=int(ml.mercenary_balance.starting_fund),
         commander_id=(profile.mainline_commanders or {}).get(mainline_id),
     )
     human.co_state = {
@@ -326,10 +602,28 @@ async def _spawn_battle_for_index(
     # `(x, y)` is passed through if the mainline author wants to
     # pin the hero to a specific map tile.
     hero_overrides: List[Dict] = []
+    svc = ProgressionService(session)
     for spec in ml.starting_units:
         if not spec.hero_id:
             continue
         override_color = spec.color or "red"
+        campaign_spawn = None
+        if override_color == human.color:
+            stored_state = await svc.get_hero_campaign_state(
+                profile.user_name,
+                spec.hero_id,
+            )
+            if stored_state is None:
+                initial_state = build_initial_campaign_state(spec.hero_id)
+                stored_state = hero_campaign_state_to_dict(initial_state)
+                await svc.set_hero_campaign_state(
+                    profile.user_name,
+                    spec.hero_id,
+                    stored_state,
+                )
+            campaign_spawn = build_campaign_spawn_payload(
+                hero_campaign_state_from_dict(stored_state)
+            )
         # When the mainline supplies a class_id that doesn't match
         # the hero's base_class_id, the UnitSpec validator already
         # rejected it; here we can trust the pairing.
@@ -339,6 +633,7 @@ async def _spawn_battle_for_index(
             "y": spec.y,
             "hero_id": spec.hero_id,
             "name": spec.name,
+            "campaign_state": campaign_spawn,
         })
     if hero_overrides:
         logger.info(
@@ -346,6 +641,27 @@ async def _spawn_battle_for_index(
             len(hero_overrides),
             [ov["hero_id"] for ov in hero_overrides],
         )
+    extra_spawn_overrides = _build_disabled_unit_spawn_overrides(
+        ml,
+        battle,
+        disabled_unit_indices,
+    )
+    battle_spawn_overrides = (
+        battle.spawn_overrides.model_dump(exclude_none=True)
+        if battle.spawn_overrides is not None
+        else None
+    )
+    merged_spawn_overrides = {
+        "remove": [
+            *((battle_spawn_overrides or {}).get("remove") or []),
+            *((extra_spawn_overrides or {}).get("remove") or []),
+        ],
+        "replace": list((battle_spawn_overrides or {}).get("replace") or []),
+        "add": list((battle_spawn_overrides or {}).get("add") or []),
+    }
+    if not merged_spawn_overrides["remove"] and not merged_spawn_overrides["replace"] and not merged_spawn_overrides["add"]:
+        merged_spawn_overrides = None
+
     await _start_battle_internal(
         session,
         game,
@@ -353,11 +669,37 @@ async def _spawn_battle_for_index(
         map_preset=battle.map_id,
         map_seed=battle.map_seed,
         hero_overrides=hero_overrides or None,
-        spawn_overrides=(
-            battle.spawn_overrides.model_dump(exclude_none=True)
-            if battle.spawn_overrides is not None
-            else None
-        ),
+        spawn_overrides=merged_spawn_overrides,
+    )
+
+    # Commander points strengthen only generic mercenaries.  Hero Units keep
+    # their own campaign snapshot and equipment path, so they are excluded.
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    _balance, rules = _build_mercenary_policy(ml)
+    human_units = (await session.execute(
+        select(Unit).where(Unit.player_id == human.id)
+    )).scalars().all()
+    from app.mercenary_domain import apply_allocation_to_unit
+    applied_unit_count = 0
+    for unit in human_units:
+        if unit.hero_id or unit.unit_type not in rules.available_unit_types():
+            continue
+        if apply_allocation_to_unit(unit, allocation.unit_type_upgrades):
+            applied_unit_count += 1
+
+    # Persist the exact, already-validated allocation on the Game.  Recruit
+    # actions consume this snapshot so post-start changes to a profile cannot
+    # rewrite a battle that is already in progress.
+    battle_config = dict(game.battle_config or {})
+    battle_config["mercenary"] = {
+        "human_player_id": int(human.id),
+        "unit_type_upgrades": allocation.unit_type_upgrades,
+    }
+    game.battle_config = battle_config
+    logger.info(
+        "mainline mercenary allocation applied: mainline=%s game=%d units=%d",
+        mainline_id, game.id, applied_unit_count,
     )
 
     # 5. Audit log.
@@ -514,6 +856,275 @@ async def get_mainline_detail(mainline_id: str) -> MainlineDetailOut:
     return out
 
 
+@router.get("/{mainline_id}/prepare", response_model=MainlinePrepareOut)
+async def get_mainline_prepare(
+    mainline_id: str,
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> MainlinePrepareOut:
+    """Build a read-only pre-battle payload without spawning a Game row."""
+    logger.debug(
+        "get_mainline_prepare entry: mainline=%s user=%s",
+        mainline_id,
+        user_name,
+    )
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        logger.warning("get_mainline_prepare not found: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        logger.exception("get_mainline_prepare invalid: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _ensure_profile_or_create(session, user_name)
+    payload = await _build_prepare_payload(session, profile, mainline_id)
+    logger.info(
+        "get_mainline_prepare ok: mainline=%s user=%s battle=%s heroes=%d",
+        mainline_id,
+        user_name,
+        payload.battle_id,
+        len(payload.heroes),
+    )
+    return payload
+
+
+@router.post(
+    "/{mainline_id}/prepare/promote",
+    response_model=MainlinePreparePromoteOut,
+)
+async def promote_mainline_hero(
+    mainline_id: str,
+    body: MainlinePreparePromoteRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlinePreparePromoteOut:
+    try:
+        ml = load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _load_profile(session, body.user_name)
+    if getattr(profile, "active_mainline", None) not in (None, mainline_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"profile {body.user_name!r} is active in another mainline",
+        )
+
+    hero_ids = {spec.hero_id for spec in ml.starting_units if spec.hero_id}
+    if body.hero_id not in hero_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"hero {body.hero_id!r} not found in mainline roster")
+
+    svc = ProgressionService(session)
+    stored_state = await svc.get_hero_campaign_state(body.user_name, body.hero_id)
+    if stored_state is None:
+        stored_state = hero_campaign_state_to_dict(build_initial_campaign_state(body.hero_id))
+        await svc.set_hero_campaign_state(body.user_name, body.hero_id, stored_state)
+    state = hero_campaign_state_from_dict(stored_state)
+    current_class = build_hero_class_template(state.class_id)
+    target_class = build_hero_class_template(body.target_class_id)
+    inventory = await svc.get_hero_inventory(body.user_name)
+    crest_count = int(inventory.get("hero_crest", 0))
+    if crest_count <= 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, "hero_crest is required for promotion")
+    try:
+        promoted_state = promote_hero(state, current_class, target_class)
+    except HeroPromotionError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+    await svc.set_hero_campaign_state(
+        body.user_name,
+        body.hero_id,
+        hero_campaign_state_to_dict(promoted_state),
+    )
+    updated_inventory = await svc.set_hero_inventory_item(
+        body.user_name,
+        "hero_crest",
+        crest_count - 1,
+    )
+
+    return MainlinePreparePromoteOut(
+        hero_id=promoted_state.hero_id,
+        class_id=promoted_state.class_id,
+        level=promoted_state.level,
+        promoted=promoted_state.promoted,
+        hero_crest_left=int((updated_inventory or {}).get("hero_crest", 0)),
+    )
+
+
+@router.post(
+    "/{mainline_id}/prepare/equipment",
+    response_model=MainlinePrepareEquipmentOut,
+)
+async def equip_mainline_hero(
+    mainline_id: str,
+    body: MainlinePrepareEquipmentRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlinePrepareEquipmentOut:
+    """Persist one equipment choice made in the pre-battle preparation view."""
+    try:
+        ml = load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    if body.slot not in EQUIPMENT_SLOTS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "unknown equipment slot")
+    hero_ids = {spec.hero_id for spec in ml.starting_units if spec.hero_id}
+    if body.hero_id not in hero_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"hero {body.hero_id!r} not found in mainline roster")
+    profile = await _load_profile(session, body.user_name)
+    definition = get_equipment(body.equipment_id)
+    if body.equipment_id is not None and (definition is None or definition.slot != body.slot):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "equipment does not match this slot")
+
+    svc = ProgressionService(session)
+    inventory = await svc.ensure_hero_equipment_starters(body.user_name)
+    if definition is not None and int(inventory.get(definition.item_id, 0)) <= 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, "equipment is not in inventory")
+    stored_state = await svc.get_hero_campaign_state(body.user_name, body.hero_id)
+    if stored_state is None:
+        stored_state = hero_campaign_state_to_dict(build_initial_campaign_state(body.hero_id))
+    state = hero_campaign_state_from_dict(stored_state)
+
+    # An inventory item can be equipped by only one hero at a time.
+    if definition is not None:
+        equipped_elsewhere = 0
+        all_states = dict(getattr(profile, "hero_campaign_states", {}) or {})
+        for hero_id, raw_state in all_states.items():
+            if hero_id != body.hero_id and definition.item_id in (raw_state.get("equipment") or {}).values():
+                equipped_elsewhere += 1
+        if equipped_elsewhere >= int(inventory.get(definition.item_id, 0)):
+            raise HTTPException(status.HTTP_409_CONFLICT, "equipment is already equipped by another hero")
+    equipment = dict(state.equipment)
+    equipment[body.slot] = body.equipment_id
+    state.equipment = equipment
+    state.equipment_initialized = True
+    await svc.set_hero_campaign_state(body.user_name, body.hero_id, hero_campaign_state_to_dict(state))
+    return MainlinePrepareEquipmentOut(
+        hero_id=state.hero_id,
+        equipment=equipment,
+        equipment_bonuses=equipped_stat_bonuses(equipment),
+    )
+
+
+@router.get("/{mainline_id}/shop", response_model=MainlineShopOut)
+async def get_post_battle_shop(
+    mainline_id: str,
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> MainlineShopOut:
+    """Return the JSON-authored post-battle stock and campaign gold."""
+    try:
+        load_mainline(mainline_id)
+        items = load_shop("post_battle")
+    except (MainlineNotFound, FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    profile = await _load_profile(session, user_name)
+    return MainlineShopOut(
+        mainline_id=mainline_id,
+        gold=int(profile.gold),
+        items=[item.payload() for item in items],
+    )
+
+
+@router.post(
+    "/{mainline_id}/shop/purchase",
+    response_model=MainlineShopPurchaseOut,
+)
+async def purchase_post_battle_shop_item(
+    mainline_id: str,
+    body: MainlineShopPurchaseRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlineShopPurchaseOut:
+    try:
+        load_mainline(mainline_id)
+        stock_ids = {item.item_id for item in load_shop("post_battle")}
+    except (MainlineNotFound, FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    item = get_item(body.item_id)
+    if item is None or item.item_id not in stock_ids:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item is not sold by this shop")
+    svc = ProgressionService(session)
+    try:
+        result = await svc.purchase_hero_inventory_item(
+            body.user_name, item.item_id, unit_price=item.price, quantity=body.quantity,
+        )
+    except ValueError:
+        raise HTTPException(status.HTTP_409_CONFLICT, "not enough campaign gold")
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    gold_remaining, inventory_count = result
+    return MainlineShopPurchaseOut(
+        item_id=item.item_id,
+        quantity=body.quantity,
+        inventory_count=inventory_count,
+        gold_remaining=gold_remaining,
+    )
+
+
+# ============================================================
+# POST /mainlines/{mainline_id}/prepare/complete
+# ============================================================
+
+
+@router.post(
+    "/{mainline_id}/prepare/complete",
+    response_model=AutoSaveCheckpointOut,
+)
+async def complete_prepare(
+    mainline_id: str,
+    body: PrepCompleteRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AutoSaveCheckpointOut:
+    """Player signals "I'm done prepping — ready to start".
+
+    Triggers an auto-save with label ``f"{mainline_id}-准备"`` so the
+    player can later reload to the post-prep / pre-battle state.
+    The FE renders "自动存档中…… 自动存档完毕" on success.
+
+    Pre-conditions (matches the FE8 design v2 §2.6 invariants):
+      * profile exists
+      * mainline is valid
+      * the player may prep an inactive mainline too — the
+        auto-save then captures them at the *post-prep / pre-start*
+        state of an inactive profile, useful for stash-style flow
+    """
+    logger.debug(
+        "complete_prepare entry: user=%s mainline=%s",
+        body.user_name, mainline_id,
+    )
+    try:
+        load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _load_profile(session, body.user_name)
+    # Persist hero_campaign_states for any heroes in this mainline
+    # that haven't been initialised yet, so the auto-save captures
+    # a complete snapshot rather than a half-empty one.  This is
+    # the same initialisation the /start path performs.
+    svc = ProgressionService(session)
+    try:
+        ml = load_mainline(mainline_id)
+        cursor_index = int(
+            (profile.mainline_progress or {}).get("battle_index", 0)
+        )
+        if not (0 <= cursor_index < len(ml.battles)):
+            cursor_index = 0
+    except Exception:  # pragma: no cover
+        cursor_index = 0
+
+    return await auto_save_checkpoint(
+        session,
+        profile,
+        mainline_id=mainline_id,
+        chapter_index=cursor_index,
+        label=f"{mainline_id}-准备",
+    )
+
+
 # ============================================================
 # POST /mainlines/{mainline_id}/start
 # ============================================================
@@ -524,6 +1135,7 @@ from app.mainline.schemas import (  # noqa: E402
     MainlineAbandonRequest,
     MainlineAdvanceRequest,
     MainlineNextBattleRequest,
+    MainlinePreparePromoteRequest,
     MainlineStartRequest,
 )
 
@@ -583,10 +1195,26 @@ async def start_mainline(
         )
 
     # Set active mainline via the progression service. Raises
-    # MainlineAlreadyActive if another campaign is in progress.
+    # MainlineAlreadyActive if another campaign is in progress
+    # (unless ``body.force`` is True, which allows restart of the
+    # same mainline after a save load).
     svc = ProgressionService(session)
+    # When force=True, also abort any in-flight game for this user
+    # so the new battle spawn doesn't leave an orphan.
+    if body.force:
+        from app.save import SaveService
+        save_svc = SaveService(session)
+        aborted = await save_svc._abort_in_flight_games(body.user_name)  # noqa: SLF001
+        if aborted:
+            logger.info(
+                "mainline_start force=true aborted in-flight games: "
+                "user=%s count=%d",
+                body.user_name, aborted,
+            )
     try:
-        await svc.set_active_mainline(body.user_name, mainline_id)
+        await svc.set_active_mainline(
+            body.user_name, mainline_id, force=body.force,
+        )
     except MainlineAlreadyActive as exc:
         logger.warning(
             "mainline_start already active: user=%s mainline=%s err=%s",
@@ -613,7 +1241,8 @@ async def start_mainline(
 
     # Spawn the first battle (always index 0 on /start).
     game, human, total_battles = await _spawn_battle_for_index(
-        session, profile, mainline_id, 0
+        session, profile, mainline_id, 0,
+        disabled_unit_indices=body.disabled_unit_indices,
     )
 
     # Determine whether to expose a pre-battle dialogue URL.
@@ -732,15 +1361,39 @@ async def advance_mainline(
 
     # Build an engine against the live profile.
     engine = MainlineEngine(session, profile, ml)
+    await _persist_mainline_hero_results(session, profile, game.id)
 
     total_battles = len(ml.battles)
     next_index = battle_index + 1
     is_last = next_index >= total_battles
 
+    # Auto-save at chapter-end (per FE8 design v2 §2.3).  Fires on
+    # both the victory path and the next-battle path — the player
+    # gets a fresh checkpoint after every settlement so they can
+    # always reload to "post-this-battle" state.  The FE uses
+    # ``auto_save`` to render "自动存档中…… 自动存档完毕".
+    auto_save_out = await auto_save_checkpoint(
+        session,
+        profile,
+        mainline_id=mainline_id,
+        chapter_index=next_index,
+        label=f"{mainline_id}-结束",
+    )
     if is_last:
         rewards = await engine.apply_victory(
             completed_battle=ml.battles[battle_index]
         )
+        next_mainline_id = ml.next_mainline_id
+        next_mainline_title = None
+        if next_mainline_id:
+            try:
+                next_mainline_title = load_mainline(next_mainline_id).title
+            except MainlineNotFound:
+                logger.warning(
+                    "mainline_advance successor missing: mainline=%s next=%s",
+                    mainline_id, next_mainline_id,
+                )
+                next_mainline_id = None
         logger.info(
             "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=victory "
             "gold=+%d unlock=%s exp_per_unit=+%d",
@@ -761,6 +1414,11 @@ async def advance_mainline(
             post_battle_dialogue_url=None,
             post_battle_dialogue_key=None,
             rewards=rewards,
+            victory_dialogue_url=ml.dialogues.get("victory"),
+            victory_dialogue_key="victory" if ml.dialogues.get("victory") else None,
+            next_mainline_id=next_mainline_id,
+            next_mainline_title=next_mainline_title,
+            auto_save=auto_save_out.model_dump(),
         )
 
     # Otherwise: advance the cursor and return the post-battle dialogue
@@ -803,6 +1461,7 @@ async def advance_mainline(
         post_battle_dialogue_url=post_url,
         post_battle_dialogue_key=post_key,
         rewards=None,
+        auto_save=auto_save_out.model_dump(),
     )
 
 
@@ -862,7 +1521,8 @@ async def next_battle_mainline(
         )
 
     game, human, total_battles = await _spawn_battle_for_index(
-        session, profile, mainline_id, next_idx
+        session, profile, mainline_id, next_idx,
+        disabled_unit_indices=body.disabled_unit_indices,
     )
 
     pre_key = ml.battles[next_idx].pre_battle_dialogue
@@ -950,6 +1610,228 @@ async def abandon_mainline(
         ok=True,
         mainline_id=mainline_id if was_active else None,
         abandoned_at=abandoned_at,
+    )
+
+
+# ============================================================
+# Mercenary domain endpoints (dual-track phase 3)
+# ============================================================
+
+
+def _build_mercenary_policy(ml):
+    """Build the server-authoritative allocation policy from mainline JSON."""
+    from app.mercenary_domain import (
+        ChapterBalanceConfig,
+        DEFAULT_UPGRADE_RULES,
+        MercenaryAllocationRules,
+        UpgradeRule,
+    )
+
+    config = ml.mercenary_balance
+    balance = ChapterBalanceConfig(starting_fund=int(config.starting_fund))
+    configured_rules = {
+        stat: UpgradeRule(
+            point_cost=int(rule.point_cost), max_bonus=int(rule.max_bonus),
+        )
+        for stat, rule in config.stat_rules.items()
+    }
+    return balance, MercenaryAllocationRules(
+        stat_rules=configured_rules or dict(DEFAULT_UPGRADE_RULES),
+        allowed_unit_types=(
+            frozenset(config.allowed_unit_types)
+            if config.allowed_unit_types is not None
+            else None
+        ),
+    )
+
+
+def _load_allocation_from_profile(
+    profile: PlayerProfile,
+) -> "CommanderAllocation":
+    """Read ``profile.mercenary_roster_state`` into a fresh
+    ``CommanderAllocation`` (or a default if absent).
+
+    The chapter determines which part of this shared commander allocation
+    can be spent; no client-controlled value participates in pricing.
+    """
+    from app.mercenary_domain import CommanderAllocation
+    stored = dict(getattr(profile, "mercenary_roster_state", {}) or {})
+    alloc_payload = dict(stored.get("allocation") or {})
+    allocation = CommanderAllocation(
+        total_points=int(alloc_payload.get("total_points", 100)),
+        spent_points=int(alloc_payload.get("spent_points", 0)),
+        unit_type_upgrades={
+            str(ut): dict(stats)
+            for ut, stats in (alloc_payload.get("unit_type_upgrades") or {}).items()
+        },
+    )
+    return allocation
+
+
+async def _save_allocation_to_profile(
+    session: AsyncSession,
+    profile: PlayerProfile,
+    allocation: "CommanderAllocation",
+) -> None:
+    """Write the allocation back into the JSON column on the profile.
+
+    The dataclass ``unit_type_upgrades`` keys must round-trip as
+    ``str``; SQLAlchemy's JSON type may coerce them, so we re-wrap
+    here.
+    """
+    stored = dict(getattr(profile, "mercenary_roster_state", {}) or {})
+    stored["allocation"] = {
+        "total_points": int(allocation.total_points),
+        "spent_points": int(allocation.spent_points),
+        "unit_type_upgrades": {
+            str(ut): {str(stat): int(value) for stat, value in stats.items()}
+            for ut, stats in allocation.unit_type_upgrades.items()
+        },
+    }
+    profile.mercenary_roster_state = stored
+    await session.flush()
+
+
+@router.get(
+    "/{mainline_id}/mercenary/config",
+    response_model=MainlineMercenaryConfigOut,
+)
+async def get_mercenary_config(
+    mainline_id: str,
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> MainlineMercenaryConfigOut:
+    """Return the chapter's balance config + the player's allocation.
+
+    Auto-creates the profile on miss (mirrors ``/start``) so a fresh
+    player can open the panel without a 404 round-trip.
+    """
+    logger.debug(
+        "get_mercenary_config entry: mainline=%s user=%s",
+        mainline_id, user_name,
+    )
+    try:
+        ml = load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        logger.warning("get_mercenary_config not found: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        logger.exception("get_mercenary_config invalid: mainline=%s", mainline_id)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    profile = await _ensure_profile_or_create(session, user_name)
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    balance, rules = _build_mercenary_policy(ml)
+    return MainlineMercenaryConfigOut(
+        mainline_id=mainline_id,
+        balance=ChapterBalanceConfigOut(
+            enemy_modifiers=dict(balance.enemy_modifiers),
+            max_recruit_count=int(balance.max_recruit_count),
+            starting_fund=int(balance.starting_fund),
+            total_points=int(ml.mercenary_balance.total_points),
+            allowed_unit_types=sorted(rules.available_unit_types()),
+            stat_rules={
+                stat: {
+                    "point_cost": int(rule.point_cost),
+                    "max_bonus": int(rule.max_bonus),
+                }
+                for stat, rule in rules.stat_rules.items()
+            },
+        ),
+        allocation=CommanderAllocationOut(
+            total_points=int(allocation.total_points),
+            spent_points=int(allocation.spent_points),
+            unit_type_upgrades={
+                str(ut): {str(stat): int(value) for stat, value in stats.items()}
+                for ut, stats in allocation.unit_type_upgrades.items()
+            },
+        ),
+        mercenary_points=int(allocation.total_points - allocation.spent_points),
+    )
+
+
+@router.post(
+    "/{mainline_id}/mercenary/allocate",
+    response_model=MainlineMercenaryAllocateOut,
+)
+async def allocate_mercenary_points(
+    mainline_id: str,
+    body: MainlineMercenaryAllocateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> MainlineMercenaryAllocateOut:
+    """Spend mercenary points on a per-unit-type stat upgrade.
+
+    Validates the point cost against the player's remaining budget,
+    writes the upgrade into the profile's
+    ``mercenary_roster_state.allocation``, and returns the new state.
+
+    This is the dual-track "pre-battle" panel; the *application* of
+    these upgrades to spawned ``Unit`` rows is a follow-up wiring
+    step (Task #1 phase 2).
+    """
+    logger.debug(
+        "allocate_mercenary_points entry: mainline=%s user=%s unit_type=%s stat=%s",
+        mainline_id, body.user_name, body.unit_type, body.stat,
+    )
+    try:
+        ml = load_mainline(mainline_id)
+    except MainlineNotFound as exc:
+        logger.warning(
+            "allocate_mercenary_points not found: mainline=%s", mainline_id,
+        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    except MainlineValidationError as exc:
+        logger.exception(
+            "allocate_mercenary_points invalid: mainline=%s", mainline_id,
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    # Strict 404: a typo'd user_name must not auto-create a wrong
+    # profile (mirrors /advance, /abandon).
+    profile = await _load_profile(session, body.user_name)
+    allocation = _load_allocation_from_profile(profile)
+    allocation.total_points = int(ml.mercenary_balance.total_points)
+    _balance, rules = _build_mercenary_policy(ml)
+
+    try:
+        from app.mercenary_domain import apply_commander_upgrade
+        receipt = apply_commander_upgrade(
+            allocation,
+            unit_type=body.unit_type,
+            stat=body.stat,
+            value=body.value,
+            rules=rules,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "allocate_mercenary_points rejected: user=%s reason=%s",
+            body.user_name, exc,
+        )
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if "points exceeded" in str(exc)
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        raise HTTPException(status_code, str(exc))
+
+    await _save_allocation_to_profile(session, profile, allocation)
+    logger.info(
+        "allocate_mercenary_points ok: user=%s unit_type=%s stat=%s "
+        "value=%d cost=%d spent=%d",
+        body.user_name, body.unit_type, body.stat,
+        body.value, receipt.cost, allocation.spent_points,
+    )
+    return MainlineMercenaryAllocateOut(
+        ok=True,
+        spent_points=int(allocation.spent_points),
+        remaining_points=int(
+            allocation.total_points - allocation.spent_points
+        ),
+        unit_type_upgrades={
+            str(ut): {str(stat): int(value) for stat, value in stats.items()}
+            for ut, stats in allocation.unit_type_upgrades.items()
+        },
     )
 
 

@@ -1,0 +1,5 @@
+{
+  "shop_id": "post_battle",
+  "name": "战后补给所",
+  "item_ids": ["iron_sword", "oak_staff", "guard_shield", "ruby_ring", "hero_crest"]
+}

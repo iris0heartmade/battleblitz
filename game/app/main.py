@@ -30,9 +30,11 @@ from app.routes import game as game_routes
 from app.routes import heroes as heroes_routes
 from app.routes import mainline as mainline_routes
 from app.routes import profile as profile_routes
+from app.routes import save as save_routes
 from app.routes import turns as turns_routes
 from app.routes import ws_gateway as ws_gateway_routes
 from app.progression import api as progression_api
+from app.save import models as save_models  # noqa: F401  (registers tables with Base)
 
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -132,3 +134,7 @@ app.include_router(heroes_routes.router)
 # of registered tracks instead of asking the user to type a track_id.
 app.include_router(audio_routes.router)
 app.include_router(commanders_routes.router)
+# Save / suspend — formal Game saves (manual + auto) and the
+# mid-battle interrupt slot.  See app/routes/save.py and
+# docs/superpowers/plans/2026-07-13-save-design-v2.md.
+app.include_router(save_routes.router)

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -182,6 +182,7 @@ def _apply_hero_overrides(
     # import time would slow every test fixture that just exercises
     # base-class unit logic.
     from app.classes.heroes import get_or_none as _get_hero
+    from app.classes.units import get_or_none as _get_unit_class
 
     color_to_pid = {p.color: p.id for p in real_players if p.color}
     # Track which units have been claimed so color-only matches don't
@@ -265,7 +266,6 @@ def _apply_hero_overrides(
         # base-class values, producing a Frankenstein unit.  The
         # same fix applies when a (x, y) match grabs a unit of a
         # different class.
-        from app.classes.units import get_or_none as _get_unit_class
         hero_base = _get_unit_class(hero.base_class_id)
         if hero_base is None:
             logger.warning(
@@ -326,6 +326,76 @@ def _apply_hero_overrides(
             if sid and sid not in merged_skills:
                 merged_skills.append(sid)
         candidate.skills = merged_skills
+        campaign_state = override.get("campaign_state")
+        if isinstance(campaign_state, dict):
+            campaign_class_id = campaign_state.get("class_id")
+            campaign_stats = dict(campaign_state.get("base_stats", {}))
+            if campaign_class_id and campaign_class_id != candidate.unit_type:
+                campaign_class = _get_unit_class(campaign_class_id)
+                if campaign_class is None:
+                    logger.warning(
+                        "hero campaign state skipped: hero_id=%r class_id=%r unknown",
+                        hero_id,
+                        campaign_class_id,
+                    )
+                else:
+                    candidate.unit_type = campaign_class_id
+                    candidate.skills = list(campaign_class.default_skills)
+            candidate.level = int(campaign_state.get("level", candidate.level))
+            candidate.exp = int(campaign_state.get("exp", candidate.exp))
+            if "hp" in campaign_stats:
+                hp = int(campaign_stats["hp"])
+                candidate.hp = hp
+                candidate.max_hp = hp
+            if "atk" in campaign_stats:
+                candidate.atk = int(campaign_stats["atk"])
+            if "def" in campaign_stats:
+                candidate.def_ = int(campaign_stats["def"])
+            if "matk" in campaign_stats:
+                candidate.matk = int(campaign_stats["matk"])
+            if "mdef" in campaign_stats:
+                candidate.mdef = int(campaign_stats["mdef"])
+            if "mov" in campaign_stats:
+                candidate.mov = int(campaign_stats["mov"])
+            if "mp" in campaign_stats:
+                candidate.mp = int(campaign_stats["mp"])
+            # Keep permanent attributes separate from the effective combat
+            # values below.  Settlement writes this snapshot, not the Unit's
+            # equipment-modified fields.
+            candidate.campaign_base_stats = {
+                "hp": int(candidate.max_hp),
+                "atk": int(candidate.atk),
+                "def": int(candidate.def_),
+                "matk": int(candidate.matk),
+                "mdef": int(candidate.mdef),
+                "mov": int(candidate.mov),
+                "mp": int(campaign_stats.get("mp", candidate.mp)),
+            }
+            # Campaign equipment is a persistent pre-battle choice.  Apply
+            # it only after all class/level values have been materialised so
+            # every combat path sees the same effective stats.
+            from app.hero_domain.equipment import equipped_stat_bonuses
+            equipment_bonuses = equipped_stat_bonuses(
+                dict(campaign_state.get("equipment", {}))
+            )
+            if "hp" in equipment_bonuses:
+                candidate.max_hp += equipment_bonuses["hp"]
+                candidate.hp += equipment_bonuses["hp"]
+            if "atk" in equipment_bonuses:
+                candidate.atk += equipment_bonuses["atk"]
+            if "def" in equipment_bonuses:
+                candidate.def_ += equipment_bonuses["def"]
+            if "matk" in equipment_bonuses:
+                candidate.matk += equipment_bonuses["matk"]
+            if "mdef" in equipment_bonuses:
+                candidate.mdef += equipment_bonuses["mdef"]
+            if "mov" in equipment_bonuses:
+                candidate.mov += equipment_bonuses["mov"]
+            merged_skills = list(candidate.skills)
+            for sid in campaign_state.get("learned_skills", []):
+                if sid and sid not in merged_skills:
+                    merged_skills.append(sid)
+            candidate.skills = merged_skills
         logger.info(
             "hero bound: unit_id=%d hero_id=%r class=%r name=%r "
             "hp=%d atk=%d def=%d matk=%d mdef=%d mov=%d mp=%d",
@@ -481,7 +551,13 @@ async def _start_battle_internal(
             name=_unit_name(unit_type, name_idx),
             level=int(u.get("level", 1)),
             exp=0,
-            hp=uc.base_hp, max_hp=uc.base_hp,
+            # Spawn-level HP override (test fixtures). When ``u["hp"]``
+            # is set, the unit spawns wounded; both current and max
+            # collapse to the override so HP bars and ``max_hp``
+            # queries stay consistent. ``None`` (default) keeps the
+            # class's ``base_hp``.
+            hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
+            max_hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
             mov=uc.mp_pool, mp=uc.mp_pool,
@@ -1226,6 +1302,9 @@ async def list_unit_classes():
             "can_move_after_action": u.can_move_after_action,
             "default_skills": list(u.default_skills),
             "strong_against": list(u.strong_against),
+            "terrain_movement": {
+                terrain: dict(rule) for terrain, rule in u.terrain_movement.items()
+            },
         }
         for u in list_all()
     ]
@@ -1358,10 +1437,12 @@ def _with_combat_stats(unit: Unit) -> dict:
     """
     from app.classes.units import get as _get_unit
     profile = _get_unit(unit.unit_type)
+    from app.movement import resolve_movement_profile
     return {
         **unit.__dict__,
         "attack_range": profile.attack_range,
         "min_attack_range": profile.min_attack_range,
+        "terrain_movement": resolve_movement_profile(unit).as_dict(),
     }
 
 
@@ -1425,7 +1506,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
     # Current player = first alive player whose seat >= current_player_index, else wrap.
     current_player_id = None
     if players:
-        alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+        alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
         if alive_seats:
             seat = next(
                 (s for s in alive_seats if s >= game.current_player_index),

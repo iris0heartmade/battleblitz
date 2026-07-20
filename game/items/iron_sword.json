@@ -1,0 +1,11 @@
+{
+  "item_id": "iron_sword",
+  "name": "铁剑",
+  "kind": "equipment",
+  "slot": "weapon",
+  "rarity": 1,
+  "stat_bonuses": {"atk": 2},
+  "description": "制式单手剑，攻击 +2。",
+  "shop": {"price": 120},
+  "art": {"icon_path": "/ui/assets/equipment/iron_sword.png"}
+}

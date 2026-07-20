@@ -142,8 +142,8 @@ class TestTerrainPassable:
     def test_castle_unowned_passable_to_anyone(self):
         assert terrain_passable(TERRAIN_CASTLE, owner_id=None, viewer_owner_id=999) is True
 
-    def test_castle_owned_blocks_enemies(self):
-        assert terrain_passable(TERRAIN_CASTLE, owner_id=1, viewer_owner_id=2) is False
+    def test_enemy_castle_is_passable_for_seize(self):
+        assert terrain_passable(TERRAIN_CASTLE, owner_id=1, viewer_owner_id=2) is True
 
     def test_castle_owned_allows_owner(self):
         assert terrain_passable(TERRAIN_CASTLE, owner_id=1, viewer_owner_id=1) is True

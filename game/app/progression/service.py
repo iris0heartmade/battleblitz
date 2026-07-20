@@ -165,6 +165,98 @@ class ProgressionService:
     async def list_units(self, profile_id: int) -> list[UnitInstance]:
         return list(await self.units.list_for_profile(profile_id))
 
+    async def get_hero_campaign_state(
+        self,
+        user_name: str,
+        hero_id: str,
+    ) -> dict | None:
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return None
+        states = dict(getattr(profile, "hero_campaign_states", {}) or {})
+        return states.get(hero_id)
+
+    async def set_hero_campaign_state(
+        self,
+        user_name: str,
+        hero_id: str,
+        state: dict,
+    ) -> dict | None:
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return None
+        states = dict(getattr(profile, "hero_campaign_states", {}) or {})
+        states[hero_id] = state
+        profile.hero_campaign_states = states
+        await self.session.flush()
+        return state
+
+    async def get_hero_inventory(
+        self,
+        user_name: str,
+    ) -> dict:
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return {}
+        return dict(getattr(profile, "hero_inventory", {}) or {})
+
+    async def set_hero_inventory_item(
+        self,
+        user_name: str,
+        item_id: str,
+        count: int,
+    ) -> dict | None:
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return None
+        inventory = dict(getattr(profile, "hero_inventory", {}) or {})
+        if count <= 0:
+            inventory.pop(item_id, None)
+        else:
+            inventory[item_id] = int(count)
+        profile.hero_inventory = inventory
+        await self.session.flush()
+        return inventory
+
+    async def ensure_hero_equipment_starters(self, user_name: str) -> dict:
+        """Grant each existing profile one copy of the four starter items.
+
+        This is intentionally idempotent and also migrates old campaign saves
+        that predate the equipment feature without a schema migration.
+        """
+        from app.hero_domain.equipment import STARTER_INVENTORY
+
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return {}
+        inventory = dict(getattr(profile, "hero_inventory", {}) or {})
+        changed = False
+        for equipment_id, count in STARTER_INVENTORY.items():
+            if int(inventory.get(equipment_id, 0)) < count:
+                inventory[equipment_id] = count
+                changed = True
+        if changed:
+            profile.hero_inventory = inventory
+            await self.session.flush()
+        return inventory
+
+    async def purchase_hero_inventory_item(
+        self, user_name: str, item_id: str, *, unit_price: int, quantity: int,
+    ) -> tuple[int, int] | None:
+        """Atomically deduct profile gold and add stackable campaign inventory."""
+        profile = await self.profiles.get_by_name(user_name)
+        if profile is None:
+            return None
+        total_price = unit_price * quantity
+        if profile.gold < total_price:
+            raise ValueError("not enough gold")
+        inventory = dict(getattr(profile, "hero_inventory", {}) or {})
+        inventory[item_id] = int(inventory.get(item_id, 0)) + quantity
+        profile.gold -= total_price
+        profile.hero_inventory = inventory
+        await self.session.flush()
+        return int(profile.gold), int(inventory[item_id])
+
     # ── Leveling ────────────────────────────────────────────
 
     async def award_xp(

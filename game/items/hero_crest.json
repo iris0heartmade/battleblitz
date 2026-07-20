@@ -1,0 +1,11 @@
+{
+  "item_id": "hero_crest",
+  "name": "英雄纹章",
+  "kind": "promotion_item",
+  "slot": null,
+  "rarity": 2,
+  "stat_bonuses": {},
+  "description": "英雄达到转职条件后消耗，用于完成转职。",
+  "shop": {"price": 300},
+  "art": {"icon_path": "/ui/assets/equipment/hero_crest.png"}
+}

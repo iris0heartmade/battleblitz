@@ -190,6 +190,7 @@ class UnitOut(APIModel):
     # already been baked into the atk/def/matk/mdef/mov fields
     # above by the spawn helper.
     hero_id: Optional[str] = None
+    terrain_movement: Dict[str, Dict[str, int | bool]] = {}
 
 
 class PlayerOut(APIModel):

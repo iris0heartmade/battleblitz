@@ -317,6 +317,7 @@ var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
 var _mainline_commander_ids: Array[String] = [""]
+var _mainline_prepare_payload: Dictionary = {}
 
 
 func _ready() -> void:
@@ -928,32 +929,31 @@ func _refresh_saves() -> void:
 		save_mainline_list.text = "[color=#a69a73]加载中...[/color]"
 	if save_select_option != null and is_instance_valid(save_select_option):
 		save_select_option.clear()
-	var user_filter := _user_name if _user_name != "" and _user_name != "Player" else ""
-	NetworkClient.list_games(Callable(self, "_on_saves_response"), user_filter)
+	NetworkClient.list_saves(_user_name, Callable(self, "_on_saves_response"))
 
 
 func _on_saves_response(body: Variant, _code: int = 0) -> void:
-	var games: Array = body if body is Array else []
+	var games: Array = _save_records_from_response(body)
 	_save_records = []
 	var open_lines: Array[String] = []
 	var mainline_lines: Array[String] = []
 	if save_select_option != null and is_instance_valid(save_select_option):
 		save_select_option.clear()
-	for g in games:
+	for record_index in range(games.size()):
+		var g: Variant = games[record_index]
 		if not (g is Dictionary):
-			continue
-		var save_id: int = int(g.get("id", 0))
-		if save_id <= 0:
 			continue
 		_save_records.append(g)
 		var line := _format_save_line(g)
 		var name := str(g.get("name", ""))
-		if name.begins_with("mainline:"):
+		var mainline_id := str(g.get("mainline_id", ""))
+		var kind := str(g.get("kind", "manual"))
+		if mainline_id != "" or kind == "suspend" or name.begins_with("mainline:"):
 			mainline_lines.append(line)
 		else:
 			open_lines.append(line)
 		if save_select_option != null and is_instance_valid(save_select_option):
-			save_select_option.add_item("#%d  %s" % [save_id, _format_save_name(name)], save_id)
+			save_select_option.add_item(_save_option_label(g), record_index + 1)
 	if open_lines.is_empty():
 		open_lines.append("[color=#a69a73]暂无开房模式存档[/color]")
 	if mainline_lines.is_empty():
@@ -973,13 +973,21 @@ func _on_saves_response(body: Variant, _code: int = 0) -> void:
 
 func _format_save_line(g: Dictionary) -> String:
 	var save_id: int = int(g.get("id", 0))
-	var name := _format_save_name(str(g.get("name", "未命名存档")))
-	var status := _format_save_status(str(g.get("status", "?")))
-	var turn := int(g.get("turn_number", 0))
-	var seed := str(g.get("map_seed", g.get("seed", "?")))
-	return "[b]%s[/b] [color=#a69a73]#%d[/color]\n[color=#d8c48a]%s · 回合 %d · 种子 %s[/color]" % [
-		name, save_id, status, turn, seed
+	var kind := str(g.get("kind", "manual"))
+	if kind == "suspend":
+		var game_id := int(g.get("game_id", 0))
+		return "[b]中断存档[/b] [color=#a69a73]game #%d[/color]\n[color=#d8c48a]%s · %s[/color]" % [
+			game_id, str(g.get("mainline_id", "自由战斗")), str(g.get("suspend_point", "manual"))
+		]
+	var label := _format_save_name(str(g.get("label", g.get("name", ""))))
+	var mainline_id := str(g.get("mainline_id", ""))
+	var chapter_index := int(g.get("chapter_index", 0)) + 1
+	var detail := "%s · 第 %d 章 · %s" % [mainline_id, chapter_index, kind] if mainline_id != "" else "%s · 回合 %d · 种子 %s" % [
+		_format_save_status(str(g.get("status", kind))),
+		int(g.get("turn_number", 0)),
+		str(g.get("map_seed", g.get("seed", "?"))),
 	]
+	return "[b]%s[/b] [color=#a69a73]#%d[/color]\n[color=#d8c48a]%s[/color]" % [label, save_id, detail]
 
 
 func _format_save_name(raw_name: String) -> String:
@@ -1012,39 +1020,139 @@ func _on_save_selected(index: int) -> void:
 		return
 	_selected_save_id = save_select_option.get_item_id(index)
 	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "已选择存档 #%d" % _selected_save_id
+		var record := _selected_save_record()
+		save_status.text = "已选择 %s" % (_save_option_label(record) if not record.is_empty() else "存档")
 
 
 func _on_save_resume_pressed() -> void:
-	if _selected_save_id <= 0:
+	var record := _selected_save_record()
+	if record.is_empty():
 		return
-	_resume_game_id = _selected_save_id
-	var last_game_id: int = int(UserSettings.get_value("session.v1.last_game_id", 0))
-	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
-	_resume_player_id = last_player_id if _resume_game_id == last_game_id else 0
-	_on_resume_pressed()
+	var kind := str(record.get("kind", "manual"))
+	if kind == "suspend":
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "正在恢复中断存档..."
+		NetworkClient.load_suspend(_user_name, Callable(self, "_on_save_suspend_load_response"))
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在载入 %s..." % _save_option_label(record)
+	NetworkClient.load_save(
+		_user_name,
+		kind,
+		int(record.get("slot_index", 0)),
+		Callable(self, "_on_save_load_response").bind(record)
+	)
+
+
+func _on_save_load_response(body: Variant, code: int, record: Dictionary) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "载入失败"
+		return
+	_active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
+	_selected_mainline_id = _active_mainline_id if _active_mainline_id != "" else _selected_mainline_id
+	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "已载入 %s" % _save_option_label(record)
+	_show_view("mainline")
+	_on_mainline_pressed()
+
+
+func _on_save_suspend_load_response(body: Variant, code: int) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "恢复中断存档失败"
+		return
+	var game_id := int(body.get("game_id", 0))
+	if game_id <= 0:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "中断存档没有可恢复对局"
+		return
+	_resume_game_id = game_id
+	_active_mainline_id = str(body.get("mainline_id", ""))
+	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
+	NetworkClient.rejoin_game_by_name(game_id, _user_name, Callable(self, "_on_ml_slot_resume_response").bind(game_id))
 
 
 func _on_save_delete_pressed() -> void:
-	if _selected_save_id <= 0:
+	var record := _selected_save_record()
+	if record.is_empty():
+		return
+	if str(record.get("kind", "")) == "suspend":
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "中断存档暂不支持手动删除"
 		return
 	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "删除存档 #%d..." % _selected_save_id
-	NetworkClient.delete_game(_selected_save_id, Callable(self, "_on_save_delete_response").bind(_selected_save_id))
+		save_status.text = "删除 %s..." % _save_option_label(record)
+	NetworkClient.erase_save(
+		_user_name,
+		str(record.get("kind", "manual")),
+		int(record.get("slot_index", 0)),
+		Callable(self, "_on_save_delete_response").bind(record)
+	)
 
 
-func _on_save_delete_response(_body: Variant, code: int, save_id: int) -> void:
+func _on_save_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
 	if code >= 200 and code < 300:
 		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "已删除存档 #%d" % save_id
+			save_status.text = "已删除 %s" % _save_option_label(record)
 		_refresh_saves()
 	else:
 		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "删除失败 #%d" % save_id
+			save_status.text = "删除失败"
 
 
 func _on_save_back_pressed() -> void:
 	_show_view("menu")
+
+
+func _save_records_from_response(body: Variant) -> Array:
+	var out: Array = []
+	if body is Array:
+		return (body as Array).duplicate(true)
+	if not (body is Dictionary):
+		return out
+	var manual_slots: Array = body.get("manual_slots", []) if body.get("manual_slots", []) is Array else []
+	for i in range(manual_slots.size()):
+		var slot: Variant = manual_slots[i]
+		if slot is Dictionary:
+			var record: Dictionary = (slot as Dictionary).duplicate(true)
+			record["kind"] = str(record.get("kind", "manual"))
+			record["slot_index"] = int(record.get("slot_index", i))
+			out.append(record)
+	var auto_slot: Variant = body.get("auto_slot", null)
+	if auto_slot is Dictionary:
+		var auto_record: Dictionary = (auto_slot as Dictionary).duplicate(true)
+		auto_record["kind"] = "auto"
+		auto_record["slot_index"] = int(auto_record.get("slot_index", 0))
+		out.append(auto_record)
+	var suspend: Variant = body.get("suspend", null)
+	if suspend is Dictionary:
+		var suspend_record: Dictionary = (suspend as Dictionary).duplicate(true)
+		suspend_record["kind"] = "suspend"
+		suspend_record["slot_index"] = -1
+		out.append(suspend_record)
+	return out
+
+
+func _selected_save_record() -> Dictionary:
+	var idx := _selected_save_id - 1
+	if idx < 0 or idx >= _save_records.size():
+		return {}
+	var record: Variant = _save_records[idx]
+	return record if record is Dictionary else {}
+
+
+func _save_option_label(record: Dictionary) -> String:
+	if record.is_empty():
+		return "存档"
+	var kind := str(record.get("kind", "manual"))
+	if kind == "suspend":
+		return "中断存档 game #%d" % int(record.get("game_id", 0))
+	var label := _format_save_name(str(record.get("label", "")))
+	if label == "":
+		label = "%s slot %d" % [kind, int(record.get("slot_index", 0)) + 1]
+	return "%s · %s" % [label, kind]
 
 
 # ============================================================
@@ -4794,19 +4902,17 @@ func _on_mainline_pressed() -> void:
 		loading_lbl.text = "存档格: 加载中..."
 		loading_lbl.modulate = Color(0.65, 0.6, 0.45)
 		ml_slots_container.add_child(loading_lbl)
-	NetworkClient.list_games(Callable(self, "_on_ml_slots_response"), _user_name)
+	NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
 
 
 func _on_ml_slots_response(body: Variant, _code: int = 0) -> void:
-	# 主线存档格:取该用户 mainline: 前缀的未结束存档,最多 3 格(web MAINLINE_SLOT_COUNT=3)。
-	var games: Array = body if body is Array else []
+	# 主线存档格:取该用户 mainline save slot,最多 3 格(web MAINLINE_SLOT_COUNT=3)。
+	var games: Array = _save_records_from_response(body)
 	_ml_slot_records = []
 	for g in games:
 		if not (g is Dictionary): continue
-		var nm := str(g.get("name", ""))
-		if not nm.begins_with("mainline:"): continue
-		var st := str(g.get("status", ""))
-		if st == "finished": continue
+		if str(g.get("kind", "")) == "suspend": continue
+		if str(g.get("mainline_id", "")) == "": continue
 		_ml_slot_records.append(g)
 		if _ml_slot_records.size() >= 3: break
 	_render_mainline_slots()
@@ -4822,21 +4928,21 @@ func _render_mainline_slots() -> void:
 		if i < shown:
 			var g: Dictionary = _ml_slot_records[i]
 			var save_id: int = int(g.get("id", 0))
-			var disp: String = _format_save_name(str(g.get("name", "")))
-			var turn: int = int(g.get("turn_number", 0))
+			var disp: String = _format_save_name(str(g.get("label", "")))
+			var chapter_index: int = int(g.get("chapter_index", 0)) + 1
 			var row := HBoxContainer.new()
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			var lbl := Label.new()
-			lbl.text = "💾 %s · 回合 %d · #%d" % [disp, turn, save_id]
+			lbl.text = "💾 %s · 第 %d 章 · #%d" % [disp, chapter_index, save_id]
 			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(lbl)
 			var resume_btn := Button.new()
 			resume_btn.text = "▶ 继续"
-			resume_btn.pressed.connect(_on_ml_slot_resume.bind(save_id))
+			resume_btn.pressed.connect(_on_ml_slot_resume.bind(g))
 			row.add_child(resume_btn)
 			var del_btn := Button.new()
 			del_btn.text = "🗑"
-			del_btn.pressed.connect(_on_ml_slot_delete.bind(save_id))
+			del_btn.pressed.connect(_on_ml_slot_delete.bind(g))
 			row.add_child(del_btn)
 			ml_slots_container.add_child(row)
 		else:
@@ -4846,22 +4952,30 @@ func _render_mainline_slots() -> void:
 			ml_slots_container.add_child(empty)
 
 
-func _on_ml_slot_resume(game_id: int) -> void:
-	if game_id <= 0: return
-	# 从存档名解析 mainline_id(格式 mainline:{mainline_id}:{chapter})
-	for g in _ml_slot_records:
-		if int(g.get("id", 0)) == game_id:
-			var parts := str(g.get("name", "")).split(":")
-			if parts.size() >= 2:
-				_active_mainline_id = parts[1]
-				_mainline_battle_game_id = game_id
-				UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
-				UserSettings.set_value("session.v1.mainline_game_id", game_id)
-			break
+func _on_ml_slot_resume(record: Dictionary) -> void:
+	if record.is_empty(): return
+	var label := _save_option_label(record)
 	_show_view("connecting")
-	connecting_label.text = "正在继续主线存档 #%d..." % game_id
-	NetworkClient.rejoin_game_by_name(game_id, _user_name,
-		Callable(self, "_on_ml_slot_resume_response").bind(game_id))
+	connecting_label.text = "正在载入 %s..." % label
+	NetworkClient.load_save(
+		_user_name,
+		str(record.get("kind", "manual")),
+		int(record.get("slot_index", 0)),
+		Callable(self, "_on_ml_slot_loaded_response").bind(record)
+	)
+
+
+func _on_ml_slot_loaded_response(body: Variant, code: int, record: Dictionary) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_update_status("主线存档载入失败")
+		_show_view("mainline")
+		return
+	_active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
+	_selected_mainline_id = _active_mainline_id if _active_mainline_id != "" else _selected_mainline_id
+	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
+	_update_status("已载入 %s" % _save_option_label(record))
+	_show_view("mainline")
+	_on_mainline_pressed()
 
 
 func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> void:
@@ -4886,18 +5000,23 @@ func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> voi
 	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
-func _on_ml_slot_delete(game_id: int) -> void:
-	if game_id <= 0: return
-	_update_status("删除主线存档 #%d..." % game_id)
-	NetworkClient.delete_game(game_id, Callable(self, "_on_ml_slot_delete_response").bind(game_id))
+func _on_ml_slot_delete(record: Dictionary) -> void:
+	if record.is_empty(): return
+	_update_status("删除 %s..." % _save_option_label(record))
+	NetworkClient.erase_save(
+		_user_name,
+		str(record.get("kind", "manual")),
+		int(record.get("slot_index", 0)),
+		Callable(self, "_on_ml_slot_delete_response").bind(record)
+	)
 
 
-func _on_ml_slot_delete_response(_body: Variant, code: int, game_id: int) -> void:
+func _on_ml_slot_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
 	if code >= 200 and code < 300:
-		_update_status("已删除主线存档 #%d" % game_id)
-		NetworkClient.list_games(Callable(self, "_on_ml_slots_response"), _user_name)
+		_update_status("已删除 %s" % _save_option_label(record))
+		NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
 	else:
-		_update_status("删除主线存档 #%d 失败" % game_id)
+		_update_status("删除主线存档失败")
 
 
 func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
@@ -4945,9 +5064,27 @@ func _on_ml_detail_response(body: Variant, _code: int = 0, mainline_id: String =
 	# 有 pre-battle 对话 → 播放
 	if dialogue != null:
 		_play_dialogue_scenes(dialogue)
-	# 对话框完毕后:战斗
-	_update_status("主线章节 %s: 创建战斗..." % mainline_id)
-	NetworkClient.start_mainline(mainline_id, _user_name, false, Callable(self, "_on_mainline_start_response"))
+	_update_status("主线章节 %s: 加载战前准备..." % mainline_id)
+	NetworkClient.get_mainline_prepare(mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(mainline_id))
+
+
+func _on_mainline_prepare_response(body: Variant, code: int = 0, mainline_id: String = "") -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		var msg := "战前准备加载失败"
+		if body is Dictionary:
+			msg = "战前准备加载失败: %s" % str(body.get("detail", body.get("message", msg)))
+		_update_status(msg)
+		return
+	_mainline_prepare_payload = (body as Dictionary).duplicate(true)
+	var heroes: Array = body.get("heroes", []) if body.get("heroes", []) is Array else []
+	var roster_units: Array = body.get("roster_units", []) if body.get("roster_units", []) is Array else []
+	var inventory: Dictionary = body.get("inventory", {}) if body.get("inventory", {}) is Dictionary else {}
+	var battle_index: int = int(body.get("battle_index", 0)) + 1
+	var total_battles: int = int(body.get("total_battles", 1))
+	_update_status("战前准备: 第 %d/%d 战 · 英雄 %d · 可部署 %d · 金币 %d" % [
+		battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
+	])
+	NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))
 
 
 func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
@@ -5014,7 +5151,7 @@ func _on_mainline_auto_abandon_response(body: Variant, code: int, mainline_id: S
 		_show_view("mainline")
 		return
 	_update_status("旧主线已放弃,重新创建战斗...")
-	NetworkClient.start_mainline(mainline_id, _user_name, false, Callable(self, "_on_mainline_start_response"))
+	NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"), true)
 
 
 func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
@@ -5058,7 +5195,7 @@ func _on_mainline_next_battle_pressed() -> void:
 		_update_status("没有可继续的主线")
 		return
 	_update_status("主线: 创建下一战...")
-	NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, Callable(self, "_on_mainline_next_battle_response"))
+	NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, [], Callable(self, "_on_mainline_next_battle_response"))
 
 
 func _on_mainline_next_battle_response(body: Variant, code: int = 0) -> void:

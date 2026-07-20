@@ -1,0 +1,11 @@
+{
+  "item_id": "ruby_ring",
+  "name": "赤玉戒",
+  "kind": "equipment",
+  "slot": "accessory",
+  "rarity": 1,
+  "stat_bonuses": {"mdef": 1, "hp": 3},
+  "description": "镶有赤玉的戒指，魔防 +1、HP +3。",
+  "shop": {"price": 150},
+  "art": {"icon_path": "/ui/assets/equipment/ruby_ring.png"}
+}

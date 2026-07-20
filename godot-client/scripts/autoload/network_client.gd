@@ -574,20 +574,121 @@ func select_mainline_commander(mainline_id: String, user_name: String, commander
 	}, callback)
 
 
-func start_mainline(mainline_id: String, user_name: String, skip_intro: bool = false, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%s/start" % mainline_id.uri_encode(), {"user_name": user_name, "skip_intro": skip_intro}, callback)
+func get_mainline_prepare(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/%s/prepare?user_name=%s" % [mainline_id.uri_encode(), user_name.uri_encode()], {}, callback)
+
+
+func promote_mainline_hero(mainline_id: String, user_name: String, hero_id: String, target_class_id: String, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/prepare/promote" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"hero_id": hero_id,
+		"target_class_id": target_class_id,
+	}, callback)
+
+
+func equip_mainline_hero(mainline_id: String, user_name: String, hero_id: String, slot: String, equipment_id: Variant, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/prepare/equipment" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"hero_id": hero_id,
+		"slot": slot,
+		"equipment_id": equipment_id,
+	}, callback)
+
+
+func get_post_battle_shop(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/%s/shop?user_name=%s" % [mainline_id.uri_encode(), user_name.uri_encode()], {}, callback)
+
+
+func purchase_post_battle_shop_item(mainline_id: String, user_name: String, item_id: String, quantity: int = 1, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/shop/purchase" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"item_id": item_id,
+		"quantity": quantity,
+	}, callback)
+
+
+func complete_mainline_prepare(mainline_id: String, user_name: String, disabled_unit_indices: Array = [], callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/prepare/complete" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"disabled_unit_indices": disabled_unit_indices,
+	}, callback)
+
+
+func get_mercenary_config(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
+	request("GET", "/mainlines/%s/mercenary/config?user_name=%s" % [mainline_id.uri_encode(), user_name.uri_encode()], {}, callback)
+
+
+func allocate_mercenary_points(mainline_id: String, user_name: String, unit_type: String, stat: String, value: int, callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/mercenary/allocate" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"unit_type": unit_type,
+		"stat": stat,
+		"value": value,
+	}, callback)
+
+
+func start_mainline(mainline_id: String, user_name: String, skip_intro: bool = false, disabled_unit_indices: Array = [], callback: Callable = Callable(), force: bool = false) -> void:
+	request("POST", "/mainlines/%s/start" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"skip_intro": skip_intro,
+		"disabled_unit_indices": disabled_unit_indices,
+		"force": force,
+	}, callback)
 
 
 func advance_mainline(mainline_id: String, user_name: String, game_id: int, callback: Callable = Callable()) -> void:
 	request("POST", "/mainlines/%s/advance" % mainline_id.uri_encode(), {"user_name": user_name, "game_id": game_id}, callback)
 
 
-func next_battle_mainline(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
-	request("POST", "/mainlines/%s/next-battle" % mainline_id.uri_encode(), {"user_name": user_name}, callback)
+func next_battle_mainline(mainline_id: String, user_name: String, disabled_unit_indices: Array = [], callback: Callable = Callable()) -> void:
+	request("POST", "/mainlines/%s/next-battle" % mainline_id.uri_encode(), {
+		"user_name": user_name,
+		"disabled_unit_indices": disabled_unit_indices,
+	}, callback)
 
 
 func abandon_mainline(mainline_id: String, user_name: String, callback: Callable = Callable()) -> void:
 	request("POST", "/mainlines/%s/abandon" % mainline_id.uri_encode(), {"user_name": user_name}, callback)
+
+
+func list_saves(user_name: String, callback: Callable = Callable()) -> void:
+	request("GET", "/saves?user_name=%s" % user_name.uri_encode(), {}, callback)
+
+
+func save_manual(user_name: String, slot_index: int, mainline_id: String, chapter_index: int, label: String = "", callback: Callable = Callable()) -> void:
+	request("POST", "/saves/save", {
+		"user_name": user_name,
+		"slot_index": slot_index,
+		"mainline_id": mainline_id,
+		"chapter_index": chapter_index,
+		"label": label,
+	}, callback)
+
+
+func load_save(user_name: String, kind: String, slot_index: int, callback: Callable = Callable()) -> void:
+	request("POST", "/saves/load", {
+		"user_name": user_name,
+		"kind": kind,
+		"slot_index": slot_index,
+	}, callback)
+
+
+func load_suspend(user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", "/saves/load_suspend", {"user_name": user_name}, callback)
+
+
+func erase_save(user_name: String, kind: String, slot_index: int, callback: Callable = Callable()) -> void:
+	request("POST", "/saves/erase", {
+		"user_name": user_name,
+		"kind": kind,
+		"slot_index": slot_index,
+	}, callback)
+
+
+func capture_suspend(game_id: int, user_name: String, callback: Callable = Callable()) -> void:
+	request("POST", "/games/%d/suspend" % game_id, {
+		"user_name": user_name,
+	}, callback)
 
 
 # T:94 — 拉战斗 BGM 列表

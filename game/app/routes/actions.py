@@ -35,7 +35,6 @@ from app.game_logic import (
     calculate_damage,
     can_attack_from_position,
     check_win_condition,
-    claim_castle_if_present,
     cleanup_dead_units,
     unit_attack_range,
     unit_min_attack_range,
@@ -43,6 +42,7 @@ from app.game_logic import (
 )
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
+from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
 from app.log_format import fmt_attack, fmt_move, fmt_wait
 from app.schemas import (
     AttackForecastOut,
@@ -139,7 +139,7 @@ async def _ensure_current_player(session: AsyncSession, game: Game, player_id: i
     # every action endpoint eventually routes through this helper, so
     # the block lives here (rather than at each route) to guarantee
     # parity across move / attack / skill / wait / claim / recruit.
-    alive_seats = sorted(p.seat for p in players if p.is_alive or p.is_spectator)
+    alive_seats = sorted(p.seat for p in players if p.is_alive and not p.is_spectator)
     if not alive_seats:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "场上没有存活玩家")
     expected_seat = next(
@@ -164,7 +164,7 @@ async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coo
     owners: Dict[Coord, Optional[int]] = {}
     occ: Dict[Coord, Optional[int]] = {}
     for t in tiles:
-        terrain[(t.x, t.y)] = t.terrain
+        terrain[(t.x, t.y)] = movement_key(t)
         owners[(t.x, t.y)] = t.owner_id
         occ[(t.x, t.y)] = t.occupied_unit_id
     return terrain, owners, occ
@@ -213,15 +213,15 @@ async def move_unit(
 
     terrain, owners, occ = await _load_tile_grid(session, game_id)
     target = (body.to_x, body.to_y)
+    movement_profile = resolve_movement_profile(unit)
 
     # Target must be empty (no unit on it)
     if occ.get(target) is not None and occ.get(target) != unit.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标格已被占据")
 
-    # Cannot enter an enemy castle
+    # Enemy HQs are valid movement targets. Claiming the HQ remains an
+    # explicit two-turn action after the unit arrives.
     tile_terrain = terrain.get(target)
-    if tile_terrain == TERRAIN_CASTLE and owners.get(target) not in (None, player.id):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法进入敌方城堡")
 
     # Pathfind with movement budget
     blocked = {(x, y) for (x, y), u in occ.items() if u is not None and u != unit.id}
@@ -233,6 +233,7 @@ async def move_unit(
         mov=unit.mp,
         viewer_owner_id=player.id,
         blocked_units=blocked,
+        movement_profile=movement_profile,
     )
     if path is None or path[-1] != target:
         logger.info(f"move_unit: pathfinding FAILED (game {game_id}, unit {unit.id} at ({unit.x},{unit.y}) -> {target}, mp={unit.mp})")
@@ -243,8 +244,7 @@ async def move_unit(
     # comment: "Real cost = integer_cost / 2").  We keep the doubled value
     # for the comparison / deduction so we never lose the half-MP that
     # road tiles (cost=1) consume.
-    from app.config import TERRAIN_MOVE_COST
-    cost_x2 = sum(TERRAIN_MOVE_COST[terrain[c]] for c in path[1:])
+    cost_x2 = sum(terrain_cost_x2(movement_profile, terrain[c]) or 0 for c in path[1:])
 
     # Enforce MP budget — double unit.mp to match the doubled cost scale.
     if cost_x2 > unit.mp * 2:
@@ -279,14 +279,10 @@ async def move_unit(
     # further non-move actions.
     unit.has_moved = True
 
-    # Castle capture
+    # A castle remains owned by its defender until the unit completes the
+    # explicit two-turn claim action. Moving onto it must not call the old
+    # immediate-capture helper.
     castle_captured = False
-    if tile_terrain == TERRAIN_CASTLE and owners.get(target) != player.id:
-        for t in (await session.execute(select(Tile).where(Tile.game_id == game_id))).scalars():
-            if (t.x, t.y) == target:
-                if claim_castle_if_present(t, unit):
-                    castle_captured = True
-                break
 
     _log(session, game, player, "move",
          f"{unit.name} moved to ({target[0]}, {target[1]}) cost={spent_mp}"
@@ -1004,6 +1000,13 @@ async def recruit_unit(
         has_moved=True,    # can't move this turn
         skills=list(profile.default_skills),
     )
+    mercenary_snapshot = dict((game.battle_config or {}).get("mercenary") or {})
+    if int(mercenary_snapshot.get("human_player_id", -1)) == player.id:
+        from app.mercenary_domain import apply_allocation_to_unit
+        apply_allocation_to_unit(
+            new_unit,
+            dict(mercenary_snapshot.get("unit_type_upgrades") or {}),
+        )
     session.add(new_unit)
     await session.flush()  # populate new_unit.id
     # Park the new unit on the barracks tile.

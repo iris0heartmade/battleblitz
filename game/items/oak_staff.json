@@ -1,0 +1,11 @@
+{
+  "item_id": "oak_staff",
+  "name": "橡木法杖",
+  "kind": "equipment",
+  "slot": "weapon",
+  "rarity": 1,
+  "stat_bonuses": {"matk": 2},
+  "description": "朴素但可靠的法杖，魔攻 +2。",
+  "shop": {"price": 120},
+  "art": {"icon_path": "/ui/assets/equipment/oak_staff.png"}
+}
