@@ -197,6 +197,16 @@ func _ready() -> void:
 		"mainline view should expose a context preparation action")
 	_assert_true("MainlineView has MLPrepAltActionBtn", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepAltActionBtn") != null,
 		"mainline view should expose a secondary preparation action")
+	_assert_true("MainlineView has MLPrepHeroSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepHeroSelect") != null,
+		"preparation UI should expose a concrete hero selector")
+	_assert_true("MainlineView has MLPrepEquipmentSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepEquipmentSelect") != null,
+		"preparation UI should expose an equipment warehouse selector")
+	_assert_true("MainlineView has MLPrepMercUnitSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect") != null,
+		"preparation UI should expose a mercenary unit selector")
+	_assert_true("MainlineView has MLPrepMercStatSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect") != null,
+		"preparation UI should expose a mercenary stat selector")
+	_assert_true("MainlineView has MLPrepShopSelect", main_check.get_node_or_null("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect") != null,
+		"preparation UI should expose a shop item selector")
 	_assert_true("Main can build attack confirm text", main_check.has_method("_build_attack_confirm_text"),
 		"attack confirm text should be testable without posting an action")
 	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
@@ -217,6 +227,17 @@ func _ready() -> void:
 			"equipment": {"weapon": "iron_sword"},
 			"can_promote": true,
 			"promotion_options": ["blade_master"],
+		}, {
+			"hero_id": "yun",
+			"name": "Yun",
+			"class_id": "archer",
+			"level": 3,
+			"exp": 12,
+			"base_stats": {"hp": 22, "atk": 7, "def": 3, "spd": 9},
+			"learned_skills": ["focus"],
+			"equipment": {},
+			"can_promote": false,
+			"promotion_options": [],
 		}],
 		"roster_units": [{"name": "Anna", "hero_id": "anna", "class_id": "swordsman", "level": 4}],
 		"equipment_catalog": [{
@@ -235,12 +256,25 @@ func _ready() -> void:
 		"mainline prepare summary should expose inventory gold")
 	_assert_true("Prepare start button enabled", not prep_start.disabled,
 		"battle start should become explicit and available after prepare loads")
+	var prep_hero_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepHeroSelect")
+	var prep_equipment_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepEquipmentSelect")
+	_assert_gte("Prepare hero selector lists heroes", prep_hero_select.item_count, 2,
+		"hero selector should list every prepared hero")
+	_assert_gte("Prepare equipment selector lists catalog", prep_equipment_select.item_count, 1,
+		"equipment selector should list warehouse items")
+	prep_hero_select.select(1)
+	main_check.call("_on_prepare_hero_selected", 1)
+	_assert_true("Prepare hero selector changes sheet", prep_content.text.contains("Yun"),
+		"selecting another hero should update the hero paper sheet")
 	main_check.call("_on_prepare_shop_response", {
 		"mainline_id": "chapter_test",
 		"gold": 320,
 		"items": [{"item_id": "hero_crest", "name": "Hero Crest", "price": 100, "description": "Promote a hero"}],
 	}, 200)
 	main_check.call("_on_prepare_tab_pressed", "shop")
+	var prep_shop_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect")
+	_assert_gte("Prepare shop selector lists stock", prep_shop_select.item_count, 1,
+		"shop selector should list buyable stock")
 	_assert_true("Prepare shop renders item", prep_content.text.contains("Hero Crest"),
 		"shop tab should render post-battle shop stock")
 	main_check.call("_on_prepare_mercenary_response", {
@@ -253,8 +287,20 @@ func _ready() -> void:
 		"mercenary_points": 2,
 	}, 200)
 	main_check.call("_on_prepare_tab_pressed", "mercenary")
+	var prep_merc_unit_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect")
+	var prep_merc_stat_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect")
+	_assert_gte("Prepare mercenary unit selector lists types", prep_merc_unit_select.item_count, 1,
+		"mercenary unit selector should list configurable unit types")
+	_assert_gte("Prepare mercenary stat selector lists stats", prep_merc_stat_select.item_count, 1,
+		"mercenary stat selector should list configurable stats")
 	_assert_true("Prepare mercenary renders points", prep_content.text.contains("可用点数 2"),
 		"mercenary tab should render spendable points")
+	var hero_node := UnitNode.new()
+	add_child(hero_node)
+	hero_node.setup({"unit_type": "swordsman", "hero_id": "anna", "name": "Anna", "hp": 20, "max_hp": 20}, Color(0.8, 0.1, 0.1))
+	_assert_true("UnitNode exposes hero badge", hero_node.has_method("has_hero_badge") and bool(hero_node.call("has_hero_badge")),
+		"battlefield hero units should render a visible hero badge")
+	hero_node.queue_free()
 	_setup_action_bubble_state(main_check)
 	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
 	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,

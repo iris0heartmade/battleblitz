@@ -56,6 +56,8 @@ var _hp_bar: ColorRect = null
 var _hp_bar_bg: ColorRect = null
 var _mp_badge: ColorRect = null
 var _mp_badge_label: Label = null
+var _hero_badge: ColorRect = null
+var _hero_badge_label: Label = null
 var _acted_overlay: ColorRect = null
 
 
@@ -164,6 +166,26 @@ func _build_pieces(team_color: Color) -> void:
 	_mp_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_mp_badge_label)
 
+	# ---- Hero badge(右上角金色徽记):素材未覆盖的 hero 也能被识别 ----
+	var hero_id := str(unit_data.get("hero_id", ""))
+	if hero_id != "":
+		_hero_badge = ColorRect.new()
+		_hero_badge.size = Vector2(14, 14)
+		_hero_badge.position = Vector2(10, -24)
+		_hero_badge.color = Color(0.95, 0.72, 0.24, 0.95)
+		_hero_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_hero_badge)
+		_hero_badge_label = Label.new()
+		_hero_badge_label.size = Vector2(18, 14)
+		_hero_badge_label.position = Vector2(8, -25)
+		_hero_badge_label.text = "H"
+		_hero_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_hero_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_hero_badge_label.add_theme_font_size_override("font_size", 9)
+		_hero_badge_label.add_theme_color_override("font_color", Color(0.08, 0.05, 0.02))
+		_hero_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_hero_badge_label)
+
 	# ---- 士气星(左上,小角) ----
 	_star_label = Label.new()
 	_star_label.size = Vector2(20, 16)
@@ -220,3 +242,7 @@ func _refresh() -> void:
 	# 已行动
 	var has_acted: bool = bool(unit_data.get("has_acted", false))
 	_acted_overlay.visible = has_acted
+
+
+func has_hero_badge() -> bool:
+	return _hero_badge != null and is_instance_valid(_hero_badge) and _hero_badge.visible

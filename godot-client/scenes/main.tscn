@@ -1025,11 +1025,39 @@ text = "商店"
 [node name="SavesTabBtn" type="Button" parent="MainlineView/MLFrame/MLPrepTabs"]
 text = "存档"
 
+[node name="MLPrepSelectorRow" type="HBoxContainer" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+offset_left = 354.0
+offset_top = 168.0
+offset_right = -24.0
+offset_bottom = 208.0
+theme_override_constants/separation = 6
+
+[node name="MLPrepHeroSelect" type="OptionButton" parent="MainlineView/MLFrame/MLPrepSelectorRow"]
+custom_minimum_size = Vector2(112, 0)
+tooltip_text = "选择英雄"
+
+[node name="MLPrepEquipmentSelect" type="OptionButton" parent="MainlineView/MLFrame/MLPrepSelectorRow"]
+custom_minimum_size = Vector2(138, 0)
+tooltip_text = "选择仓库装备"
+
+[node name="MLPrepMercUnitSelect" type="OptionButton" parent="MainlineView/MLFrame/MLPrepSelectorRow"]
+custom_minimum_size = Vector2(112, 0)
+tooltip_text = "选择佣兵兵种"
+
+[node name="MLPrepMercStatSelect" type="OptionButton" parent="MainlineView/MLFrame/MLPrepSelectorRow"]
+custom_minimum_size = Vector2(96, 0)
+tooltip_text = "选择佣兵属性"
+
+[node name="MLPrepShopSelect" type="OptionButton" parent="MainlineView/MLFrame/MLPrepSelectorRow"]
+custom_minimum_size = Vector2(132, 0)
+tooltip_text = "选择商店商品"
+
 [node name="MLPrepContent" type="RichTextLabel" parent="MainlineView/MLFrame"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 354.0
-offset_top = 174.0
+offset_top = 218.0
 offset_right = -24.0
 offset_bottom = -116.0
 bbcode_enabled = true

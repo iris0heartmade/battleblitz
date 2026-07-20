@@ -183,6 +183,11 @@ var _mainline_auto_retry_pending: bool = false
 @onready var ml_prep_refresh_btn: Button = $MainlineView/MLFrame/MLPrepRefreshBtn
 @onready var ml_prep_action_btn: Button = $MainlineView/MLFrame/MLPrepActionBtn
 @onready var ml_prep_alt_action_btn: Button = $MainlineView/MLFrame/MLPrepAltActionBtn
+@onready var ml_prep_hero_select: OptionButton = $MainlineView/MLFrame/MLPrepSelectorRow/MLPrepHeroSelect
+@onready var ml_prep_equipment_select: OptionButton = $MainlineView/MLFrame/MLPrepSelectorRow/MLPrepEquipmentSelect
+@onready var ml_prep_merc_unit_select: OptionButton = $MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect
+@onready var ml_prep_merc_stat_select: OptionButton = $MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect
+@onready var ml_prep_shop_select: OptionButton = $MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect
 @onready var ml_prep_heroes_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/HeroesTabBtn
 @onready var ml_prep_roster_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/RosterTabBtn
 @onready var ml_prep_equipment_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/EquipmentTabBtn
@@ -333,6 +338,10 @@ var _mainline_commander_ids: Array[String] = [""]
 var _mainline_prepare_payload: Dictionary = {}
 var _mainline_prepare_tab: String = "heroes"
 var _selected_prepare_hero_id: String = ""
+var _selected_prepare_equipment_id: String = ""
+var _selected_prepare_shop_item_id: String = ""
+var _selected_prepare_merc_unit_type: String = ""
+var _selected_prepare_merc_stat: String = ""
 var _mainline_shop_payload: Dictionary = {}
 var _mainline_mercenary_payload: Dictionary = {}
 
@@ -384,6 +393,16 @@ func _ready() -> void:
 		ml_prep_shop_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("shop"))
 	if ml_prep_saves_tab_btn != null and is_instance_valid(ml_prep_saves_tab_btn):
 		ml_prep_saves_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("saves"))
+	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
+		ml_prep_hero_select.item_selected.connect(_on_prepare_hero_selected)
+	if ml_prep_equipment_select != null and is_instance_valid(ml_prep_equipment_select):
+		ml_prep_equipment_select.item_selected.connect(_on_prepare_equipment_selected)
+	if ml_prep_merc_unit_select != null and is_instance_valid(ml_prep_merc_unit_select):
+		ml_prep_merc_unit_select.item_selected.connect(_on_prepare_merc_unit_selected)
+	if ml_prep_merc_stat_select != null and is_instance_valid(ml_prep_merc_stat_select):
+		ml_prep_merc_stat_select.item_selected.connect(_on_prepare_merc_stat_selected)
+	if ml_prep_shop_select != null and is_instance_valid(ml_prep_shop_select):
+		ml_prep_shop_select.item_selected.connect(_on_prepare_shop_item_selected)
 	if ai_player_option != null and is_instance_valid(ai_player_option):
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
@@ -4927,6 +4946,10 @@ func _on_mainline_pressed() -> void:
 	_mainline_mercenary_payload = {}
 	_mainline_prepare_tab = "heroes"
 	_selected_prepare_hero_id = ""
+	_selected_prepare_equipment_id = ""
+	_selected_prepare_shop_item_id = ""
+	_selected_prepare_merc_unit_type = ""
+	_selected_prepare_merc_stat = ""
 	_render_mainline_prepare()
 	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
 	for child in ml_list_container.get_children():
@@ -5174,6 +5197,7 @@ func _render_mainline_prepare() -> void:
 	_update_prepare_tab_buttons()
 	_update_prepare_action_buttons()
 	if _mainline_prepare_payload.is_empty():
+		_sync_prepare_selectors()
 		ml_prep_summary.text = "[b]战前整备[/b]\n[color=#a69a73]选择章节后载入英雄、装备、佣兵和商店。[/color]"
 		_set_prepare_content("[color=#a69a73]尚未载入整备资料。[/color]")
 		if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
@@ -5190,6 +5214,7 @@ func _render_mainline_prepare() -> void:
 	ml_prep_summary.text = "[b]%s[/b]\n第 %d/%d 战 · 英雄 %d · 部队 %d · 金币 %d" % [
 		_bb_escape(_selected_mainline_id), battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
 	]
+	_sync_prepare_selectors()
 	match _mainline_prepare_tab:
 		"roster":
 			_set_prepare_content(_build_prepare_roster_text(_mainline_prepare_payload))
@@ -5226,6 +5251,161 @@ func _update_prepare_tab_buttons() -> void:
 		btn.disabled = key == _mainline_prepare_tab
 
 
+func _sync_prepare_selectors() -> void:
+	_sync_prepare_hero_select()
+	_sync_prepare_equipment_select()
+	_sync_prepare_shop_select()
+	_sync_prepare_mercenary_selects()
+
+
+func _sync_prepare_hero_select() -> void:
+	if ml_prep_hero_select == null or not is_instance_valid(ml_prep_hero_select):
+		return
+	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
+	ml_prep_hero_select.clear()
+	var selected_index := 0
+	for i in range(heroes.size()):
+		if not (heroes[i] is Dictionary): continue
+		var hero: Dictionary = heroes[i]
+		var hero_id := str(hero.get("hero_id", ""))
+		if hero_id == "":
+			continue
+		ml_prep_hero_select.add_item("%s · %s" % [str(hero.get("name", hero_id)), str(hero.get("class_id", "?"))])
+		var idx := ml_prep_hero_select.item_count - 1
+		ml_prep_hero_select.set_item_metadata(idx, hero_id)
+		if hero_id == _selected_prepare_hero_id:
+			selected_index = idx
+	if ml_prep_hero_select.item_count > 0:
+		ml_prep_hero_select.select(selected_index)
+		_selected_prepare_hero_id = str(ml_prep_hero_select.get_item_metadata(selected_index))
+	ml_prep_hero_select.disabled = ml_prep_hero_select.item_count <= 0
+
+
+func _sync_prepare_equipment_select() -> void:
+	if ml_prep_equipment_select == null or not is_instance_valid(ml_prep_equipment_select):
+		return
+	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
+	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
+	ml_prep_equipment_select.clear()
+	var selected_index := 0
+	for item in catalog:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
+		if item_id == "":
+			continue
+		var count := int(inventory.get(item_id, 0))
+		ml_prep_equipment_select.add_item("%s · %s · x%d" % [str(it.get("name", item_id)), str(it.get("slot", "item")), count])
+		var idx := ml_prep_equipment_select.item_count - 1
+		ml_prep_equipment_select.set_item_metadata(idx, item_id)
+		if item_id == _selected_prepare_equipment_id:
+			selected_index = idx
+	if ml_prep_equipment_select.item_count > 0:
+		ml_prep_equipment_select.select(selected_index)
+		_selected_prepare_equipment_id = str(ml_prep_equipment_select.get_item_metadata(selected_index))
+	ml_prep_equipment_select.disabled = ml_prep_equipment_select.item_count <= 0
+
+
+func _sync_prepare_shop_select() -> void:
+	if ml_prep_shop_select == null or not is_instance_valid(ml_prep_shop_select):
+		return
+	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
+	ml_prep_shop_select.clear()
+	var selected_index := 0
+	for item in items:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		var item_id := str(it.get("item_id", ""))
+		if item_id == "":
+			continue
+		ml_prep_shop_select.add_item("%s · %dG" % [str(it.get("name", item_id)), int(it.get("price", 0))])
+		var idx := ml_prep_shop_select.item_count - 1
+		ml_prep_shop_select.set_item_metadata(idx, item_id)
+		if item_id == _selected_prepare_shop_item_id:
+			selected_index = idx
+	if ml_prep_shop_select.item_count > 0:
+		ml_prep_shop_select.select(selected_index)
+		_selected_prepare_shop_item_id = str(ml_prep_shop_select.get_item_metadata(selected_index))
+	ml_prep_shop_select.disabled = ml_prep_shop_select.item_count <= 0
+
+
+func _sync_prepare_mercenary_selects() -> void:
+	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
+	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
+	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
+	if ml_prep_merc_unit_select != null and is_instance_valid(ml_prep_merc_unit_select):
+		ml_prep_merc_unit_select.clear()
+		var selected_unit_index := 0
+		for unit_type in allowed:
+			ml_prep_merc_unit_select.add_item(_unit_type_cn(str(unit_type)))
+			var idx := ml_prep_merc_unit_select.item_count - 1
+			ml_prep_merc_unit_select.set_item_metadata(idx, str(unit_type))
+			if str(unit_type) == _selected_prepare_merc_unit_type:
+				selected_unit_index = idx
+		if ml_prep_merc_unit_select.item_count > 0:
+			ml_prep_merc_unit_select.select(selected_unit_index)
+			_selected_prepare_merc_unit_type = str(ml_prep_merc_unit_select.get_item_metadata(selected_unit_index))
+		ml_prep_merc_unit_select.disabled = ml_prep_merc_unit_select.item_count <= 0
+	if ml_prep_merc_stat_select != null and is_instance_valid(ml_prep_merc_stat_select):
+		ml_prep_merc_stat_select.clear()
+		var selected_stat_index := 0
+		for stat in stat_rules.keys():
+			ml_prep_merc_stat_select.add_item(str(stat).to_upper())
+			var idx := ml_prep_merc_stat_select.item_count - 1
+			ml_prep_merc_stat_select.set_item_metadata(idx, str(stat))
+			if str(stat) == _selected_prepare_merc_stat:
+				selected_stat_index = idx
+		if ml_prep_merc_stat_select.item_count > 0:
+			ml_prep_merc_stat_select.select(selected_stat_index)
+			_selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(selected_stat_index))
+		ml_prep_merc_stat_select.disabled = ml_prep_merc_stat_select.item_count <= 0
+
+
+func _on_prepare_hero_selected(index: int) -> void:
+	if ml_prep_hero_select == null or not is_instance_valid(ml_prep_hero_select):
+		return
+	if index < 0 or index >= ml_prep_hero_select.item_count:
+		return
+	_selected_prepare_hero_id = str(ml_prep_hero_select.get_item_metadata(index))
+	_render_mainline_prepare()
+
+
+func _on_prepare_equipment_selected(index: int) -> void:
+	if ml_prep_equipment_select == null or not is_instance_valid(ml_prep_equipment_select):
+		return
+	if index < 0 or index >= ml_prep_equipment_select.item_count:
+		return
+	_selected_prepare_equipment_id = str(ml_prep_equipment_select.get_item_metadata(index))
+	_render_mainline_prepare()
+
+
+func _on_prepare_shop_item_selected(index: int) -> void:
+	if ml_prep_shop_select == null or not is_instance_valid(ml_prep_shop_select):
+		return
+	if index < 0 or index >= ml_prep_shop_select.item_count:
+		return
+	_selected_prepare_shop_item_id = str(ml_prep_shop_select.get_item_metadata(index))
+	_render_mainline_prepare()
+
+
+func _on_prepare_merc_unit_selected(index: int) -> void:
+	if ml_prep_merc_unit_select == null or not is_instance_valid(ml_prep_merc_unit_select):
+		return
+	if index < 0 or index >= ml_prep_merc_unit_select.item_count:
+		return
+	_selected_prepare_merc_unit_type = str(ml_prep_merc_unit_select.get_item_metadata(index))
+	_render_mainline_prepare()
+
+
+func _on_prepare_merc_stat_selected(index: int) -> void:
+	if ml_prep_merc_stat_select == null or not is_instance_valid(ml_prep_merc_stat_select):
+		return
+	if index < 0 or index >= ml_prep_merc_stat_select.item_count:
+		return
+	_selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(index))
+	_render_mainline_prepare()
+
+
 func _update_prepare_action_buttons() -> void:
 	if ml_prep_action_btn == null or not is_instance_valid(ml_prep_action_btn):
 		return
@@ -5245,7 +5425,8 @@ func _update_prepare_action_buttons() -> void:
 				ml_prep_alt_action_btn.disabled = not has_prepare
 		"equipment":
 			ml_prep_action_btn.text = "装备首件"
-			ml_prep_action_btn.disabled = not _find_first_equippable_item().has("slot")
+			ml_prep_action_btn.text = "装备选中"
+			ml_prep_action_btn.disabled = not _selected_equippable_item().has("slot")
 			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
 				ml_prep_alt_action_btn.text = "卸下武器"
 				ml_prep_alt_action_btn.disabled = _focused_prepare_hero().is_empty()
@@ -5256,7 +5437,7 @@ func _update_prepare_action_buttons() -> void:
 				ml_prep_alt_action_btn.text = "刷新佣兵"
 				ml_prep_alt_action_btn.disabled = not has_prepare
 		"shop":
-			ml_prep_action_btn.text = "购买首件"
+			ml_prep_action_btn.text = "购买选中"
 			ml_prep_action_btn.disabled = _mainline_shop_payload.is_empty()
 			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
 				ml_prep_alt_action_btn.text = "刷新商店"
@@ -5280,7 +5461,7 @@ func _on_prepare_primary_action_pressed() -> void:
 		"heroes":
 			_promote_focused_prepare_hero()
 		"equipment":
-			var item := _find_first_equippable_item()
+			var item := _selected_equippable_item()
 			if item.has("slot"):
 				_equip_focused_prepare_hero(str(item.get("slot", "")), item.get("equipment_id", item.get("item_id", "")))
 		"mercenary":
@@ -5316,7 +5497,31 @@ func _build_prepare_heroes_text(payload: Dictionary) -> String:
 	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
 	if heroes.is_empty():
 		return "[b]英雄[/b]\n[color=#a69a73]本章暂无英雄资料。[/color]"
-	var lines: Array[String] = ["[b]英雄[/b]  选择英雄后可在装备页配置装备。"]
+	var focused := _focused_prepare_hero()
+	var lines: Array[String] = ["[b]英雄详情纸页[/b]  选择英雄后可转职或切到装备页整理仓库。"]
+	if not focused.is_empty():
+		var equipment: Dictionary = focused.get("equipment", {}) if focused.get("equipment", {}) is Dictionary else {}
+		var stats: Dictionary = focused.get("base_stats", {}) if focused.get("base_stats", {}) is Dictionary else {}
+		var skills: Array = focused.get("learned_skills", []) if focused.get("learned_skills", []) is Array else []
+		var options: Array = focused.get("promotion_options", []) if focused.get("promotion_options", []) is Array else []
+		lines.append("\n[color=#f0c75e][b]%s[/b][/color] · %s · Lv.%d · EXP %d" % [
+			_bb_escape(str(focused.get("name", focused.get("hero_id", "?")))),
+			_bb_escape(str(focused.get("class_id", "?"))),
+			int(focused.get("level", 1)),
+			int(focused.get("exp", 0)),
+		])
+		lines.append("HP %s / ATK %s / DEF %s / SPD %s / MATK %s / MDEF %s" % [
+			str(stats.get("hp", "-")), str(stats.get("atk", "-")), str(stats.get("def", "-")),
+			str(stats.get("spd", "-")), str(stats.get("matk", "-")), str(stats.get("mdef", "-"))
+		])
+		lines.append("技能: %s" % (_bb_escape(", ".join(skills)) if not skills.is_empty() else "—"))
+		lines.append("装备: 武器 %s / 防具 %s / 饰品 %s" % [
+			_bb_escape(str(equipment.get("weapon", "未装备"))),
+			_bb_escape(str(equipment.get("armor", "未装备"))),
+			_bb_escape(str(equipment.get("accessory", "未装备"))),
+		])
+		lines.append("转职: %s" % (_bb_escape(", ".join(options)) if bool(focused.get("can_promote", false)) and not options.is_empty() else ("已完成" if bool(focused.get("promoted", false)) else "暂不可用")))
+	lines.append("\n[b]队伍英雄[/b]")
 	for h in heroes:
 		if not (h is Dictionary): continue
 		var hero: Dictionary = h
@@ -5384,7 +5589,9 @@ func _build_prepare_equipment_text(payload: Dictionary) -> String:
 		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
 		var count := int(inventory.get(item_id, 0))
 		var bonuses: Dictionary = it.get("stat_bonuses", {}) if it.get("stat_bonuses", {}) is Dictionary else {}
-		lines.append("%s · %s · x%d · %s" % [
+		var marker := "▶ " if item_id == _selected_prepare_equipment_id else "  "
+		lines.append("%s%s · %s · x%d · %s" % [
+			marker,
 			_bb_escape(str(it.get("name", item_id))),
 			_bb_escape(str(it.get("slot", "item"))),
 			count,
@@ -5415,7 +5622,10 @@ func _build_prepare_shop_text() -> String:
 	for item in items:
 		if not (item is Dictionary): continue
 		var it: Dictionary = item
-		lines.append("%s · %dG · %s" % [
+		var item_id := str(it.get("item_id", ""))
+		var marker := "▶ " if item_id == _selected_prepare_shop_item_id else "  "
+		lines.append("%s%s · %dG · %s" % [
+			marker,
 			_bb_escape(str(it.get("name", it.get("item_id", "?")))),
 			int(it.get("price", 0)),
 			_bb_escape(str(it.get("description", ""))),
@@ -5435,8 +5645,10 @@ func _build_prepare_mercenary_text() -> String:
 	lines.append("可用兵种: %s" % _bb_escape(", ".join(allowed)))
 	for unit_type in allowed:
 		var per_unit: Dictionary = upgrades.get(str(unit_type), {}) if upgrades.get(str(unit_type), {}) is Dictionary else {}
-		lines.append("%s · %s" % [_bb_escape(str(unit_type)), _bb_escape(str(per_unit))])
+		var marker := "▶ " if str(unit_type) == _selected_prepare_merc_unit_type else "  "
+		lines.append("%s%s · %s" % [marker, _bb_escape(str(unit_type)), _bb_escape(str(per_unit))])
 	if not stat_rules.is_empty():
+		lines.append("选中属性: %s" % (_bb_escape(_selected_prepare_merc_stat.to_upper()) if _selected_prepare_merc_stat != "" else "—"))
 		lines.append("规则: %s" % _bb_escape(str(stat_rules)))
 	return "\n".join(lines)
 
@@ -5488,10 +5700,12 @@ func _equip_focused_prepare_hero(slot: String, equipment_id: Variant) -> void:
 
 func _purchase_first_shop_item() -> void:
 	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
-	if items.is_empty() or not (items[0] is Dictionary):
+	var item := _selected_shop_item()
+	if item.is_empty() and not items.is_empty() and items[0] is Dictionary:
+		item = items[0]
+	if item.is_empty():
 		_update_status("商店暂无可购买商品")
 		return
-	var item: Dictionary = items[0]
 	var item_id := str(item.get("item_id", ""))
 	if item_id == "":
 		_update_status("商品缺少 item_id")
@@ -5582,8 +5796,9 @@ func _first_mercenary_allocation_choice() -> Dictionary:
 	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
 	if allowed.is_empty() or stat_rules.is_empty():
 		return {}
-	var stat := str(stat_rules.keys()[0])
-	return {"unit_type": str(allowed[0]), "stat": stat, "value": 1}
+	var unit_type := _selected_prepare_merc_unit_type if _selected_prepare_merc_unit_type != "" else str(allowed[0])
+	var stat := _selected_prepare_merc_stat if _selected_prepare_merc_stat != "" else str(stat_rules.keys()[0])
+	return {"unit_type": unit_type, "stat": stat, "value": 1}
 
 
 func _focused_prepare_hero() -> Dictionary:
@@ -5593,6 +5808,33 @@ func _focused_prepare_hero() -> Dictionary:
 			return h
 	if not heroes.is_empty() and heroes[0] is Dictionary:
 		return heroes[0]
+	return {}
+
+
+func _selected_equippable_item() -> Dictionary:
+	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
+	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
+	for item in catalog:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
+		if item_id == "" or item_id != _selected_prepare_equipment_id:
+			continue
+		if int(inventory.get(item_id, 0)) <= 0:
+			return {}
+		var out := it.duplicate(true)
+		out["equipment_id"] = item_id
+		return out
+	return _find_first_equippable_item()
+
+
+func _selected_shop_item() -> Dictionary:
+	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
+	for item in items:
+		if not (item is Dictionary): continue
+		var it: Dictionary = item
+		if str(it.get("item_id", "")) == _selected_prepare_shop_item_id:
+			return it
 	return {}
 
 
@@ -6355,12 +6597,14 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
 	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
+	var hero_id := str(ud.get("hero_id", ""))
 	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.text = "⚔ %s · 等级 %d" % [name, lvl]
+		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
 	var lines: Array = [
+		("[color=#f0c75e]✦ Hero ID[/color]  %s" % _bb_escape(hero_id)) if hero_id != "" else "",
 		"[color=#a89878]⛓ 位置[/color]  (%d, %d)   %s" % [pos.x, pos.y, owner_str],
 		("[color=#f4e8c1]❤ 生命[/color]  %d / %d   [color=#5fa8e8]⚡ 能量[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ 生命[/color]  %d / %d" % [hp, max_hp]),
 		"[color=#c9a14a]⚔ 攻击[/color] %d  [color=#c9a14a]🛡 防御[/color] %d  [color=#c9a14a]✨ 魔攻[/color] %d  [color=#c9a14a]🔮 魔防[/color] %d" % [atk, def, matk, mdef],
@@ -6371,6 +6615,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		lines.append("[color=#c63a3a]⚠ 敌方单位·无法操作[/color]")
 	elif not can_act:
 		lines.append("[color=#a89878]💤 已结束本回合行动[/color]")
+	lines = lines.filter(func(line): return str(line) != "")
 	unit_info.text = "\n".join(lines)
 
 
