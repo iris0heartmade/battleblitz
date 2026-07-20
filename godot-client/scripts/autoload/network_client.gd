@@ -558,8 +558,11 @@ func rejoin_game(game_id: int, user_name: String, callback: Callable = Callable(
 
 
 # T:96 — Mainline 章节 API
-func list_mainlines(callback: Callable = Callable()) -> void:
-	request("GET", "/mainlines", {}, callback)
+func list_mainlines(callback: Callable = Callable(), user_name: String = "") -> void:
+	var path := "/mainlines"
+	if user_name.strip_edges() != "":
+		path += "?user_name=%s" % user_name.uri_encode()
+	request("GET", path, {}, callback)
 
 
 func list_heroes(callback: Callable = Callable()) -> void:

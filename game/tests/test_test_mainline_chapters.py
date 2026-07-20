@@ -52,6 +52,33 @@ async def _create_profile(client, user_name="alice"):
     return r.json()["id"]
 
 
+async def _unlock_test_chapter(SessionLocal, user_name: str, target_mainline_id: str):
+    """Seed formal save slots for predecessors in the test campaign chain."""
+    chain = ["chapter_test_01", "chapter_test_02", "chapter_test_03"]
+    target_index = chain.index(target_mainline_id)
+    if target_index <= 0:
+        return
+
+    from app.mainline import load_mainline
+    from app.progression.models import PlayerProfile
+    from app.save import SaveService
+
+    async with SessionLocal() as s:
+        profile = (await s.execute(
+            select(PlayerProfile).where(PlayerProfile.user_name == user_name)
+        )).scalar_one()
+        save_svc = SaveService(s)
+        for slot_index, mainline_id in enumerate(chain[:target_index]):
+            await save_svc.save_manual(
+                profile,
+                slot_index=slot_index,
+                mainline_id=mainline_id,
+                chapter_index=len(load_mainline(mainline_id).battles),
+                label=f"{mainline_id}-cleared",
+            )
+        await s.commit()
+
+
 # ============================================================
 # Loader visibility
 # ============================================================
@@ -86,6 +113,48 @@ class TestListTestMainlines:
         assert body["battles"][0]["id"] == "battle_01"
         assert "intro" in body["dialogue_keys"]
         assert "battle_01_after" in body["dialogue_keys"]
+
+
+@pytest.mark.integration
+class TestMainlineChapterUnlocks:
+    async def test_new_profile_can_only_enter_first_test_chapter(self, tml_client):
+        client, _ = tml_client
+        await _create_profile(client, "alice")
+
+        listed = await client.get("/mainlines", params={"user_name": "alice"})
+        assert listed.status_code == 200, listed.text
+        ids = [m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")]
+        assert ids == ["chapter_test_01"]
+
+        blocked = await client.post(
+            "/mainlines/chapter_test_02/start",
+            json={"user_name": "alice", "skip_intro": True},
+        )
+        assert blocked.status_code == 403, blocked.text
+
+    async def test_cleared_formal_save_unlocks_next_test_chapter(self, tml_client):
+        client, SessionLocal = tml_client
+        await _create_profile(client, "alice")
+
+        from app.progression.models import PlayerProfile
+        from app.save import SaveService
+        async with SessionLocal() as s:
+            profile = (await s.execute(
+                select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+            )).scalar_one()
+            await SaveService(s).save_manual(
+                profile,
+                slot_index=0,
+                mainline_id="chapter_test_01",
+                chapter_index=1,
+                label="chapter_test_01-cleared",
+            )
+            await s.commit()
+
+        listed = await client.get("/mainlines", params={"user_name": "alice"})
+        assert listed.status_code == 200, listed.text
+        ids = [m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")]
+        assert ids == ["chapter_test_02"]
 
 
 # ============================================================
@@ -134,8 +203,9 @@ class TestWoundedEnemySpawn:
     async def test_chapter_test_02_spawns_one_wounded_archer(
         self, tml_client,
     ):
-        client, _ = tml_client
+        client, SessionLocal = tml_client
         await _create_profile(client, "alice")
+        await _unlock_test_chapter(SessionLocal, "alice", "chapter_test_02")
         r = await client.post(
             "/mainlines/chapter_test_02/start",
             json={"user_name": "alice", "skip_intro": True},
@@ -162,8 +232,9 @@ class TestWoundedEnemySpawn:
     async def test_chapter_test_03_spawns_one_wounded_warlock(
         self, tml_client,
     ):
-        client, _ = tml_client
+        client, SessionLocal = tml_client
         await _create_profile(client, "alice")
+        await _unlock_test_chapter(SessionLocal, "alice", "chapter_test_03")
         r = await client.post(
             "/mainlines/chapter_test_03/start",
             json={"user_name": "alice", "skip_intro": True},
@@ -213,6 +284,7 @@ class TestHeroSpawnInTestChapters:
         """
         client, SessionLocal = tml_client
         await _create_profile(client, "alice")
+        await _unlock_test_chapter(SessionLocal, "alice", "chapter_test_03")
 
         from app.progression.models import PlayerProfile
         async with SessionLocal() as s:
@@ -266,6 +338,7 @@ class TestHeroSpawnInTestChapters:
         /start. Verifies the spawn honours the promoted class."""
         client, SessionLocal = tml_client
         await _create_profile(client, "alice")
+        await _unlock_test_chapter(SessionLocal, "alice", "chapter_test_03")
 
         from app.progression.models import PlayerProfile
         async with SessionLocal() as s:

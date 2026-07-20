@@ -107,6 +107,7 @@ from app.routes.game import _start_battle_internal
 from app.routes.save import auto_save_checkpoint
 from app.save import (
     AutoSaveCheckpointOut,
+    GameSaveSlot,
     PrepCompleteRequest,
 )
 from app.commanders.registry import get_power_threshold
@@ -132,6 +133,59 @@ _GAME_ROOT: Path = Path(__file__).resolve().parents[2]
 def game_root() -> Path:
     """Absolute path to the ``game/`` directory. Exposed for tests."""
     return _GAME_ROOT
+
+
+TEST_MAINLINE_CHAIN = ("chapter_test_01", "chapter_test_02", "chapter_test_03")
+
+
+async def _has_cleared_mainline(
+    session: AsyncSession,
+    user_name: str,
+    mainline_id: str,
+) -> bool:
+    """Return True when a formal save proves this chapter is cleared."""
+    try:
+        battle_count = len(load_mainline(mainline_id).battles)
+    except (MainlineNotFound, MainlineValidationError):
+        return False
+    rows = (await session.execute(
+        select(GameSaveSlot).where(
+            GameSaveSlot.user_name == user_name,
+            GameSaveSlot.mainline_id == mainline_id,
+            GameSaveSlot.chapter_index >= battle_count,
+        )
+    )).scalars().all()
+    return bool(rows)
+
+
+async def _current_test_mainline_for_user(
+    session: AsyncSession,
+    user_name: str,
+) -> str:
+    for mainline_id in TEST_MAINLINE_CHAIN:
+        if not await _has_cleared_mainline(session, user_name, mainline_id):
+            return mainline_id
+    return TEST_MAINLINE_CHAIN[-1]
+
+
+async def _ensure_test_mainline_unlocked(
+    session: AsyncSession,
+    user_name: str,
+    mainline_id: str,
+) -> None:
+    if mainline_id not in TEST_MAINLINE_CHAIN:
+        return
+    allowed = await _current_test_mainline_for_user(session, user_name)
+    if mainline_id != allowed:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {
+                "error": "mainline_locked",
+                "mainline_id": mainline_id,
+                "available_mainline_id": allowed,
+                "hint": "Clear the previous chapter from a formal save before entering this one.",
+            },
+        )
 
 
 async def _build_prepare_payload(
@@ -735,10 +789,25 @@ async def _spawn_battle_for_index(
 # ============================================================
 
 @router.get("", response_model=List)
-async def list_mainlines_endpoint():
-    """Return all mainlines (lobby view). Pure passthrough to loader."""
+async def list_mainlines_endpoint(
+    user_name: Optional[str] = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return mainlines for the lobby view.
+
+    Without ``user_name`` this remains a pure all-chapter listing for
+    tools and tests. With ``user_name`` the temporary test campaign is
+    exposed as a Fire Emblem-style current chapter: only the first
+    uncleared test chapter appears.
+    """
     logger.debug("list_mainlines entry")
     items = list_mainlines()
+    if user_name:
+        allowed_test = await _current_test_mainline_for_user(session, user_name)
+        items = [
+            item for item in items
+            if item.id not in TEST_MAINLINE_CHAIN or item.id == allowed_test
+        ]
     logger.info("list_mainlines ok: count=%d", len(items))
     return items
 
@@ -878,6 +947,7 @@ async def get_mainline_prepare(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
     profile = await _ensure_profile_or_create(session, user_name)
+    await _ensure_test_mainline_unlocked(session, user_name, mainline_id)
     payload = await _build_prepare_payload(session, profile, mainline_id)
     logger.info(
         "get_mainline_prepare ok: mainline=%s user=%s battle=%s heroes=%d",
@@ -1180,6 +1250,7 @@ async def start_mainline(
     # _load_profile (strict 404) so a typo'd user_name never silently
     # creates the wrong profile.
     profile = await _ensure_profile_or_create(session, body.user_name)
+    await _ensure_test_mainline_unlocked(session, body.user_name, mainline_id)
 
     # Class prerequisite check (the mainline declares required_classes).
     unlocked = set(profile.unlocked_classes or [])

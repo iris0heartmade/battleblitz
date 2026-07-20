@@ -322,6 +322,7 @@ var _lobby_last_players: Array = []
 var _lobby_host_player_sig: String = ""
 var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d"]
 var _lobby_seat_ai_replacements: Array[bool] = [false, true, true, true]
+var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
 var _selected_lobby_seat_index: int = 0
@@ -351,6 +352,7 @@ var _user_name: String = "Player"
 var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
+var _mainline_page: String = "chapter_list"
 var _mainline_commander_ids: Array[String] = [""]
 var _mainline_prepare_payload: Dictionary = {}
 var _mainline_prepare_tab: String = "heroes"
@@ -4267,7 +4269,7 @@ func _continue_lobby_ai_creation() -> void:
 		_game_id,
 		_selected_ai_difficulty(),
 		_selected_ai_kind(),
-		_selected_ai_personality(),
+		_lobby_ai_personality_for_seat(seat_index),
 		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index)
 	)
 
@@ -4790,6 +4792,26 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	ai_toggle.toggled.connect(_on_lobby_seat_ai_toggled.bind(index))
 	ai_toggle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	control_row.add_child(ai_toggle)
+	var ai_style_row := HBoxContainer.new()
+	ai_style_row.name = "AiStyleRow"
+	ai_style_row.add_theme_constant_override("separation", 6)
+	box.add_child(ai_style_row)
+	var ai_style_label := Label.new()
+	ai_style_label.text = "AI风格"
+	ai_style_label.custom_minimum_size = Vector2(70, 24)
+	ai_style_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+	ai_style_row.add_child(ai_style_label)
+	var ai_personality := OptionButton.new()
+	ai_personality.name = "AiPersonalityOption"
+	ai_personality.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ai_personality.custom_minimum_size = Vector2(0, 26)
+	ai_personality.add_item("均衡")
+	ai_personality.add_item("激进")
+	ai_personality.add_item("保守")
+	ai_personality.select(_lobby_ai_personality_index_for_seat(index))
+	ai_personality.disabled = not _lobby_ai_replacement_for_seat(index)
+	ai_personality.item_selected.connect(_on_lobby_seat_ai_personality_selected.bind(index))
+	ai_style_row.add_child(ai_personality)
 	var commander_row := HBoxContainer.new()
 	commander_row.name = "CommanderRow"
 	commander_row.add_theme_constant_override("separation", 4)
@@ -4853,6 +4875,28 @@ func _lobby_ai_replacement_for_seat(seat_index: int) -> bool:
 	return false
 
 
+func _lobby_ai_personality_for_seat(seat_index: int) -> String:
+	if seat_index >= 0 and seat_index < _lobby_seat_ai_personalities.size():
+		var personality := str(_lobby_seat_ai_personalities[seat_index])
+		if personality in ["aggressive", "balanced", "conservative"]:
+			return personality
+	return "balanced"
+
+
+func _lobby_ai_personality_index_for_seat(seat_index: int) -> int:
+	match _lobby_ai_personality_for_seat(seat_index):
+		"aggressive": return 1
+		"conservative": return 2
+		_: return 0
+
+
+func _lobby_ai_personality_for_index(index: int) -> String:
+	match index:
+		1: return "aggressive"
+		2: return "conservative"
+		_: return "balanced"
+
+
 func _lobby_seat_occupant_name(seat_index: int) -> String:
 	if seat_index >= 0 and seat_index < _lobby_seat_occupants.size():
 		return str(_lobby_seat_occupants[seat_index])
@@ -4893,6 +4937,15 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	while _lobby_seat_ai_replacements.size() <= seat_index:
 		_lobby_seat_ai_replacements.append(false)
 	_lobby_seat_ai_replacements[seat_index] = pressed
+	while _lobby_seat_ai_personalities.size() <= seat_index:
+		_lobby_seat_ai_personalities.append("balanced")
+	_render_lobby_seat_columns()
+
+
+func _on_lobby_seat_ai_personality_selected(option_index: int, seat_index: int) -> void:
+	while _lobby_seat_ai_personalities.size() <= seat_index:
+		_lobby_seat_ai_personalities.append("balanced")
+	_lobby_seat_ai_personalities[seat_index] = _lobby_ai_personality_for_index(option_index)
 
 
 func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
@@ -5112,6 +5165,10 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 			var pseat := int(p.get("seat", -1))
 			if pseat >= 0 and pseat < _lobby_seat_occupants.size():
 				_lobby_seat_occupants[pseat] = str(p.get("user_name", ""))
+				if bool(p.get("is_ai", false)) and pseat < _lobby_seat_ai_personalities.size():
+					var personality := str(p.get("agent_personality", "balanced"))
+					if personality in ["aggressive", "balanced", "conservative"]:
+						_lobby_seat_ai_personalities[pseat] = personality
 	# 自己的 seat / 观战标记(房主 = seat 0)
 	var self_seat: int = -1
 	var self_is_spec: bool = false
@@ -5515,6 +5572,7 @@ func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> voi
 # T:96 — MainlineView 章节列表 + 入口
 func _on_mainline_pressed() -> void:
 	_show_view("mainline")
+	_set_mainline_page("chapter_list")
 	ml_title.text = "主线章节 · 加载中..."
 	_mainline_prepare_payload = {}
 	_mainline_shop_payload = {}
@@ -5535,7 +5593,7 @@ func _on_mainline_pressed() -> void:
 	if _hero_speaker_map.is_empty():
 		NetworkClient.list_heroes(Callable(self, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
-	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"))
+	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"), _user_name)
 	if ml_slots_container != null and is_instance_valid(ml_slots_container):
 		for child in ml_slots_container.get_children():
 			child.queue_free()
@@ -5544,6 +5602,30 @@ func _on_mainline_pressed() -> void:
 		loading_lbl.modulate = Color(0.65, 0.6, 0.45)
 		ml_slots_container.add_child(loading_lbl)
 	NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
+
+
+func _set_node_visible(node: Node, value: bool) -> void:
+	if node != null and is_instance_valid(node) and node is CanvasItem:
+		(node as CanvasItem).visible = value
+
+
+func _set_mainline_page(page: String) -> void:
+	_mainline_page = page
+	var showing_prepare := page == "prepare"
+	_set_node_visible(ml_slots_container, not showing_prepare)
+	_set_node_visible(ml_list_container, not showing_prepare)
+	_set_node_visible(ml_commander_status, not showing_prepare)
+	_set_node_visible(ml_commander_option, not showing_prepare)
+	_set_node_visible(ml_apply_commander_btn, not showing_prepare)
+	_set_node_visible(ml_prep_summary, showing_prepare)
+	_set_node_visible(ml_prep_tabs, showing_prepare)
+	_set_node_visible(ml_prep_content, showing_prepare)
+	_set_node_visible(ml_prep_start_btn, showing_prepare)
+	_set_node_visible(ml_prep_refresh_btn, showing_prepare)
+	_set_node_visible(ml_prep_action_btn, showing_prepare)
+	_set_node_visible(ml_prep_alt_action_btn, showing_prepare)
+	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
+		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
 
 
 func _on_ml_slots_response(body: Variant, _code: int = 0) -> void:
@@ -5728,6 +5810,7 @@ func _on_mainline_prepare_response(body: Variant, code: int = 0, mainline_id: St
 	if _selected_prepare_hero_id == "" and not heroes.is_empty() and heroes[0] is Dictionary:
 		_selected_prepare_hero_id = str((heroes[0] as Dictionary).get("hero_id", ""))
 	_mainline_prepare_tab = "heroes"
+	_set_mainline_page("prepare")
 	_render_mainline_prepare()
 
 
@@ -6533,6 +6616,12 @@ func _on_mainline_next_battle_response(body: Variant, code: int = 0) -> void:
 
 
 func _on_ml_back_pressed() -> void:
+	if _mainline_page == "prepare":
+		_mainline_prepare_payload = {}
+		_mainline_shop_payload = {}
+		_mainline_mercenary_payload = {}
+		_set_mainline_page("chapter_list")
+		return
 	_show_view("menu")
 
 

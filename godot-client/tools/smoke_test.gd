@@ -446,6 +446,11 @@ func _ready() -> void:
 	var first_occupant: Label = first_seat.get_node("SeatBox/SeatTopRow/SeatStatusBox/SeatOccupant") as Label
 	_assert_true("Lobby seat action shows occupant", first_occupant.text.contains("Alice"),
 		"clicking a free seat should update the visible seat card occupant instead of leaving it waiting")
+	var ai_personality_option := first_seat.get_node_or_null("SeatBox/AiStyleRow/AiPersonalityOption") as OptionButton
+	_assert_true("Lobby seat has AI personality option", ai_personality_option != null,
+		"AI replacement should expose a per-seat personality picker")
+	_assert_eq("Lobby AI personality option count", ai_personality_option.item_count, 3,
+		"per-seat AI personality picker should expose the three rules AI styles")
 	main_check.call("_on_lobby_presets_response", {
 		"maps": [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
 	}, 200)

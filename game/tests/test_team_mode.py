@@ -235,6 +235,36 @@ async def test_update_player_seat_swaps_players_for_host(db_session, tmp_db_path
         assert colors == {"Host": "blue", "Guest": "red"}
 
 
+@pytest.mark.asyncio
+async def test_same_user_cannot_join_multiple_player_seats(db_session, tmp_db_path):
+    from app.models import Game, Player
+
+    game = Game(
+        name="unique-player-seat", status="waiting", map_seed=0,
+        map_preset="classic", current_player_index=0, phase="player",
+    )
+    db_session.add(game)
+    await db_session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        first = await c.post(f"/games/{game.id}/join", json={
+            "user_name": "Alice", "seat": 0,
+        })
+        assert first.status_code == 201, first.text
+
+        second = await c.post(f"/games/{game.id}/join", json={
+            "user_name": "Alice", "seat": 1,
+        })
+        assert second.status_code == 409, second.text
+
+    rows = (await db_session.execute(
+        select(Player).where(Player.game_id == game.id, Player.user_name == "Alice")
+    )).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].seat == 0
+
+
 # ============================================================
 # End-to-end: 2v2 seize mode via the API
 # ============================================================
