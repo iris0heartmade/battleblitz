@@ -448,6 +448,9 @@ func _ready() -> void:
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
 		lobby_remove_ai_btn.pressed.connect(_on_lobby_remove_ai_pressed)
+	# P1:audit 发现 LobbyAddAiBtn 在 tscn 存在但 var 未接 .pressed.connect
+	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
+		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
 	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
 	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
