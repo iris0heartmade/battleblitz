@@ -338,11 +338,7 @@ func _dispatch_ws_message(msg: Dictionary) -> void:
 			# P2:audio 帧暂不播放(Godot 客户端不做音频 narration),仅 log + UI 提示文本。
 			commentary_received.emit("[音频评论]")
 		_:
-			pass
-			# Reserved for future AI commentary. No-op for now.
-			pass
-		_:
-			# Unknown type — already emitted via ws_message_received.
+			# Reserved for future AI commentary / unknown type.
 			pass
 
 
