@@ -338,6 +338,7 @@ var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
+tvar _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
 var _selected_lobby_seat_index: int = 0
 var _pending_lobby_start_after_create: bool = false
 var _pending_lobby_ai_seats: Array[int] = []
@@ -791,7 +792,7 @@ func _show_view(name: String) -> void:
 		_start_state_polling()
 		# 棋盘右边有空档(Backdrop 绿色露出来) — 切暗色调融合棋盘边界
 		if backdrop != null and is_instance_valid(backdrop):
-			backdrop.color = Color(0.06, 0.08, 0.06, 1)
+			backdrop.color = Color.TRANSPARENT
 	else:
 		_stop_state_polling()
 		# 恢复主题背景色
@@ -2472,23 +2473,21 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 		return {}
 	var local: Vector2 = layer.to_local(global_pos)
 	var cell: Vector2i = layer.local_to_map(local)
-	# tile_lookup 只有 terrain/subtype,没有 owner_id。
-	# 必须 fallback 到 GameState — 否则 owner_id 永远 -1。
-	var tile: Dictionary = {}
-	if board.tile_lookup != null:
+	# GameState tiles 有 owner_id(服务器 TileOut.owner_id);
+	# board.tile_lookup 只有 terrain/subtype。优先从 GameState 拿。
+	var tile := GameState.get_tile(cell.x, cell.y)
+	if tile.is_empty() and board.tile_lookup != null:
 		tile = board.tile_lookup.get(cell, {})
-	if tile.is_empty() and GameState != null:
-		tile = GameState.get_tile(cell.x, cell.y)
 	if tile.is_empty():
 		return {}
 	if str(tile.get("terrain", "")) != "barracks":
 		return {}
-	# GameState tiles 带 owner_id; tile_lookup 不带
+	# owner_id — GameState tile 优先
 	var owner_id := int(tile.get("owner_id", -1))
 	if owner_id == -1 and GameState != null:
-		var gs_tile := GameState.get_tile(cell.x, cell.y)
-		if not gs_tile.is_empty():
-			owner_id = int(gs_tile.get("owner_id", -1))
+		var gs_tile_owner := GameState.get_tile(cell.x, cell.y)
+		if not gs_tile_owner.is_empty():
+			owner_id = int(gs_tile_owner.get("owner_id", -1))
 	if owner_id != _player_id:
 		return {}
 	# 该 tile 上是否有单位(occupied → 不能招募)
@@ -4813,7 +4812,9 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 	if ai_commander_option != null and is_instance_valid(ai_commander_option):
 		ai_commander_option.clear()
 		ai_commander_option.add_item("电脑自动选择指挥官")
-	for item in unlocked:
+	# 如果 API 返回空(新玩家无解锁),fallback 到硬编码默认指挥官(等同 webui 行为)
+	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna"]
+	for item in pool:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
 			continue
@@ -7496,6 +7497,8 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 				blocked[k] = true
 	var me_pid: int = int(_player_id)
+	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
+	var attacker_ignores_los: bool = "snipe" in attacker_skills
 	var out: Dictionary = {}
 	for rt in range_tiles:
 		var rt_v := Vector2i(int(rt.x), int(rt.y))
@@ -7508,10 +7511,10 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 				if not uu is Dictionary: continue
 				if int(uu.get("x", -1)) != rt_v.x or int(uu.get("y", -1)) != rt_v.y:
 					continue
-				# LoS 校验(远距离攻击需要通视)
+				# LoS 校验:仅有障碍(archer snipe无视障碍)
 				var attacker_pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
 				var d: int = abs(attacker_pos.x - rt_v.x) + abs(attacker_pos.y - rt_v.y)
-				if d > 1:
+				if d > 1 and not attacker_ignores_los:
 					var los_ok: bool = MapLogic.has_line_of_sight(
 						attacker_pos, rt_v, blocked, size_v
 					)
@@ -7719,7 +7722,9 @@ func _active_skill_of(ud: Dictionary) -> String:
 func _arcane_targets(ud: Dictionary) -> Dictionary:
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var me_pid2: int = int(_player_id)
-	var out: Dictionary = {}
+	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
+		var attacker_ignores_los: bool = "snipe" in attacker_skills
+		var out: Dictionary = {}
 	for uu in _all_units_including_self():
 		var adx: int = abs(int(uu.get("x", 0)) - pos_h.x)
 		var ady: int = abs(int(uu.get("y", 0)) - pos_h.y)
@@ -7740,7 +7745,9 @@ func _arcane_targets(ud: Dictionary) -> Dictionary:
 func _heal_targets(ud: Dictionary) -> Dictionary:
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var me_pid2: int = int(_player_id)
-	var out: Dictionary = {}
+	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
+		var attacker_ignores_los: bool = "snipe" in attacker_skills
+		var out: Dictionary = {}
 	for uu in _all_units_including_self():
 		var dx: int = abs(int(uu.get("x", 0)) - pos_h.x)
 		var dy: int = abs(int(uu.get("y", 0)) - pos_h.y)

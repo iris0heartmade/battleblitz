@@ -56,7 +56,7 @@ class PlayerProfile(Base):
         JSON, nullable=False, default=dict
     )
     unlocked_commanders: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
+        JSON, nullable=False, default=lambda: ["yun", "anna"]
     )
     # Pre-battle choices keyed by mainline id.  Keeping this on the profile
     # prevents a lobby choice from mutating an already spawned battle.
