@@ -78,6 +78,7 @@ from app.mainline.schemas import (
     MainlineShopPurchaseRequest,
     MainlineStartOut,
 )
+from app.events import GameEvent, bus
 from app.hero_domain import (
     build_campaign_spawn_payload,
     build_hero_character_template,
@@ -1400,6 +1401,11 @@ async def start_mainline(
         body.user_name, mainline_id, game.id,
     )
 
+    # 07-21 F5A: publish match_start
+    await bus.publish(GameEvent(
+        type="match_start", game_id=game.id, turn=1,
+        context={"mainline_id": mainline_id, "user_name": body.user_name},
+    ))
     return MainlineStartOut(
         game_id=game.id,
         player_id=human.id,

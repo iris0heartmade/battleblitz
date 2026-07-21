@@ -714,6 +714,13 @@ async def use_skill(
         "skill=%s | unit=%d",
         player.id, game_id, skill_id, unit.id,
     )
+    # Publish skill event to bus (07-21 F5A)
+    await bus.publish(GameEvent(
+        type="skill", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+        target_unit_id=body.target_id,
+        context={"skill": skill_id, "restored_hp": result.restored_hp},
+    ))
     return SkillResult(
         unit_id=unit.id, skill=skill_id, target_unit_id=body.target_id,
         restored_hp=result.restored_hp,
@@ -846,6 +853,13 @@ async def claim_tile(
             "unit=%d | tile=(%d,%d) | completes_turn=%d",
             player.id, game_id, unit.id, tile.x, tile.y, cs.completes_turn,
         )
+        # 07-21 F5A: publish claim_start (one of the 2 turns)
+        await bus.publish(GameEvent(
+            type="claim_start", game_id=game_id, turn=game.turn_number,
+            actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+            context={"x": tile.x, "y": tile.y, "terrain": tile.terrain,
+                     "completes_turn": cs.completes_turn},
+        ))
         return ClaimResult(
             started=True,
             completes_turn=cs.completes_turn,
@@ -885,6 +899,13 @@ async def claim_tile(
         "unit=%d | tile=(%d,%d) | old_owner=%s",
         player.id, game_id, unit.id, tile.x, tile.y, old_owner,
     )
+    # 07-21 F5A: publish castle_captured when claim completes
+    await bus.publish(GameEvent(
+        type="castle_captured", game_id=game_id, turn=game.turn_number,
+        actor_player_id=player.id, actor_unit_id=unit.id, actor_name=unit.name,
+        context={"x": tile.x, "y": tile.y, "terrain": tile.terrain,
+                 "old_owner": old_owner, "new_owner": player.id},
+    ))
     return ClaimResult(
         completed=True,
         new_owner_id=player.id,

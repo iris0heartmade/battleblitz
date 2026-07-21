@@ -46,6 +46,11 @@ class GameEventBus:
     Each subscriber receives its own asyncio.Queue. If a subscriber is too
     slow and its queue fills up, events for that subscriber are dropped
     (a warning is logged) — other subscribers are unaffected.
+
+    Optional file logger: when ``set_file_logger(path)`` is called, every
+    published event is appended as one JSON line to that file. This is
+    the primary evidence stream used by the chapter_06 event verifier
+    (see ``godot-client/tools/chapter_06_event_log_verify.gd``).
     """
 
     QUEUE_MAX_SIZE: int = 100
@@ -54,6 +59,50 @@ class GameEventBus:
         self._subscribers: dict[int, list[asyncio.Queue["GameEvent"]]] = \
             defaultdict(list)
         self._lock = asyncio.Lock()
+        # File logger state. When ``_log_path`` is set, every published
+        # event is appended as one JSON line.
+        self._log_path: str | None = None
+        self._log_file = None  # open file handle
+
+    def set_file_logger(self, log_path: str) -> None:
+        """Enable file-based event logging. Each event → one JSON line.
+
+        Used by ``godot-client/tools/chapter_06_event_log_verify.gd``
+        to verify that the chapter_06 design triggers the expected
+        sequence of move / attack / trap / boss / victory events.
+        """
+        if self._log_file is not None:
+            self._log_file.close()
+        self._log_path = log_path
+        # Write a header so the file is self-describing.
+        self._log_file = open(log_path, "a", encoding="utf-8")
+        if self._log_file is not None:
+            self._log_file.write("=== chapter_06 event log started ===\n")
+            self._log_file.flush()
+
+    def close_file_logger(self) -> None:
+        if self._log_file is not None:
+            self._log_file.write("=== chapter_06 event log closed ===\n")
+            self._log_file.close()
+            self._log_file = None
+            self._log_path = None
+
+    def _write_log_line(self, event: "GameEvent") -> None:
+        if self._log_file is None:
+            return
+        # Compact one-line JSON for grep-friendly verification
+        import json as _json
+        line = _json.dumps({
+            "t": event.timestamp_ms,
+            "turn": event.turn,
+            "type": event.type,
+            "game": event.game_id,
+            "actor": [event.actor_player_id, event.actor_unit_id, event.actor_name],
+            "target": [event.target_player_id, event.target_unit_id, event.target_name],
+            "ctx": event.context,
+        }, ensure_ascii=False, separators=(",", ":"))
+        self._log_file.write(line + "\n")
+        self._log_file.flush()
 
     async def publish(self, event: "GameEvent") -> None:
         """Fan out an event to all subscribers of its game_id.
@@ -61,6 +110,8 @@ class GameEventBus:
         Non-blocking from the publisher's perspective: a slow subscriber
         cannot back-pressure the publisher.
         """
+        # Always log to file if enabled (even with 0 subscribers)
+        self._write_log_line(event)
         queues = self._subscribers.get(event.game_id, [])
         if not queues:
             return

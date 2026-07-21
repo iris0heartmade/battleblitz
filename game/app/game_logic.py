@@ -19,6 +19,7 @@ from app.classes.units import (
     get_or_none as _get_unit_or_none,
     type_advantage as _type_adv,
 )
+from app.events import GameEvent, bus
 from app.config import (
     AI_MAX_ACTIONS_PER_TURN,
     BASE_CRIT_RATE, MAX_CASTLES, CASTLE_NEIGHBOR_RADIUS, CASTLE_DOOR,
@@ -728,6 +729,17 @@ def _finish_game(
     # Stash the winning team on a transient attribute so the state
     # endpoint can include it without us adding yet another column.
     game._winner_team = winner_team
+    # 07-21 F5A: publish match_end (the canonical win event)
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(bus.publish(GameEvent(
+                type="match_end", game_id=game.id, turn=game.turn_number,
+                context={"winner": winner_team, "reason": win_reason},
+            )))
+    except RuntimeError:
+        pass  # 同步上下文, 跳过
 
 
 async def check_win_condition(session: AsyncSession, game: Game) -> bool:

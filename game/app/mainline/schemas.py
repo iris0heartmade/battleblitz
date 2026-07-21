@@ -47,7 +47,15 @@ def _class_id_pattern() -> str:
 # ============================================================
 
 class APIModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+    # extra="allow" 让 chapter JSON 的可魔改字段（如 waves/traps/tags/
+    # difficulty_modifiers/battle_talks/...）不会被静默丢弃。
+    # 字段会被 Pydantic 保留在 `model_extra` 里，由 mainline engine
+    # 后续读取。
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+        extra="allow",
+    )
 
 
 class UnitSpec(APIModel):

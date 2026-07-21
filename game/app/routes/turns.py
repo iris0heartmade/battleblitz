@@ -36,6 +36,7 @@ from app.config import (
     TURNS_CHECK_INTERVAL_SECONDS,
 )
 from app.database import AsyncSessionLocal, get_session
+from app.events import GameEvent, bus
 from app.game_logic import ai_take_turn, ai_take_one_action, apply_end_of_turn, check_pending_claims
 from app.logging_config import (
     collect_health_metrics,
@@ -266,6 +267,11 @@ async def end_turn(
                 game.status = "finished"
                 game.phase = "player"
                 logger.info(f"Game {game.id} finished at turn {game.turn_number}: all alive players eliminated")
+                # 07-21 F5A: publish match_end (07-21 plan §F5A)
+                await bus.publish(GameEvent(
+                    type="match_end", game_id=game_id, turn=game.turn_number,
+                    context={"winner": None, "reason": "all_players_eliminated"},
+                ))
 
         next_id = (
             next((p.id for p in players if p.seat == game.current_player_index), None)
@@ -279,6 +285,14 @@ async def end_turn(
         # away (instead of sitting at phase="ai" with no loop).
         if schedule_ai and game.status == "playing":
             asyncio.create_task(_run_ai_turn_chain(game.id))
+        # 07-21 F5A: publish turn_end for the player who just ended
+        if game.status == "playing":
+            await bus.publish(GameEvent(
+                type="turn_end", game_id=game_id, turn=game.turn_number,
+                actor_player_id=body.player_id,
+                actor_name=next((p.user_name for p in players if p.id == body.player_id), None),
+                context={"next_player_id": next_id, "next_seat": game.current_player_index},
+            ))
         return EndTurnResult(
             next_player_id=next_id,
             turn_number=game.turn_number,
