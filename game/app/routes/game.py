@@ -47,6 +47,8 @@ from app.commanders.actions import can_player_fire_now
 from app.commanders.registry import get_power_threshold
 from app.classes.heroes import get_or_none as _get_hero_or_none
 from app.models import ActionLog, Game, Player, Tile, Unit
+from app.events.bus import bus
+from app.events.types import GameEvent
 from app.schemas import (
     AddAIRequest,
     CreateGameRequest,
@@ -1058,7 +1060,21 @@ async def update_player_commander(
     battle_config["seat_commanders"] = seat_commanders
     game.battle_config = battle_config
     await session.flush()
-
+    # 实时推送给大厅里正在 WS 长连的其它客户端(主时间轴 ≤ 50ms),
+    # 不靠 2 秒轮询 — 给前端"实时切指挥官"的体验。
+    await bus.publish(GameEvent(
+        type="commander_changed",
+        game_id=game_id,
+        turn=game.turn_number,
+        actor_player_id=caller.id,
+        target_player_id=target.id,
+        target_name=target.user_name,
+        context={
+            "seat": target.seat,
+            "commander_id": body.commander_id,
+            "seat_commanders": seat_commanders,
+        },
+    ))
     return {"ok": True, "player_id": player_id, "seat": target.seat,
             "commander_id": body.commander_id}
 

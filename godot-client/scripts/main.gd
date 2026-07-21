@@ -5108,9 +5108,17 @@ func _load_lobby_map_from_disk(map_id: String) -> Dictionary:
 func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
 	if lobby_seat_grid == null or not is_instance_valid(lobby_seat_grid):
 		return
-	for child in lobby_seat_grid.get_children():
+	# P2 修复:每张座位卡里有 prev_btn / next_btn / action_btn 等,它们的
+	# pressed signal 可能在 emit 过程中又来调用本函数导致 child.free() 时
+	# "Object freed or unreferenced" 报错。我们改用 queue_free() 来避开这
+	# 个问题 — Godot 会等当前帧 idle 处理时才真正释放,且对 PackedScene 的
+	# 常驻节点也能友好处理。
+	var children := lobby_seat_grid.get_children()
+	for child in children:
+		if not is_instance_valid(child):
+			continue
 		lobby_seat_grid.remove_child(child)
-		child.free()
+		child.queue_free()
 	if summary.is_empty():
 		var map_data := _selected_lobby_map_data()
 		if not map_data.is_empty():
@@ -5172,7 +5180,10 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	action_btn.text = "入座"
 	action_btn.custom_minimum_size = Vector2(50, 26)
 	MenuTheme.apply_button_theme(action_btn, 12)
-	action_btn.pressed.connect(_on_lobby_seat_action_pressed.bind(index))
+	action_btn.pressed.connect(
+		_on_lobby_seat_action_pressed.bind(index),
+		Object.CONNECT_DEFERRED
+	)
 	control_row.add_child(action_btn)
 	var side_option := OptionButton.new()
 	side_option.name = "TeamSideOption"
@@ -5187,7 +5198,10 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	ai_toggle.text = "AI替补"
 	ai_toggle.custom_minimum_size = Vector2(80, 26)
 	ai_toggle.button_pressed = _lobby_ai_replacement_for_seat(index)
-	ai_toggle.toggled.connect(_on_lobby_seat_ai_toggled.bind(index))
+	ai_toggle.toggled.connect(
+		_on_lobby_seat_ai_toggled.bind(index),
+		Object.CONNECT_DEFERRED
+	)
 	ai_toggle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	control_row.add_child(ai_toggle)
 	var ai_style_row := HBoxContainer.new()
@@ -5219,7 +5233,13 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	prev_btn.text = "<"
 	prev_btn.custom_minimum_size = Vector2(28, 22)
 	MenuTheme.apply_button_theme(prev_btn, 12)
-	prev_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, -1))
+	# CONNECT_DEFERRED:让回调在 idle 阶段执行,避免 pressed emit 中途自
+	# 由其持有的 prev/next 按钮树时撞上 "Object freed while signal is
+	# being emitted" 报错。
+	prev_btn.pressed.connect(
+		_on_lobby_seat_commander_step.bind(index, -1),
+		Object.CONNECT_DEFERRED
+	)
 	commander_row.add_child(prev_btn)
 	var commander_label := Label.new()
 	commander_label.name = "CommanderName"
@@ -5233,7 +5253,10 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	next_btn.text = ">"
 	next_btn.custom_minimum_size = Vector2(28, 22)
 	MenuTheme.apply_button_theme(next_btn, 12)
-	next_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, 1))
+	next_btn.pressed.connect(
+		_on_lobby_seat_commander_step.bind(index, 1),
+		Object.CONNECT_DEFERRED
+	)
 	commander_row.add_child(next_btn)
 	var ability := Label.new()
 	ability.name = "CommanderAbility"
@@ -5311,6 +5334,32 @@ func _lobby_seat_commander_id(seat_index: int) -> String:
 	return _lobby_commander_ids[idx]
 
 
+# 服务器真值同步:把 game.battle_config.seat_commanders 写入本地镜像,使
+# 大厅其他玩家调左右的指挥官时,本端 2s 轮询后立刻看到。server-authoritative:
+# 永远以服务端返回为准(乐观更新被 server 接受后会写回 seat_commanders)。
+func _sync_lobby_seat_commanders(game: Dictionary) -> void:
+	if _lobby_commander_ids.is_empty():
+		return
+	var battle_config_v = game.get("battle_config", null)
+	if battle_config_v == null or not (battle_config_v is Dictionary):
+		return
+	var raw_seat_commanders = battle_config_v.get("seat_commanders", null)
+	if raw_seat_commanders == null or not (raw_seat_commanders is Dictionary):
+		return
+	var seat_commanders: Dictionary = raw_seat_commanders
+	while _lobby_seat_commander_indices.size() < MapPreviewSummary.SEAT_COLORS.size():
+		_lobby_seat_commander_indices.append(0)
+	for seat_v in seat_commanders.keys():
+		var seat_index := int(seat_v)
+		if seat_index < 0 or seat_index >= _lobby_seat_commander_indices.size():
+			continue
+		var commander_id := str(seat_commanders[seat_v])
+		var idx: int = _lobby_commander_ids.find(commander_id)
+		if idx < 0:
+			continue
+		_lobby_seat_commander_indices[seat_index] = idx
+
+
 func _lobby_seat_commander_label(seat_index: int) -> String:
 	var commander_id := _lobby_seat_commander_id(seat_index)
 	return "未选择" if commander_id == "" else _commander_label(commander_id)
@@ -5334,10 +5383,66 @@ func _on_lobby_seat_team_selected(option_index: int, seat_index: int) -> void:
 func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	while _lobby_seat_ai_replacements.size() <= seat_index:
 		_lobby_seat_ai_replacements.append(false)
-	_lobby_seat_ai_replacements[seat_index] = pressed
 	while _lobby_seat_ai_personalities.size() <= seat_index:
 		_lobby_seat_ai_personalities.append("balanced")
+	_lobby_seat_ai_replacements[seat_index] = pressed
+	if _game_id <= 0 or seat_index < 0:
+		_render_lobby_seat_columns()
+		return
+	# 只房主能换人。/start 后 game.status != "waiting",后端会拒绝。
+	if not _lobby_is_host:
+		_update_status("只有房主可以替换该席位为 AI。")
+		_render_lobby_seat_columns()
+		return
+	var existing_pid: int = 0
+	var existing_is_ai: bool = false
+	for p in _lobby_last_players:
+		if not p is Dictionary:
+			continue
+		if int(p.get("seat", -1)) == seat_index and not bool(p.get("is_spectator", false)):
+			existing_pid = int(p.get("id", 0))
+			existing_is_ai = bool(p.get("is_ai", false))
+			break
+	if not pressed:
+		# 取消 AI 替补 → 把这个 seat 上的 AI 删掉(若是 AI)。人类不动。
+		if existing_pid > 0 and existing_is_ai:
+			NetworkClient.remove_player(_game_id, existing_pid,
+				Callable(self, "_on_lobby_seat_ai_remove_response").bind(seat_index))
+		_render_lobby_seat_columns()
+		return
+	# 按下 AI → 先删旧的(人类或 AI),再加 AI。
+	if existing_pid > 0:
+		NetworkClient.remove_player(_game_id, existing_pid,
+			Callable(self, "_on_lobby_seat_ai_add_after_remove").bind(seat_index))
+	else:
+		_request_add_ai_for_seat(seat_index)
 	_render_lobby_seat_columns()
+
+
+func _request_add_ai_for_seat(seat_index: int) -> void:
+	if _game_id <= 0:
+		return
+	var personality := _lobby_ai_personality_for_seat(seat_index)
+	NetworkClient.add_ai_player(_game_id, "normal", "rules", personality,
+		Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index))
+
+
+func _on_lobby_seat_ai_remove_response(body: Variant, _code: int, seat_index: int) -> void:
+	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
+		_update_status("移除失败:%s" % str(body.get("detail", body)))
+		return
+	_refresh_lobby_view()
+
+
+func _on_lobby_seat_ai_add_after_remove(_body: Variant, _code: int, seat_index: int) -> void:
+	_request_add_ai_for_seat(seat_index)
+
+
+func _on_lobby_seat_ai_add_response(body: Variant, code: int, seat_index: int) -> void:
+	if code < 200 or code >= 300:
+		_update_status("AI 入座失败:HTTP %d" % code)
+		return
+	_refresh_lobby_view()
 
 
 func _on_lobby_seat_ai_personality_selected(option_index: int, seat_index: int) -> void:
@@ -5622,6 +5727,10 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 		_selected_lobby_seat_index = self_seat
 	_lobby_is_host = (_player_id > 0 and _player_id == host_player_id)
 	_lobby_self_is_spectator = self_is_spec
+	# 同步 seat_commanders(大厅里其他玩家改的指挥官要实时反映给当前客户端)。
+	# server-authoritative:服务端 game.battle_config.seat_commanders 是真值,
+	# 本地 _lobby_seat_commander_indices 是 UI 镜像 — 始终以服务端为准。
+	_sync_lobby_seat_commanders(game)
 	_render_lobby_seat_columns()
 	# 渲染逐玩家列表(含 seat / 队伍 / 观战标记)
 	var lines: Array = []

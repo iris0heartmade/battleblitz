@@ -38,6 +38,15 @@ EventType = Literal[
     "kill",
     "skill",
     "wait",
+    # P0.4 — claim lifecycle. `claim_start` fires on the first turn a unit
+    # begins occupying a claimable tile; the completion leg still publishes
+    # `castle_captured` (one event per ownership flip is enough for telemetry
+    # and the commentary stream). `claim_complete` is reserved for endpoints
+    # that want a dedicated "claim finished" signal separate from the broader
+    # castle_captured bucket.
+    "claim_start",
+    "claim_complete",
+    "commander_changed",
     # Turn / round events (fired by app/routes/turns.py)
     "turn_end",
     "round_end",
