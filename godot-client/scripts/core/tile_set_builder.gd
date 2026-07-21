@@ -273,15 +273,14 @@ static func _tile_asset_candidates(terrain: String, biome: String) -> Array[Dict
 	return candidates
 
 static func _try_load_image(path: String) -> Image:
+	# 07-21 M7 — runtime I/O 路径收口到 TextureLoader。TileSetBuilder
+	# 之前是直接 ResourceLoader.load() + Image.load_from_file() 两段
+	# fallback,容易在导出 / 跨平台构建时遗漏路径(本仓库 .import
+	# 系统未启用)。TextureLoader 内部对 `res://` 与 globalised 路径
+	# 都有显式分支,后续如需 redirect 也只改一处。
 	if not FileAccess.file_exists(path):
 		return null
-	if ResourceLoader.exists(path):
-		var res: Resource = load(path)
-		if res is Texture2D:
-			var tex: Texture2D = res
-			if tex.get_image() != null:
-				return tex.get_image()
-	return Image.load_from_file(path)
+	return TextureLoader.load_image(path)
 
 static func _fill_plain_color(atlas: Image, terrain: String, variant_index: int) -> void:
 	var y0 := variant_index * TILE_SIZE.y

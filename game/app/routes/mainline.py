@@ -138,6 +138,43 @@ def game_root() -> Path:
 TEST_MAINLINE_CHAIN = ("chapter_test_01", "chapter_test_02", "chapter_test_03")
 
 
+# Campaign chain abstraction. Each entry is a tuple of mainline ids that
+# must be cleared sequentially; the front-end ``/mainlines`` listing and
+# the ``/mainlines/{id}/start`` gate both consume the dict so future
+# chains (e.g. a "veteran" chain that unlocks after the test chain) only
+# need a new key here.
+CAMPAIGN_CHAINS: dict[str, tuple[str, ...]] = {
+    "test": TEST_MAINLINE_CHAIN,
+}
+
+
+def _chain_for(mainline_id: str) -> Optional[tuple[str, ...]]:
+    """Return the campaign chain that contains ``mainline_id`` (if any)."""
+    for chain in CAMPAIGN_CHAINS.values():
+        if mainline_id in chain:
+            return chain
+    return None
+
+
+def _campaign_chain_name(mainline_id: str) -> Optional[str]:
+    """Return the campaign name (dict key) for ``mainline_id``."""
+    for name, chain in CAMPAIGN_CHAINS.items():
+        if mainline_id in chain:
+            return name
+    return None
+
+
+async def _current_mainline_for_user(
+    session: AsyncSession,
+    user_name: str,
+    chain: tuple[str, ...],
+) -> str:
+    for mainline_id in chain:
+        if not await _has_cleared_mainline(session, user_name, mainline_id):
+            return mainline_id
+    return chain[-1]
+
+
 async def _has_cleared_mainline(
     session: AsyncSession,
     user_name: str,
@@ -162,10 +199,8 @@ async def _current_test_mainline_for_user(
     session: AsyncSession,
     user_name: str,
 ) -> str:
-    for mainline_id in TEST_MAINLINE_CHAIN:
-        if not await _has_cleared_mainline(session, user_name, mainline_id):
-            return mainline_id
-    return TEST_MAINLINE_CHAIN[-1]
+    """Back-compat wrapper for the test chain."""
+    return await _current_mainline_for_user(session, user_name, TEST_MAINLINE_CHAIN)
 
 
 async def _ensure_test_mainline_unlocked(
@@ -173,9 +208,16 @@ async def _ensure_test_mainline_unlocked(
     user_name: str,
     mainline_id: str,
 ) -> None:
-    if mainline_id not in TEST_MAINLINE_CHAIN:
+    """Back-compat wrapper: gate any mainline that belongs to a chain.
+
+    Reads ``CAMPAIGN_CHAINS`` so the same routine now governs future
+    chains. ``TEST_MAINLINE_CHAIN`` remains the only declared chain;
+    adding a second key here is enough to enable a new campaign.
+    """
+    chain = _chain_for(mainline_id)
+    if chain is None:
         return
-    allowed = await _current_test_mainline_for_user(session, user_name)
+    allowed = await _current_mainline_for_user(session, user_name, chain)
     if mainline_id != allowed:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -183,6 +225,7 @@ async def _ensure_test_mainline_unlocked(
                 "error": "mainline_locked",
                 "mainline_id": mainline_id,
                 "available_mainline_id": allowed,
+                "chain": _campaign_chain_name(mainline_id),
                 "hint": "Clear the previous chapter from a formal save before entering this one.",
             },
         )
@@ -803,11 +846,20 @@ async def list_mainlines_endpoint(
     logger.debug("list_mainlines entry")
     items = list_mainlines()
     if user_name:
-        allowed_test = await _current_test_mainline_for_user(session, user_name)
-        items = [
-            item for item in items
-            if item.id not in TEST_MAINLINE_CHAIN or item.id == allowed_test
-        ]
+        # For every declared campaign chain, only the first uncleared
+        # chapter is visible. Chains with no progress show their first
+        # chapter; chains the user has finished collapse to the final
+        # chapter (current chapter semantics).
+        filtered: list = []
+        for item in items:
+            chain = _chain_for(item.id)
+            if chain is None:
+                filtered.append(item)
+                continue
+            allowed = await _current_mainline_for_user(session, user_name, chain)
+            if item.id == allowed:
+                filtered.append(item)
+        items = filtered
     logger.info("list_mainlines ok: count=%d", len(items))
     return items
 

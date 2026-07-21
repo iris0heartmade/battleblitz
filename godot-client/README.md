@@ -95,6 +95,14 @@ Run the smoke test:
 "<godot_exe>" --headless --path godot-client res://tools/smoke_test.tscn
 ```
 
+> The smoke test now resolves `GameState` / `NetworkClient` / `InputState` /
+> `UserSettings` through `get_node_or_null("/root/<Name>")` at the top of
+> `_ready()`. If any required autoload is missing the test prints a clear
+> failure instead of crashing with `Identifier not found: <Name>`; the
+> dependent assertions are skipped via local guard variables. Always use
+> the scene-based entry above; the legacy `godot --script smoke_test.gd`
+> form is no longer reliable because autoloads only register on scene load.
+
 Verify the two critical GUI entry flows against a running backend:
 
 ```bash

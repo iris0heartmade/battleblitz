@@ -77,23 +77,14 @@ func _clear_children() -> void:
 
 
 # static — PNG 在 godot-client/assets/classic/ 下,没经过 .import 系统
-# (项目从未在 Editor 里打开过),所以不能 ResourceLoader.load()。
-# 改走 Image.load(path) — Image 支持直接 load res:// 路径(绕过 .import)。
-# 同时缩到 marker 大小(40×40)再生成 ImageTexture,这样 TextureRect
-# 不需要 stretch_mode,就能在 1 tile(48px)里清晰显示。
+# (项目从未在 Editor 里打开过),所以走 TextureLoader 的两段式兜底:
+# 1. ResourceLoader.load() 拿到已注册的 Texture2D(优先)
+# 2. fallback: Image.load_from_file() 直接读 raw 字节
+# 然后统一通过 TextureLoader.fit_image_to_square 缩到目标尺寸,这样
+# TextureRect 不需要 stretch_mode,就能在 1 tile(48px)里清晰显示。
+# (07-21 M7) — 把"运行时 I/O"路径收口到 TextureLoader 单一审计点。
 static func _load_png(res_path: String, target_size: int = 40) -> Texture2D:
-	var img: Image = null
-	if ResourceLoader.exists(res_path):
-		var res: Resource = load(res_path)
-		if res is Texture2D:
-			var tex: Texture2D = res
-			img = tex.get_image()
-	if img == null:
-		img = Image.new()
-		var err := img.load(res_path)
-		if err != OK:
-			return null
-	return _fit_image_to_square(img, target_size)
+	return TextureLoader.load_resized(res_path, target_size)
 
 
 static func _fit_image_to_square(img: Image, target_size: int) -> Texture2D:

@@ -17,11 +17,60 @@ var _failed: int = 0
 var _passed: int = 0
 var _last_recruit_event: Array = []
 
+# Resolved autoload singletons (lookup via /root/<Name> so the test never
+# depends on the autoload identifier being a compile-time singleton).
+# _init_autoloads() short-circuits with a clear failure if the project
+# is missing any required autoload.
+var _game_state: Node = null
+var _input_state: Node = null
+var _network_client: Node = null
+var _user_settings: Node = null
+
+
+func _resolve_autoload(name: String) -> Node:
+	return get_node_or_null("/root/" + name)
+
+
+func _init_autoloads() -> bool:
+	_game_state = _resolve_autoload("GameState")
+	_input_state = _resolve_autoload("InputState")
+	_network_client = _resolve_autoload("NetworkClient")
+	_user_settings = _resolve_autoload("UserSettings")
+	var ok := _game_state != null \
+		and _input_state != null \
+		and _network_client != null \
+		and _user_settings != null
+	if not ok:
+		print("  FAIL  Missing required autoload(s): "
+			% _missing_autoload_names())
+	return ok
+
+
+func _missing_autoload_names() -> String:
+	var missing: Array[String] = []
+	if _game_state == null:
+		missing.append("GameState")
+	if _input_state == null:
+		missing.append("InputState")
+	if _network_client == null:
+		missing.append("NetworkClient")
+	if _user_settings == null:
+		missing.append("UserSettings")
+	return ", ".join(missing)
+
 
 func _ready() -> void:
 	_write_result("START", "Smoke test booted")
 	print("=== BattleBlitz Godot Client - 48px smoke test ===")
 	await get_tree().process_frame
+
+	# Bail out early with a clear failure if any required autoload is
+	# missing — autoload identifiers are resolved through /root/* so the
+	# test never relies on compile-time singleton bindings.
+	if not _init_autoloads():
+		_write_result("FAIL", "Missing autoloads: %s" % _missing_autoload_names())
+		# Still try to fail gracefully below; autoload guards will skip
+		# dependent assertions.
 
 	_assert_eq("MapMetrics tile size x", MAP_METRICS_SCRIPT.TILE_SIZE.x, 48,
 		"tile width must stay locked to the 48px spec")
@@ -456,20 +505,20 @@ func _ready() -> void:
 	}, 200)
 	_assert_eq("Lobby 2P map renders two seat cards", seat_grid.get_child_count(), 2,
 		"seat cards should shrink when selecting a 2P map")
-	var prev_tiles: Array = GameState.tiles
-	var prev_players: Array = GameState.players
-	var prev_summary: Dictionary = GameState.game_summary
+	var prev_tiles: Array = _game_state.tiles
+	var prev_players: Array = _game_state.players
+	var prev_summary: Dictionary = _game_state.game_summary
 	var mock_tiles: Array = []
 	for y in range(20):
 		for x in range(20):
 			mock_tiles.append({"x": x, "y": y, "terrain": "plain"})
-	GameState.tiles = mock_tiles
-	GameState.players = []
-	GameState.game_summary = {"map_biome": "grass"}
+	_game_state.tiles = mock_tiles
+	_game_state.players = []
+	_game_state.game_summary = {"map_biome": "grass"}
 	var pseudo_map: Dictionary = main_check.call("_snapshot_to_pseudo_map")
-	GameState.tiles = prev_tiles
-	GameState.players = prev_players
-	GameState.game_summary = prev_summary
+	_game_state.tiles = prev_tiles
+	_game_state.players = prev_players
+	_game_state.game_summary = prev_summary
 	var pseudo_size: Dictionary = pseudo_map.get("size", {}) if pseudo_map.get("size", {}) is Dictionary else {}
 	_assert_eq("Snapshot pseudo map width uses full state", int(pseudo_size.get("width", 0)), 20,
 		"snapshot adapter should preserve maps larger than 15x15 for the board loader")
@@ -490,58 +539,62 @@ func _ready() -> void:
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
 		"Unit.def_ must keep its Python-keyword underscore in JSON wire format")
-	_assert_true("GameState autoload", GameState != null,
+	_assert_true("GameState autoload", _game_state != null,
 		"GameState autoload not registered")
-	_assert_true("InputState autoload", InputState != null,
+	_assert_true("InputState autoload", _input_state != null,
 		"InputState autoload not registered")
-	_assert_true("NetworkClient autoload", NetworkClient != null,
+	_assert_true("NetworkClient autoload", _network_client != null,
 		"NetworkClient autoload not registered")
-	_assert_true("NetworkClient add_ai_player method", NetworkClient.has_method("add_ai_player"),
-		"NetworkClient should expose a typed add-ai wrapper for the lobby")
-	_assert_true("NetworkClient remove_player method", NetworkClient.has_method("remove_player"),
-		"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
-	_assert_true("NetworkClient update_player_team method", NetworkClient.has_method("update_player_team"),
-		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
-	_assert_true("NetworkClient update_player_seat method", NetworkClient.has_method("update_player_seat"),
-		"NetworkClient should expose PATCH /games/{id}/players/{player_id}/seat")
-	_assert_true("NetworkClient forecast_attack method", NetworkClient.has_method("forecast_attack"),
-		"NetworkClient should expose GET /games/{id}/forecast-attack")
-	_assert_gte("NetworkClient list_games argument count", _method_arg_count(NetworkClient, "list_games"), 2,
-		"list_games should accept callback and optional user_name filter")
-	_assert_gte("NetworkClient join_game argument count", _method_arg_count(NetworkClient, "join_game"), 6,
-		"join_game should accept game_id, user_name, color, team, role, callback")
-	_assert_gte("NetworkClient create_game argument count", _method_arg_count(NetworkClient, "create_game"), 9,
-		"create_game should accept optional commander, BGM, AI commander, callback, and seat commander arguments")
-	_assert_true("NetworkClient delete_game method", NetworkClient.has_method("delete_game"),
-		"NetworkClient should expose DELETE /games/{id}")
-	_assert_true("NetworkClient rejoin_game_by_player_id method", NetworkClient.has_method("rejoin_game_by_player_id"),
-		"NetworkClient should expose player_id based rejoin")
-	_assert_true("NetworkClient rejoin_game_by_name method", NetworkClient.has_method("rejoin_game_by_name"),
-		"NetworkClient should expose user_name based rejoin")
-	_assert_true("NetworkClient get_game_state method", NetworkClient.has_method("get_game_state"),
-		"NetworkClient should expose GET /games/{id}/state for refreshes")
-	_assert_gte("NetworkClient action_recruit argument count", _method_arg_count(NetworkClient, "action_recruit"), 6,
-		"action_recruit should accept game_id, player_id, tile, unit_type, callback")
-	_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(NetworkClient, "start_mainline"), 4,
-		"start_mainline should accept mainline_id, user_name, skip_intro, callback")
-	_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(NetworkClient, "advance_mainline"), 4,
-		"advance_mainline should accept mainline_id, user_name, game_id, callback")
-	_assert_true("NetworkClient fetch_mainline_dialogue method", NetworkClient.has_method("fetch_mainline_dialogue"),
-		"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
-	_assert_true("NetworkClient get_unlocked_commanders method", NetworkClient.has_method("get_unlocked_commanders"),
-		"NetworkClient should expose GET /players/me/commanders")
-	_assert_true("NetworkClient select_mainline_commander method", NetworkClient.has_method("select_mainline_commander"),
-		"NetworkClient should expose POST /mainlines/{id}/select-commander")
-	_assert_true("NetworkClient list_editor_maps method", NetworkClient.has_method("list_editor_maps"),
-		"NetworkClient should expose GET /editor/maps")
-	_assert_true("NetworkClient load_editor_map method", NetworkClient.has_method("load_editor_map"),
-		"NetworkClient should expose GET /editor/maps/{map_id}")
-	_assert_true("NetworkClient save_editor_map method", NetworkClient.has_method("save_editor_map"),
-		"NetworkClient should expose POST /editor/maps")
-	_assert_true("NetworkClient delete_editor_map method", NetworkClient.has_method("delete_editor_map"),
-		"NetworkClient should expose DELETE /editor/maps/{map_id}")
-	_assert_true("UserSettings autoload", UserSettings != null,
+	_assert_true("UserSettings autoload", _user_settings != null,
 		"UserSettings autoload not registered")
+	if _network_client == null:
+		# Subsequent NetworkClient assertions would crash — short-circuit.
+		_fail("NetworkClient autoload missing; skipping method-shape assertions")
+	else:
+		_assert_true("NetworkClient add_ai_player method", _network_client.has_method("add_ai_player"),
+			"NetworkClient should expose a typed add-ai wrapper for the lobby")
+		_assert_true("NetworkClient remove_player method", _network_client.has_method("remove_player"),
+			"NetworkClient should expose DELETE /games/{id}/players/{player_id}")
+		_assert_true("NetworkClient update_player_team method", _network_client.has_method("update_player_team"),
+			"NetworkClient should expose PATCH /games/{id}/players/{player_id}/team")
+		_assert_true("NetworkClient update_player_seat method", _network_client.has_method("update_player_seat"),
+			"NetworkClient should expose PATCH /games/{id}/players/{player_id}/seat")
+		_assert_true("NetworkClient forecast_attack method", _network_client.has_method("forecast_attack"),
+			"NetworkClient should expose GET /games/{id}/forecast-attack")
+		_assert_gte("NetworkClient list_games argument count", _method_arg_count(_network_client, "list_games"), 2,
+			"list_games should accept callback and optional user_name filter")
+		_assert_gte("NetworkClient join_game argument count", _method_arg_count(_network_client, "join_game"), 6,
+			"join_game should accept game_id, user_name, color, team, role, callback")
+		_assert_gte("NetworkClient create_game argument count", _method_arg_count(_network_client, "create_game"), 9,
+			"create_game should accept optional commander, BGM, AI commander, callback, and seat commander arguments")
+		_assert_true("NetworkClient delete_game method", _network_client.has_method("delete_game"),
+			"NetworkClient should expose DELETE /games/{id}")
+		_assert_true("NetworkClient rejoin_game_by_player_id method", _network_client.has_method("rejoin_game_by_player_id"),
+			"NetworkClient should expose player_id based rejoin")
+		_assert_true("NetworkClient rejoin_game_by_name method", _network_client.has_method("rejoin_game_by_name"),
+			"NetworkClient should expose user_name based rejoin")
+		_assert_true("NetworkClient get_game_state method", _network_client.has_method("get_game_state"),
+			"NetworkClient should expose GET /games/{id}/state for refreshes")
+		_assert_gte("NetworkClient action_recruit argument count", _method_arg_count(_network_client, "action_recruit"), 6,
+			"action_recruit should accept game_id, player_id, tile, unit_type, callback")
+		_assert_gte("NetworkClient start_mainline argument count", _method_arg_count(_network_client, "start_mainline"), 4,
+			"start_mainline should accept mainline_id, user_name, skip_intro, callback")
+		_assert_gte("NetworkClient advance_mainline argument count", _method_arg_count(_network_client, "advance_mainline"), 4,
+			"advance_mainline should accept mainline_id, user_name, game_id, callback")
+		_assert_true("NetworkClient fetch_mainline_dialogue method", _network_client.has_method("fetch_mainline_dialogue"),
+			"NetworkClient should expose dialogue fetch for mainline pre/post scenes")
+		_assert_true("NetworkClient get_unlocked_commanders method", _network_client.has_method("get_unlocked_commanders"),
+			"NetworkClient should expose GET /players/me/commanders")
+		_assert_true("NetworkClient select_mainline_commander method", _network_client.has_method("select_mainline_commander"),
+			"NetworkClient should expose POST /mainlines/{id}/select-commander")
+		_assert_true("NetworkClient list_editor_maps method", _network_client.has_method("list_editor_maps"),
+			"NetworkClient should expose GET /editor/maps")
+		_assert_true("NetworkClient load_editor_map method", _network_client.has_method("load_editor_map"),
+			"NetworkClient should expose GET /editor/maps/{map_id}")
+		_assert_true("NetworkClient save_editor_map method", _network_client.has_method("save_editor_map"),
+			"NetworkClient should expose POST /editor/maps")
+		_assert_true("NetworkClient delete_editor_map method", _network_client.has_method("delete_editor_map"),
+			"NetworkClient should expose DELETE /editor/maps/{map_id}")
 
 	main_check.set("_user_name", "Alice")
 	main_check.call("_on_list_games_for_resume", [
@@ -597,22 +650,25 @@ func _ready() -> void:
 		"forecast panel text should include counter damage")
 
 	_last_recruit_event = []
-	GameState.unit_recruited.connect(_capture_recruit_event, CONNECT_ONE_SHOT)
-	GameState.ingest_event({
-		"event_type": "recruit",
-		"actor_unit_id": 44,
-		"context": {
-			"new_unit_id": 44,
-			"unit_type": "archer",
-			"tile_x": 5,
-			"tile_y": 6,
-			"cost": 250,
-		},
-	})
-	_assert_eq("GameState emits recruit unit id", int(_last_recruit_event[0]) if _last_recruit_event.size() > 0 else -1, 44,
-		"recruit event should emit the new unit id")
-	_assert_eq("GameState emits recruit unit type", str(_last_recruit_event[1]) if _last_recruit_event.size() > 1 else "", "archer",
-		"recruit event should emit the unit type")
+	if _game_state == null:
+		_fail("GameState autoload missing; skipping recruit event assertions")
+	else:
+		_game_state.unit_recruited.connect(_capture_recruit_event, CONNECT_ONE_SHOT)
+		_game_state.ingest_event({
+			"event_type": "recruit",
+			"actor_unit_id": 44,
+			"context": {
+				"new_unit_id": 44,
+				"unit_type": "archer",
+				"tile_x": 5,
+				"tile_y": 6,
+				"cost": 250,
+			},
+		})
+		_assert_eq("GameState emits recruit unit id", int(_last_recruit_event[0]) if _last_recruit_event.size() > 0 else -1, 44,
+			"recruit event should emit the new unit id")
+		_assert_eq("GameState emits recruit unit type", str(_last_recruit_event[1]) if _last_recruit_event.size() > 1 else "", "archer",
+			"recruit event should emit the unit type")
 
 	main_check.call("_on_recruit_response", {
 		"new_unit_type": "archer",
@@ -1016,13 +1072,16 @@ func _preset_options_contain(options: Array, preset_id: String) -> bool:
 
 func _setup_action_bubble_state(main_check: Node) -> void:
 	main_check.set("_player_id", 1)
-	GameState.local_player_id = 1
+	if _game_state == null:
+		_fail("GameState autoload missing; action-bubble state setup aborted")
+		return
+	_game_state.local_player_id = 1
 	var tiles: Array = []
 	for y in range(5):
 		for x in range(5):
 			tiles.append({"x": x, "y": y, "terrain": "plain", "owner_id": null})
 	tiles.append({"x": 1, "y": 1, "terrain": "village", "owner_id": 2})
-	GameState.ingest_snapshot({
+	_game_state.ingest_snapshot({
 		"game": {"id": 900, "status": "playing"},
 		"current_player_id": 1,
 		"tiles": tiles,

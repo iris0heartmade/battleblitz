@@ -30,14 +30,35 @@ var _win_reason: String = ""
 var _logf: FileAccess = null
 var _my_turn_presses: int = 0
 
+# Regression counters (07-19 plan Task 1 + 07-21 plan M5). Each entry
+# flow's "reached game view" milestone records a hit; the test only
+# passes when every flow reaches the milestone.
+var _assertion_total: int = 0
+var _assertion_failed: int = 0
+var _flow_create_completed: bool = false
+var _flow_join_completed: bool = false
+var _flow_ai_completed: bool = false
+var _flow_start_completed: bool = false
+var _flow_game_view_reached: bool = false
+
 
 func _ready() -> void:
 	_logf = FileAccess.open("user://e2e_one_game.log", FileAccess.WRITE)
 	_log("=== BattleBlitz e2e: 1 full game vs AI (direct NetworkClient) ===")
 	_log("godot %s | backend 127.0.0.1:8000" % Engine.get_version_info().get("string", "?"))
-	if GameState == null or NetworkClient == null:
+	# Resolve autoloads via /root lookup; this lets the e2e scene run
+	# even if a singleton identifier is misconfigured. The smoke test
+	# uses the same guard so the production and e2e entry points stay
+	# in sync.
+	var game_state := get_node_or_null("/root/GameState")
+	var network_client := get_node_or_null("/root/NetworkClient")
+	if game_state == null or network_client == null:
 		_finish(false, "autoload 缺失(GameState/NetworkClient)")
 		return
+	# Pin the local references so the rest of the script reads from the
+	# autoloads through the same names that the production code uses.
+	GameState = game_state
+	NetworkClient = network_client
 	if not GameState.match_ended.is_connected(_on_match_ended):
 		GameState.match_ended.connect(_on_match_ended)
 	# 诊断:监听 NetworkClient 底层信号,定位 WS 链路断点
@@ -60,6 +81,11 @@ func _on_created(body: Variant, code: int) -> void:
 		_finish(false, "create_game 失败: code=%d body=%s" % [code, str(body).substr(0, 200)])
 		return
 	_game_id = int(body.get("id", 0))
+	_assertion_total += 1
+	if _game_id > 0:
+		_flow_create_completed = true
+	else:
+		_assertion_failed += 1
 	_log("[1/5] OK 对局 #%d 已创建 (code=%d)" % [_game_id, code])
 	_log("[2/5] join_game(#%d, %s, red)..." % [_game_id, _USER_NAME])
 	NetworkClient.join_game(_game_id, _USER_NAME, "red", "", "", Callable(self, "_on_joined"))
@@ -80,18 +106,33 @@ func _on_joined(body: Variant, code: int) -> void:
 		return
 	_player_id = pid
 	GameState.local_player_id = _player_id
+	_assertion_total += 1
+	if _player_id > 0:
+		_flow_join_completed = true
+	else:
+		_assertion_failed += 1
 	_log("[2/5] OK 已加入 玩家 #%d (code=%d)" % [_player_id, code])
 	_log("[3/5] add_ai_player(normal, rules, balanced)...")
 	NetworkClient.add_ai_player(_game_id, "normal", "rules", "balanced", Callable(self, "_on_ai_added"))
 
 
 func _on_ai_added(body: Variant, code: int) -> void:
+	_assertion_total += 1
+	if int(code) in [200, 201]:
+		_flow_ai_completed = true
+	else:
+		_assertion_failed += 1
 	_log("[3/5] OK AI 已加入 (code=%d)" % code)
 	_log("[4/5] start_game(#%d)..." % [_game_id])
 	NetworkClient.start_game(_game_id, Callable(self, "_on_started"))
 
 
 func _on_started(body: Variant, code: int) -> void:
+	_assertion_total += 1
+	if int(code) in [200, 201]:
+		_flow_start_completed = true
+	else:
+		_assertion_failed += 1
 	_log("[4/5] OK 对局已开始 (code=%d)" % code)
 	_log("[5/5] connect_to_game(WS)...")
 	NetworkClient.connect_to_game(_game_id, _player_id)
@@ -115,6 +156,16 @@ func _run_game_loop() -> void:
 		return
 	_log(">>> 对局可玩: 玩家数=%d 单位数=%d 我的pid=%d 当前pid=%s" %
 		[GameState.players.size(), _unit_count(), _player_id, str(GameState.current_player_id)])
+	# Regression assertion: every entry flow must have reached "game view"
+	# (i.e. GameState has tiles + at least 2 players + a current player).
+	_assertion_total += 1
+	if GameState.tiles.size() > 0 and GameState.players.size() >= 2 and GameState.current_player_id != null:
+		_flow_game_view_reached = true
+	else:
+		_assertion_failed += 1
+		_finish(false, "reached_game_view 断言失败: tiles=%d players=%d current=%s" %
+			[GameState.tiles.size(), GameState.players.size(), str(GameState.current_player_id)])
+		return
 
 	var game_deadline: float = Time.get_ticks_msec() / 1000.0 + _GAME_TIMEOUT_SEC
 	# 服务端 end_turn(及回合推进/对局结束)不往 WS 事件总线 publish 事件 -- 只有
@@ -218,7 +269,23 @@ func _diag_api_error(method: Variant, path: Variant, msg: Variant, code: int) ->
 
 func _finish(passed: bool, msg: String) -> void:
 	var tag: String = "PASS" if passed else "FAIL"
+	# Regression summary: a PASS only counts if every milestone fired.
+	# This is the M5 / 07-19 Task 1 entry-blocker guard: if any of the
+	# five entry flows falls through silently, the run is FAIL.
+	_assertion_total += 1
+	if not (_flow_create_completed and _flow_join_completed
+			and _flow_ai_completed and _flow_start_completed
+			and _flow_game_view_reached):
+		passed = false
+		_assertion_failed += 1
+		if msg == "" or msg == "对局已结束":
+			msg = "entry flow regression failed"
+		msg = "%s | regression: create=%s join=%s ai=%s start=%s game_view=%s" % [
+			msg, _flow_create_completed, _flow_join_completed,
+			_flow_ai_completed, _flow_start_completed, _flow_game_view_reached,
+		]
 	_log("[RESULT] %s - %s" % [tag, msg])
+	_log("[REGRESSION] total=%d failed=%d" % [_assertion_total, _assertion_failed])
 	if _logf != null:
 		_logf.close()
 	print("[e2e] ===== %s =====" % tag)
