@@ -72,6 +72,8 @@ var _recruit_mode_unit_id: int = -1
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
+@onready var auto_save_toast: Panel = $GameView/HUD/AutoSaveToast
+@onready var auto_save_toast_label: Label = $GameView/HUD/AutoSaveToast/ToastLabel
 # CreateFormPanel(自由模式专用)— 房间设置表单
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
@@ -87,6 +89,7 @@ var _recruit_mode_unit_id: int = -1
 @onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
 var _turn_banner_tween: Tween = null
 var _ai_pulse_tween: Tween = null
+var _auto_save_toast_tween: Tween = null
 
 # V2 第 6 轮:设置 + 暂停面板
 @onready var settings_panel: Panel = $GameView/HUD/SettingsPanel
@@ -103,11 +106,13 @@ var _ai_pulse_tween: Tween = null
 @onready var settings_green_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/GreenBtn
 @onready var settings_yellow_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/YellowBtn
 @onready var settings_theme_dropdown: OptionButton = $GameView/HUD/SettingsPanel/SettingsList/ThemeRow/ThemeDropdown
+@onready var settings_mute_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/AudioRow/MuteBtn
 @onready var pause_overlay: ColorRect = $GameView/HUD/PauseOverlay
 @onready var pause_panel: Panel = $GameView/HUD/PausePanel
 @onready var pause_resume_btn: Button = $GameView/HUD/PausePanel/PauseList/ResumeBtn
 @onready var pause_settings_btn: Button = $GameView/HUD/PausePanel/PauseList/SettingsBtn
 @onready var pause_main_menu_btn: Button = $GameView/HUD/PausePanel/PauseList/MainMenuBtn
+@onready var pause_suspend_btn: Button = $GameView/HUD/PausePanel/PauseList/PauseSuspendBtn
 @onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
 
 # V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
@@ -197,14 +202,19 @@ var _mainline_auto_retry_pending: bool = false
 @onready var ml_prep_saves_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/SavesTabBtn
 var _ml_slot_records: Array = []
 @onready var lobby_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/LobbyButton
+@onready var join_by_code_input: LineEdit = $Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow/JoinByCodeInput
+@onready var join_by_code_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow/JoinByCodeButton
 @onready var saves_button: Button = $Menu/CenterContainer/FooterRow/SavesButton
 @onready var settings_button: Button = $Menu/CenterContainer/FooterRow/SettingsButton
+@onready var help_button: Button = $Menu/CenterContainer/FooterRow/HelpButton
 @onready var exit_button: Button = $Menu/CenterContainer/FooterRow/ExitButton
 
 # T:5 单槽存档
 @onready var resume_button: Button = $Menu/CenterContainer/FooterRow/ResumeButton
 var _resume_game_id: int = 0
 var _resume_player_id: int = 0
+# P0:resume 流程分流("game" = 直接 rejoin,"suspend" = load_suspend 后再 rejoin)
+var _resume_kind: String = ""
 
 @onready var saves_view: Control = $SavesView
 @onready var save_status: Label = $SavesView/SaveFrame/SaveStatus
@@ -214,6 +224,8 @@ var _resume_player_id: int = 0
 @onready var save_resume_btn: Button = $SavesView/SaveFrame/SaveResumeBtn
 @onready var save_delete_btn: Button = $SavesView/SaveFrame/SaveDeleteBtn
 @onready var save_refresh_btn: Button = $SavesView/SaveFrame/SaveRefreshBtn
+@onready var save_new_btn: Button = $SavesView/SaveFrame/SaveNewBtn
+@onready var save_slot_option: OptionButton = $SavesView/SaveFrame/SaveSlotOption
 @onready var save_back_btn: Button = $SavesView/SaveFrame/SaveBackBtn
 var _save_records: Array = []
 var _selected_save_id: int = 0
@@ -380,6 +392,12 @@ func _ready() -> void:
 	_show_view("menu")
 	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	# P1:主菜单"按号加入"按钮接 — 接受数字房间号 → join_game
+	if join_by_code_button != null and is_instance_valid(join_by_code_button):
+		join_by_code_button.pressed.connect(_on_join_by_code_pressed)
+	# Enter 键在输入框中直接触发
+	if join_by_code_input != null and is_instance_valid(join_by_code_input):
+		join_by_code_input.text_submitted.connect(_on_join_by_code_submitted)
 	if editor_button != null and is_instance_valid(editor_button):
 		editor_button.pressed.connect(_on_editor_pressed)
 	if saves_button != null and is_instance_valid(saves_button):
@@ -460,7 +478,7 @@ func _ready() -> void:
 		lobby_host_apply_btn.pressed.connect(_on_lobby_host_apply_pressed)
 	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
 		lobby_to_spec_btn.pressed.connect(_on_lobby_to_spec_pressed)
-	settings_button.pressed.connect(_on_settings_pressed)
+	settings_button.pressed.connect(_on_settings_open_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
 		resume_button.pressed.connect(_on_resume_pressed)
@@ -472,6 +490,9 @@ func _ready() -> void:
 		save_delete_btn.pressed.connect(_on_save_delete_pressed)
 	if save_refresh_btn != null and is_instance_valid(save_refresh_btn):
 		save_refresh_btn.pressed.connect(_refresh_saves)
+	# P0:主菜单存档页"新建存档"按钮 — 手动存档到 3 个 slot 之一
+	if save_new_btn != null and is_instance_valid(save_new_btn):
+		save_new_btn.pressed.connect(_on_save_new_pressed)
 	if save_back_btn != null and is_instance_valid(save_back_btn):
 		save_back_btn.pressed.connect(_on_save_back_pressed)
 	if editor_new_btn != null and is_instance_valid(editor_new_btn):
@@ -554,9 +575,18 @@ func _ready() -> void:
 		settings_theme_dropdown.add_item("金属银", 1)
 		settings_theme_dropdown.add_item("极简明亮", 2)
 		settings_theme_dropdown.item_selected.connect(_on_theme_dropdown_item_selected)
+	# P1:静音 toggle 按钮接通 — 用 toggled 信号单向同步到 AudioManager
+	if settings_mute_btn != null and is_instance_valid(settings_mute_btn):
+		settings_mute_btn.toggled.connect(_on_mute_toggled)
+		# 启动时按 UserSettings 里的 muted 状态同步按钮视觉
+		var saved_mute: bool = bool(UserSettings.get_value("settings.v1.muted", false))
+		settings_mute_btn.button_pressed = saved_mute
 	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
 	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
+	# P0:暂停面板"中断退出"按钮 — capture_suspend(主动存中断)
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.pressed.connect(_on_pause_suspend_pressed)
 	pause_quit_btn.pressed.connect(_on_pause_quit_pressed)
 	# V2 第 7 轮:对话 + 教程 + 战斗结算
 	dialog_continue_btn.pressed.connect(_on_dialog_continue_pressed)
@@ -631,6 +661,13 @@ func _ready() -> void:
 			_on_state_poll_response(body)
 	)
 
+	# P1:Reparent SettingsPanel to root so 主菜单 SettingsButton 可直接打开它
+	# (SettingsPanel 默认挂在 GameView/HUD 下,主菜单时 GameView 不可见)。
+	# reparent() 保留节点对象,@onready 引用继续有效。
+	if settings_panel != null and is_instance_valid(settings_panel) \
+			and settings_panel.get_parent() != self:
+		settings_panel.reparent(self)
+		settings_panel.visible = false
 
 	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play opens the lobby
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
@@ -659,9 +696,12 @@ func _ready() -> void:
 		settings_button.disabled = false
 		# settings_button.pressed 已经连接到 _on_settings_pressed (M3 stub)
 		# 替换:让它在游戏视图下打开 SettingsPanel,菜单视图下保留原提示
-		if settings_button.pressed.is_connected(_on_settings_pressed):
-			settings_button.pressed.disconnect(_on_settings_pressed)
-		settings_button.pressed.connect(_on_settings_open_pressed)
+	if settings_button.pressed.is_connected(_on_settings_pressed):
+		settings_button.pressed.disconnect(_on_settings_pressed)
+	settings_button.pressed.connect(_on_settings_open_pressed)
+	# P1:主菜单 HelpButton → 玩法说明浮层
+	if help_button != null and is_instance_valid(help_button):
+		help_button.pressed.connect(_on_help_pressed)
 	# TSCN-FIX:强制覆盖,确保 GameView 不吞棋盘点击(以防 tscn mouse_filter=2 没生效)
 	if game_view != null and is_instance_valid(game_view):
 		game_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -935,14 +975,38 @@ func _on_exit_pressed() -> void:
 
 
 # T:5 单槽存档 / Resume — 主菜单可见按钮 + 一键 rejoin
+# P0 强化:优先检查中断存档(WebUI 行为对齐),再 fallback 到 playing/waiting game。
 func _check_resume_session() -> void:
 	if _user_name == "" or _user_name == "Player":
 		return
+	# 先并行拉两路:list_saves(看是否有 suspend)+ list_games(找 in-flight game)
+	NetworkClient.list_saves(_user_name, Callable(self, "_on_list_saves_for_resume"))
 	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"), _user_name)
+
+
+# 优先选 suspend 中断存档;有则按钮"▶ 继续中断战斗" → 走 load_suspend 分支
+func _on_list_saves_for_resume(body: Variant, _code: int = 0) -> void:
+	if not (body is Dictionary):
+		return
+	var suspend: Variant = body.get("suspend", null)
+	if not (suspend is Dictionary):
+		return
+	var game_id := int(suspend.get("game_id", 0))
+	if game_id <= 0:
+		return
+	_resume_game_id = game_id
+	_resume_player_id = 0  # suspend 走 rejoin_by_name,不需 pid
+	_resume_kind = "suspend"
+	if resume_button != null and is_instance_valid(resume_button):
+		resume_button.text = "▶ 继续中断战斗"
+		resume_button.visible = true
 
 
 func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 	# /games?user_name= 返回该用户可继续的 GameSummaryOut 列表,不带 players。
+	# 若 _resume_game_id 已被 suspend 分支设置,则不覆盖。
+	if _resume_game_id > 0:
+		return
 	var games: Array = (body as Array) if body is Array else []
 	var last_game_id: int = int(UserSettings.get_value("session.v1.last_game_id", 0))
 	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
@@ -956,7 +1020,40 @@ func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 		if resume_button != null and is_instance_valid(resume_button):
 			resume_button.text = "继续对局 #%d" % _resume_game_id
 			resume_button.visible = _resume_game_id > 0
+		_resume_kind = "game"
 		return
+
+
+# P0:resume 按钮按下 → 根据 kind 分流到 game(直接 rejoin)或 suspend(load_suspend 后再 rejoin)
+func _on_resume_pressed() -> void:
+	if _resume_game_id <= 0:
+		return
+	_show_view("connecting")
+	connecting_label.text = "正在重连对局 #%d..." % _resume_game_id
+	if _resume_kind == "suspend":
+		# suspend 流程:先调 load_suspend 告知服务端把中断游戏变成当前游戏 → 再 rejoin
+		NetworkClient.load_suspend(_user_name, Callable(self, "_on_resume_suspend_load_response"))
+		return
+	if _resume_player_id > 0:
+		NetworkClient.rejoin_game_by_player_id(_resume_game_id, _resume_player_id,
+			Callable(self, "_on_resume_rejoin_response"))
+	else:
+		NetworkClient.rejoin_game_by_name(_resume_game_id, _user_name,
+			Callable(self, "_on_resume_rejoin_response"))
+
+
+func _on_resume_suspend_load_response(body: Variant, code: int) -> void:
+	# load_suspend 成功后,body 含 game_id + mainline_id
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_update_status("恢复中断存档失败")
+		return
+	var game_id := int(body.get("game_id", 0))
+	if game_id <= 0:
+		_update_status("中断存档没有可恢复对局")
+		return
+	_resume_game_id = game_id  # 用服务端回的新 game_id 覆盖
+	NetworkClient.rejoin_game_by_name(game_id, _user_name,
+		Callable(self, "_on_resume_rejoin_response"))
 
 
 func _on_resume_pressed() -> void:
@@ -1104,6 +1201,42 @@ func _on_save_selected(index: int) -> void:
 		save_status.text = "已选择 %s" % (_save_option_label(record) if not record.is_empty() else "存档")
 
 
+# P1:主菜单"按号加入"按钮接 — 解析输入房间号 → 入大厅选队入场
+func _on_join_by_code_submitted(_text: String) -> void:
+	_on_join_by_code_pressed()
+
+
+func _on_join_by_code_pressed() -> void:
+	if join_by_code_input == null or not is_instance_valid(join_by_code_input):
+		return
+	var raw: String = join_by_code_input.text.strip_edges()
+	if raw == "":
+		_update_status("请输入房间号")
+		return
+	# 接受纯数字 game_id
+	var gid: int = -1
+	if raw.is_valid_int():
+		gid = raw.to_int()
+	else:
+		_update_status("房间号必须是数字")
+		return
+	if gid <= 0 or gid > 99999:
+		_update_status("房间号超出范围")
+		return
+	# 切到 connecting 视图,展示等待 toast,然后 join_game
+	_show_view("connecting")
+	_update_status("按号加入: #%d" % gid)
+	# 默认以玩家身份入席(role=player);玩家偏好色由 join_game 内部派生。
+	NetworkClient.join_game(
+		gid,
+		_user_name,
+		"",  # color — server 派生
+		"",  # team — player 自选 team 在 game view 内调整
+		"player",
+		Callable(self, "_on_join_game_response")
+	)
+
+
 func _on_save_resume_pressed() -> void:
 	var record := _selected_save_record()
 	if record.is_empty():
@@ -1136,6 +1269,98 @@ func _on_save_load_response(body: Variant, code: int, record: Dictionary) -> voi
 		save_status.text = "已载入 %s" % _save_option_label(record)
 	_show_view("mainline")
 	_on_mainline_pressed()
+
+
+# P0:主菜单存档页"新建存档"按钮 — 手动存档
+# 优先选 SaveSlotOption(用户指定)或第一个空 slot,全部占用则覆盖选定 slot
+func _find_free_save_slot() -> int:
+	if save_slot_option != null and is_instance_valid(save_slot_option):
+		var chosen: int = int(save_slot_option.get_selected_id() if save_slot_option.get_selected_id() >= 0 else save_slot_option.selected)
+		return clamp(chosen, 0, 2)
+	# 没选 slot_option 时找第一个不在 _save_records 的 manual slot
+	var used := {}
+	for rec in _save_records:
+		if str(rec.get("kind", "")) == "manual":
+			used[int(rec.get("slot_index", -1))] = true
+	for i in range(3):
+		if not used.has(i):
+			return i
+	return 0
+
+
+func _current_save_mainline_id() -> String:
+	# 主线模式优先;无主线时用当前 game.name(FE8 风格的 mainline:chapter_N:battle_N:seed)
+	if _active_mainline_id != "":
+		return _active_mainline_id
+	if GameState != null:
+		var gs: Dictionary = GameState.game_summary if GameState else {}
+		var name: String = str(gs.get("name", ""))
+		if name.begins_with("mainline:"):
+			var parts := name.split(":")
+			if parts.size() >= 2:
+				return parts[1]
+	if _game_id > 0:
+		return "freeplay"
+	return ""
+
+
+func _current_save_chapter_index() -> int:
+	if _active_mainline_id != "" and GameState != null:
+		var gs: Dictionary = GameState.game_summary
+		return int(gs.get("chapter_index", 0))
+	if GameState != null:
+		var gs2: Dictionary = GameState.game_summary
+		var name: String = str(gs2.get("name", ""))
+		if name.begins_with("mainline:"):
+			var parts := name.split(":")
+			if parts.size() >= 3:
+				# battle_id 数字作为 chapter 索引
+				return int(parts[2]) if parts[2].is_valid_int() else 0
+	return 0
+
+
+func _on_save_new_pressed() -> void:
+	if _user_name == "":
+		_update_status("请先在设置填写玩家昵称")
+		return
+	if save_new_btn != null and is_instance_valid(save_new_btn):
+		save_new_btn.disabled = true
+	var mid: String = _current_save_mainline_id()
+	if mid == "":
+		_update_status("无法存档:当前没有关联主线/对局")
+		if save_new_btn != null and is_instance_valid(save_new_btn):
+			save_new_btn.disabled = false
+		return
+	var slot: int = _find_free_save_slot()
+	var chidx: int = _current_save_chapter_index()
+	var label: String = ("第 %d 章 - 手动" % (chidx + 1)) if _active_mainline_id != "" else ("自由战 #%d - 手动" % _game_id)
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在写入存档 %d ..." % (slot + 1)
+	NetworkClient.save_manual(
+		_user_name,
+		slot,
+		mid,
+		chidx,
+		label,
+		Callable(self, "_on_save_new_response")
+	)
+
+
+func _on_save_new_response(body: Variant, code: int) -> void:
+	if save_new_btn != null and is_instance_valid(save_new_btn):
+		save_new_btn.disabled = false
+	if code < 200 or code >= 300:
+		var msg: String = "存档失败"
+		if body is Dictionary and body.has("detail"):
+			msg = "存档失败: %s" % str(body.get("detail"))
+		_update_status(msg)
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = msg
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "已保存到存档"
+	_update_status("💾 已写入手动存档")
+	_refresh_saves()
 
 
 func _on_save_suspend_load_response(body: Variant, code: int) -> void:
@@ -1801,6 +2026,15 @@ func _on_toggle_mute_pressed() -> void:
 	_update_status("静音: %s" % ("开" if muted else "关"))
 
 
+# P1:SettingsPanel 里的 MuteBtn 用了 toggle_mode,toggled(toggled_on) signal
+# 直连到 set_muted(单向),无需 toggle。
+func _on_mute_toggled(toggled_on: bool) -> void:
+	if AudioManager == null: return
+	AudioManager.set_muted(toggled_on)
+	UserSettings.set_value("settings.v1.muted", toggled_on)
+	_update_status("静音: %s" % ("开" if toggled_on else "关"))
+
+
 # M6.5 主题切换 — 三套主题:deep_gba / metal_silver / minimal_light
 # 通过 set_root_theme 设置全局 default_* 颜色与字号。
 const _THEMES := ["deep_gba", "metal_silver", "minimal_light"]
@@ -1890,6 +2124,11 @@ func show_help() -> void:
 func hide_help() -> void:
 	if _help_panel != null and is_instance_valid(_help_panel):
 		_help_panel.visible = false
+
+
+# P1:主菜单 HelpButton → 触发玩法说明浮层
+func _on_help_pressed() -> void:
+	show_help()
 
 
 func _on_turn_ended(next_player_id, turn_number: int) -> void:
@@ -2416,6 +2655,25 @@ func _on_settings_close_pressed() -> void:
 	_hide_settings_panel()
 
 
+# P0:自动存档 toast — 服务端 /advance 与 /mainlines/{id}/prepare/complete 写 auto-save
+# response.body.auto_save = AutoSaveCheckpointOut {label, auto_kind, saved_at}
+func _show_auto_save_toast(label: String, ms: float = 1800.0) -> void:
+	if auto_save_toast == null or not is_instance_valid(auto_save_toast):
+		return
+	if auto_save_toast_label != null and is_instance_valid(auto_save_toast_label):
+		auto_save_toast_label.text = label
+	auto_save_toast.visible = true
+	# kill 旧 tween 以支持叠加调用
+	if _auto_save_toast_tween != null and _auto_save_toast_tween.is_valid():
+		_auto_save_toast_tween.kill()
+	_auto_save_toast_tween = create_tween()
+	_auto_save_toast_tween.tween_interval(ms / 1000.0)
+	_auto_save_toast_tween.tween_callback(func():
+		if auto_save_toast != null and is_instance_valid(auto_save_toast):
+			auto_save_toast.visible = false
+	)
+
+
 func _on_settings_apply_pressed() -> void:
 	if settings_name_input != null and is_instance_valid(settings_name_input):
 		var new_name: String = settings_name_input.text.strip_edges()
@@ -2554,6 +2812,32 @@ func _reset_game_state_for_main_menu() -> void:
 
 func _on_pause_quit_pressed() -> void:
 	get_tree().quit()
+
+
+# P0:暂停面板"中断退出"按钮 — 玩家主动 capture_suspend 然后回到主菜单
+# 与 MainMenuBtn 不同:MainMenuBtn 不写中断、可能丢进度;此处显式存为中断存档
+func _on_pause_suspend_pressed() -> void:
+	if _game_id <= 0 or _user_name == "":
+		_update_status("无法中断:无对局")
+		return
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.disabled = true
+	_update_status("正在保存中断状态...")
+	NetworkClient.capture_suspend(_game_id, _user_name,
+		Callable(self, "_on_capture_suspend_response"))
+
+
+func _on_capture_suspend_response(body: Variant, code: int) -> void:
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.disabled = false
+	if code < 200 or code >= 300:
+		var msg: String = "中断保存失败"
+		if body is Dictionary and body.has("detail"):
+			msg = "中断保存失败: %s" % str(body.get("detail"))
+		_update_status(msg)
+		return
+	_update_status("💾 中断已保存,返回主菜单(可继续中断战斗)")
+	_reset_game_state_for_main_menu()
 
 
 # ============================================================
@@ -6601,6 +6885,10 @@ func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
 		_update_status("主线推进到战斗 %d/%d" % [battle_index, total_battles])
 		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 			battle_mainline_next_btn.visible = true
+	# P0:服务端 /advance 写自动存档 → toast 提示(对齐 WebUI autoSaveToast)
+	var auto_save: Variant = body.get("auto_save", {})
+	if auto_save is Dictionary and auto_save.has("label"):
+		_show_auto_save_toast("💾 自动存档完毕 ✓  %s" % str(auto_save.get("label", "")), 1800.0)
 
 
 func _on_mainline_next_battle_pressed() -> void:

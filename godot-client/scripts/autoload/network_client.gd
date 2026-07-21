@@ -92,8 +92,8 @@ func _wire_to_game_state() -> void:
 	# Use set() so the compiler resolves `is_connected` as GameState's
 	# property, not Object's built-in is_connected() method (gs is typed
 	# Node here, so a direct `gs.is_connected = ...` is a parse error).
-	ws_connected.connect(func(): gs.set("is_connected", true))
-	ws_disconnected.connect(func(_r): gs.set("is_connected", false))
+	ws_connected.connect(func(): gs.set("ws_connected", true))
+	ws_disconnected.connect(func(_r): gs.set("ws_connected", false))
 
 
 # ============================================================

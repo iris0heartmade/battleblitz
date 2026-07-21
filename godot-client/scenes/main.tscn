@@ -140,10 +140,18 @@ theme_override_font_sizes/font_size = 14
 text = "联机大厅"
 custom_minimum_size = Vector2(0, 44)
 
-[node name="JoinByCodeButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard"]
-text = "按房间号加入"
-custom_minimum_size = Vector2(0, 44)
-disabled = true
+[node name="JoinByCodeRow" type="HBoxContainer" parent="Menu/CenterContainer/GroupRow/MultiCard"]
+theme_override_constants/separation = 8
+
+[node name="JoinByCodeInput" type="LineEdit" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
+custom_minimum_size = Vector2(0, 36)
+placeholder_text = "输入房间号"
+max_length = 6
+virtual_keyboard_type = 2
+
+[node name="JoinByCodeButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
+text = "按号加入"
+custom_minimum_size = Vector2(0, 36)
 
 ; --- Spacer ---
 [node name="Spacer2" type="Control" parent="Menu/CenterContainer"]
@@ -164,6 +172,10 @@ disabled = true
 
 [node name="SavesButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "存档管理"
+custom_minimum_size = Vector2(0, 32)
+
+[node name="HelpButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "玩法说明"
 custom_minimum_size = Vector2(0, 32)
 
 [node name="EditorButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
@@ -989,12 +1001,39 @@ offset_right = 808.0
 offset_bottom = 442.0
 text = "删除存档"
 
+[node name="SaveNewBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 824.0
+offset_top = 406.0
+offset_right = 956.0
+offset_bottom = 442.0
+text = "💾 新建"
+
 [node name="SaveRefreshBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 252.0
 offset_top = 492.0
 offset_right = 392.0
 offset_bottom = 528.0
 text = "刷新存档"
+
+[node name="SaveSlotOption" type="OptionButton" parent="SavesView/SaveFrame"]
+offset_left = 32.0
+offset_top = 458.0
+offset_right = 200.0
+offset_bottom = 488.0
+item_count = 3
+popup/item_0/text = "槽 1"
+popup/item_0/id = 0
+popup/item_1/text = "槽 2"
+popup/item_1/id = 1
+popup/item_2/text = "槽 3"
+popup/item_2/id = 2
+
+[node name="SaveSlotLabel" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 212.0
+offset_top = 462.0
+offset_right = 312.0
+offset_bottom = 484.0
+text = "→ 写入:"
 
 [node name="SaveBackBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 468.0
@@ -1575,6 +1614,28 @@ offset_right = 260.0
 offset_bottom = 180.0
 mouse_filter = 0
 
+[node name="AutoSaveToast" type="Panel" parent="GameView/HUD"]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+offset_left = -160.0
+offset_top = 80.0
+offset_right = 160.0
+offset_bottom = 116.0
+mouse_filter = 2
+
+[node name="ToastLabel" type="Label" parent="GameView/HUD/AutoSaveToast"]
+anchor_right = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 36.0
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "自动存档中…"
+theme_override_font_sizes/font_size = 14
+
 [node name="Header" type="Label" parent="GameView/HUD/WarReportPanel"]
 anchor_right = 1.0
 offset_left = 12.0
@@ -1752,6 +1813,19 @@ selected = 0
 popup/item_0/text = "像素战棋风 (默认)"
 popup/item_0/id = 0
 
+[node name="AudioRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
+theme_override_constants/separation = 12
+
+[node name="AudioLabel" type="Label" parent="GameView/HUD/SettingsPanel/SettingsList/AudioRow"]
+text = "音效:"
+custom_minimum_size = Vector2(80, 28)
+vertical_alignment = 1
+
+[node name="MuteBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/AudioRow"]
+custom_minimum_size = Vector2(280, 32)
+toggle_mode = true
+text = "静音"
+
 [node name="ButtonRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
 alignment = 1
 theme_override_constants/separation = 16
@@ -1814,6 +1888,10 @@ custom_minimum_size = Vector2(0, 44)
 
 [node name="MainMenuBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "↩  返回主菜单"
+custom_minimum_size = Vector2(0, 44)
+
+[node name="PauseSuspendBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
+text = "⏸  中断退出"
 custom_minimum_size = Vector2(0, 44)
 
 [node name="QuitBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
