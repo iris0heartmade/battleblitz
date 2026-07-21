@@ -338,7 +338,7 @@ var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
-tvar _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
+var _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
 var _selected_lobby_seat_index: int = 0
 var _pending_lobby_start_after_create: bool = false
 var _pending_lobby_ai_seats: Array[int] = []
@@ -7751,9 +7751,7 @@ func _active_skill_of(ud: Dictionary) -> String:
 func _arcane_targets(ud: Dictionary) -> Dictionary:
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var me_pid2: int = int(_player_id)
-	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
-		var attacker_ignores_los: bool = "snipe" in attacker_skills
-		var out: Dictionary = {}
+	var out: Dictionary = {}
 	for uu in _all_units_including_self():
 		var adx: int = abs(int(uu.get("x", 0)) - pos_h.x)
 		var ady: int = abs(int(uu.get("y", 0)) - pos_h.y)
