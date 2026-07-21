@@ -2409,18 +2409,47 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_path_dots_on_hover(event.global_position)
 		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
-	# M5.x:鼠标右键 = 取消当前模式(行动气泡 / 移动 / 攻击 / 技能)
+	# 右键:有面板→关面板;行动模式→取消;点单位→显示射程;空地→清除
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		if game_view == null or not game_view.visible:
 			return
 		if board == null:
 			return
-		if (settings_panel != null and settings_panel.visible) \
-				or (pause_panel != null and pause_panel.visible) \
-				or (war_report_panel != null and war_report_panel.visible):
+		# ① 面板 → 关闭
+		if settings_panel != null and settings_panel.visible:
+			_hide_settings_panel()
+			get_viewport().set_input_as_handled()
 			return
+		if pause_panel != null and pause_panel.visible:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
+			return
+		if war_report_panel != null and war_report_panel.visible:
+			war_report_panel.visible = false
+			get_viewport().set_input_as_handled()
+			return
+		# ② 行动模式 → 取消
+		if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
+			_cancel_action_mode()
+			_hide_action_bubble()
+			get_viewport().set_input_as_handled()
+			return
+		# ③ 右键点单位 → 显示该单位所有可能射程
+		var rtu_id: int = board.pick_unit_at_screen(event.global_position)
+		if rtu_id > 0:
+			var rtu: Dictionary = GameState.get_unit(rtu_id) if GameState != null else {}
+			if not rtu.is_empty():
+				var rtiles: Array = _get_attack_range_tiles(rtu)
+				if rtiles.size() > 0 and board != null:
+					board.show_attack_marks(rtiles)
+				_update_status("查看射程: %s (%d格)" % [rtu.get("name", rtu.get("unit_type", "?")), rtiles.size()])
+			get_viewport().set_input_as_handled()
+			return
+		# ④ 空地右键 → 清除选中
 		_cancel_action_mode()
 		_hide_action_bubble()
+		if board != null and board.has_method("clear_selection_marks"):
+			board.clear_selection_marks()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
