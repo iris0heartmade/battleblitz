@@ -1022,23 +1022,22 @@ async def update_player_commander(
     body: UpdateCommanderRequest,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Pick the commander for a player in the lobby.
+    """Pick the commander for a player (or empty seat) in the lobby.
 
     - The host (seat 0) may change **any** player's commander (including AI).
     - Other players may only change their **own** commander.
     - Game must be in 'waiting' status.
     - Side effect: also writes ``game.battle_config.seat_commanders[seat]``
       so the choice survives through /start and is applied at game start.
+    - When ``player_id=0`` (empty seat), ``body.seat`` MUST be provided.
+      In that case only ``battle_config.seat_commanders[seat]`` is
+      written — no player record is touched.
     """
     game = await session.get(Game, game_id)
     if game is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
     if game.status != "waiting":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始，无法修改指挥官")
-
-    target = await session.get(Player, player_id)
-    if target is None or target.game_id != game_id or target.is_spectator:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
 
     all_players = (await session.execute(
         select(Player).where(Player.game_id == game_id)
@@ -1048,6 +1047,48 @@ async def update_player_commander(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法识别请求者")
     host = _host_player(all_players)
     is_host = host is not None and caller.id == host.id
+
+    # ── empty-seat path (player_id == 0) ──────────────────────────
+    if player_id == 0:
+        if body.seat is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "空席位需提供 seat 参数",
+            )
+        if not is_host:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "只有房主可以给空席位选指挥官",
+            )
+        battle_config = dict(game.battle_config or {})
+        seat_commanders = dict(battle_config.get("seat_commanders") or {})
+        seat_commanders[str(body.seat)] = body.commander_id
+        battle_config["seat_commanders"] = seat_commanders
+        game.battle_config = battle_config
+        await session.flush()
+        await bus.publish(GameEvent(
+            type="commander_changed",
+            game_id=game_id,
+            turn=game.turn_number,
+            actor_player_id=caller.id,
+            context={
+                "seat": body.seat,
+                "commander_id": body.commander_id,
+                "seat_commanders": seat_commanders,
+            },
+        ))
+        return {
+            "ok": True,
+            "player_id": 0,
+            "seat": body.seat,
+            "commander_id": body.commander_id,
+        }
+
+    # ── normal player path ────────────────────────────────────────
+    target = await session.get(Player, player_id)
+    if target is None or target.game_id != game_id or target.is_spectator:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
+
     is_self = caller.id == target.id
     if not (is_host or is_self):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "只有房主可以修改其他玩家的指挥官")

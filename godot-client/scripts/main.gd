@@ -334,7 +334,7 @@ var _lobby_host_team_ids: Array[String] = [""]
 var _lobby_last_players: Array = []
 var _lobby_host_player_sig: String = ""
 var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d"]
-var _lobby_seat_ai_replacements: Array[bool] = [false, true, true, true]
+var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
@@ -789,8 +789,14 @@ func _show_view(name: String) -> void:
 	# game view 时启动状态轮询(每 1s GET /state 追 AI 行动)
 	if name == "game":
 		_start_state_polling()
+		# 棋盘右边有空档(Backdrop 绿色露出来) — 切暗色调融合棋盘边界
+		if backdrop != null and is_instance_valid(backdrop):
+			backdrop.color = Color(0.06, 0.08, 0.06, 1)
 	else:
 		_stop_state_polling()
+		# 恢复主题背景色
+		if backdrop != null and is_instance_valid(backdrop):
+			backdrop.color = MenuTheme.C_BG_DEEP
 
 
 # HUD (CanvasLayer) 显隐控制 — CanvasLayer 不受父 Control.visible 影响
@@ -2466,26 +2472,35 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 		return {}
 	var local: Vector2 = layer.to_local(global_pos)
 	var cell: Vector2i = layer.local_to_map(local)
-	var terrain: Dictionary = board.tile_lookup if board.tile_lookup != null else {}
-	for k in terrain.keys():
-		var t: Dictionary = terrain[k]
-		if Vector2i(int(t.get("x", k.x)), int(t.get("y", k.y))) != cell:
-			continue
-		if str(t.get("terrain", "")) != "barracks":
+	# tile_lookup 只有 terrain/subtype,没有 owner_id。
+	# 必须 fallback 到 GameState — 否则 owner_id 永远 -1。
+	var tile: Dictionary = {}
+	if board.tile_lookup != null:
+		tile = board.tile_lookup.get(cell, {})
+	if tile.is_empty() and GameState != null:
+		tile = GameState.get_tile(cell.x, cell.y)
+	if tile.is_empty():
+		return {}
+	if str(tile.get("terrain", "")) != "barracks":
+		return {}
+	# GameState tiles 带 owner_id; tile_lookup 不带
+	var owner_id := int(tile.get("owner_id", -1))
+	if owner_id == -1 and GameState != null:
+		var gs_tile := GameState.get_tile(cell.x, cell.y)
+		if not gs_tile.is_empty():
+			owner_id = int(gs_tile.get("owner_id", -1))
+	if owner_id != _player_id:
+		return {}
+	# 该 tile 上是否有单位(occupied → 不能招募)
+	for uu in _all_units_including_self():
+		if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
 			return {}
-		if int(t.get("owner_id", -1)) != _player_id:
-			return {}
-		# 该 tile 上是否有单位(occupied → 不能招募)
-		for uu in _all_units_including_self():
-			if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
-				return {}
-		var me: Dictionary = GameState.get_player(_player_id)
-		return {
-			"x": cell.x,
-			"y": cell.y,
-			"gold": int(me.get("gold", 0)),
-		}
-	return {}
+	var me: Dictionary = GameState.get_player(_player_id)
+	return {
+		"x": cell.x,
+		"y": cell.y,
+		"gold": int(me.get("gold", 0)),
+	}
 
 
 # S:4 — T:4 RecruitPanel 真 modal(替换 status 凑合)。
@@ -5228,10 +5243,12 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	commander_row.name = "CommanderRow"
 	commander_row.add_theme_constant_override("separation", 4)
 	box.add_child(commander_row)
+	var commanders_loaded: bool = _lobby_commander_ids.size() > 1
 	var prev_btn := Button.new()
 	prev_btn.name = "PrevCommanderBtn"
 	prev_btn.text = "<"
 	prev_btn.custom_minimum_size = Vector2(28, 22)
+	prev_btn.disabled = not commanders_loaded
 	MenuTheme.apply_button_theme(prev_btn, 12)
 	# CONNECT_DEFERRED:让回调在 idle 阶段执行,避免 pressed emit 中途自
 	# 由其持有的 prev/next 按钮树时撞上 "Object freed while signal is
@@ -5243,7 +5260,7 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	commander_row.add_child(prev_btn)
 	var commander_label := Label.new()
 	commander_label.name = "CommanderName"
-	commander_label.text = _lobby_seat_commander_label(index)
+	commander_label.text = _lobby_seat_commander_label(index) if commanders_loaded else "加载中…"
 	commander_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	commander_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
@@ -5252,6 +5269,7 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	next_btn.name = "NextCommanderBtn"
 	next_btn.text = ">"
 	next_btn.custom_minimum_size = Vector2(28, 22)
+	next_btn.disabled = not commanders_loaded
 	MenuTheme.apply_button_theme(next_btn, 12)
 	next_btn.pressed.connect(
 		_on_lobby_seat_commander_step.bind(index, 1),
@@ -5385,6 +5403,8 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 		_lobby_seat_ai_replacements.append(false)
 	while _lobby_seat_ai_personalities.size() <= seat_index:
 		_lobby_seat_ai_personalities.append("balanced")
+	while _lobby_seat_occupants.size() <= seat_index:
+		_lobby_seat_occupants.append("")
 	_lobby_seat_ai_replacements[seat_index] = pressed
 	if _game_id <= 0 or seat_index < 0:
 		_render_lobby_seat_columns()
@@ -5406,11 +5426,14 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	if not pressed:
 		# 取消 AI 替补 → 把这个 seat 上的 AI 删掉(若是 AI)。人类不动。
 		if existing_pid > 0 and existing_is_ai:
+			_lobby_seat_occupants[seat_index] = ""
 			NetworkClient.remove_player(_game_id, existing_pid,
 				Callable(self, "_on_lobby_seat_ai_remove_response").bind(seat_index))
 		_render_lobby_seat_columns()
 		return
-	# 按下 AI → 先删旧的(人类或 AI),再加 AI。
+	# 按下 AI → 乐观显示"入座中"→ 先删旧的(人类或 AI),再加 AI。
+	var ai_placeholder := "电脑-%d (入座中…)" % (seat_index + 1)
+	_lobby_seat_occupants[seat_index] = ai_placeholder
 	if existing_pid > 0:
 		NetworkClient.remove_player(_game_id, existing_pid,
 			Callable(self, "_on_lobby_seat_ai_add_after_remove").bind(seat_index))
@@ -5475,7 +5498,16 @@ func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
 		if int(p.get("seat", -1)) == seat_index:
 			target_pid = int(p.get("id", 0))
 			break
-	if target_pid <= 0 or _player_id <= 0 or _game_id <= 0:
+	if _player_id <= 0 or _game_id <= 0:
+		return
+	# 空座位:用 player_id=0 + seat=seat_index 让后端只写
+	# battle_config.seat_commanders[seat],不需要 player 记录。
+	if target_pid <= 0:
+		NetworkClient.update_player_commander(
+			_game_id, 0, _player_id, commander_id,
+			Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta),
+			seat_index
+		)
 		return
 	# 发送后端;成功才确认;失败回退 1 step 并 toast
 	NetworkClient.update_player_commander(
@@ -7924,6 +7956,7 @@ func _use_skill_on_target(skill_id: String, unit_id: int, target_id: int) -> voi
 	_skill_targets = {}
 	if board != null: board.clear_selection_marks()
 	_hide_action_bubble()
+	_schedule_board_refresh()
 
 
 func _on_wait_pressed() -> void:

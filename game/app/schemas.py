@@ -104,9 +104,14 @@ class UpdateCommanderRequest(BaseModel):
     Persists to ``player.commander_id`` and updates
     ``game.battle_config.seat_commanders[seat]`` so the choice is
     preserved through start_game.
+
+    When ``player_id=0`` (empty seat), ``seat`` must be provided so the
+    endpoint writes ``battle_config.seat_commanders[seat]`` only — no
+    player record is required.
     """
     commander_id: str = Field(min_length=1, max_length=64)
     caller_player_id: int
+    seat: Optional[int] = Field(default=None, ge=0)
 
 
 class RejoinGameRequest(BaseModel):

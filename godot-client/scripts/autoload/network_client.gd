@@ -554,11 +554,14 @@ func update_player_seat(game_id: int, player_id: int, caller_player_id: int, sea
 
 
 # P1:大厅座位卡左右切指挥官按钮接通
-func update_player_commander(game_id: int, player_id: int, caller_player_id: int, commander_id: String, callback: Callable = Callable()) -> void:
-	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/commander" % player_id, {
+func update_player_commander(game_id: int, player_id: int, caller_player_id: int, commander_id: String, callback: Callable = Callable(), seat: int = -1) -> void:
+	var body: Dictionary = {
 		"caller_player_id": caller_player_id,
 		"commander_id": commander_id,
-	}, callback)
+	}
+	if seat >= 0:
+		body["seat"] = seat
+	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/commander" % player_id, body, callback)
 
 
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:

@@ -249,7 +249,7 @@ static func attack_range_tiles(attacker_pos: Vector2i, attack_range: int, min_ra
 		for x in size:
 			var p := Vector2i(x, y)
 			var d: int = manhattan(attacker_pos, p)
-			if d >= min_range and d <= attack_range:
+			if d > min_range and d <= attack_range:
 				out.append(p)
 	return out
 

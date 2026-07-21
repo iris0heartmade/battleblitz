@@ -522,10 +522,8 @@ async def attack(
 
     is_kill = target.hp <= 0
 
-    # Morale bonus on kill (capped server-side in award_morale).
-    if is_kill:
-        from app.game_logic import award_morale
-        award_morale(attacker)
+    # Morale bonus on kill is handled inside award_exp(..., "kill")
+    # (game_logic.py line 553). Double-counting removed.
 
     # ── Counter attack ────────────────────────────────────────
     # Counter fires if:
