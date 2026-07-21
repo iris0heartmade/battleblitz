@@ -21,12 +21,10 @@ stock warlock; unlisted fields inherit from ``Warlock`` verbatim.
     MP   8            -- (inherit)    --  (8 MP stays)
 
 Art notes for the designer:
-    * ``yun.png``        — grid sprite (initially the swordsman classic
-      sprite, swapped for a custom portrait during the art pass).
-    * ``portrait_yun.png`` — full dialog portrait (re-used from
-      ``assets/portrait_yun.png``).
-    * ``crest_yun.png``  — circular dialog avatar (re-used from
-      ``assets/crest_yun.png``).
+    * ``heroes/yun.png``        — grid sprite (initially the swordsman
+      classic sprite, swapped for a custom portrait during the art pass).
+    * ``heroes/portrait_yun.png`` — full dialog portrait.
+    * ``heroes/crest_yun.png``  — circular dialog avatar.
 """
 from dataclasses import dataclass
 
