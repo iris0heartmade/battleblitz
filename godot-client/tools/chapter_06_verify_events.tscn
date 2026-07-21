@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/chapter_06_verify_events.gd" id="1_verify"]
+
+[node name="Chapter06VerifyEvents" type="Node"]
+script = ExtResource("1_verify")

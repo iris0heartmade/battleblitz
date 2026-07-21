@@ -1,0 +1,112 @@
+{
+  "id": "chapter_NN_slug_here",
+  "title": "章节中文标题",
+  "synopsis": "一句话剧情简介,UI 列表显示",
+  "cover_art": null,
+  "background": null,
+  "tags": [],
+
+  "preconditions": {
+    "completed_chapters": [],
+    "required_heroes_alive": [],
+    "min_support_pairs": [],
+    "min_gold": 0
+  },
+
+  "required_classes": ["swordsman", "archer", "healer"],
+  "deployment_cap": 8,
+  "forced_heroes": [],
+  "starting_units": [
+    {
+      "hero_id": "yun",
+      "class_id": "warlock",
+      "level": 1,
+      "name": "云",
+      "color": "red"
+    }
+  ],
+
+  "difficulty_modifiers": {
+    "easy":   {"level_delta": -1, "gold_bonus": 0.30, "enemy_hp_mult": 0.85, "reinforcement_turn_delay": 3},
+    "normal": {"level_delta":  0, "gold_bonus": 0.00, "enemy_hp_mult": 1.00, "reinforcement_turn_delay": 0},
+    "hard":   {"level_delta":  1, "gold_bonus": 0.00, "enemy_hp_mult": 1.15, "reinforcement_turn_delay": -2}
+  },
+
+  "rewards_on_clear": {
+    "gold": 500,
+    "exp_per_unit": 100,
+    "items": [],
+    "unlock_class": null,
+    "unlocks_chapter": null
+  },
+
+  "tactics_rank": {"S": 8, "A": 12, "B": 18, "C": 30, "D": 999},
+
+  "support_dialogues": {},
+  "battle_talks": {},
+  "defeat_talks": [],
+
+  "forced_deployments": [],
+
+  "hidden_items": [],
+  "merchant": null,
+  "tile_events": {},
+
+  "dialogues": {
+    "intro":           "stories/chapter_NN/intro.json",
+    "battle_01_after": "stories/chapter_NN/battle_01_after.json",
+    "victory":         "stories/chapter_NN/victory.json"
+  },
+
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "战斗 1 中文名",
+      "map_id": "balanced_2p_15",
+      "map_seed": 1,
+      "win_condition": "rout",
+      "turn_limit": 20,
+      "fail_if_hero_dies": ["yun"],
+      "weather": "clear",
+      "fog_of_war": false,
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "设计师备注: 本章第 1 战的玩法要点",
+      "battle_config": {
+        "audio": {
+          "bgm": {"track_id": "sample_battle_01", "volume": 0.85, "fade_in_ms": 800, "fade_out_ms": 600}
+        }
+      },
+      "spawn_overrides": {
+        "add": [],
+        "replace": [],
+        "remove": []
+      },
+      "waves": [
+        {
+          "turn": 3,
+          "spawns": [
+            {"x": 12, "y": 0, "type": "knight", "color": "blue", "level": 3}
+          ],
+          "trigger_msg": "援军从北坡冲下!"
+        }
+      ],
+      "traps": [
+        {"x": 8, "y": 4, "type": "spike", "damage": 8, "trigger": "step"}
+      ],
+      "battle_talks": {},
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after",
+      "defeat_hero_dialogue": null,
+      "mid_battle_trigger_turn": 4,
+      "mid_battle_trigger_dialogue": null
+    }
+  ],
+
+  "art_assets": {},
+  "credits": {
+    "level_design": "team_name",
+    "dialogue": "team_name"
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "id": "chapter_06_iron_reckoning",
+  "title": "铁之清算",
+  "synopsis": "异族祭坛被毁后，卡尔德勾结残部卷土重来。云率军于河谷要塞迎击，决定王朝命运的关键一战。",
+  "cover_art": "ui/assets/heroes/cover_iron_reckoning.png",
+  "background": "黄昏。山谷中的要塞废墟，远处烽烟四起。",
+  "tags": ["boss_battle", "siege", "defend", "paralogue_chain"],
+  "preconditions": {
+    "completed_chapters": ["chapter_05_crown_united"],
+    "required_heroes_alive": ["yun", "anna"],
+    "min_support_pairs": [{"a": "yun", "b": "anna", "min_level": "B"}],
+    "min_gold": 800
+  },
+  "required_classes": ["swordsman", "archer", "healer"],
+  "deployment_cap": 8,
+  "forced_heroes": [
+    {"hero_id": "yun",  "class_id": "warlock", "level": 12, "name": "云",   "color": "red", "x": 3, "y": 11},
+    {"hero_id": "anna", "class_id": "healer",  "level": 12, "name": "安娜", "color": "red", "x": 4, "y": 12}
+  ],
+  "starting_units": [
+    {"hero_id": "yun",  "class_id": "warlock", "level": 12, "name": "云",   "color": "red", "x": 3, "y": 11},
+    {"hero_id": "anna", "class_id": "healer",  "level": 12, "name": "安娜", "color": "red", "x": 4, "y": 12},
+    {"class_id": "archer", "level": 12, "name": "红",   "color": "red", "x": 5, "y": 12},
+    {"class_id": "archer", "level": 10, "name": "游骑", "color": "red", "x": 2, "y": 12},
+    {"class_id": "knight", "level": 9,  "name": "近卫", "color": "red", "x": 1, "y": 12},
+    {"class_id": "healer", "level": 8,  "name": "医师", "color": "red", "x": 6, "y": 12},
+    {"class_id": "warlock","level": 8,  "name": "术士", "color": "red", "x": 7, "y": 12}
+  ],
+  "difficulty_modifiers": {
+    "easy":   {"level_delta": -1, "gold_bonus": 0.30, "enemy_hp_mult": 0.85, "reinforcement_turn_delay": 3},
+    "normal": {"level_delta":  0, "gold_bonus": 0.00, "enemy_hp_mult": 1.00, "reinforcement_turn_delay": 0},
+    "hard":   {"level_delta":  1, "gold_bonus": 0.00, "enemy_hp_mult": 1.15, "reinforcement_turn_delay": -2}
+  },
+  "rewards_on_clear": {
+    "gold": 1500,
+    "exp_per_unit": 250,
+    "items": [
+      {"item_id": "hero_crest",     "count": 1},
+      {"item_id": "lunar_bracelet", "count": 1}
+    ],
+    "unlock_class": "knight",
+    "unlocks_chapter": "chapter_07_dawn_reckoning"
+  },
+  "tactics_rank": {"S": 8, "A": 12, "B": 18, "C": 30, "D": 999},
+  "support_dialogues": {
+    "yun_anna_c": "stories/chapter_06/support_yun_anna_c.json",
+    "yun_anna_b": "stories/chapter_06/support_yun_anna_b.json",
+    "yun_hong_a":  "stories/chapter_06/support_yun_hong_a.json"
+  },
+  "battle_talks": {
+    "yun_vs_kalde":   "stories/chapter_06/battle_talk_yun_vs_kalde.json",
+    "anna_vs_priest": "stories/chapter_06/battle_talk_anna_vs_priest.json",
+    "hong_vs_dragon": "stories/chapter_06/battle_talk_hong_vs_dragon.json"
+  },
+  "defeat_talks": [
+    {"hero_id": "yun",  "msg": "云: 路, 就到这里了吗",   "event": "stories/chapter_06/defeat_event_yun.json"},
+    {"hero_id": "anna", "msg": "安娜: 不能倒下, 有人还在等我", "event": "stories/chapter_06/defeat_event_anna.json"}
+  ],
+  "forced_deployments": [
+    {"hero_id": "yun",  "chapters": ["chapter_06_iron_reckoning"]},
+    {"hero_id": "anna", "chapters": ["chapter_06_iron_reckoning"]}
+  ],
+  "hidden_items": [
+    {"x": 7,  "y": 3, "item_id": "angelic_robe",   "description": "山谷泉眼旁的发光布匹"},
+    {"x": 12, "y": 2, "item_id": "secret_book",    "description": "藏在箭塔废墟中的古代典籍"},
+    {"x": 14, "y": 6, "item_id": "lunar_bracelet", "description": "卡尔德的私人宝箱"}
+  ],
+  "merchant": {
+    "x": 5, "y": 13,
+    "inventory": [
+      {"item_id": "vulnerary", "price": 300,  "stock": 3},
+      {"item_id": "elixir",    "price": 1500, "stock": 1},
+      {"item_id": "chest_key", "price": 100,  "stock": 2}
+    ]
+  },
+  "tile_events": {
+    "10,3": "stories/chapter_06/visit_altar.json",
+    "3,11": "stories/chapter_06/visit_lake.json",
+    "13,8": "stories/chapter_06/seize_throne.json"
+  },
+  "dialogues": {
+    "intro":                   "stories/chapter_06/intro.json",
+    "battle_01_after":         "stories/chapter_06/battle_01_after.json",
+    "battle_02_after":         "stories/chapter_06/battle_02_after.json",
+    "battle_03_after":         "stories/chapter_06/battle_03_after.json",
+    "battle_01_defeat_hero":   "stories/chapter_06/battle_01_defeat_hero.json",
+    "battle_01_reinforcement": "stories/chapter_06/battle_01_reinforcement.json",
+    "battle_02_midpoint":      "stories/chapter_06/battle_02_midpoint.json",
+    "victory":                 "stories/chapter_06/victory.json"
+  },
+  "battles": [
+    {
+      "id": "battle_01",
+      "title": "河谷突袭",
+      "map_id": "realistic_grass_3p_25",
+      "map_seed": 106,
+      "win_condition": "rout",
+      "turn_limit": 20,
+      "fail_if_hero_dies": ["yun", "anna"],
+      "weather": "rain",
+      "fog_of_war": false,
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "unlocks_commander": null,
+      "enemy_commander": null,
+      "notes": "本章第 1 战: 玩家抢渡河谷, 击退卡尔德先遣队. 敌指挥 NPC (非 player hero)",
+      "battle_config": {
+        "audio": {
+          "bgm": {"track_id": "sample_battle_01", "volume": 0.85, "fade_in_ms": 800, "fade_out_ms": 600},
+          "ambient": {"track_id": "rain_loop", "loop": true}
+        },
+        "weather": "rain",
+        "vision": {"ally": 4, "enemy": 5}
+      },
+      "spawn_overrides": {
+        "add": [
+          {"x": 14, "y": 2, "type": "sniper",  "color": "blue", "level": 5},
+          {"x": 13, "y": 1, "type": "warlock", "color": "blue", "level": 4}
+        ]
+      },
+      "waves": [
+        {
+          "turn": 3,
+          "spawns": [{"x": 12, "y": 0, "type": "knight", "color": "blue", "level": 3}],
+          "trigger_msg": "援军从北坡冲下!"
+        },
+        {
+          "turn": 7,
+          "spawns": [
+            {"x": 14, "y": 4, "type": "healer", "color": "blue", "level": 2},
+            {"x": 14, "y": 5, "type": "archer", "color": "blue", "level": 3}
+          ],
+          "trigger_msg": "卡尔德的后续部队抵达!"
+        }
+      ],
+      "traps": [
+        {"x": 8, "y": 4, "type": "spike",  "damage": 8, "trigger": "step"},
+        {"x": 9, "y": 5, "type": "spike",  "damage": 8, "trigger": "step"},
+        {"x": 6, "y": 7, "type": "poison", "damage": 4, "trigger": "turn_start", "duration_turns": 3}
+      ],
+      "battle_talks": {
+        "yun_vs_kalde": "stories/chapter_06/battle_talk_yun_vs_kalde_b1.json"
+      },
+      "pre_battle_dialogue": "intro",
+      "post_battle_dialogue": "battle_01_after",
+      "defeat_hero_dialogue": "battle_01_defeat_hero",
+      "mid_battle_trigger_turn": 4,
+      "mid_battle_trigger_dialogue": "battle_01_reinforcement"
+    },
+    {
+      "id": "battle_02",
+      "title": "要塞防御",
+      "map_id": "balanced_4p_20",
+      "map_seed": 107,
+      "win_condition": "defend",
+      "turn_limit": 15,
+      "fail_if_hero_dies": ["yun", "anna"],
+      "weather": "fog",
+      "fog_of_war": true,
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "enemy_commander": null,
+      "notes": "本章第 2 战: 玩家占据要塞, 坚守 15 回合. 卡尔德会从四波援军冲上来. 敌指挥 NPC",
+      "battle_config": {
+        "audio": {"bgm": {"track_id": "sample_battle_01", "loop": true, "volume": 0.9}}
+      },
+      "waves": [
+        {"turn": 2,  "spawns": [{"x": 0, "y": 7,  "type": "knight", "color": "blue", "level": 4}]},
+        {"turn": 5,  "spawns": [
+          {"x": 0, "y": 5,  "type": "knight", "color": "blue", "level": 4},
+          {"x": 0, "y": 9,  "type": "knight", "color": "blue", "level": 4}
+        ]},
+        {"turn": 9,  "spawns": [
+          {"x": 0, "y": 4,  "type": "warlock", "color": "blue", "level": 5},
+          {"x": 0, "y": 10, "type": "healer",  "color": "blue", "level": 4}
+        ]},
+        {"turn": 12, "spawns": [
+          {"x": 0, "y": 7,  "type": "knight", "color": "blue", "level": 8},
+          {"x": 0, "y": 6,  "type": "knight", "color": "blue", "level": 8}
+        ], "trigger_msg": "卡尔德亲自上场!"}
+      ],
+      "pre_battle_dialogue": "battle_01_after",
+      "post_battle_dialogue": "battle_02_after",
+      "mid_battle_trigger_turn": 8,
+      "mid_battle_trigger_dialogue": "battle_02_midpoint"
+    },
+    {
+      "id": "battle_03",
+      "title": "王朝决战",
+      "map_id": "realistic_snow_3p_25",
+      "map_seed": 108,
+      "win_condition": "boss",
+      "boss_unit_id": "kalde",
+      "fail_if_hero_dies": ["yun", "anna"],
+      "teams": {"ally": ["red"], "enemy": ["blue"]},
+      "enemy_commander": null,
+      "notes": "本章第 3 战: Boss 卡尔德亲自镇守王座. 击破他即结束王朝内战. (卡尔德是 NPC 敌人, 需新增到 heroes registry 后才能填此字段)",
+      "battle_config": {
+        "audio": {
+          "bgm": {
+            "track_id": "sample_battle_01",
+            "loop": true,
+            "volume": 1.0,
+            "fade_in_ms": 1200,
+            "victory_jingle": "fanfare_clear"
+          }
+        }
+      },
+      "spawn_overrides": {
+        "replace": [],
+        "add": [
+          {"x": 7, "y": 7, "type": "knight", "color": "blue", "level": 20, "name": "kalde", "is_boss": true,
+           "stats_override": {"hp": 80, "atk": 28, "def": 18, "spd": 12}}
+        ]
+      },
+      "pre_battle_dialogue": "battle_02_after",
+      "post_battle_dialogue": "victory"
+    }
+  ],
+  "art_assets": {
+    "background_music_main":  "sample_battle_01",
+    "background_music_boss":  "boss_battle_main",
+    "ambient_rain":          "rain_loop",
+    "victory_jingle":        "fanfare_clear"
+  },
+  "credits": {
+    "level_design":   "team_blue",
+    "dialogue":       "team_red",
+    "voice_director": "team_purple",
+    "lead_tester":    "QA"
+  }
+}
