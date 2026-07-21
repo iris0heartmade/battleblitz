@@ -7772,9 +7772,7 @@ func _arcane_targets(ud: Dictionary) -> Dictionary:
 func _heal_targets(ud: Dictionary) -> Dictionary:
 	var pos_h := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var me_pid2: int = int(_player_id)
-	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
-		var attacker_ignores_los: bool = "snipe" in attacker_skills
-		var out: Dictionary = {}
+	var out: Dictionary = {}
 	for uu in _all_units_including_self():
 		var dx: int = abs(int(uu.get("x", 0)) - pos_h.x)
 		var dy: int = abs(int(uu.get("y", 0)) - pos_h.y)
