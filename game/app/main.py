@@ -74,6 +74,14 @@ async def lifespan(app: FastAPI):
         log_server_lifecycle("stopped")
 
 
+# 07-21 F5B: register mainline event triggers (waves/traps/boss_kill)
+try:
+    from app.mainline.event_trigger import register_end_of_turn_hook
+    register_end_of_turn_hook()
+except Exception as _e:  # pragma: no cover
+    import logging
+    logging.getLogger(__name__).warning('F5B hook init failed: %s', _e)
+
 app = FastAPI(
     title=APP_TITLE,
     version=APP_VERSION,
