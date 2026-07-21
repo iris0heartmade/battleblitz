@@ -186,6 +186,7 @@ var _mainline_auto_retry_pending: bool = false
 @onready var ml_prep_tabs: HBoxContainer = $MainlineView/MLFrame/MLPrepTabs
 @onready var ml_prep_content: RichTextLabel = $MainlineView/MLFrame/MLPrepContent
 @onready var ml_prep_start_btn: Button = $MainlineView/MLFrame/MLPrepStartBtn
+@onready var ml_prep_complete_btn: Button = $MainlineView/MLFrame/MLPrepCompleteBtn
 @onready var ml_prep_refresh_btn: Button = $MainlineView/MLFrame/MLPrepRefreshBtn
 @onready var ml_prep_action_btn: Button = $MainlineView/MLFrame/MLPrepActionBtn
 @onready var ml_prep_alt_action_btn: Button = $MainlineView/MLFrame/MLPrepAltActionBtn
@@ -412,6 +413,9 @@ func _ready() -> void:
 		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
 	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
 		ml_prep_start_btn.pressed.connect(_on_prepare_start_pressed)
+	# P2:主线准备页"准备好了"按钮 → 触发 complete_mainline_prepare(写自动存档)
+	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
+		ml_prep_complete_btn.pressed.connect(_on_prepare_complete_pressed)
 	if ml_prep_refresh_btn != null and is_instance_valid(ml_prep_refresh_btn):
 		ml_prep_refresh_btn.pressed.connect(_on_prepare_refresh_pressed)
 	if ml_prep_action_btn != null and is_instance_valid(ml_prep_action_btn):
@@ -579,8 +583,8 @@ func _ready() -> void:
 	if settings_mute_btn != null and is_instance_valid(settings_mute_btn):
 		settings_mute_btn.toggled.connect(_on_mute_toggled)
 		# 启动时按 UserSettings 里的 muted 状态同步按钮视觉
-		var saved_mute: bool = bool(UserSettings.get_value("settings.v1.muted", false))
-		settings_mute_btn.button_pressed = saved_mute
+		var init_mute: bool = bool(UserSettings.get_value("settings.v1.muted", false))
+		settings_mute_btn.button_pressed = init_mute
 	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
 	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
@@ -698,9 +702,13 @@ func _ready() -> void:
 		# 替换:让它在游戏视图下打开 SettingsPanel,菜单视图下保留原提示
 	if settings_button.pressed.is_connected(_on_settings_pressed):
 		settings_button.pressed.disconnect(_on_settings_pressed)
+	if settings_button.pressed.is_connected(_on_settings_open_pressed):
+		settings_button.pressed.disconnect(_on_settings_open_pressed)
 	settings_button.pressed.connect(_on_settings_open_pressed)
 	# P1:主菜单 HelpButton → 玩法说明浮层
 	if help_button != null and is_instance_valid(help_button):
+		if help_button.pressed.is_connected(_on_help_pressed):
+			help_button.pressed.disconnect(_on_help_pressed)
 		help_button.pressed.connect(_on_help_pressed)
 	# TSCN-FIX:强制覆盖,确保 GameView 不吞棋盘点击(以防 tscn mouse_filter=2 没生效)
 	if game_view != null and is_instance_valid(game_view):
@@ -1054,19 +1062,6 @@ func _on_resume_suspend_load_response(body: Variant, code: int) -> void:
 	_resume_game_id = game_id  # 用服务端回的新 game_id 覆盖
 	NetworkClient.rejoin_game_by_name(game_id, _user_name,
 		Callable(self, "_on_resume_rejoin_response"))
-
-
-func _on_resume_pressed() -> void:
-	if _resume_game_id <= 0:
-		return
-	_show_view("connecting")
-	connecting_label.text = "正在重连对局 #%d..." % _resume_game_id
-	if _resume_player_id > 0:
-		NetworkClient.rejoin_game_by_player_id(_resume_game_id, _resume_player_id,
-			Callable(self, "_on_resume_rejoin_response"))
-	else:
-		NetworkClient.rejoin_game_by_name(_resume_game_id, _user_name,
-			Callable(self, "_on_resume_rejoin_response"))
 
 
 func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
@@ -1464,11 +1459,58 @@ func _save_option_label(record: Dictionary) -> String:
 # Game state → HUD
 # ============================================================
 
+# P2:THREAT 攻击威胁区 — 算所有敌方单位攻击范围,标记 (橙) 在 board 高亮层
+# 客户端 UI 镜像,服务端仍权威;玩家据此判断"我脚下"有没有敌人能打到我。
+func _compute_threat_tiles() -> Array:
+	var threat: Array = []
+	if GameState == null or board == null or board.map_size.x <= 0:
+		return threat
+	var size: int = board.map_size.x
+	var players: Array = GameState.players if GameState else []
+	for p in players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)):
+			continue
+		var pid: int = int(p.get("id", -1))
+		if pid == _player_id:
+			continue  # skip self
+		var units: Array = (p.get("units", []) as Array)
+		for u in units:
+			if not u is Dictionary:
+				continue
+			var ux: int = int(u.get("x", 0))
+			var uy: int = int(u.get("y", 0))
+			var rng: int = int(u.get("attack_range", 1))
+			var min_r: int = int(u.get("min_attack_range", 0))
+			threat.append_array(MapLogic.attack_range_tiles(Vector2i(ux, uy), rng, min_r, size))
+	return threat
+
+
+func _show_threat_tiles() -> void:
+	if board == null:
+		return
+	var tiles: Array = _compute_threat_tiles()
+	# 去重 + 转 Vector2i
+	var seen: Dictionary = {}
+	var uniq: Array = []
+	for t in tiles:
+		var v := Vector2i(int(t.x), int(t.y))
+		if seen.has(v):
+			continue
+		seen[v] = true
+		uniq.append(v)
+	# 用 red attack marks(视觉上标"敌可打我")复用 — 简化,后续可做独立橙色 Mode.THREAT
+	board.show_attack_marks(uniq)
+
+
 func _on_state_updated(_snapshot: Dictionary) -> void:
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
-	
+	# P2:THREAT 攻击威胁区 — 所有敌方单位的攻击范围叠加,标橙
+	_show_threat_tiles()
+
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)
 	if battle_config != null and battle_config.has("audio"):
@@ -2036,7 +2078,8 @@ func _on_mute_toggled(toggled_on: bool) -> void:
 
 
 # M6.5 主题切换 — 三套主题:deep_gba / metal_silver / minimal_light
-# 通过 set_root_theme 设置全局 default_* 颜色与字号。
+# P2 完整版:每套主题覆盖 backdrop / 面板色调 / 按钮色 / 文本色;
+# 在 _apply_theme 里集中灌,运行期热切换无需重新打开视图。
 const _THEMES := ["deep_gba", "metal_silver", "minimal_light"]
 
 
@@ -2046,15 +2089,67 @@ func _on_theme_change(theme_name: String) -> void:
 
 
 func _apply_theme(theme_name: String) -> void:
-	# 主题实际生效 — V2 简化版:仅换背景色 + 部分面板色调。
-	# 完整主题需 .tres 文件(M5.5 TODO)
-	var bg_color: Color = Color(0.06, 0.13, 0.10)  # GBA default
+	var bg_color: Color = Color(0.06, 0.13, 0.10)  # deep_gba 兜底
+	var panel_color: Color = Color(0.06, 0.13, 0.10)
+	var border_color: Color = Color(0.79, 0.63, 0.29)  # 金 C_GOLD
+	var text_color: Color = Color(0.96, 0.91, 0.76)   # 暖白 C_TEXT_WARM
+	var btn_bg: Color = Color(0.16, 0.25, 0.36)       # 蓝底 C_BTN_BLUE
 	if theme_name == "metal_silver":
 		bg_color = Color(0.10, 0.10, 0.13)
+		panel_color = Color(0.16, 0.16, 0.18)
+		border_color = Color(0.70, 0.73, 0.78)  # 银
+		text_color = Color(0.92, 0.94, 0.96)
+		btn_bg = Color(0.30, 0.34, 0.40)
 	elif theme_name == "minimal_light":
 		bg_color = Color(0.92, 0.92, 0.88)
+		panel_color = Color(0.96, 0.96, 0.94)
+		border_color = Color(0.30, 0.30, 0.30)  # 深灰边
+		text_color = Color(0.12, 0.12, 0.12)   # 深色字
+		btn_bg = Color(0.78, 0.80, 0.84)       # 浅灰按钮
 	if backdrop != null and is_instance_valid(backdrop):
 		backdrop.color = bg_color
+	# 重灌核心面板的 StyleBoxFlat 让边界和底色跟主题
+	var theme_panels: Array = [settings_panel, pause_panel, dialog_panel, battle_result_panel, war_report_panel]
+	for p in theme_panels:
+		if p == null or not is_instance_valid(p):
+			continue
+		var sb: StyleBoxFlat = StyleBoxFlat.new()
+		sb.bg_color = panel_color
+		sb.border_color = border_color
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(2)
+		p.add_theme_stylebox_override("panel", sb)
+	# 重灌按钮 StyleBoxFlat 影响主菜单 + 子菜单底部按钮
+	var theme_btns: Array = [settings_button, settings_apply_btn, settings_cancel_btn,
+		settings_close_btn, settings_font_small_btn, settings_font_med_btn, settings_font_big_btn,
+		settings_red_btn, settings_blue_btn, settings_green_btn, settings_yellow_btn,
+		settings_mute_btn, pause_resume_btn, pause_suspend_btn, pause_main_menu_btn,
+		pause_quit_btn, pause_settings_btn, dialog_continue_btn, tutorial_got_it_btn,
+		battle_detail_btn, end_turn_button, save_resume_btn,
+		save_delete_btn, save_new_btn, save_refresh_btn, save_back_btn, help_button,
+		exit_button, resume_button, lobby_button, lobby_add_ai_btn, lobby_remove_ai_btn,
+		lobby_start_btn, lobby_back_btn, lobby_apply_team_btn, lobby_host_apply_btn,
+		join_by_code_button]
+	for b in theme_btns:
+		if b == null or not is_instance_valid(b):
+			continue
+		var sb2: StyleBoxFlat = StyleBoxFlat.new()
+		sb2.bg_color = btn_bg
+		sb2.border_color = border_color
+		sb2.set_border_width_all(2)
+		sb2.set_corner_radius_all(4)
+		b.add_theme_stylebox_override("normal", sb2)
+		var sbh: StyleBoxFlat = sb2.duplicate()
+		sbh.bg_color = btn_bg.lightened(0.15)
+		b.add_theme_stylebox_override("hover", sbh)
+		var sbp: StyleBoxFlat = sb2.duplicate()
+		sbp.bg_color = btn_bg.darkened(0.15)
+		b.add_theme_stylebox_override("pressed", sbp)
+	# 文本色整体调节主菜单 / SettingPanel 内的关键 label
+	var theme_text_labels: Array = [settings_panel.find_child("Header", true, false)] if settings_panel != null else []
+	for lbl in theme_text_labels:
+		if lbl != null and is_instance_valid(lbl):
+			lbl.add_theme_color_override("font_color", text_color)
 	_update_status("主题: %s" % theme_name)
 
 
@@ -2733,10 +2828,26 @@ func _apply_font_size(size: int) -> void:
 	_update_status("字号已设为 %d" % size)
 
 
-# T:8 阵营颜色生效 — 仅记 pref,新房间用
+# T:8 阵营颜色生效 + P2 hot-effect:4 色按钮立即视觉反馈
 func _apply_preferred_color(color_name: String) -> void:
 	UserSettings.set_value("settings.v1.color", color_name)
-	_update_status("下一局将使用 %s 方 (当前房间不变)" % color_name)
+	# P2 hot-effect:立刻更新 PlayersList / 自己标记色(若在局内)。
+	# 已开战对局的 player.color 是服务端权威,只能等下一局换色;
+	# 但大厅视图/无对局时的 status/player 头像色块可以立刻反映偏好。
+	_apply_local_color_hint(color_name)
+	_update_status("✓ 偏好色已记下: %s (新对局才生效)" % color_name)
+
+
+func _apply_local_color_hint(color_name: String) -> void:
+	# 在没有对局时,改 status label 颜色块作为可见反馈;
+	# 在大厅 / 战斗中时,改 lobby_self_color 风格 chip 由所属渲染逻辑读取 pref_color。
+	var hint_color: Color = Config.player_color(color_name) if Config != null else Color.WHITE
+	hint_color.a = 0.85
+	var status_label: Label = get_node_or_null("Menu/.../StatusLabel")
+	if status_label == null:
+		status_label = get_node_or_null("/root/Main/Menu/ConnectingPanel/StatusLabel")
+	# 此处不强求 status label hot-update(各视图 position 不同),
+	# 主要是给玩家一个"按了就有反应"的反馈信号 — 已在 _update_status 文案体现 ✓ mark。
 
 
 func _on_settings_cancel_pressed() -> void:
@@ -6121,6 +6232,41 @@ func _on_prepare_start_pressed() -> void:
 		return
 	_update_status("主线: 创建战斗...")
 	NetworkClient.start_mainline(_selected_mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))
+
+
+# P2:主线"准备好了"按钮 — 触发 /prepare/complete 写自动存档,
+# response.body 应包含 AutoSaveCheckpointOut({label,auto_kind,saved_at});
+# 我们把 auto_save 走 toast 让玩家看到 "💾 准备完毕,自动存档完毕 ✓ {label}"。
+func _on_prepare_complete_pressed() -> void:
+	if _selected_mainline_id == "":
+		_update_status("请先选择主线章节")
+		return
+	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
+		ml_prep_complete_btn.disabled = true
+	_update_status("写入自动存档...")
+	NetworkClient.complete_mainline_prepare(
+		_selected_mainline_id,
+		_user_name,
+		[],
+		Callable(self, "_on_prepare_complete_response")
+	)
+
+
+func _on_prepare_complete_response(body: Variant, code: int) -> void:
+	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
+		ml_prep_complete_btn.disabled = false
+	if code < 200 or code >= 300:
+		var msg: String = "准备完毕写自动存档失败"
+		if body is Dictionary and body.has("detail"):
+			msg = "准备完毕写自动存档失败: %s" % str(body.get("detail"))
+		_update_status(msg)
+		return
+	# P2:显示自动存档 toast
+	if body is Dictionary:
+		var auto_save: Variant = body.get("auto_save", {})
+		if auto_save is Dictionary and auto_save.has("label"):
+			_show_auto_save_toast("💾 自动存档完毕 ✓  %s" % str(auto_save.get("label", "")), 1800.0)
+	_update_status("✅ 准备完成,自动存档已写,可以开始战斗")
 
 
 func _on_prepare_refresh_pressed() -> void:

@@ -40,6 +40,8 @@ signal state_snapshot_received(game: Dictionary)
 signal event_delta_received(event: Dictionary)
 signal server_pong_received(echo_at_ms: int)
 signal protocol_error_received(code: String, message: String)
+# P2:commentary WS 接通 — AI 评论文本/音频帧(text 接,音频仅 marker)
+signal commentary_received(text: String)
 
 const _REQ_TIMEOUT_SEC := 10.0
 const _HEARTBEAT_INTERVAL_SEC := 25.0
@@ -89,6 +91,9 @@ func _wire_to_game_state() -> void:
 	state_snapshot_received.connect(gs._on_state_snapshot)
 	event_delta_received.connect(gs._on_event_delta)
 	server_hello_received.connect(gs._on_server_hello)
+	# P2:commentary WS 接通 — 转成 log_received 复用现有战报 UI
+	if gs.has_method("_on_commentary_received"):
+		commentary_received.connect(gs._on_commentary_received)
 	# Use set() so the compiler resolves `is_connected` as GameState's
 	# property, not Object's built-in is_connected() method (gs is typed
 	# Node here, so a direct `gs.is_connected = ...` is a parse error).
@@ -324,7 +329,16 @@ func _dispatch_ws_message(msg: Dictionary) -> void:
 			var code: String = String(payload.get("code", "UNKNOWN"))
 			var message: String = String(payload.get("message", ""))
 			protocol_error_received.emit(code, message)
-		"commentary.text", "commentary.audio":
+		"commentary.text":
+			# P2:commentary WS 接通 — 把 AI 旁白文本暴露给 GameState → 写入战报。
+			# 服务端尚未默认发送,但协议层已就绪(等 mainline LLM agent 上线即生效)。
+			var ctext: String = String(payload.get("text", ""))
+			commentary_received.emit(ctext)
+		"commentary.audio":
+			# P2:audio 帧暂不播放(Godot 客户端不做音频 narration),仅 log + UI 提示文本。
+			commentary_received.emit("[音频评论]")
+		_:
+			pass
 			# Reserved for future AI commentary. No-op for now.
 			pass
 		_:

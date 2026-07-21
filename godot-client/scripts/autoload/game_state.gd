@@ -261,6 +261,19 @@ func _on_event_delta(event: Dictionary) -> void:
 			pass
 
 
+# P2:commentary WS 接通 — AI 旁白文本/音频帧转 log_received
+# 由 NetworkClient.commentary_received 触发,客户端无需新建 signal,
+# 直接借用 log_received(action) 让 WarReportPanel 统一显示。
+func _on_commentary_received(text: String) -> void:
+	# 用现有 log_received 派发一条评论日志;main.gd 的 _on_log_received 会渲染
+	var fake_action: Dictionary = {
+		"action_type": "commentary.text",
+		"description": text,
+		"importance": "info",
+	}
+	log_received.emit(fake_action)
+
+
 # ============================================================
 # Internal helpers
 # ============================================================
