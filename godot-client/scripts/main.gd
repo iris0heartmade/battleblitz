@@ -5353,6 +5353,49 @@ func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
 		_lobby_seat_commander_indices.append(0)
 	_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) + delta, _lobby_commander_ids.size())
 	_render_lobby_seat_columns()
+	# P1:同步服务端 — 房主改任意 seat / 玩家改自己 seat
+	var new_idx: int = int(_lobby_seat_commander_indices[seat_index])
+	new_idx = clampi(new_idx, 0, _lobby_commander_ids.size() - 1)
+	var commander_id: String = str(_lobby_commander_ids[new_idx])
+	if commander_id == "":
+		# "" = "未选择",服务端应保持现有值 / 或保留空。直接发空字符串让服务端 reset
+		pass
+	# 找 seat 上 player_id
+	var target_pid: int = 0
+	for p in _lobby_last_players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)):
+			continue
+		if int(p.get("seat", -1)) == seat_index:
+			target_pid = int(p.get("id", 0))
+			break
+	if target_pid <= 0 or _player_id <= 0 or _game_id <= 0:
+		return
+	# 发送后端;成功才确认;失败回退 1 step 并 toast
+	NetworkClient.update_player_commander(
+		_game_id,
+		target_pid,
+		_player_id,
+		commander_id,
+		Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta)
+	)
+
+
+func _on_lobby_seat_commander_response(body: Variant, _code: int, seat_index: int, delta: int) -> void:
+	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
+		# 回退:把 index 倒回(因为我们乐观更新了)
+		if _lobby_commander_ids.is_empty():
+			return
+		while _lobby_seat_commander_indices.size() <= seat_index:
+			_lobby_seat_commander_indices.append(0)
+		var n: int = _lobby_commander_ids.size()
+		_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) - delta, n)
+		_render_lobby_seat_columns()
+		var detail: String = "切换指挥官失败"
+		if body is Dictionary and body.has("detail"):
+			detail = "切换指挥官失败: %s" % str(body.get("detail"))
+		_update_status(detail)
 
 
 func _on_lobby_seat_action_pressed(seat_index: int) -> void:

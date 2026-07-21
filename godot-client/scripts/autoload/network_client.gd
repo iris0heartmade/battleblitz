@@ -553,6 +553,14 @@ func update_player_seat(game_id: int, player_id: int, caller_player_id: int, sea
 	}, callback)
 
 
+# P1:大厅座位卡左右切指挥官按钮接通
+func update_player_commander(game_id: int, player_id: int, caller_player_id: int, commander_id: String, callback: Callable = Callable()) -> void:
+	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/commander" % player_id, {
+		"caller_player_id": caller_player_id,
+		"commander_id": commander_id,
+	}, callback)
+
+
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
 	request("GET", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/lobby", {}, callback)
 

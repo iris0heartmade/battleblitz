@@ -61,6 +61,7 @@ from app.schemas import (
     RejoinGameRequest,
     RejoinGameResponse,
     UpdateSeatRequest,
+    UpdateCommanderRequest,
     UpdateTeamRequest,
     TileOut,
     UnitOut,
@@ -1010,6 +1011,56 @@ async def update_player_seat(
     target.color = _color_for_seat(body.seat)
     await session.flush()
     return await _build_state(session, game)
+
+
+@router.patch("/{game_id}/players/{player_id}/commander")
+async def update_player_commander(
+    game_id: int,
+    player_id: int,
+    body: UpdateCommanderRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Pick the commander for a player in the lobby.
+
+    - The host (seat 0) may change **any** player's commander (including AI).
+    - Other players may only change their **own** commander.
+    - Game must be in 'waiting' status.
+    - Side effect: also writes ``game.battle_config.seat_commanders[seat]``
+      so the choice survives through /start and is applied at game start.
+    """
+    game = await session.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "游戏不存在")
+    if game.status != "waiting":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "游戏已开始，无法修改指挥官")
+
+    target = await session.get(Player, player_id)
+    if target is None or target.game_id != game_id or target.is_spectator:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "玩家不在此游戏中")
+
+    all_players = (await session.execute(
+        select(Player).where(Player.game_id == game_id)
+    )).scalars().all()
+    caller = next((p for p in all_players if p.id == body.caller_player_id), None)
+    if caller is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法识别请求者")
+    host = _host_player(all_players)
+    is_host = host is not None and caller.id == host.id
+    is_self = caller.id == target.id
+    if not (is_host or is_self):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "只有房主可以修改其他玩家的指挥官")
+
+    target.commander_id = body.commander_id
+    # Mirror to game.battle_config.seat_commanders so /start picks it up
+    battle_config = dict(game.battle_config or {})
+    seat_commanders = dict(battle_config.get("seat_commanders") or {})
+    seat_commanders[str(target.seat)] = body.commander_id
+    battle_config["seat_commanders"] = seat_commanders
+    game.battle_config = battle_config
+    await session.flush()
+
+    return {"ok": True, "player_id": player_id, "seat": target.seat,
+            "commander_id": body.commander_id}
 
 
 @router.post("/{game_id}/rejoin", response_model=RejoinGameResponse)

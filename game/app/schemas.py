@@ -98,6 +98,17 @@ class UpdateSeatRequest(BaseModel):
     caller_player_id: int
 
 
+class UpdateCommanderRequest(BaseModel):
+    """Change the commander for a player in the lobby.
+
+    Persists to ``player.commander_id`` and updates
+    ``game.battle_config.seat_commanders[seat]`` so the choice is
+    preserved through start_game.
+    """
+    commander_id: str = Field(min_length=1, max_length=64)
+    caller_player_id: int
+
+
 class RejoinGameRequest(BaseModel):
     """Resume an existing player in a game (e.g. after browser refresh)."""
     player_id: int
