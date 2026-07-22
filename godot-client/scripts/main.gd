@@ -263,7 +263,11 @@ var _editor_map_ids: Array[String] = []
 var _selected_editor_map_id: String = ""
 var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "r", "S"]
 var _editor_surface_chars: Array[String] = ["C", "v", "b", "g"]
-var _editor_unit_types: Array[String] = ["swordsman", "archer", "knight", "healer", "warlock"]
+var _editor_unit_types: Array[String] = [
+	"swordsman", "archer", "knight", "healer", "warlock",
+	"lancer", "warrior", "berserker", "dragon_rider", "falcon_knight",
+	"blade_master", "paladin", "sniper", "sage", "saint",
+]
 var _editor_unit_colors: Array[String] = ["red", "blue", "green", "yellow"]
 var _editor_owner_colors: Array[String] = ["", "red", "blue", "green", "yellow"]
 var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
@@ -3774,6 +3778,26 @@ func _unit_type_cn(unit_type: String) -> String:
 			return "术士"
 		"healer":
 			return "治疗师"
+		"lancer":
+			return "枪骑兵"
+		"warrior":
+			return "战士"
+		"berserker":
+			return "狂战士"
+		"dragon_rider":
+			return "龙骑士"
+		"falcon_knight":
+			return "隼骑士"
+		"blade_master":
+			return "剑圣"
+		"paladin":
+			return "圣骑士"
+		"sniper":
+			return "狙击手"
+		"sage":
+			return "贤者"
+		"saint":
+			return "圣者"
 		_:
 			return unit_type
 

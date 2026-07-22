@@ -87,6 +87,8 @@ def test_level_up_scales_hero_snapshot_not_equipment_bonus():
         max_hp=53,
         atk=20,
         def_=11,
+        matk=27,
+        mdef=12,
         campaign_base_stats={
             "hp": 50, "atk": 20, "def": 11,
             "matk": 27, "mdef": 12, "mov": 4, "mp": 8,
@@ -101,6 +103,78 @@ def test_level_up_scales_hero_snapshot_not_equipment_bonus():
     assert unit.hp == 55
     assert unit.campaign_base_stats["atk"] == 22
     assert unit.atk == 22
+
+
+def test_magic_hero_level_up_grows_magic_lane_and_weak_defense():
+    """Magic classes grow MATK/MDEF while DEF still grows as the weak side."""
+    from types import SimpleNamespace
+
+    from app.config import EXP_TO_LEVEL
+    from app.game_logic import level_up_if_ready
+
+    unit = SimpleNamespace(
+        unit_type="warlock",
+        level=1,
+        exp=EXP_TO_LEVEL,
+        hp=53,
+        max_hp=53,
+        atk=20,
+        def_=11,
+        matk=27,
+        mdef=12,
+        campaign_base_stats={
+            "hp": 50, "atk": 20, "def": 11,
+            "matk": 27, "mdef": 12, "mov": 4, "mp": 8,
+        },
+    )
+
+    result = level_up_if_ready(unit)
+
+    assert result is not None
+    assert unit.campaign_base_stats["hp"] == 52
+    assert unit.campaign_base_stats["atk"] == 20
+    assert unit.campaign_base_stats["def"] == 12
+    assert unit.campaign_base_stats["matk"] == 29
+    assert unit.campaign_base_stats["mdef"] == 14
+    assert unit.atk == 20
+    assert unit.def_ == 12
+    assert unit.matk == 29
+    assert unit.mdef == 14
+
+
+def test_physical_hero_level_up_grows_physical_lane_and_weak_magic_defense():
+    """Physical classes grow ATK/DEF while MDEF still grows as the weak side."""
+    from types import SimpleNamespace
+
+    from app.config import EXP_TO_LEVEL
+    from app.game_logic import level_up_if_ready
+
+    unit = SimpleNamespace(
+        unit_type="swordsman",
+        level=1,
+        exp=EXP_TO_LEVEL,
+        hp=45,
+        max_hp=45,
+        atk=18,
+        def_=12,
+        matk=4,
+        mdef=4,
+        campaign_base_stats={
+            "hp": 45, "atk": 18, "def": 12,
+            "matk": 4, "mdef": 4, "mov": 3, "mp": 5,
+        },
+    )
+
+    result = level_up_if_ready(unit)
+
+    assert result is not None
+    assert unit.campaign_base_stats["hp"] == 47
+    assert unit.campaign_base_stats["atk"] == 20
+    assert unit.campaign_base_stats["def"] == 14
+    assert unit.campaign_base_stats["matk"] == 4
+    assert unit.campaign_base_stats["mdef"] == 5
+    assert unit.matk == 4
+    assert unit.mdef == 5
 
 
 # ============================================================

@@ -27,8 +27,10 @@ const _SPRITE_DIR := "res://assets/classic/"
 const _HERO_SPRITE_DIR := "res://assets/heroes/"
 # 镜像 game/app/web/assets/classic/ 7 类 sprite
 const _KNOWN_TYPES := [
-	"archer", "healer", "heavy_armor", "knight",
-	"swordsman", "warlock",
+	"archer", "berserker", "blade_master", "dragon_rider",
+	"falcon_knight", "healer", "heavy_armor", "knight",
+	"lancer", "paladin", "sage", "saint", "sniper",
+	"swordsman", "warlock", "warrior",
 ]
 # 英雄单位 — 用 hero 立绘(anna.png / yun.png)替代 base class sprite。
 # 后续可在 .import 注册更多(用 `find_hero_sprite_path` 字典扩展)。

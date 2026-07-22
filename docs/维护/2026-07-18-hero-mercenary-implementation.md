@@ -32,6 +32,18 @@ python -m pytest tests/e2e -m e2e -q
 
 示例见 `game/mainlines/chapter_test_01.json`：修改一个兵种名或数值即可改变该章节允许的分配规则，无需改 Python 代码。
 
+### 职业化升级成长分流（2026-07-23）
+
+- `level_up_if_ready` 现在按 `unit_type.attack_kind` 区分成长路线：物理职业成长 HP/ATK/DEF，并让 MDEF 作为弱侧防御成长；魔法职业成长 HP/MATK/MDEF，并让 DEF 作为弱侧防御成长。
+- 英雄仍优先成长 `Unit.campaign_base_stats` 里的裸属性，再把差值同步到本场有效属性，装备加成不会被永久写回。
+- 已补测试覆盖魔法英雄（云/warlock 类）升级 MATK/MDEF、物理英雄升级 ATK/DEF，以及双防弱侧成长。
+
+### 新职业棋盘立绘导入（2026-07-23）
+
+- Web 端 `game/app/web/assets/classic/` 新增 `lancer`、`warrior`、`berserker`、`falcon_knight`、`blade_master`、`paladin`、`sage`、`saint`、`sniper` 九类单位 sprite。
+- Godot 端 `godot-client/assets/classic/` 同步上述九类，并补齐缺失的 `dragon_rider.png`；`unit_node.gd` 的 `_KNOWN_TYPES` 已扩展到全部职业。
+- Godot 地图编辑器单位列表与 `_unit_type_cn` 中文名映射同步新增职业，避免资源存在但 UI 仍只能选择旧职业。
+
 ## 尚未实现
 
 - 跨章节保留已招募佣兵及 Veteran 进度：现有 `MercenaryRosterState` 仍未成为生成来源。

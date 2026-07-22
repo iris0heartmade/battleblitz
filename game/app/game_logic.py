@@ -475,8 +475,9 @@ class LevelUpResult:
 def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     """Auto-level when EXP crosses `EXP_TO_LEVEL` (single level per call).
 
-    Each level: +5% to all base stats (HP, ATK, DEF); +2 bonus stat points
-    auto-allocated as +1 ATK, +1 DEF. MOV does not scale.
+    Each level grows HP plus the class's combat lane. Physical classes grow
+    ATK/DEF strongly and MDEF weakly; magic classes grow MATK/MDEF strongly
+    and DEF weakly. MOV does not scale.
     """
     if unit.level >= MAX_LEVEL:
         return None
@@ -486,6 +487,14 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     unit.exp -= EXP_TO_LEVEL
     unit.level += 1
     factor = 1.0 + LEVEL_UP_STAT_BONUS  # 1.05
+    attack_kind = _attack_kind_of(unit)
+
+    def strong_growth(base: int) -> int:
+        return int(round(base * factor)) + 1
+
+    def weak_def_growth(base: int) -> int:
+        return max(int(round(base * factor)), base + 1)
+
     campaign_base = dict(unit.campaign_base_stats or {})
     if campaign_base:
         # Hero battle Units hold naked campaign stats separately from their
@@ -495,27 +504,45 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
         old_base_hp = int(campaign_base.get("hp", unit.max_hp))
         old_base_atk = int(campaign_base.get("atk", unit.atk))
         old_base_def = int(campaign_base.get("def", unit.def_))
+        old_base_matk = int(campaign_base.get("matk", unit.matk))
+        old_base_mdef = int(campaign_base.get("mdef", unit.mdef))
         campaign_base["hp"] = int(round(old_base_hp * factor))
-        campaign_base["atk"] = int(round(old_base_atk * factor)) + 1
-        campaign_base["def"] = int(round(old_base_def * factor)) + 1
+        if attack_kind == "magic":
+            campaign_base["matk"] = strong_growth(old_base_matk)
+            campaign_base["mdef"] = strong_growth(old_base_mdef)
+            campaign_base["def"] = weak_def_growth(old_base_def)
+        else:
+            campaign_base["atk"] = strong_growth(old_base_atk)
+            campaign_base["def"] = strong_growth(old_base_def)
+            campaign_base["mdef"] = weak_def_growth(old_base_mdef)
         unit.max_hp += campaign_base["hp"] - old_base_hp
         unit.hp = min(unit.max_hp, unit.hp + campaign_base["hp"] - old_base_hp)
         unit.atk += campaign_base["atk"] - old_base_atk
         unit.def_ += campaign_base["def"] - old_base_def
+        unit.matk += campaign_base["matk"] - old_base_matk
+        unit.mdef += campaign_base["mdef"] - old_base_mdef
         unit.campaign_base_stats = campaign_base
     else:
         # Non-heroes and battles created before the snapshot migration retain
-        # the legacy effective-stat behaviour.
+        # the effective-stat behaviour, now split by class combat lane.
+        old_atk = unit.atk
+        old_def = unit.def_
+        old_matk = unit.matk
+        old_mdef = unit.mdef
         new_max_hp = int(round(unit.max_hp * factor))
         hp_gain = new_max_hp - unit.max_hp
         unit.max_hp = new_max_hp
         unit.hp = min(unit.max_hp, unit.hp + hp_gain)
-        unit.atk = int(round(unit.atk * factor))
-        unit.def_ = int(round(unit.def_ * factor))
-
-        # Auto-allocate bonus points
-        unit.atk += 1
-        unit.def_ += 1
+        if attack_kind == "magic":
+            unit.atk = old_atk
+            unit.matk = strong_growth(old_matk)
+            unit.def_ = weak_def_growth(old_def)
+            unit.mdef = strong_growth(old_mdef)
+        else:
+            unit.atk = strong_growth(old_atk)
+            unit.matk = old_matk
+            unit.def_ = strong_growth(old_def)
+            unit.mdef = weak_def_growth(old_mdef)
 
     return LevelUpResult(
         new_level=unit.level,
