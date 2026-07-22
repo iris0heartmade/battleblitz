@@ -5057,7 +5057,14 @@ func _selected_lobby_ai_commanders() -> Dictionary:
 	var commander_id := _selected_lobby_ai_commander()
 	if commander_id == "":
 		return {}
-	return {2: commander_id}
+	var result: Dictionary = {}
+	var host_seat := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
+	for seat_index in range(_selected_lobby_player_count()):
+		if seat_index == host_seat:
+			continue
+		if _lobby_ai_replacement_for_seat(seat_index):
+			result[seat_index] = commander_id
+	return result
 
 
 # 胜利条件下拉:P2.4 polish 后只剩 rout+seize 二合一,默认 "rout"
@@ -5884,7 +5891,8 @@ func _on_create_room_pressed() -> void:
 		_selected_lobby_bgm_track(),
 		_selected_lobby_ai_commanders(),
 		Callable(self, "_on_lobby_create_response"),
-		_selected_lobby_seat_commanders()
+		_selected_lobby_seat_commanders(),
+		"free"
 	)
 
 

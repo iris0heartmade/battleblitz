@@ -45,6 +45,20 @@ def test_godot_network_client_exposes_hero_backend_endpoints():
         assert snippet in source
 
 
+def test_godot_free_lobby_create_sends_free_mode_to_backend():
+    network = _read(NETWORK_CLIENT)
+    main = _read(MAIN_GD)
+    assert '"mode": mode' in network
+    assert 'mode: String = "free"' in network
+    assert 'Callable(self, "_on_lobby_create_response"),\n\t\t_selected_lobby_seat_commanders(),\n\t\t"free"' in main
+    ai_start = main.index("func _selected_lobby_ai_commanders() -> Dictionary:")
+    ai_end = main.index("func _setup_lobby_win_condition_options", ai_start)
+    ai_body = main[ai_start:ai_end]
+    assert "return {2: commander_id}" not in ai_body
+    assert "for seat_index in range(_selected_lobby_player_count()):" in ai_body
+    assert "_lobby_ai_replacement_for_seat(seat_index)" in ai_body
+
+
 def test_godot_save_views_use_save_api_not_game_delete_api():
     source = _read(MAIN_GD)
     assert 'NetworkClient.list_saves(_user_name, Callable(self, "_on_saves_response"))' in source

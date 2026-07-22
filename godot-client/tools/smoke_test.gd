@@ -733,10 +733,17 @@ func _ready() -> void:
 		"lobby commander selector should include none plus unlocked commanders")
 	_assert_gte("Lobby AI commander selector lists unlocked choices", ai_commander_option.item_count, 3,
 		"AI commander selector should include auto plus unlocked commanders")
+	main_check.set("_game_id", 0)
+	main_check.call("_on_lobby_seat_ai_toggled", true, 1)
 	ai_commander_option.select(1)
 	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
-	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(2, "")), "yun",
-		"room creation should map the selected AI commander to seat 2")
+	var first_ai_seat := -1
+	for seat_index in range(main_check.call("_selected_lobby_player_count")):
+		if bool(main_check.call("_lobby_ai_replacement_for_seat", seat_index)):
+			first_ai_seat = seat_index
+			break
+	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(first_ai_seat, "")), "yun",
+		"room creation should map the selected AI commander to the first AI replacement seat")
 	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("云"),
 		"commander response should show the selected commander in Chinese")
 	main_check.call("_on_select_mainline_commander_response", {
