@@ -42,7 +42,7 @@ UNIT_KNIGHT = "knight"
 
 from app.models import ActionLog, ClaimSession, Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
-from app.utils import bfs_reachable, has_line_of_sight, manhattan, pathfind
+from app.utils import bfs_reachable, manhattan, pathfind
 
 
 logger = logging.getLogger(__name__)
@@ -334,35 +334,16 @@ def can_attack_from_position(
     blockers: Optional[set] = None,
     board_size: int = MAP_SIZE,
 ) -> bool:
-    """True if `unit` could attack (toX, toY) when standing on (fromX, fromY).
+    """True if ``unit`` can attack a target by Manhattan range alone.
 
-    Distance is measured in Manhattan metric (|dx|+|dy|). For
-    attacks at distance > 1 we also require a clear line of sight
-    (mountains / forests / rivers block) — unless the unit has
-    `ignores_line_of_sight=True` (e.g. archer sniper), which shoots
-    through obstacles. Melee (d == 1) is always allowed — the unit
-    can close distance and swing.
-
-    `blockers` is a set of (x, y) coords; pass the set of mountain
-    / forest / river tiles from the AI snapshot or pass None to skip
-    the LoS check (e.g. for melee-only or for callers that don't
-    have the map handy — the legacy single-player tests do this).
+    Terrain, units, and line-of-sight never block attacks. ``blockers`` and
+    ``board_size`` are accepted for backwards-compatible callers but ignored.
     """
+    _ = blockers, board_size
     d = manhattan((fromX, fromY), (toX, toY))
     if d == 0:
         return False
-    if not (unit_min_attack_range(unit) < d <= unit_attack_range(unit)):
-        return False
-    if d <= 1:
-        return True  # melee, no LoS needed
-    # Ranged attack — apply LoS check unless the unit's class ignores it.
-    # Matches the policy in routes/actions.py and agent/legal_actions.py.
-    if blockers is not None and not _get_unit(unit.unit_type).ignores_line_of_sight:
-        if not has_line_of_sight(
-            (fromX, fromY), (toX, toY), blockers, size=board_size,
-        ):
-            return False
-    return True
+    return unit_min_attack_range(unit) < d <= unit_attack_range(unit)
 
 
 def _type_multiplier(attacker: Unit, defender: Unit) -> float:
@@ -595,7 +576,12 @@ async def _load_game_actors(session: AsyncSession, game: Game) -> Tuple[List[Pla
     return list(players), list(units)
 
 
-async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> List[int]:
+async def cleanup_dead_units(
+    session: AsyncSession,
+    units: Sequence[Unit],
+    *,
+    evaluate_win: bool = True,
+) -> List[int]:
     """Delete dead units, awarding one death score per unique casualty."""
     pending_delete = tuple(getattr(session, "deleted", ()))
     dead_by_id = {
@@ -640,7 +626,7 @@ async def cleanup_dead_units(session: AsyncSession, units: Sequence[Unit]) -> Li
     else:
         game_id = None
     game = await _resolve_game(session, game_id) if game_id is not None else None
-    if game is not None and game.status == "playing":
+    if evaluate_win and game is not None and game.status == "playing":
         await check_win_condition(session, game)
     return dead_ids
 
@@ -1034,7 +1020,7 @@ async def check_pending_claims(
                 # cleanup_dead_units handles FK SET NULL on tiles, claim
                 # cancellation, CO meter on_death, AND re-runs
                 # check_win_condition internally (rout verdict).
-                await cleanup_dead_units(session, old_player_units)
+                await cleanup_dead_units(session, old_player_units, evaluate_win=False)
                 session.add(ActionLog(
                     game_id=game.id,
                     turn_number=game.turn_number,
@@ -1797,20 +1783,12 @@ def _ai_pick_attack_target(
     the shot. Kill-shots (1-hit kill) bypass the scaling — guaranteed.
     """
     atk_range = unit_attack_range(unit)
-    blockers = {
-        c for c, t in snap.terrain.items()
-        if t in (TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER)
-    }
     candidates = []
     for e in snap.enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
-        if d > 1 and not _get_unit(unit.unit_type).ignores_line_of_sight:
-            # Ranged: check line of sight (archer's "snipe" ignores obstacles)
-            blockers.discard((e.x, e.y))
-            if not has_line_of_sight((unit.x, unit.y), (e.x, e.y), blockers):
-                continue
+
         # Score: lower hp = better kill chance; type-advantage = bonus
         score = _unit_value(e) * 1.0
         score -= e.hp * 0.5   # lower HP = higher score

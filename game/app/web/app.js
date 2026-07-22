@@ -2659,35 +2659,6 @@ function canUnitAttack(unit, fromX, fromY, toX, toY) {
   if (d === 0) return false;
   const prof = getUnitAttackProfile(unit);
   if (!(d > prof.minRange && d <= prof.maxRange)) return false;
-  // P2.4 polish — ranged attacks (>1 cell) need a clear LoS. The
-  // server enforces this; we mirror it client-side so the
-  // attack-target highlights match what the engine will actually
-  // accept.
-  if (d > 1 && !clientHasLineOfSight(fromX, fromY, toX, toY)) {
-    return false;
-  }
-  return true;
-}
-
-// P2.4 polish — mirror of app/utils.py:has_line_of_sight for the
-// client. Mountains, forests, and rivers block ranged shots. Castles
-// do NOT block (a unit on a castle is still targetable).
-function clientHasLineOfSight(ax, ay, bx, by) {
-  if (ax === bx && ay === by) return true;
-  if (ax !== bx && ay !== by) return false;  // no diagonal shots
-  const stepX = ax === bx ? 0 : (bx > ax ? 1 : -1);
-  const stepY = ay === by ? 0 : (by > ay ? 1 : -1);
-  let cx = ax + stepX, cy = ay + stepY;
-  const tileMap = new Map();
-  for (const t of state.game?.tiles || []) tileMap.set(`${t.x},${t.y}`, t);
-  while ((cx !== bx) || (cy !== by)) {
-    if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return false;
-    const t = tileMap.get(`${cx},${cy}`);
-    if (t && (t.terrain === "mountain" || t.terrain === "forest" || t.terrain === "river")) {
-      return false;
-    }
-    cx += stepX; cy += stepY;
-  }
   return true;
 }
 

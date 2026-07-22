@@ -64,7 +64,6 @@ from app.events import GameEvent, bus
 from app.utils import (
     Coord,
     bfs_reachable,
-    has_line_of_sight,
     manhattan,
     pathfind,
 )
@@ -360,13 +359,6 @@ async def _validate_attack_request(
             f"目标超出射程（需要 {atk_min} < 距离 {distance} <= {atk_range}）",
         )
 
-    if atk_range > 1 and not _get_unit(attacker.unit_type).ignores_line_of_sight:
-        terrain, _owners, _occ = await _load_tile_grid(session, game_id)
-        blockers = _blocker_set(terrain)
-        blockers.discard((target.x, target.y))
-        if not has_line_of_sight((attacker.x, attacker.y), (target.x, target.y), blockers):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "视线被阻挡")
-
     def_tile = (
         await session.execute(
             select(Tile).where(Tile.game_id == game_id, Tile.x == target.x, Tile.y == target.y)
@@ -495,15 +487,6 @@ async def attack(
             status.HTTP_400_BAD_REQUEST,
             f"target out of range (need {atk_min} < d={distance} <= {atk_range})",
         )
-
-    # Ranged attacks need LOS (archer's "snipe" skill ignores obstacles)
-    if atk_range > 1 and not _get_unit(attacker.unit_type).ignores_line_of_sight:
-        terrain, _owners, _occ = await _load_tile_grid(session, game_id)
-        blockers = _blocker_set(terrain)
-        # The target's own tile should not block LOS to itself
-        blockers.discard((target.x, target.y))
-        if not has_line_of_sight((attacker.x, attacker.y), (target.x, target.y), blockers):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "视线被阻挡")
 
     # Determine defender's terrain bonus
     def_tile = (
@@ -885,10 +868,16 @@ async def claim_tile(
             "该单位已离开占领位置，请重新开始",
         )
 
-    # Force completion: flip ownership and clear the session now.
+    # Force completion through the same resolver used by end-turn expiry so
+    # HQ capture, cascade cleanup, and seize victory stay consistent.
     old_owner = tile.owner_id
-    tile.owner_id = player.id
-    await session.delete(existing)
+    existing.completes_turn = game.turn_number
+    flipped = await check_pending_claims(session, game)
+    if tile.id not in flipped:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "占领无法完成，请确认单位仍站在目标地块上",
+        )
     unit.has_acted = True
     unit.mp = 0
     _log(session, game, player, "claim_complete",

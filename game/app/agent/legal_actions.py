@@ -23,16 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from app.agent.schemas import LegalAction
-from app.classes.units import get as _get_unit
 from app.config import (
-    AI_AGGRO_RANGE,
-    SKILL_DOUBLE_STRIKE,
     SKILL_SNIPE,
-    TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
-    TERRAIN_FOREST,
-    TERRAIN_MOUNTAIN,
-    TERRAIN_RIVER,
 )
 from app.game_logic import (
     calculate_damage,
@@ -40,7 +33,7 @@ from app.game_logic import (
 )
 from app.models import Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile
-from app.utils import bfs_reachable, has_line_of_sight, manhattan
+from app.utils import bfs_reachable, manhattan
 
 
 # Cap the number of move targets we list. AI doesn't need to know about every
@@ -160,21 +153,12 @@ def _legal_actions_for_unit(
                     description=f"→{tx},{ty}",
                 ))
 
-    # 3. Attack — enemies in range
+    # 3. Attack - enemies in range by Manhattan distance only.
     atk_range = unit_attack_range(unit)
-    los_blockers = {
-        c for c, t in terrain.items()
-        if t in (TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER)
-    }
     for e in enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
         if d == 0 or d > atk_range:
             continue
-        if d > 1 and not _get_unit(unit.unit_type).ignores_line_of_sight:
-            # Ranged: check LOS (archer's "snipe" ignores obstacles)
-            los_blockers.discard((e.x, e.y))
-            if not has_line_of_sight((unit.x, unit.y), (e.x, e.y), los_blockers):
-                continue
 
         # Estimate damage
         def_tile_terrain = terrain.get((e.x, e.y), "plain")
