@@ -78,7 +78,10 @@ static func fit_image_to_square(img: Image, target_size: int = 0) -> Texture2D:
 		)
 		var out_w: int = max(1, int(round(float(img.get_width()) * scale)))
 		var out_h: int = max(1, int(round(float(img.get_height()) * scale)))
-		img.resize(out_w, out_h, Image.INTERPOLATE_BILINEAR)
+		# 用 NEAREST 块采样,保留像素艺术锐边;与 tile_set_builder.gd:246
+		# 及 WebUI 的 image-rendering: pixelated 等价。BILINEAR 会预先把锐边
+		# 平均成软像素,之后再配 Nearest 也救不回来。
+		img.resize(out_w, out_h, Image.INTERPOLATE_NEAREST)
 	return ImageTexture.create_from_image(img)
 
 

@@ -621,6 +621,7 @@ async def attack(
             "is_kill": is_kill,
             "attacker_hp": attacker.hp,
             "target_hp": target.hp,
+            "counter_damage": counter_dmg,
         },
     ))
 

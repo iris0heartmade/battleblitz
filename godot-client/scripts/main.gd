@@ -1956,7 +1956,7 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	_schedule_board_refresh()
 
 
-func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
+func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool, counter_damage: int) -> void:
 	action_log.append_text("[color=#f0c75e]⚔ #%d → #%d: %d 伤害%s%s[/color]\n" % [
 		attacker_id, target_id, damage,
 		" (暴击!)" if is_crit else "",
@@ -1972,6 +1972,15 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 				text = "💀%d" % damage
 				color_hex = "#c63a3a"
 			board.spawn_floating_text_at_cell(cell, text, color_hex, "damage")
+	# M4.14+:反击伤害飘字 — 显示在攻击者位置,触发条件与服务端 actions.py:537 的 not is_kill 对齐
+	if counter_damage > 0 and board != null:
+		var atk: Dictionary = GameState.get_unit(attacker_id) if GameState != null else {}
+		if not atk.is_empty():
+			var acell := Vector2i(int(atk.get("x", 0)), int(atk.get("y", 0)))
+			var is_counter_kill: bool = int(atk.get("hp", 1)) <= 0
+			var atext: String = ("💀%d" % counter_damage) if is_counter_kill else ("↩%d" % counter_damage)
+			var acolor: String = "#c63a3a" if is_counter_kill else "#e85a6a"
+			board.spawn_floating_text_at_cell(acell, atext, acolor, "counter_damage")
 	# M4.14:post-attack bubble — 若目标未死 + can_move_after_action 还能再行动
 	if not is_kill:
 		_show_post_action_bubble(attacker_id, "攻击")
@@ -2496,6 +2505,7 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 	if board == null or GameState == null:
 		return {}
 	if not GameState.is_local_turn:
+		_update_status("等待你的回合…")
 		return {}
 	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
 	if layer == null:
@@ -2508,6 +2518,7 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 	if tile.is_empty() and board.tile_lookup != null:
 		tile = board.tile_lookup.get(cell, {})
 	if tile.is_empty():
+		_update_status("地图数据未就绪 (tiles 未加载)")
 		return {}
 	if str(tile.get("terrain", "")) != "barracks":
 		return {}
@@ -2518,10 +2529,12 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 		if not gs_tile_owner.is_empty():
 			owner_id = int(gs_tile_owner.get("owner_id", -1))
 	if owner_id != _player_id:
+		_update_status("该兵营不属于你 (owner=%d)" % owner_id)
 		return {}
 	# 该 tile 上是否有单位(occupied → 不能招募)
 	for uu in _all_units_including_self():
 		if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
+			_update_status("该兵营已被单位驻守，请先让该单位移开")
 			return {}
 	var me: Dictionary = GameState.get_player(_player_id)
 	return {

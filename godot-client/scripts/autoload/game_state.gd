@@ -27,7 +27,7 @@ signal connection_state_changed(connected: bool)
 # Granular event-delta signals (M2.2)
 signal log_received(action: Dictionary)            # every event → log line
 signal unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int, cost: int)
-signal unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool)
+signal unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool, counter_damage: int)
 signal unit_killed(unit_id: int, killer_id: int)
 signal unit_leveled_up(unit_id: int, new_level: int)
 signal unit_waited(unit_id: int)
@@ -186,28 +186,61 @@ func _on_event_delta(event: Dictionary) -> void:
 
 	match event_type:
 		"move":
+			# M4.16+:同步更新 players 缓存中的 x/y — 否则 _all_units_including_self()
+			# 等用 GameState.players 数据的代码会读到 stale 位置(knight 移开后
+			# 还显示在原 cell,导致 _pick_empty_my_barracks 误判"已驻守")。
+			var moved_to_x: int = int(context.get("to_x", -1))
+			var moved_to_y: int = int(context.get("to_y", -1))
+			_update_unit_in_cache(actor_unit_id, func(u: Dictionary) -> void:
+				u["x"] = moved_to_x
+				u["y"] = moved_to_y
+			)
 			unit_moved.emit(
 				actor_unit_id,
 				int(context.get("from_x", -1)),
 				int(context.get("from_y", -1)),
-				int(context.get("to_x", -1)),
-				int(context.get("to_y", -1)),
+				moved_to_x,
+				moved_to_y,
 				int(context.get("cost", 0))
 			)
 		"attack":
+			# M4.16+:同步 HP — attack/kill 影响 units[].hp,_all_units_including_self 也读 hp
+			var attacker_hp_after: int = int(context.get("attacker_hp", -1))
+			var target_hp_after: int = int(context.get("target_hp", -1))
+			var is_kill_v: bool = bool(context.get("is_kill", false))
+			if attacker_hp_after >= 0:
+				_update_unit_in_cache(actor_unit_id, func(u: Dictionary) -> void:
+					u["hp"] = attacker_hp_after
+				)
+			if target_hp_after >= 0:
+				_update_unit_in_cache(target_unit_id, func(u: Dictionary) -> void:
+					u["hp"] = target_hp_after
+				)
 			unit_attacked.emit(
 				actor_unit_id, target_unit_id,
 				int(context.get("damage", 0)),
 				bool(context.get("is_crit", false)),
-				bool(context.get("is_kill", false))
+				is_kill_v,
+				int(context.get("counter_damage", 0))
 			)
 		"kill":
+			# M4.16+:从 players 缓存中移除死亡单位 — 否则 _all_units_including_self 还会看到尸体
+			_remove_unit_from_cache(target_unit_id)
 			unit_killed.emit(target_unit_id, actor_unit_id)
 		"level_up":
+			_update_unit_in_cache(actor_unit_id, func(u: Dictionary) -> void:
+				u["level"] = int(context.get("new_level", int(u.get("level", 1))))
+			)
 			unit_leveled_up.emit(actor_unit_id, int(context.get("new_level", 0)))
 		"wait":
 			unit_waited.emit(actor_unit_id)
 		"skill":
+			# M4.16+:同步 HP(heal 技能 restore_hp)
+			var skill_restored: int = int(context.get("restored_hp", -1))
+			if skill_restored >= 0:
+				_update_unit_in_cache(actor_unit_id, func(u: Dictionary) -> void:
+					u["hp"] = int(u.get("hp", 0)) + skill_restored
+				)
 			unit_used_skill.emit(
 				actor_unit_id,
 				String(context.get("skill", "")),
@@ -221,11 +254,28 @@ func _on_event_delta(event: Dictionary) -> void:
 				int(context.get("new_owner_id", -1))
 			)
 		"recruit":
+			# M4.16+:把新单位推到 local player 的 units 缓存 — 下一次
+			# _all_units_including_self 立刻能看到(避免 REST polling 延迟
+			# 期间新单位被当作"未驻守"允许二次招募)。
+			var new_uid: int = int(context.get("new_unit_id", actor_unit_id))
+			var rec_tx: int = int(context.get("tile_x", -1))
+			var rec_ty: int = int(context.get("tile_y", -1))
+			if new_uid >= 0 and rec_tx >= 0 and rec_ty >= 0 and local_player_id > 0:
+				_add_unit_to_player_cache(local_player_id, {
+					"id": new_uid,
+					"unit_type": String(context.get("unit_type", "")),
+					"x": rec_tx,
+					"y": rec_ty,
+					"hp": -1,         # 待 REST polling 补完整 HP
+					"max_hp": -1,
+					"has_acted": true,
+					"has_moved": true,
+				})
 			unit_recruited.emit(
-				int(context.get("new_unit_id", actor_unit_id)),
+				new_uid,
 				String(context.get("unit_type", "")),
-				int(context.get("tile_x", -1)),
-				int(context.get("tile_y", -1)),
+				rec_tx,
+				rec_ty,
 				int(context.get("cost", 0))
 			)
 		"turn_end":
@@ -286,3 +336,57 @@ func _flatten_units(players_in: Array) -> Array:
 				if u is Dictionary:
 					out.append(u)
 	return out
+
+
+# M4.16+:在 players 缓存里按 id 找单位并应用 updater。
+# event.delta 不重发整套 state,只有 typed signals — 但 main.gd 用
+# GameState.players[].units[] 做占用判定/HP 显示,必须同步更新,否则
+# _pick_empty_my_barracks / _show_threat_tiles 等用 stale data 出 bug。
+func _update_unit_in_cache(unit_id: int, updater: Callable) -> bool:
+	if unit_id < 0:
+		return false
+	for p in players:
+		if not p is Dictionary:
+			continue
+		var units_v: Variant = p.get("units", [])
+		if not units_v is Array:
+			continue
+		for u in units_v:
+			if u is Dictionary and int(u.get("id", -1)) == unit_id:
+				updater.call(u)
+				return true
+	return false
+
+
+# 从 players 缓存中移除死亡/被解散的单位(actor_unit_id)
+func _remove_unit_from_cache(unit_id: int) -> bool:
+	if unit_id < 0:
+		return false
+	for p in players:
+		if not p is Dictionary:
+			continue
+		var units_v: Variant = p.get("units", [])
+		if not units_v is Array:
+			continue
+		for i in range(units_v.size() - 1, -1, -1):
+			var u: Variant = units_v[i]
+			if u is Dictionary and int(u.get("id", -1)) == unit_id:
+				units_v.remove_at(i)
+				return true
+	return false
+
+
+# 给指定 player 追加新单位(recruit / summon 事件用)
+func _add_unit_to_player_cache(player_id: int, new_unit: Dictionary) -> bool:
+	for p in players:
+		if not p is Dictionary:
+			continue
+		if int(p.get("id", -1)) != player_id:
+			continue
+		var units_v: Variant = p.get("units", [])
+		if not units_v is Array:
+			units_v = []
+			p["units"] = units_v
+		units_v.append(new_unit)
+		return true
+	return false
