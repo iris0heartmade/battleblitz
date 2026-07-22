@@ -370,6 +370,13 @@ var _user_name: String = "Player"
 var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
+# Phase 2: mainline session — backup source of truth for state scattered
+# across handlers that re-implement mainline flow.  The new modules
+# (``scripts/mainline/mainline_session.gd`` +
+# ``scripts/mainline/mainline_responses.gd``) read/write via this
+# instance; main.gd's own fields above stay read/write-compat for now
+# and get synced through helper methods in the response handlers.
+var _mainline_session: MainlineSession = null
 var _mainline_page: String = "chapter_list"
 var _mainline_commander_ids: Array[String] = [""]
 var _mainline_prepare_payload: Dictionary = {}
@@ -391,6 +398,12 @@ func _ready() -> void:
 	else:
 		_user_name = "学妹喵" if _random_suffix() > 0.5 else "学长"
 		UserSettings.set_value("settings.v1.player_name", _user_name)
+
+	# === Phase 2: instantiate mainline session (currently a pass-through
+	# to the legacy _active_mainline_id / _mainline_battle_game_id fields;
+	# a later phase will move those fields into the session object proper).
+	_mainline_session = MainlineSession.new()
+	_mainline_session.restore_from_settings()
 
 	# === GBA 火纹风主题注入(V2 第 1+2 轮:主菜单 + HUD 4 角) ===
 	_apply_gba_theme()
