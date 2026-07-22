@@ -3076,7 +3076,10 @@ func _on_capture_suspend_response(body: Variant, code: int) -> void:
 			msg = "中断保存失败: %s" % str(body.get("detail"))
 		_update_status(msg)
 		return
+	# Bug fix: 中断存档成功后必须主动切回主菜单 + toast 提示。否则玩家
+	# 停在 pause 面板,不知道刚才那一按到底有没有生效。
 	_update_status("💾 中断已保存,返回主菜单(可继续中断战斗)")
+	_show_view("menu")
 	_reset_game_state_for_main_menu()
 
 
@@ -3787,6 +3790,43 @@ func _skill_cn(skill_id: String) -> String:
 			return "奥术冲击"
 		_:
 			return skill_id
+
+
+# P2.6+: 地形名中文化(用于 InfoPanel 加成区段)
+func _terrain_cn(terrain_name: String, subtype: String = "") -> String:
+	# subtype 优先 — castle_floor / castle_wall / etc.
+	if subtype != "":
+		match subtype:
+			"castle_floor": return "城堡内部"
+			"castle_wall": return "城墙"
+			"castle_door": return "城门"
+			"castle_throne": return "王座厅"
+			"castle_stairs": return "城梯"
+			"castle_vault": return "金库"
+	match terrain_name:
+		"plain": return "平原"
+		"forest": return "森林"
+		"mountain": return "山地"
+		"snow_peak": return "雪峰"
+		"river": return "河流"
+		"road": return "道路"
+		"bridge": return "桥梁"
+		"castle": return "城堡"
+		"village": return "村庄"
+		"barracks": return "兵营"
+		"gate": return "城门"
+		_:
+			return terrain_name
+
+
+# P2.6+: 指挥官名中文化(用于 InfoPanel 战斗加成区段)
+func _commander_cn(co_id: String) -> String:
+	match co_id:
+		"anna": return "安娜"
+		"yun": return "云"
+		"boss": return "Boss"
+		_:
+			return co_id
 
 
 func _color_name_cn(color_name: String) -> String:
@@ -8004,7 +8044,11 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
 	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
-	var hero_id := str(ud.get("hero_id", ""))
+	# Bug fix: GDScript 的 str(null) 返回字面字符串 "<null>",跟空字符串
+	# 比较仍然不为空 → 之前会把没有 hero_id 的普通单位误判成英雄。
+	# 显式判断 Variant 类型后再 stringify。
+	var hero_id_v: Variant = ud.get("hero_id", null)
+	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	_set_unit_info_portrait(hero_id)
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
@@ -8019,6 +8063,54 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		"[color=#a89878]👣 移动力[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
 		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skill_names) if skill_names.size() > 0 else "—"],
 	]
+
+	# ── 战斗加成 / Buffs 区段(P2.6+ 用户要的逐条列出) ──
+	# 每条描述一个 buff 来源:地形 / 士气 / 指挥官 / 装备 / 技能 /
+	# 主动技能附带效果等。空 buff 不显示该区段。
+	var buffs: Array[String] = []
+	# 1) 地形防御加成(单位所站格子的 TERRAIN_DEF_BONUS)
+	var tile_d: Dictionary = GameState.get_tile(int(pos.x), int(pos.y)) if GameState != null else {}
+	var terrain_name: String = String(tile_d.get("terrain", ""))
+	if terrain_name != "":
+		var def_bonus: int = int(Config.TERRAIN_DEF_BONUS.get(terrain_name, 0))
+		# castle_floor / castle_wall 等 subtype 也走同一张表
+		var subtype: String = String(tile_d.get("subtype", ""))
+		if subtype != "" and Config.TERRAIN_DEF_BONUS.has(subtype):
+			def_bonus = int(Config.TERRAIN_DEF_BONUS.get(subtype, 0))
+		var terrain_cn := _terrain_cn(terrain_name, subtype)
+		if def_bonus > 0:
+			buffs.append("[color=#7ec97e]🌲 %s[/color] +%d 防御" % [terrain_cn, def_bonus])
+		elif terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
+			buffs.append("[color=#a89878]🏰 %s (无地形加成,但可驻守/产兵)[/color]" % terrain_cn)
+	# 2) 士气加成(MORALE_ATK_PER_STAR / MORALE_DEF_PER_STAR)
+	if morale > 0:
+		var atk_pct: int = int(round(morale * Config.MORALE_ATK_PER_STAR * 100))
+		var def_pct: int = int(round(morale * Config.MORALE_DEF_PER_STAR * 100))
+		buffs.append("[color=#fad855]⭐ 士气 %d[/color] → +%d%% 攻击 +%d%% 防御" % [morale, atk_pct, def_pct])
+	# 3) 玩家指挥官统御 Power 是否启动(仅自己单位)
+	if is_mine:
+		var my_player: Dictionary = GameState.get_player(_player_id) if GameState != null else {}
+		var co_state_d: Dictionary = my_player.get("co_state", {}) if my_player is Dictionary else {}
+		if co_state_d is Dictionary and co_state_d.get("is_power_active", false):
+			var co_id: String = str(co_state_d.get("commander_id", ""))
+			var co_name_cn := _commander_cn(co_id) if co_id != "" else "指挥官"
+			buffs.append("[color=#f2666b]🔥 %s 统御 Power 启动中[/color] → 全军 buff" % co_name_cn)
+	# 4) 转职加成(高等级 → 转职后等级加成)
+	if lvl >= 10:
+		buffs.append("[color=#5fa8e8]📈 等级 %d 已解锁转职[/color]" % lvl)
+	# 5) 技能被动效果(只对未在 skill list 中显示的通用增益提示)
+	for sk_name in skills:
+		var sk_cn: String = _skill_cn(str(sk_name))
+		if sk_cn != "" and sk_cn != str(sk_name):
+			buffs.append("[color=#a69a73]💠 技能:[/color] %s" % sk_cn)
+
+	if buffs.size() > 0:
+		var header: String = "[color=#c9a14a][b]— ⚡ 战斗加成 —[/b][/color]"
+		var buff_block: Array[String] = [header]
+		buff_block.append_array(buffs)
+		lines.append("")
+		lines.append_array(buff_block)
+
 	if not is_mine:
 		lines.append("[color=#c63a3a]⚠ 敌方单位·无法操作[/color]")
 	elif not can_act:
