@@ -78,13 +78,17 @@ func _on_units_changed(units_data: Array) -> void:
 		var existing: Node = _unit_nodes_by_id.get(uid)
 		if existing != null and is_instance_valid(existing):
 			# 增量:update data + FLIP 动画(如果位置变化)。
-			existing.setup(unit_data, Config.player_color(String(unit_data.get("color", "red"))), _team_id_for_unit(unit_data))
+			existing.setup(unit_data, _team_color_for_unit(unit_data), _team_id_for_unit(unit_data))
 			var new_cell := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 			var new_pos: Vector2 = metrics.cell_to_local(new_cell)
 			var prev_pos: Vector2 = existing.position  # 截图前一帧位置
 			if prev_pos != new_pos:
 				# 位置变化 — 用 Tween 0.32s 插值(FLIP 等价)
+				var old_tween: Tween = existing.get_meta("move_tween", null)
+				if old_tween != null and old_tween.is_running():
+					old_tween.kill()
 				var t: Tween = create_tween()
+				existing.set_meta("move_tween", t)
 				t.set_trans(Tween.TRANS_CUBIC)
 				t.set_ease(Tween.EASE_OUT)
 				# FIX: tween 从 prev_pos → new_pos。
@@ -111,7 +115,7 @@ func _add_unit_node(unit_data: Dictionary) -> void:
 	var unit_dict: Dictionary = unit_data
 	var color_name := String(unit_dict.get("color", "red"))
 	var cell := Vector2i(int(unit_dict.get("x", 0)), int(unit_dict.get("y", 0)))
-	presenter.setup(unit_dict, Config.player_color(color_name), _team_id_for_unit(unit_dict))
+	presenter.setup(unit_dict, _team_color_for_unit(unit_dict), _team_id_for_unit(unit_dict))
 	presenter.position = metrics.cell_to_local(cell)
 	units.add_child(presenter)
 	var uid: int = int(unit_dict.get("id", -1))
@@ -132,6 +136,18 @@ func _team_id_for_unit(unit_data: Dictionary) -> Variant:
 	if owner.is_empty():
 		return null
 	return owner.get("team", null)
+
+
+func _team_color_for_unit(unit_data: Dictionary) -> Color:
+	var team_id: Variant = _team_id_for_unit(unit_data)
+	var team_key: String = String(team_id) if team_id != null else ""
+	match team_key:
+		"team_a": return Config.player_color("red")
+		"team_b": return Config.player_color("blue")
+		"team_c": return Config.player_color("green")
+		"team_d": return Config.player_color("yellow")
+	var color_name := String(unit_data.get("color", "red"))
+	return Config.player_color(color_name)
 
 
 # M4.10:屏幕坐标 → cell,找该 cell 的单位

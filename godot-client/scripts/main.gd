@@ -837,6 +837,8 @@ func _stop_state_polling() -> void:
 
 
 func _poll_state_now() -> void:
+	if _game_over:
+		return
 	if _game_id <= 0:
 		return
 	if game_view == null or not is_instance_valid(game_view) or not game_view.visible:
@@ -1530,10 +1532,9 @@ func _show_threat_tiles() -> void:
 
 
 func _on_state_updated(_snapshot: Dictionary) -> void:
-	# M4.16+ game-over 保险:如果 game_summary.status == "finished",说明
-	# server 已经判定胜负,不再重画棋盘(防止循环 + AI 继续推事件导致卡死)。
 	var _sum: Dictionary = GameState.game_summary if GameState != null else {}
 	if String(_sum.get("status", "")) == "finished":
+		_handle_finished_snapshot(_sum)
 		return
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
@@ -2025,6 +2026,8 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 # 避免 AI 回合里 N 个 event.delta 各拉一次。事件→响应回来→ingest→
 # units_changed → board._on_units_changed 自动 FLIP 单位位置。
 func _schedule_board_refresh() -> void:
+	if _game_over:
+		return
 	if _board_refresh_pending:
 		return
 	_board_refresh_pending = true
@@ -2033,6 +2036,8 @@ func _schedule_board_refresh() -> void:
 
 func _do_board_refresh() -> void:
 	_board_refresh_pending = false
+	if _game_over:
+		return
 	if _game_id <= 0:
 		return
 	NetworkClient.get_game_state(_game_id)
@@ -2285,10 +2290,41 @@ func _on_turn_ended(next_player_id, turn_number: int) -> void:
 	_schedule_board_refresh()
 
 
+func _winner_player_id_from_finished_snapshot() -> int:
+	if GameState == null:
+		return -1
+	var alive_team_to_pid: Dictionary = {}
+	for p in GameState.players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)) or not bool(p.get("is_alive", true)):
+			continue
+		if (p.get("units", []) as Array).is_empty():
+			continue
+		var pid: int = int(p.get("id", -1))
+		var key: String = _player_team_key(pid)
+		if not alive_team_to_pid.has(key):
+			alive_team_to_pid[key] = pid
+	if alive_team_to_pid.size() == 1:
+		return int(alive_team_to_pid.values()[0])
+	return _player_id
+
+
+func _handle_finished_snapshot(summary: Dictionary) -> void:
+	if _game_over:
+		return
+	var reason: String = str(summary.get("win_reason", "rout"))
+	var winner_pid: int = _winner_player_id_from_finished_snapshot()
+	_on_match_ended(winner_pid, reason)
+
+
 func _on_match_ended(winner_player_id, win_reason: String) -> void:
 	# M4.16+ game-over 保险:置 flag 后,后续的 _on_state_updated /
 	# ai_thinking 都会被屏蔽,避免循环刷新或 AI 推事件导致卡死。
 	_game_over = true
+	_board_refresh_pending = false
+	if _state_poll_timer != null and is_instance_valid(_state_poll_timer):
+		_state_poll_timer.stop()
 	# 关闭可能还在显示的 AI thinking / end-turn 提示
 	if ai_thinking_label != null and is_instance_valid(ai_thinking_label):
 		ai_thinking_label.visible = false
@@ -2520,69 +2556,56 @@ func _unhandled_input(event: InputEvent) -> void:
 				# 治疗模式:空地点击 → 取消
 				_cancel_action_mode()
 			else:
-				# 走 web 的"空佣兵站(我方 owner)+ 没单位驻守"→ 招募入口
-				# (game/app/web/app.js:3015-3024)。
-				var batt: Dictionary = _pick_empty_my_barracks(event.global_position)
-				if not batt.is_empty():
-					_show_recruit_at(batt)
-				else:
-					board.clear_selection_marks()
-					_hide_action_bubble()
+				board.emit_tile_clicked(event.global_position)
 		get_viewport().set_input_as_handled()
 
 
 # 把屏幕坐标转 tile,看是不是"我方 owner + 空 barracks + 是我的回合"。
 # 是 → {x, y, gold};否 → {}。
 func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
-	if board == null or GameState == null:
-		return {}
-	if not GameState.is_local_turn:
-		_update_status("等待你的回合…")
+	if board == null:
 		return {}
 	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
 	if layer == null:
 		return {}
 	var local: Vector2 = layer.to_local(global_pos)
-	var cell: Vector2i = layer.local_to_map(local)
-	# GameState tiles 有 owner_id(服务器 TileOut.owner_id);
-	# board.tile_lookup 只有 terrain/subtype。优先从 GameState 拿。
+	return _pick_empty_my_barracks_at_cell(layer.local_to_map(local))
+
+
+func _pick_empty_my_barracks_at_cell(cell: Vector2i) -> Dictionary:
+	if board == null or GameState == null:
+		return {}
+	if not GameState.is_local_turn:
+		_update_status("Not your turn...")
+		return {}
 	var tile := GameState.get_tile(cell.x, cell.y)
 	if tile.is_empty() and board.tile_lookup != null:
 		tile = board.tile_lookup.get(cell, {})
 	if tile.is_empty():
-		_update_status("地图数据未就绪 (tiles 未加载)")
+		_update_status("Map data not loaded")
 		return {}
 	if str(tile.get("terrain", "")) != "barracks":
 		return {}
-	# owner_id — GameState tile 优先
 	var owner_id := int(tile.get("owner_id", -1))
-	if owner_id == -1 and GameState != null:
-		var gs_tile_owner := GameState.get_tile(cell.x, cell.y)
-		if not gs_tile_owner.is_empty():
-			owner_id = int(gs_tile_owner.get("owner_id", -1))
 	if owner_id != _player_id:
-		_update_status("该兵营不属于你 (owner=%d)" % owner_id)
+		_update_status("This barracks is not yours (owner=%d)" % owner_id)
 		return {}
-	# 该 tile 上是否有单位(occupied → 不能招募)
-	# M4.16+ fix:直接用 server TileOut.occupied_unit_id(权威)而不是扫描
-	# 本地 _all_units_including_self。后者依赖 GameState.players 缓存同步,
-	# 在初始 spawn / polling 间隔期间会读到 stale 位置,误判 barracks"已驻守"。
 	var occ_v: Variant = tile.get("occupied_unit_id", null)
-	var occupied: bool = occ_v != null and int(occ_v) > 0
-	if occupied:
-		_update_status("该兵营已被单位驻守，请先让该单位移开")
+	if occ_v != null and int(occ_v) > 0:
+		_update_status("Barracks occupied; move the unit away first")
 		return {}
 	var me: Dictionary = GameState.get_player(_player_id)
-	return {
-		"x": cell.x,
-		"y": cell.y,
-		"gold": int(me.get("gold", 0)),
-	}
+	return {"x": cell.x, "y": cell.y, "gold": int(me.get("gold", 0))}
 
 
-# S:4 — T:4 RecruitPanel 真 modal(替换 status 凑合)。
-# 仿照 web 的 showRecruitModal(3276-3325):5 类单位列表 + 金币门槛 disable
-# + 类型 buttons — server 是 source of truth。
+func _try_open_recruit_at_tile(tile: Vector2i) -> bool:
+	var batt: Dictionary = _pick_empty_my_barracks_at_cell(tile)
+	if batt.is_empty():
+		return false
+	_show_recruit_at(batt)
+	return true
+
+
 func _show_recruit_at(info: Dictionary) -> void:
 	if recruit_panel == null or not is_instance_valid(recruit_panel):
 		return
@@ -2652,8 +2675,12 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 
 # M4.1:点击地图格子(空白区 / 落点)→ 处理
 func _on_board_tile_clicked(tile: Vector2i) -> void:
-	# 不在移动模式 → 忽略
 	if _move_mode_unit_id <= 0:
+		if tile.x >= 0 and tile.y >= 0 and _try_open_recruit_at_tile(tile):
+			return
+		if board != null:
+			board.clear_selection_marks()
+		_hide_action_bubble()
 		return
 	if tile.x < 0 or tile.y < 0:
 		_cancel_move_mode()
@@ -7418,7 +7445,7 @@ func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 	var can_attack := has_unit and _compute_attack_targets(ud).size() > 0 and not bool(ud.get("has_acted", false))
 	var active_skill := _available_active_skill(ud) if has_unit and not bool(ud.get("has_acted", false)) else ""
 	var can_skill := active_skill != ""
-	var can_claim := has_unit and context != _ACTION_CONTEXT_POST_ACTION and _can_claim_here(ud)
+	var can_claim := has_unit and _can_claim_here(ud)
 	var can_move := false
 	if has_unit:
 		if context == _ACTION_CONTEXT_INITIAL:
@@ -7534,7 +7561,7 @@ func _on_attack_pressed() -> void:
 	if ud.is_empty():
 		_update_status("攻击: 找不到单位 #%d" % _selected_unit_id)
 		return
-	# 计算可攻击目标(只算范围内 + LoS 通的敌方单位)
+	# Compute attack targets by Manhattan range only; no terrain or unit blockers.
 	var targets: Dictionary = _compute_attack_targets(ud)
 	_attack_mode_unit_id = _selected_unit_id
 	_attack_targets = targets
@@ -7570,53 +7597,38 @@ func _on_cancel_pressed() -> void:
 	_update_status("已取消(右键亦可)")
 
 
-# 计算攻击范围内所有可攻击的目标(敌方单位所在格 — 需在范围内 + LoS 通)
-#
-# 重要原则:client 端**不重复**伤害计算 — server (calculate_damage)
-# 是唯一公式来源。这里只算"哪几个敌方单位在范围内且被本单位的
-# attack_range + LoS 覆盖",对应 game/app/web/app.js:2183 canUnitAttack。
-# 真正的伤害值在 server 推 unit_attacked 事件时由服务端返回的
-# (damage, is_crit, is_kill) 决定。
+# Compute attackable enemy units by Manhattan range only.
+# Damage remains server-authoritative via calculate_damage / unit_attacked events.
+func _player_team_key(player_id: int) -> String:
+	var p: Dictionary = GameState.get_player(player_id) if GameState != null else {}
+	if p.is_empty():
+		return "player_%d" % player_id
+	var team_v: Variant = p.get("team", null)
+	if team_v != null and str(team_v) != "":
+		return str(team_v)
+	return "player_%d" % player_id
+
+
 func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
-	# 范围
 	var range_tiles: Array = _get_attack_range_tiles(attacker)
 	if range_tiles.is_empty():
 		return {}
-	var size_v: int = 15
-	if board != null and board.map_size.x > 0:
-		size_v = board.map_size.x
-	# blocked 字典(只看地形 passable,不拦人 — 自己可站)
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
 	var me_pid: int = int(_player_id)
-	var attacker_skills: Array = attacker.get("skills", []) if attacker.get("skills", []) is Array else []
-	var attacker_ignores_los: bool = "snipe" in attacker_skills
+	var my_team_key: String = _player_team_key(me_pid)
 	var out: Dictionary = {}
 	for rt in range_tiles:
 		var rt_v := Vector2i(int(rt.x), int(rt.y))
-		# 看这个格是否有敌方单位
-		for u in GameState.players:
-			if not u is Dictionary: continue
-			if int(u.get("id", -1)) == me_pid:
+		for p in GameState.players:
+			if not p is Dictionary:
 				continue
-			for uu in u.get("units", []):
-				if not uu is Dictionary: continue
+			var candidate_pid: int = int(p.get("id", -1))
+			if candidate_pid <= 0 or _player_team_key(candidate_pid) == my_team_key:
+				continue
+			for uu in p.get("units", []):
+				if not uu is Dictionary:
+					continue
 				if int(uu.get("x", -1)) != rt_v.x or int(uu.get("y", -1)) != rt_v.y:
 					continue
-				# LoS 校验:仅有障碍(archer snipe无视障碍)
-				var attacker_pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
-				var d: int = abs(attacker_pos.x - rt_v.x) + abs(attacker_pos.y - rt_v.y)
-				if d > 1 and not attacker_ignores_los:
-					var los_ok: bool = MapLogic.has_line_of_sight(
-						attacker_pos, rt_v, blocked, size_v
-					)
-					if not los_ok:
-						continue
 				out[int(uu.get("id", -1))] = {
 					"x": rt_v.x,
 					"y": rt_v.y,
@@ -7624,18 +7636,10 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 					"unit_type": str(uu.get("unit_type", "")),
 					"hp": int(uu.get("hp", 0)),
 					"max_hp": int(uu.get("max_hp", uu.get("hp", 0))),
-					# 不预测,只显示攻击者/目标基本信息。真实伤害由
-					# server 决定。
 				}
 	return out
 
 
-# (删)旧 _forecast_attack_simple 已移除 — 客户端不抄伤害公式,
-# server calculate_damage 单一来源。预测数字走
-# GET /games/{id}/forecast-attack，只展示后端结果。
-
-
-# 拿 attack_range(含 snipe 技能 +1),然后用 MapLogic.attack_range_tiles 求出范围
 func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	var max_range: int = int(attacker.get("attack_range", 1))
 	if (attacker.get("skills", []) as Array).has("snipe"):

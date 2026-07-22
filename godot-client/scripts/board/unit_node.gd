@@ -82,7 +82,6 @@ func setup(data: Dictionary, color: Color, team_id: Variant = null) -> void:
 	_clear_children()
 	_build_pieces(color)
 	_refresh()
-	position = Vector2.ZERO
 
 var _team_id: Variant = null
 
