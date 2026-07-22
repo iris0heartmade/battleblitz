@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://tools/recruit_e2e.gd" id="1_re"]
+[ext_resource type="PackedScene" path="res://scenes/main.tscn" id="2_main"]
+
+[node name="RecruitE2E" type="Node"]
+script = ExtResource("1_re")
+
+[node name="Main" parent="." instance=ExtResource("2_main")]
