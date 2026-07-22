@@ -433,6 +433,7 @@ async def _start_battle_internal(
     map_seed: Optional[int] = None,
     hero_overrides: Optional[List[Dict]] = None,
     spawn_overrides: Optional[Dict] = None,
+    start_level: int = 1,
 ) -> None:
     """Generate tiles, spawn units, mark castles + tile occupancy.
 
@@ -591,11 +592,14 @@ async def _start_battle_internal(
         # Phase 2 §6.5.3 — Generic units go through spawn_generic_stats
         # so chapter / free-mode multipliers and Boss-autolevel rates apply.
         # Skip when the caller passed an explicit hp override (test fixtures).
+        # Phase 2 step 3 — `start_level` is the *mode-level* starting level
+        # (mainline=1, free=10).  When ``u["level"]`` is set explicitly that
+        # wins (allows per-unit override like "this boss spawns at L20").
         if u.get("hp") is None:
             apply_spawn_generic_to_unit(
                 units[-1],
                 unit_type,
-                start_level=int(u.get("level", 1)),
+                start_level=int(u.get("level") or start_level),
             )
     if units:
         session.add_all(units)
@@ -756,6 +760,12 @@ async def create_game(
     # `_effective_max_players` clamps to [MIN_PLAYERS, MAX_PLAYERS] and
     # falls back to the global cap when the preset doesn't declare one.
     capacity = _effective_max_players(body.map_preset)
+    # Phase 2 step 3 — stash spawn mode in battle_config so ``start_game``
+    # can derive the mode-level start_level.  Stored under a reserved key
+    # ``_mode`` (underscore prefix deters collisions with user-supplied
+    # battle_config keys).
+    battle_config = dict(battle_config or {})
+    battle_config["_mode"] = body.mode
     game = Game(
         name=body.name,
         status="waiting",
@@ -1239,6 +1249,11 @@ async def start_game(
         )
 
     battle_config = game.battle_config or {}
+    # Phase 2 step 3 — derive start_level from spawn mode.
+    # "mainline" → L1, "free" → L10.  Unknown / absent mode falls back to L1
+    # (back-compat with any pre-feature games already in the DB).
+    stored_mode = str(battle_config.get("_mode", "mainline"))
+    mode_start_level = 10 if stored_mode == "free" else 1
     host_commander = battle_config.get("commander")
     ai_commanders = battle_config.get("ai_commanders") or {}
     seat_commanders = battle_config.get("seat_commanders") or {}
@@ -1260,7 +1275,7 @@ async def start_game(
                 "last_start_turn": -1,
             }
 
-    await _start_battle_internal(session, game, players)
+    await _start_battle_internal(session, game, players, start_level=mode_start_level)
 
     # P0.4 — collect income for the first player at game start so turn 1
     # income is granted based on initial building ownership.

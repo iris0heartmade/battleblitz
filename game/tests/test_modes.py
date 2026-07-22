@@ -316,3 +316,73 @@ def test_four_new_classes_can_spawn_in_memory():
         assert unit.unit_type == tid
         # Class-static fields come from compile().
         assert unit.mov == profile.base_mov
+
+
+# ── Phase 2 Step 3 — Free mode L10 baseline ─────────────────────
+
+
+def test_mode_config_mainline_yields_l1_start_level():
+    """Default ModeConfig.mainline() should result in L1 spawn for Generic."""
+    from app.modes import ModeConfig
+
+    cfg = ModeConfig.mainline()
+    start_level = 10 if cfg.name.value == "free" else 1
+    assert start_level == 1
+
+
+def test_mode_config_free_yields_l10_start_level():
+    from app.modes import ModeConfig
+
+    cfg = ModeConfig.free()
+    start_level = 10 if cfg.name.value == "free" else 1
+    assert start_level == 10
+
+
+def test_mode_config_free_with_custom_start_level():
+    from app.modes import ModeConfig
+
+    cfg = ModeConfig.free(start_level=15)
+    assert cfg.start_level == 15
+    assert cfg.name.value == "free"
+
+
+def test_gamemode_string_values_match_api_schema():
+    """GameMode enum strings must match the Literal["mainline","free"]
+    type used in CreateGameRequest — schema ↔ mode.py must stay in sync."""
+    from app.modes import GameMode
+
+    assert GameMode.MAINLINE.value == "mainline"
+    assert GameMode.FREE.value == "free"
+
+
+def test_apply_spawn_free_l10_matches_applied_l10_dictionary():
+    """End-to-end: start_level=10 via apply_spawn_generic_to_unit must match
+    spawn_generic_stats free config output."""
+    from app.modes import spawn_generic_stats, apply_spawn_generic_to_unit
+
+    stats_dict = spawn_generic_stats("lancer", start_level=10)
+    unit = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit, "lancer", start_level=10)
+    assert unit.hp == stats_dict["hp"]
+    assert unit.atk == stats_dict["atk"]
+    assert unit.def_ == stats_dict["def"]
+    assert unit.matk == stats_dict["matk"]
+    assert unit.mdef == stats_dict["mdef"]
+    assert unit.mov == stats_dict["mov"]
+
+
+def test_apply_spawn_free_l10_actually_raises_stats_above_l1():
+    """Acceptance: free L10 must show measurable stat boost vs L1.
+
+    For a lancer: HP rises 27→34 (+9 × 0.85 ≈ +7);
+    Atk rises 8→12 (+9 × 0.50 ≈ +4).  No regression to L1 defaults.
+    """
+    from app.modes import apply_spawn_generic_to_unit
+
+    unit_l1 = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_l1, "lancer", start_level=1)
+    unit_l10 = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_l10, "lancer", start_level=10)
+
+    assert unit_l10.hp > unit_l1.hp, "free L10 should have higher HP than L1"
+    assert unit_l10.atk > unit_l1.atk, "free L10 should have higher Atk than L1"

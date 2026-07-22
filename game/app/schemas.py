@@ -66,6 +66,10 @@ class CreateGameRequest(BaseModel):
     # which the surviving team wins.
     defend_turns: int = 10
     battle_config: Optional[BattleConfig] = None
+    # Phase 2 双轨制 — game mode.  "mainline" → units spawn at L1
+    # (default, FE8 L10 calibrated baseline), "free" → units spawn at L10
+    # (Boss-autolevel boosted).  Mode is persisted in game.battle_config.
+    mode: Literal["mainline", "free"] = "mainline"
 
 
 class JoinGameRequest(BaseModel):
