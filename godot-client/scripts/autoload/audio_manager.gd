@@ -12,6 +12,10 @@ var _bgm_stream: AudioStream = null
 var _bgm_volume: float = 1.0  # 0..1 linear
 var _muted: bool = false
 
+# 当前 BGM 的 track_id,用于在 apply_battle_bgm 被反复调用时
+# 跳过 crossfade,避免每次 state snapshot 都把音乐从头播放。
+var _current_track_id: String = ""
+
 # T:94 — 真实音频资源缓存(避免重复磁盘读)
 # key 是 track_id(如 "sample_battle_01");value 是 AudioStream
 # 在 audio/ 目录匹配 <track_id>.ogg / .mp3 / .wav 任意后缀
@@ -69,10 +73,15 @@ func apply_battle_bgm(bgm: Dictionary) -> void:
 	var track_id: String = String(bgm.get("track_id", ""))
 	if track_id == "":
 		return
+	# 07-22 fix:同一首 BGM 重复触发时不要重新 crossfade — 否则每次
+	# state snapshot 都会把音乐从头播放,出现"卡在开头"的症状。
+	if track_id == _current_track_id and _active_player != null and _active_player.playing:
+		return
 	var stream: AudioStream = _load_track(track_id)
 	if stream == null:
 		# 没找到音频文件 — 静默(no-op,不报错)
 		return
+	_current_track_id = track_id
 	var target_volume: float = float(bgm.get("volume", 0.8))
 	var fade_in_ms: int = int(bgm.get("fade_in_ms", _DEFAULT_CROSSFADE_MS))
 	# 07-21 M7 — crossfade BGM 切换:旧流 fade-out,新流 fade-in。

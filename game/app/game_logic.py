@@ -1783,10 +1783,11 @@ def _ai_pick_attack_target(
     the shot. Kill-shots (1-hit kill) bypass the scaling — guaranteed.
     """
     atk_range = unit_attack_range(unit)
+    atk_min = unit_min_attack_range(unit)
     candidates = []
     for e in snap.enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
-        if d == 0 or d > atk_range:
+        if d == 0 or d < atk_min or d > atk_range:
             continue
 
         # Score: lower hp = better kill chance; type-advantage = bonus
@@ -1974,6 +1975,16 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
 async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> bool:
     """Perform an AI attack. Returns True if successful."""
     logger.info(f"AI attack: {attacker.name}(id={attacker.id},type={attacker.unit_type}) at ({attacker.x},{attacker.y}) -> {target.name}(id={target.id},type={target.unit_type},hp={target.hp}) at ({target.x},{target.y})")
+    # 07-22 fix:_ai_attack 必须自带射程校验作为安全网,防止上游
+    # (LLM 行动选择 / 规则 AI 评分 / 未来新增快捷路径)漏过滤而
+    # 导致剑士(atk_range=1)打到对角单位(d=2)之类的越界攻击。
+    if not can_attack_from_position(attacker, attacker.x, attacker.y, target.x, target.y):
+        logger.warning(
+            "AI attack REJECTED (out of range): %s at (%d,%d) -> %s at (%d,%d), d=%d",
+            attacker.name, attacker.x, attacker.y, target.name, target.x, target.y,
+            manhattan((attacker.x, attacker.y), (target.x, target.y)),
+        )
+        return False
     target_tile = (
         await session.execute(
             select(Tile).where(Tile.occupied_unit_id == target.id)

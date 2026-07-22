@@ -27,28 +27,44 @@ GAME_DIR = HERE.parent / "game"
 sys.path.insert(0, str(GAME_DIR))
 
 from app.config import (
-    MAP_STYLES, STYLE_CASTLE_INTERNAL, STYLE_GRASS_OUTER, STYLE_SNOW_OUTER,
-    STYLE_DESERT_OUTER, STYLE_COMPACT_OUTER, CASTLE_THRONE, CASTLE_DOOR,
+    MAP_STYLES, STYLE_GRASS_OUTER, STYLE_SNOW_OUTER,
+    STYLE_DESERT_OUTER, STYLE_COMPACT_OUTER, STYLE_ISLAND_OUTER,
+    STYLE_CHAPTER_GRASS, STYLE_CHAPTER_SNOW, STYLE_CHAPTER_SEIZE,
+    STYLE_ASYMMETRIC_1V2, STYLE_ASYMMETRIC_1V3,
+    CASTLE_THRONE, CASTLE_DOOR,
     CASTLE_STAIRS, CASTLE_VAULT, CASTLE_WALL, CASTLE_FLOOR,
 )
-from app.game_logic import generate_map  # noqa: E402
+from app.map_generation import MapGenerator  # noqa: E402
 
 OUT_DIR = GAME_DIR / "maps"
 
 # Cross-product definition:
 #   style → list of (size, num_players) tuples.
+# P0-5 — added island_outer + 3 chapter_* styles.
 STYLE_SIZES: Dict[str, List[int]] = {
     STYLE_GRASS_OUTER:   [15, 20],
     STYLE_SNOW_OUTER:    [20, 25],
     STYLE_DESERT_OUTER:  [20],
     STYLE_COMPACT_OUTER: [15],
-    STYLE_CASTLE_INTERNAL: [20, 25],
+    STYLE_ISLAND_OUTER:  [20, 25],
+    # P0-1 — mainline chapter styles (FE-style)
+    STYLE_CHAPTER_GRASS: [15, 20],
+    STYLE_CHAPTER_SNOW:  [20],
+    STYLE_CHAPTER_SEIZE: [15],
+    # 学长 2026-07-22 — 1vN 不对称设计(玩家数固定,1v2=3p,1v3=4p)
+    STYLE_ASYMMETRIC_1V2: [20],
+    STYLE_ASYMMETRIC_1V3: [20, 25],
 }
 
 # Player counts we generate for each cell. The procedural generator
 # supports 2/3/4 players; we emit all three so the lobby's 3p
 # category has real options (P2.4 polish).
-PLAYER_COUNTS = [2, 3, 4]
+# 学长 2026-07-22:1vN style 锁定玩家数(1v2→3p,1v3→4p)
+DEFAULT_PLAYER_COUNTS = [2, 3, 4]
+STYLE_PLAYER_COUNTS: Dict[str, List[int]] = {
+    STYLE_ASYMMETRIC_1V2: [3],
+    STYLE_ASYMMETRIC_1V3: [4],
+}
 
 
 def _tile_to_char(terrain: str, subtype: str | None) -> str:
@@ -96,9 +112,18 @@ def _style_meta(style: str) -> Dict:
 
 
 def build_one(style: str, size: int, players: int, seed: int) -> Dict:
-    grid = generate_map(seed=seed, num_castles=players, style=style, size=size)
+    # P0-5 — use the new MapGenerator directly (not the legacy
+    # generate_map wrapper) so chapter_* styles get the
+    # connectivity-rescue + per-style weights + target_share wiring.
+    gen = MapGenerator(
+        size=size, player_count=players, style=style, seed=seed,
+        use_clusters=True, use_rivers=True, use_roads=True,
+        use_buildings=True,
+    )
+    grid = gen.generate()
     meta = _style_meta(style)
     base_id = f"{style}_{size}_{players}p"
+    cfg = MAP_STYLES[style]
     return {
         "id": base_id,
         "name": f"{meta['display_cn']} · {size}×{size} · {players}人",
@@ -113,6 +138,14 @@ def build_one(style: str, size: int, players: int, seed: int) -> Dict:
         "recommended_players": players,
         "seed": seed,
         "layout": _grid_to_chars(grid),
+        # P0-5 — embed the style's full param set so the file is
+        # self-describing and the fitness function can recompute S7
+        # (target-share match) without needing the live MAP_STYLES.
+        "objective": cfg.get("objective", "rout"),
+        "category": cfg.get("category", "free_for_all"),
+        "target_share": cfg.get("target_share", {}),
+        "road_density": cfg.get("road_density", 0.5),
+        "water_template": cfg.get("water_template", "river"),
     }
 
 
@@ -120,8 +153,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     written = 0
     for style, sizes in STYLE_SIZES.items():
+        # 学长 2026-07-22:1vN style 锁定玩家数
+        player_counts = STYLE_PLAYER_COUNTS.get(style, DEFAULT_PLAYER_COUNTS)
         for size in sizes:
-            for players in PLAYER_COUNTS:
+            for players in player_counts:
                 seed = 1000 + size * 17 + players * 7  # deterministic per (style,size,players)
                 preset = build_one(style, size, players, seed)
                 path = OUT_DIR / f"{preset['id']}.json"

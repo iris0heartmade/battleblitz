@@ -30,6 +30,7 @@ from app.config import (
 from app.game_logic import (
     calculate_damage,
     unit_attack_range,
+    unit_min_attack_range,
 )
 from app.models import Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile
@@ -155,9 +156,10 @@ def _legal_actions_for_unit(
 
     # 3. Attack - enemies in range by Manhattan distance only.
     atk_range = unit_attack_range(unit)
+    atk_min = unit_min_attack_range(unit)
     for e in enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
-        if d == 0 or d > atk_range:
+        if d == 0 or d < atk_min or d > atk_range:
             continue
 
         # Estimate damage

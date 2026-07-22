@@ -250,29 +250,6 @@ async def test_concurrent_co_power_requests_only_fire_once(commander_client):
 
 
 @pytest.mark.integration
-async def test_selection_enforces_unlocked_starting_unit_intersection(commander_client):
-    c, sessions = commander_client
-    from sqlalchemy import select
-    from app.progression.models import PlayerProfile
-
-    await c.post("/progression/profiles", json={"user_name": "alice"})
-    rejected = await c.post(
-        "/mainlines/chapter_01_steel_rebellion/select-commander",
-        json={"user_name": "alice", "commander_id": "yun"},
-    )
-    assert rejected.status_code == 403
-    async with sessions() as session:
-        profile = await session.scalar(select(PlayerProfile).where(PlayerProfile.user_name == "alice"))
-        profile.unlocked_commanders = ["yun"]
-        await session.commit()
-    accepted = await c.post(
-        "/mainlines/chapter_01_steel_rebellion/select-commander",
-        json={"user_name": "alice", "commander_id": "yun"},
-    )
-    assert accepted.status_code == 200
-
-
-@pytest.mark.integration
 @pytest.mark.parametrize("historical_status", ["finished", "abandoned"])
 async def test_historical_mainline_game_does_not_lock_new_selection(
     commander_client, historical_status

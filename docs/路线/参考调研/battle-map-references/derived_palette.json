@@ -1,0 +1,557 @@
+{
+  "version": 1,
+  "source_labels": "docs\\路线\\参考调研\\battle-map-references\\map_region_labels.jsonl",
+  "n_records": 46,
+  "palette": {
+    "advance_wars_awbw": {
+      "mountain": {
+        "label": "mountain",
+        "n_pixels": 528,
+        "n_regions": 5,
+        "low": [
+          147,
+          97,
+          43
+        ],
+        "high": [
+          253,
+          247,
+          149
+        ],
+        "median": [
+          176,
+          144,
+          136
+        ],
+        "fudge": 0.05
+      },
+      "water": {
+        "label": "water",
+        "n_pixels": 4688,
+        "n_regions": 3,
+        "low": [
+          88,
+          104,
+          248
+        ],
+        "high": [
+          88,
+          104,
+          248
+        ],
+        "median": [
+          88,
+          104,
+          248
+        ],
+        "fudge": 0.1
+      },
+      "plain": {
+        "label": "plain",
+        "n_pixels": 1536,
+        "n_regions": 2,
+        "low": [
+          100,
+          231,
+          54
+        ],
+        "high": [
+          172,
+          241,
+          82
+        ],
+        "median": [
+          168,
+          240,
+          80
+        ],
+        "fudge": 0.05
+      },
+      "road": {
+        "label": "road",
+        "n_pixels": 192,
+        "n_regions": 2,
+        "low": [
+          175,
+          142,
+          134
+        ],
+        "high": [
+          185,
+          178,
+          170
+        ],
+        "median": [
+          184,
+          176,
+          168
+        ],
+        "fudge": 0.05
+      },
+      "castle": {
+        "label": "castle",
+        "n_pixels": 96,
+        "n_regions": 5,
+        "low": [
+          99,
+          57,
+          41
+        ],
+        "high": [
+          255,
+          255,
+          255
+        ],
+        "median": [
+          248,
+          80,
+          59
+        ],
+        "fudge": 0.03
+      }
+    },
+    "advance_wars_2": {
+      "plain": {
+        "label": "plain",
+        "n_pixels": 6912,
+        "n_regions": 13,
+        "low": [
+          190,
+          223,
+          12
+        ],
+        "high": [
+          225,
+          240,
+          74
+        ],
+        "median": [
+          203,
+          231,
+          48
+        ],
+        "fudge": 0.05
+      },
+      "water": {
+        "label": "water",
+        "n_pixels": 3104,
+        "n_regions": 14,
+        "low": [
+          31,
+          81,
+          247
+        ],
+        "high": [
+          120,
+          150,
+          255
+        ],
+        "median": [
+          112,
+          88,
+          255
+        ],
+        "fudge": 0.1
+      },
+      "road": {
+        "label": "road",
+        "n_pixels": 288,
+        "n_regions": 9,
+        "low": [
+          156,
+          164,
+          181
+        ],
+        "high": [
+          233,
+          218,
+          209
+        ],
+        "median": [
+          199,
+          191,
+          192
+        ],
+        "fudge": 0.05
+      }
+    },
+    "advance_wars_ds": {
+      "plain": {
+        "label": "plain",
+        "n_pixels": 4864,
+        "n_regions": 20,
+        "low": [
+          189,
+          222,
+          27
+        ],
+        "high": [
+          242,
+          255,
+          128
+        ],
+        "median": [
+          216,
+          232,
+          48
+        ],
+        "fudge": 0.05
+      },
+      "water": {
+        "label": "water",
+        "n_pixels": 192,
+        "n_regions": 2,
+        "low": [
+          94,
+          82,
+          248
+        ],
+        "high": [
+          114,
+          150,
+          248
+        ],
+        "median": [
+          112,
+          88,
+          248
+        ],
+        "fudge": 0.1
+      }
+    },
+    "fire_emblem": {
+      "mountain": {
+        "label": "mountain",
+        "n_pixels": 4352,
+        "n_regions": 6,
+        "low": [
+          88,
+          89,
+          63
+        ],
+        "high": [
+          255,
+          239,
+          255
+        ],
+        "median": [
+          96,
+          96,
+          72
+        ],
+        "fudge": 0.05
+      },
+      "plain": {
+        "label": "plain",
+        "n_pixels": 7680,
+        "n_regions": 13,
+        "low": [
+          141,
+          214,
+          81
+        ],
+        "high": [
+          203,
+          250,
+          231
+        ],
+        "median": [
+          176,
+          232,
+          200
+        ],
+        "fudge": 0.05
+      },
+      "water": {
+        "label": "water",
+        "n_pixels": 6144,
+        "n_regions": 14,
+        "low": [
+          0,
+          30,
+          122
+        ],
+        "high": [
+          80,
+          146,
+          190
+        ],
+        "median": [
+          8,
+          88,
+          136
+        ],
+        "fudge": 0.1
+      },
+      "sand": {
+        "label": "sand",
+        "n_pixels": 1280,
+        "n_regions": 4,
+        "low": [
+          205,
+          204,
+          139
+        ],
+        "high": [
+          235,
+          244,
+          197
+        ],
+        "median": [
+          216,
+          216,
+          152
+        ],
+        "fudge": 0.1
+      },
+      "road": {
+        "label": "road",
+        "n_pixels": 256,
+        "n_regions": 4,
+        "low": [
+          198,
+          173,
+          77
+        ],
+        "high": [
+          234,
+          235,
+          131
+        ],
+        "median": [
+          200,
+          200,
+          88
+        ],
+        "fudge": 0.05
+      },
+      "forest": {
+        "label": "forest",
+        "n_pixels": 256,
+        "n_regions": 13,
+        "low": [
+          32,
+          72,
+          35
+        ],
+        "high": [
+          208,
+          248,
+          141
+        ],
+        "median": [
+          104,
+          152,
+          72
+        ],
+        "fudge": 0.05
+      }
+    },
+    "advance_wars": {
+      "castle": {
+        "label": "castle",
+        "n_pixels": 64,
+        "n_regions": 5,
+        "low": [
+          190,
+          58,
+          46
+        ],
+        "high": [
+          245,
+          252,
+          114
+        ],
+        "median": [
+          208,
+          64,
+          56
+        ],
+        "fudge": 0.03
+      },
+      "water": {
+        "label": "water",
+        "n_pixels": 192,
+        "n_regions": 2,
+        "low": [
+          94,
+          82,
+          248
+        ],
+        "high": [
+          114,
+          150,
+          248
+        ],
+        "median": [
+          112,
+          88,
+          248
+        ],
+        "fudge": 0.1
+      },
+      "plain": {
+        "label": "plain",
+        "n_pixels": 256,
+        "n_regions": 14,
+        "low": [
+          193,
+          227,
+          99
+        ],
+        "high": [
+          242,
+          255,
+          99
+        ],
+        "median": [
+          214,
+          247,
+          99
+        ],
+        "fudge": 0.05
+      }
+    }
+  },
+  "audit": {
+    "by_class": {
+      "plain": {
+        "pixels": 21248,
+        "correct": 20575,
+        "accuracy": 0.9683264307228916
+      },
+      "forest": {
+        "pixels": 256,
+        "correct": 215,
+        "accuracy": 0.83984375
+      },
+      "mountain": {
+        "pixels": 4880,
+        "correct": 1754,
+        "accuracy": 0.35942622950819675
+      },
+      "snow_peak": {
+        "pixels": 0,
+        "correct": 0,
+        "accuracy": 0.0
+      },
+      "water": {
+        "pixels": 14320,
+        "correct": 13605,
+        "accuracy": 0.9500698324022346
+      },
+      "sand": {
+        "pixels": 1280,
+        "correct": 220,
+        "accuracy": 0.171875
+      },
+      "road": {
+        "pixels": 736,
+        "correct": 379,
+        "accuracy": 0.5149456521739131
+      },
+      "castle": {
+        "pixels": 160,
+        "correct": 143,
+        "accuracy": 0.89375
+      }
+    },
+    "by_kind_class": {
+      "advance_wars_awbw/mountain": {
+        "pixels": 528,
+        "correct": 474,
+        "accuracy": 0.8977272727272727
+      },
+      "advance_wars_awbw/water": {
+        "pixels": 4688,
+        "correct": 4496,
+        "accuracy": 0.9590443686006825
+      },
+      "advance_wars_awbw/plain": {
+        "pixels": 1536,
+        "correct": 1536,
+        "accuracy": 1.0
+      },
+      "advance_wars_awbw/road": {
+        "pixels": 192,
+        "correct": 112,
+        "accuracy": 0.5833333333333334
+      },
+      "advance_wars_2/plain": {
+        "pixels": 6912,
+        "correct": 6709,
+        "accuracy": 0.9706307870370371
+      },
+      "advance_wars_2/water": {
+        "pixels": 3104,
+        "correct": 2941,
+        "accuracy": 0.9474871134020618
+      },
+      "advance_wars_ds/plain": {
+        "pixels": 4864,
+        "correct": 4779,
+        "accuracy": 0.9825246710526315
+      },
+      "advance_wars_2/road": {
+        "pixels": 288,
+        "correct": 267,
+        "accuracy": 0.9270833333333334
+      },
+      "fire_emblem/mountain": {
+        "pixels": 4352,
+        "correct": 1280,
+        "accuracy": 0.29411764705882354
+      },
+      "fire_emblem/plain": {
+        "pixels": 7680,
+        "correct": 7308,
+        "accuracy": 0.9515625
+      },
+      "fire_emblem/water": {
+        "pixels": 6144,
+        "correct": 5784,
+        "accuracy": 0.94140625
+      },
+      "fire_emblem/sand": {
+        "pixels": 1280,
+        "correct": 220,
+        "accuracy": 0.171875
+      },
+      "advance_wars_awbw/castle": {
+        "pixels": 96,
+        "correct": 87,
+        "accuracy": 0.90625
+      },
+      "advance_wars/castle": {
+        "pixels": 64,
+        "correct": 56,
+        "accuracy": 0.875
+      },
+      "advance_wars/water": {
+        "pixels": 192,
+        "correct": 192,
+        "accuracy": 1.0
+      },
+      "advance_wars/plain": {
+        "pixels": 256,
+        "correct": 243,
+        "accuracy": 0.94921875
+      },
+      "advance_wars_ds/water": {
+        "pixels": 192,
+        "correct": 192,
+        "accuracy": 1.0
+      },
+      "fire_emblem/road": {
+        "pixels": 256,
+        "correct": 0,
+        "accuracy": 0.0
+      },
+      "fire_emblem/forest": {
+        "pixels": 256,
+        "correct": 215,
+        "accuracy": 0.83984375
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "chapter_grass_15_3p",
+  "name": "主线·山野 · 15×15 · 3人",
+  "description": "P2.4 自动生成：主线·山野 风格，3 人对战，15×15 棋盘 (种子 #1276)",
+  "biome": "grass",
+  "size": 15,
+  "style": "chapter_grass",
+  "mode": "single_hq",
+  "recommended_players": 3,
+  "seed": 1276,
+  "layout": [
+    "FFFPPMMRMMvMFFF",
+    "FPPPvMMMvMMPPPF",
+    "FPCPvRMFRFFPCPM",
+    "FPPPPRMRMMMPPPP",
+    "FvMvvFFRbMbRRMM",
+    "FRRMRMMRRMRRRRR",
+    "FvPMMMMRMMRFFvP",
+    "PFFRMMMMMMMMMMM",
+    "RMbMMvMMMMMMMRb",
+    "vMFvMRRMMMMMMMv",
+    "FFRvMRRRPMMMMMv",
+    "FRvvFMPPPMMMMMF",
+    "vMFFFFPCPFMMMMM",
+    "RMFFFFPPPFMMMMM",
+    "MMFbFRRRFbMMMMM"
+  ],
+  "objective": "seize",
+  "category": "mainline",
+  "target_share": {
+    "plain": 0.05,
+    "forest": 0.2,
+    "mountain": 0.45,
+    "river": 0.1,
+    "village": 0.08,
+    "barracks": 0.03,
+    "road": 0.0
+  },
+  "road_density": 0.0,
+  "water_template": "river"
+}

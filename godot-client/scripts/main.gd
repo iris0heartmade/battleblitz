@@ -1666,7 +1666,8 @@ func _refresh_hud_from_state() -> void:
 	# End-turn button:玩家阶段(自己回合)或观战者阶段(自己观战回合)时启用。
 	# 观战者无单位、不能操作,但必须手动"确认(继续)"推进自己的观战回合,
 	# 否则对局卡在观战者回合(后端 end_turn 接受 is_spectator,turns.py:167)。
-	var my_turn: bool = int(cur_pid) == _player_id
+	# cur_pid 在 _reset_game_state_for_main_menu 后是 null,需守护。
+	var my_turn: bool = cur_pid != null and int(cur_pid) == _player_id
 	if my_turn and phase_text == "spectator":
 		end_turn_button.disabled = false
 		end_turn_button.text = "✅ 确认(继续)"
@@ -1864,7 +1865,7 @@ func _refresh_commander_section() -> void:
 	var meter: int = 0
 	var threshold: int = 100
 	for c in GameState.co_states:
-		if c is Dictionary and int(c.get("player_id", -1)) == int(cur_pid):
+		if c is Dictionary and int(c.get("player_id", -1)) == (int(cur_pid) if cur_pid != null else -1):
 			meter = int(c.get("meter", 0))
 			threshold = max(1, int(c.get("threshold", 100)))
 			break

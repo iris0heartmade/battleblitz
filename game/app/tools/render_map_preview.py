@@ -615,13 +615,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             show_grid=args.show_grid,
             show_units=args.show_units,
         )
-        print(f"  {out_png.relative_to(_REPO_ROOT)}")
+        try:
+            display = out_png.relative_to(_REPO_ROOT)
+        except ValueError:
+            display = out_png
+        print(f"  {display}")
         previews.append((spec, out_png))
 
     if args.write_index and len(previews) > 1:
         index_path = args.out / "index.html"
         render_index(previews, index_path)
-        print(f"  {index_path.relative_to(_REPO_ROOT)} (index)")
+        try:
+            display = index_path.relative_to(_REPO_ROOT)
+        except ValueError:
+            display = index_path
+        print(f"  {display} (index)")
 
     return 0
 
