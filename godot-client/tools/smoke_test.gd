@@ -1010,9 +1010,17 @@ func _test_one_map(map_id: String) -> void:
 		"tile_lookup should have one entry per cell")
 	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
 		"board camera should be present")
-	if w > 15 or h > 15:
-		_assert_true("%s camera zoom fits large map" % map_id, board.board_camera.zoom.x < 1.0,
-			"large boards should fit into the playable viewport instead of rendering at fixed 15x15 scale")
+	var viewport_size := board.get_viewport().get_visible_rect().size
+	var usable_w: float = viewport_size.x * 0.55
+	var usable_h: float = viewport_size.y
+	var board_pixel_w: float = float(w * MAP_METRICS_SCRIPT.TILE_SIZE.x)
+	var board_pixel_h: float = float(h * MAP_METRICS_SCRIPT.TILE_SIZE.y)
+	var expected_fit_zoom: float = min(
+		(usable_w - 16.0) / board_pixel_w,
+		(usable_h - 16.0) / board_pixel_h
+	)
+	_assert_eq("%s camera zoom matches viewport fit" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(expected_fit_zoom, 0.001),
+		"board camera should derive fit zoom from the active viewport and reserved HUD width")
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()

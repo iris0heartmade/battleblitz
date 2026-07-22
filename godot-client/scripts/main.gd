@@ -338,9 +338,6 @@ var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d
 var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
-# M4.16+ throttle:_show_threat_tiles() 上次绘制时间戳(ms)。初始设 -10000
-# 确保首次调用必执行,之后 1s 内重复调用直接 return。
-var _last_threat_show_ms: int = -10000
 # M4.16+:game-over 保险。_on_match_ended 触发后置 true,屏蔽后续 state
 # poll / AI 操作。重置场景时(_on_lobby_pressed / 新 game 创建)→ false。
 var _game_over: bool = false
@@ -1511,12 +1508,6 @@ func _compute_threat_tiles() -> Array:
 func _show_threat_tiles() -> void:
 	if board == null:
 		return
-	# M4.16+ throttle:_on_state_updated 触发频率 ~200ms(REST poll 防抖),
-	# 无脑重画会感觉 outline "不停刷新"。限定 1s 内最多重画 1 次。
-	var now_ms: int = Time.get_ticks_msec()
-	if now_ms - _last_threat_show_ms < 1000:
-		return
-	_last_threat_show_ms = now_ms
 	var tiles: Array = _compute_threat_tiles()
 	# 去重 + 转 Vector2i
 	var seen: Dictionary = {}
@@ -1539,8 +1530,6 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
-	# P2:THREAT 攻击威胁区 — 所有敌方单位的攻击范围叠加,标橙
-	_show_threat_tiles()
 
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)

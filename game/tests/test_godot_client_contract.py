@@ -6,6 +6,8 @@ NETWORK_CLIENT = ROOT / "godot-client" / "scripts" / "autoload" / "network_clien
 MAIN_GD = ROOT / "godot-client" / "scripts" / "main.gd"
 BOARD_GD = ROOT / "godot-client" / "scripts" / "board" / "board.gd"
 UNIT_NODE_GD = ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd"
+PROJECT_GODOT = ROOT / "godot-client" / "project.godot"
+TEXTURE_LOADER_GD = ROOT / "godot-client" / "scripts" / "core" / "texture_loader.gd"
 WEB_APP_JS = ROOT / "game" / "app" / "web" / "app.js"
 
 
@@ -111,6 +113,41 @@ def test_godot_game_over_stops_refreshing_and_polling():
     assert "if _game_over:" in source
     assert "_board_refresh_pending = false" in source
     assert "_state_poll_timer.stop()" in source
+
+
+def test_godot_client_defaults_to_full_hd_viewport():
+    source = _read(PROJECT_GODOT)
+    assert "window/size/viewport_width=1920" in source
+    assert "window/size/viewport_height=1080" in source
+
+
+def test_godot_unit_art_uses_high_quality_resize_not_pixelated_resize():
+    source = _read(TEXTURE_LOADER_GD)
+    start = source.index("static func fit_image_to_square")
+    body = source[start:]
+    assert "img.resize(out_w, out_h, Image.INTERPOLATE_LANCZOS)" in body
+    assert "Image.INTERPOLATE_NEAREST" not in body
+
+
+def test_godot_texture_loader_avoids_stale_import_cache_errors():
+    source = _read(TEXTURE_LOADER_GD)
+    assert "static func _imported_texture_ready(res_path: String) -> bool:" in source
+    assert "_imported_texture_ready(res_path) and ResourceLoader.exists(res_path)" in source
+    assert 'var marker := "dest_files=[\\""' in source
+
+
+def test_godot_state_refresh_does_not_auto_paint_enemy_threat_range():
+    source = _read(MAIN_GD)
+    start = source.index("func _on_state_updated(_snapshot: Dictionary) -> void:")
+    end = source.index("# GET /state", start)
+    body = source[start:end]
+    assert "_show_threat_tiles()" not in body
+    assert "func _show_threat_tiles()" in source
+    threat_start = source.index("func _show_threat_tiles() -> void:")
+    threat_end = source.index("func _on_state_updated(_snapshot: Dictionary) -> void:", threat_start)
+    threat_body = source[threat_start:threat_end]
+    assert "_last_threat_show_ms" not in source
+    assert "Time.get_ticks_msec()" not in threat_body
 
 
 def test_godot_unit_refresh_does_not_reset_position_or_leave_stale_tweens():
