@@ -7344,8 +7344,19 @@ func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
 		_update_status("主线通关%s" % (": " + ", ".join(reward_bits) if reward_bits.size() > 0 else ""))
 	else:
 		_update_status("主线推进到战斗 %d/%d" % [battle_index, total_battles])
+		# Phase 3 (FE8-style): bypass the MainlineNextBtn click and
+		# immediately auto-spawn the next battle.  Dialogue fetch above
+		# plays in parallel; the response handler is the same one the
+		# button would have invoked, so behaviour is identical to the
+		# old flow minus the click.  See docs/路线/FE8-vs-BattleBlitz-
+		# 对照改进建议.md §FE8 风格改造.
 		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-			battle_mainline_next_btn.visible = true
+			battle_mainline_next_btn.visible = false
+		if _active_mainline_id != "":
+			NetworkClient.next_battle_mainline(
+				_active_mainline_id, _user_name, [],
+				Callable(self, "_on_mainline_next_battle_response")
+			)
 	# P0:服务端 /advance 写自动存档 → toast 提示(对齐 WebUI autoSaveToast)
 	var auto_save: Variant = body.get("auto_save", {})
 	if auto_save is Dictionary and auto_save.has("label"):
