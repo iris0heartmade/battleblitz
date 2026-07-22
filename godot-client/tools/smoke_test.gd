@@ -921,8 +921,13 @@ func _ready() -> void:
 	_assert_true("Mainline advance status includes next progress", main_status_label.text.contains("2/2"),
 		"mainline advance should show the next battle progress")
 	var ml_next_btn: Button = main_check.get_node("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn")
-	_assert_true("Mainline advance shows next battle button", ml_next_btn.visible,
-		"non-victory advance should reveal the next-battle button")
+	# Phase 3 (FE8 auto-advance): non-victory advance no longer reveals
+	# the MainlineNextBtn button — instead main.gd immediately calls
+	# ``NetworkClient.next_battle_mainline``.  The button stays hidden
+	# to match the FE8 chapter-advance invariant (server-driven flow,
+	# no UI gate).  See commit f96753b (refactor/extract-mainline-modules).
+	_assert_true("Mainline advance hides next battle button (FE8 auto-advance)", not ml_next_btn.visible,
+		"non-victory advance should hide the next-battle button — advance now auto-calls NetworkClient.next_battle_mainline")
 	main_check.call("_on_mainline_next_battle_response", {
 		"game_id": 321,
 		"player_id": 654,

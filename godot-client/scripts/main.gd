@@ -376,6 +376,10 @@ var _selected_mainline_id: String = "chapter_01_steel_rebellion"
 # ``scripts/mainline/mainline_responses.gd``) read/write via this
 # instance; main.gd's own fields above stay read/write-compat for now
 # and get synced through helper methods in the response handlers.
+# Preloaded directly instead of relying on `class_name` global registration
+# so the project's global_script_class_cache (populated by the editor) is
+# not required for headless `--quit` invocations of the smoke test.
+const MainlineSession = preload("res://scripts/mainline/mainline_session.gd")
 var _mainline_session: MainlineSession = null
 var _mainline_page: String = "chapter_list"
 var _mainline_commander_ids: Array[String] = [""]
