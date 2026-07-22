@@ -7,7 +7,7 @@ without touching the DB layer.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 

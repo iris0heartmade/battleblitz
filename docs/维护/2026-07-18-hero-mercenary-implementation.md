@@ -50,3 +50,10 @@ python -m pytest tests/e2e -m e2e -q
 - `max_recruit_count`、敌军 income/vision 等章节 modifier 尚未进入实际战斗规则，不能在 JSON 中假定其已经生效。
 - 精确半点 MP：当前 `Unit.mp` 仍为整数，路线中的 x2 成本在扣除时会向下取整。
 - 正式章节内容扩展与 E2E 的删除存档、战后进入下一章覆盖。
+
+### 战斗升级即时结算与正式存档关联（2026-07-23）
+
+- 战斗成长等级上限从 `MAX_LEVEL=10` 调整为 `20`，与英雄转职门槛和 tier-1 成长上限保持一致。
+- `award_exp()` 现在在发放击杀/协助/命中经验后立即调用 `level_up_if_ready()`；也就是战斗中经验一满，等级和 HP/ATK/DEF/MATK/MDEF 成长当场落到 live `Unit` 上。
+- 主线正式保存仍然只认通关后的 `/mainlines/{id}/advance`：该入口先把 live 英雄单位写回 `hero_campaign_states`，再生成章节结束 auto-save。未成功通关或未执行正式推进时，升级只停留在当前战斗态/中断态，不会污染正式存档。
+- 玩家攻击导致即时升级时，行动日志追加 `level_up` 记录；回合结束的升级检查保留为旧数据或非标准经验入口的兜底。

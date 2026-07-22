@@ -43,7 +43,7 @@ from app.game_logic import (
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
-from app.log_format import fmt_attack, fmt_move, fmt_wait
+from app.log_format import fmt_attack, fmt_level_up, fmt_move, fmt_wait
 from app.schemas import (
     AttackForecastOut,
     AttackRequest,
@@ -584,10 +584,10 @@ async def attack(
     exp_gained = 0
     assist_ids: List[int] = []
     if is_kill:
-        award_exp(attacker, "kill")
+        level_result = award_exp(attacker, "kill")
         exp_gained = 10
     else:
-        award_exp(attacker, "hit")  # small xp on hit
+        level_result = award_exp(attacker, "hit")  # small xp on hit
         exp_gained = 5
 
     _log(session, game, player, "attack",
@@ -598,6 +598,9 @@ async def attack(
         _log(session, game, player, "death", f"{target.name} 被击杀了")
 
     # ── Immediately remove dead units (don't wait for end-of-turn) ──
+    if level_result:
+        _log(session, game, player, "level_up", fmt_level_up(attacker, level_result.new_level))
+
     # Units killed by the attack or killed by the counter-attack
     # are cleaned up so their tile is freed and they vanish from the board.
     dead_after_combat = [u for u in (target, attacker) if u.hp <= 0]

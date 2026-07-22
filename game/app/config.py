@@ -650,7 +650,7 @@ CRIT_MULTIPLIER: Final[float] = 1.5
 EXP_PER_KILL: Final[int] = 10
 EXP_PER_ASSIST: Final[int] = 5   # if a teammate landed the killing blow
 EXP_TO_LEVEL: Final[int] = 60    # every 60 EXP triggers level-up (faster pacing)
-MAX_LEVEL: Final[int] = 10
+MAX_LEVEL: Final[int] = 20
 LEVEL_UP_STAT_BONUS: Final[float] = 0.05   # +5% to all base stats on level up
 LEVEL_UP_BONUS_POINTS: Final[int] = 2      # manual stat points per level (auto for now)
 

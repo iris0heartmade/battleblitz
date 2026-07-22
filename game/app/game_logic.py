@@ -480,6 +480,7 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     and DEF weakly. MOV does not scale.
     """
     if unit.level >= MAX_LEVEL:
+        unit.exp = 0
         return None
     if unit.exp < EXP_TO_LEVEL:
         return None
@@ -544,6 +545,9 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
             unit.def_ = strong_growth(old_def)
             unit.mdef = weak_def_growth(old_mdef)
 
+    if unit.level >= MAX_LEVEL:
+        unit.exp = 0
+
     return LevelUpResult(
         new_level=unit.level,
         stat_bonus_applied=factor,
@@ -551,11 +555,19 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     )
 
 
-def award_exp(unit: Unit, kind: str) -> None:
-    """Award EXP. `kind` is one of: kill | assist | hit.
+def award_exp(unit: Unit, kind: str) -> Optional[LevelUpResult]:
+    """Award EXP and immediately apply a level-up if the threshold is crossed.
 
-    Kept for backward compatibility; only `kill` now also bumps morale.
+    `kind` is one of: kill | assist | hit.  Only `kill` also bumps morale.
     """
+    if unit.level >= MAX_LEVEL:
+        unit.exp = 0
+        if kind == "kill":
+            award_morale(unit)
+        elif kind not in {"assist", "hit"}:
+            raise ValueError(f"unknown exp kind: {kind!r}")
+        return None
+
     if kind == "kill":
         unit.exp += EXP_PER_KILL
         award_morale(unit)
@@ -565,6 +577,7 @@ def award_exp(unit: Unit, kind: str) -> None:
         unit.exp += max(1, EXP_PER_ASSIST // 2)
     else:
         raise ValueError(f"unknown exp kind: {kind!r}")
+    return level_up_if_ready(unit)
 
 
 def award_morale(unit: Unit) -> None:
@@ -834,7 +847,7 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
 async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
     """Resolve end-of-turn effects.
 
-    - Auto-level any units that crossed EXP threshold.
+    - Catch up any units that crossed EXP threshold outside EXP award.
     - Delete dead units and free their tiles.
     - Mark players with no units as eliminated.
     - Check win condition.

@@ -177,6 +177,160 @@ def test_physical_hero_level_up_grows_physical_lane_and_weak_magic_defense():
     assert unit.mdef == 5
 
 
+def test_battle_level_cap_is_20_and_exp_award_levels_immediately():
+    """Combat EXP settlement should apply level-up before turn/chapter end."""
+    from types import SimpleNamespace
+
+    from app.config import EXP_PER_KILL, EXP_TO_LEVEL, MAX_LEVEL
+    from app.game_logic import award_exp
+
+    assert MAX_LEVEL == 20
+
+    unit = SimpleNamespace(
+        unit_type="warlock",
+        level=19,
+        exp=EXP_TO_LEVEL - EXP_PER_KILL,
+        hp=53,
+        max_hp=53,
+        atk=20,
+        def_=11,
+        matk=27,
+        mdef=12,
+        morale=0,
+        campaign_base_stats={
+            "hp": 50, "atk": 20, "def": 11,
+            "matk": 27, "mdef": 12, "mov": 4, "mp": 8,
+        },
+    )
+
+    result = award_exp(unit, "kill")
+
+    assert result is not None
+    assert result.new_level == 20
+    assert unit.level == 20
+    assert unit.exp == 0
+    assert unit.morale == 1
+    assert unit.campaign_base_stats["matk"] == 29
+    assert unit.campaign_base_stats["mdef"] == 14
+    assert unit.campaign_base_stats["def"] == 12
+
+
+def test_battle_exp_is_discarded_at_level_cap():
+    """Lv20 is the hard battle cap; do not bank overflow EXP."""
+    from types import SimpleNamespace
+
+    from app.config import EXP_PER_KILL, EXP_TO_LEVEL
+    from app.game_logic import award_exp
+
+    unit = SimpleNamespace(
+        unit_type="swordsman",
+        level=19,
+        exp=EXP_TO_LEVEL - EXP_PER_KILL + 5,
+        hp=45,
+        max_hp=45,
+        atk=18,
+        def_=12,
+        matk=4,
+        mdef=4,
+        morale=0,
+        campaign_base_stats={},
+    )
+
+    result = award_exp(unit, "kill")
+
+    assert result is not None
+    assert unit.level == 20
+    assert unit.exp == 0
+
+    result = award_exp(unit, "kill")
+
+    assert result is None
+    assert unit.level == 20
+    assert unit.exp == 0
+
+
+@pytest.mark.integration
+async def test_immediate_hero_level_up_persists_only_after_mainline_advance(wb_client):
+    """Live battle growth is formalized only by successful chapter advance."""
+    client, SessionLocal = wb_client
+    await _create_profile(client, "alice")
+    body = await _start_mainline(client, "alice")
+    game_id = body["game_id"]
+
+    from app.config import EXP_PER_KILL, EXP_TO_LEVEL
+    from app.game_logic import award_exp
+    from app.models import Game, Player, Unit
+    from app.progression.models import PlayerProfile
+
+    async with SessionLocal() as s:
+        profile = (await s.execute(
+            select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+        )).scalar_one()
+        baseline_level = profile.hero_campaign_states["yun"]["level"]
+        baseline_exp = profile.hero_campaign_states["yun"]["exp"]
+
+        human = (await s.execute(
+            select(Player).where(Player.game_id == game_id, Player.user_name == "alice")
+        )).scalar_one()
+        yun = (await s.execute(
+            select(Unit).where(Unit.player_id == human.id, Unit.hero_id == "yun")
+        )).scalar_one()
+
+        yun.level = baseline_level
+        yun.exp = EXP_TO_LEVEL - EXP_PER_KILL
+        result = award_exp(yun, "kill")
+        assert result is not None
+        assert yun.level == baseline_level + 1
+
+        # Before chapter advance, formal profile state must not be mutated.
+        await s.flush()
+        await s.refresh(profile)
+        assert profile.hero_campaign_states["yun"]["level"] == baseline_level
+        assert profile.hero_campaign_states["yun"]["exp"] == baseline_exp
+
+        game = await s.get(Game, game_id)
+        game.status = "finished"
+        await s.commit()
+
+    r = await client.post(
+        "/mainlines/chapter_01_steel_rebellion/advance",
+        json={"user_name": "alice", "game_id": game_id},
+    )
+    assert r.status_code == 200, r.text
+
+    async with SessionLocal() as s:
+        profile = (await s.execute(
+            select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+        )).scalar_one()
+        saved = profile.hero_campaign_states["yun"]
+        assert saved["level"] == baseline_level + 1
+        assert saved["exp"] == 0
+
+    # Auto-save is a formal snapshot; mutating the profile afterward should
+    # prove the saved chapter-end copy already contains the leveled hero.
+    async with SessionLocal() as s:
+        profile = (await s.execute(
+            select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+        )).scalar_one()
+        mutated = dict(profile.hero_campaign_states)
+        mutated["yun"] = dict(mutated["yun"])
+        mutated["yun"]["level"] = 1
+        profile.hero_campaign_states = mutated
+        await s.commit()
+
+    r = await client.post(
+        "/saves/load",
+        json={"user_name": "alice", "kind": "auto", "slot_index": 0},
+    )
+    assert r.status_code == 200, r.text
+
+    async with SessionLocal() as s:
+        profile = (await s.execute(
+            select(PlayerProfile).where(PlayerProfile.user_name == "alice")
+        )).scalar_one()
+        assert profile.hero_campaign_states["yun"]["level"] == baseline_level + 1
+
+
 # ============================================================
 # Edge 1: hero died during battle
 # ============================================================
