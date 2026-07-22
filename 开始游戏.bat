@@ -9,7 +9,6 @@ set PORT=8000
 set GAME_DIR=%~dp0game
 set GODOT_EXE=D:\Python\godot\Godot_v4.7-stable_win64_console.exe
 set GODOT_PROJECT=%~dp0godot-client
-set SLEEP=%SystemRoot%\System32\timeout.exe
 
 echo ============================================================
 echo   BattleBlitz Launcher
@@ -36,7 +35,7 @@ if not "!PORT_PIDS!"=="" (
             taskkill /F /PID %%p >nul 2>&1
             echo       Killed PID %%p
         )
-        %SLEEP% /t 1 /nobreak >nul
+        ping -n 2 127.0.0.1 >nul
     ) else (
         echo       Aborted. Free port %PORT% and try again.
         pause
@@ -50,21 +49,13 @@ echo.
 echo [2/3] Starting backend server ...
 start "BattleBlitz Server" cmd /k "cd /d "%GAME_DIR%" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port %PORT%"
 
-set /a TRIES=0
-:WAIT_SERVER
-set /a TRIES+=1
-%SLEEP% /t 1 /nobreak >nul
-netstat -ano | findstr ":%PORT%" | findstr "LISTENING" >nul
+echo       Waiting for server to come up ...
+powershell -NoProfile -Command "for($i=0;$i -lt 40;$i++){try{$c=New-Object Net.Sockets.TcpClient;$c.Connect('127.0.0.1',%PORT%);$c.Close();exit 0}catch{Start-Sleep -Milliseconds 750}};exit 1"
 if errorlevel 1 (
-    if !TRIES! GEQ 30 (
-        echo       [ERROR] Server did not start within 30s.
-        pause
-        exit /b 1
-    )
-    echo       Waiting for server ... (!TRIES!s)
-    goto WAIT_SERVER
+    echo       [WARN] Server not detected yet; opening client anyway.
+) else (
+    echo       Server is up on http://localhost:%PORT%/
 )
-echo       Server is up on http://localhost:%PORT%/
 
 echo.
 echo [3/3] Launching Godot client (debug) ...
@@ -78,5 +69,5 @@ start "BattleBlitz Godot" "%GODOT_EXE%" --path "%GODOT_PROJECT%" --debug
 echo.
 echo Done. Server window and Godot client launched.
 echo Close the server window to stop the backend.
-%SLEEP% /t 3 /nobreak >nul
+ping -n 4 127.0.0.1 >nul
 endlocal
