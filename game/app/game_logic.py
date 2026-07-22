@@ -2001,10 +2001,20 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
     counter_dmg = 0
     defender_skills = set(target.skills or [])
     has_counter_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    # Bug 反查(2026-07-22):玩家报告 AI 剑士反击超距离。range check 读起来对,加 debug。
+    _t_d = manhattan((target.x, target.y), (attacker.x, attacker.y))
+    _t_min = unit_min_attack_range(target)
+    _t_max = unit_attack_range(target)
+    _t_can = can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    logger.info(
+        "ai_attack: COUNTER-CHECK defender=%s(atk_range=%d-%d, immune=%s) vs attacker=%s, d=%d, passes=%s, hp_after=%d",
+        target.name, _t_min, _t_max, has_counter_immunity,
+        attacker.name, _t_d, _t_can, target.hp,
+    )
     if (
         target.hp > 0
         and not has_counter_immunity
-        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+        and _t_can
     ):
         counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
         for h in counter_hits:

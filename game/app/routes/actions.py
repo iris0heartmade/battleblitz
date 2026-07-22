@@ -517,10 +517,22 @@ async def attack(
     counter_dmg = 0
     defender_skills = set(target.skills or [])
     has_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    # Bug 反查(2026-07-22):玩家报告敌方剑士反击超距离。range check
+    # 代码读起来正确(swordsman min=0 max=1 → d=1 才允许),但还没复现。
+    # 加 debug 日志,玩家下次触发时把这段贴回来再深挖。
+    _t_d = manhattan((target.x, target.y), (attacker.x, attacker.y))
+    _t_min = unit_min_attack_range(target)
+    _t_max = unit_attack_range(target)
+    _t_can = can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    logger.info(
+        "attack: COUNTER-CHECK game=%s defender=%s(atk_range=%d-%d, immune=%s) vs attacker=%s, d=%d, passes=%s, is_kill=%s",
+        game_id, target.name, _t_min, _t_max, has_immunity,
+        attacker.name, _t_d, _t_can, is_kill,
+    )
     if (
         not is_kill
         and not has_immunity
-        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+        and _t_can
     ):
         # Defender's terrain bonus is the tile the defender is on
         counter_tile = (
