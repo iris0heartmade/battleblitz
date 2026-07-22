@@ -8094,11 +8094,13 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var buffs: Array[String] = []
 	# 1) 地形防御加成(单位所站格子的 TERRAIN_DEF_BONUS)
 	var tile_d: Dictionary = GameState.get_tile(int(pos.x), int(pos.y)) if GameState != null else {}
-	var terrain_name: String = String(tile_d.get("terrain", ""))
+	var terrain_v: Variant = tile_d.get("terrain", "")
+	var terrain_name: String = "" if terrain_v == null else str(terrain_v)
 	if terrain_name != "":
 		var def_bonus: int = int(Config.TERRAIN_DEF_BONUS.get(terrain_name, 0))
 		# castle_floor / castle_wall 等 subtype 也走同一张表
-		var subtype: String = String(tile_d.get("subtype", ""))
+		var subtype_v: Variant = tile_d.get("subtype", "")
+		var subtype: String = "" if subtype_v == null else str(subtype_v)
 		if subtype != "" and Config.TERRAIN_DEF_BONUS.has(subtype):
 			def_bonus = int(Config.TERRAIN_DEF_BONUS.get(subtype, 0))
 		var terrain_cn := _terrain_cn(terrain_name, subtype)

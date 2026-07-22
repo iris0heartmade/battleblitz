@@ -535,6 +535,25 @@ func _ready() -> void:
 	main_check.call("_unhandled_input", pan_press)
 	_assert_true("Main forwards left press to board panning", bool(game_board.get("_panning")),
 		"main click handling should not starve Board's left-drag panning state")
+	prev_tiles = _game_state.tiles
+	_game_state.tiles = [{"x": 3, "y": 4, "terrain": "plain", "subtype": ["连击"]}]
+	main_check.call("_refresh_unit_info", {
+		"id": 9001,
+		"name": "Knight",
+		"unit_type": "knight",
+		"level": 1,
+		"hp": 55,
+		"max_hp": 55,
+		"x": 3,
+		"y": 4,
+		"player_id": 1,
+		"color": "red",
+		"skills": ["double_strike"],
+	})
+	_game_state.tiles = prev_tiles
+	var info_text: String = str(main_check.get_node("GameView/HUD/InfoPanel/UnitInfo").text)
+	_assert_true("Unit info tolerates string subtype", info_text.length() > 0,
+		"clicking a unit must not crash when the tile subtype is a non-empty string")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
