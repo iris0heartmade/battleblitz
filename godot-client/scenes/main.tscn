@@ -2081,6 +2081,10 @@ visible = false
 text = "▶ 下一战"
 custom_minimum_size = Vector2(140, 36)
 
+[node name="BackLobbyBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
+text = "返回联机大厅"
+custom_minimum_size = Vector2(140, 36)
+
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "返回主菜单"
 custom_minimum_size = Vector2(140, 36)

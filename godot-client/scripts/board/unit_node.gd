@@ -24,12 +24,26 @@ class_name UnitNode
 ## `unit_type`。这解释了为什么之前 unit 都是 "?"。
 
 const _SPRITE_DIR := "res://assets/classic/"
-const _HERO_CREST_DIR := "res://assets/heroes/"
+const _HERO_SPRITE_DIR := "res://assets/heroes/"
 # 镜像 game/app/web/assets/classic/ 7 类 sprite
 const _KNOWN_TYPES := [
 	"archer", "healer", "heavy_armor", "knight",
 	"swordsman", "warlock",
 ]
+# 英雄单位 — 用 hero 立绘(anna.png / yun.png)替代 base class sprite。
+# 后续可在 .import 注册更多(用 `find_hero_sprite_path` 字典扩展)。
+const _HERO_SPRITES := {
+	"anna": "anna.png",
+	"yun":  "yun.png",
+}
+# team_id → 右上角字母(team_a=A / team_b=B / team_c=C / team_d=D)。
+# 1V1 free-for-all(team=None)→ 不显示字母,只显示阵营色块。
+const _TEAM_GLYPH := {
+	"team_a": "A",
+	"team_b": "B",
+	"team_c": "C",
+	"team_d": "D",
+}
 # 没 sprite 时 fallback 单字母 + 颜色
 const _FALLBACK_GLYPH := {
 	"archer":      "A",
@@ -57,18 +71,20 @@ var _hp_bar: ColorRect = null
 var _hp_bar_bg: ColorRect = null
 var _mp_badge: ColorRect = null
 var _mp_badge_label: Label = null
-var _hero_badge: ColorRect = null
-var _hero_crest: TextureRect = null
-var _hero_badge_label: Label = null
+var _team_badge: ColorRect = null
+var _team_badge_label: Label = null
 var _acted_overlay: ColorRect = null
 
 
-func setup(data: Dictionary, color: Color) -> void:
+func setup(data: Dictionary, color: Color, team_id: Variant = null) -> void:
 	unit_data = data
+	_team_id = team_id
 	_clear_children()
 	_build_pieces(color)
 	_refresh()
 	position = Vector2.ZERO
+
+var _team_id: Variant = null
 
 
 func _clear_children() -> void:
@@ -142,7 +158,19 @@ func _build_pieces(team_color: Color) -> void:
 	# ---- sprite 优先 — TextureRect 中心 48x48(满 1 tile)
 	# (texture 在 _load_png 里 resize 到 48×48 直接)
 	var ut := _unit_type()
-	if ut != "" and _KNOWN_TYPES.has(ut):
+	# M4.16+:英雄单位(hero_id 已绑定)用 hero 立绘(anna/yun)替代 base class sprite。
+	# 不再画 hero badge — 视觉上靠"完整立绘"+"阵营色 team badge"区分。
+	var hero_sprite_path := _hero_sprite_path(unit_data.get("hero_id", null))
+	if hero_sprite_path != "":
+		var hero_tex: Texture2D = _load_png(hero_sprite_path, 48)
+		if hero_tex != null:
+			_sprite = TextureRect.new()
+			_sprite.texture = hero_tex
+			_sprite.size = Vector2(48, 48)
+			_sprite.position = -_sprite.size * 0.5
+			_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_sprite)
+	elif ut != "" and _KNOWN_TYPES.has(ut):
 		var sprite_path := _SPRITE_DIR + ut + ".png"
 		var tex: Texture2D = _load_png(sprite_path, 48)
 		if tex != null:
@@ -202,35 +230,34 @@ func _build_pieces(team_color: Color) -> void:
 	_mp_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_mp_badge_label)
 
-	# ---- Hero badge(右上角金色徽记):素材未覆盖的 hero 也能被识别 ----
-	var hero_id := str(unit_data.get("hero_id", ""))
-	if hero_id != "":
-		var crest_path := _HERO_CREST_DIR + "crest_" + hero_id + ".png"
-		var crest_tex := _load_png(crest_path, 18)
-		if crest_tex != null:
-			_hero_crest = TextureRect.new()
-			_hero_crest.texture = crest_tex
-			_hero_crest.size = Vector2(18, 18)
-			_hero_crest.position = Vector2(8, -26)
-			_hero_crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			add_child(_hero_crest)
-		else:
-			_hero_badge = ColorRect.new()
-			_hero_badge.size = Vector2(14, 14)
-			_hero_badge.position = Vector2(10, -24)
-			_hero_badge.color = Color(0.95, 0.72, 0.24, 0.95)
-			_hero_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			add_child(_hero_badge)
-			_hero_badge_label = Label.new()
-			_hero_badge_label.size = Vector2(18, 14)
-			_hero_badge_label.position = Vector2(8, -25)
-			_hero_badge_label.text = "H"
-			_hero_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			_hero_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			_hero_badge_label.add_theme_font_size_override("font_size", 9)
-			_hero_badge_label.add_theme_color_override("font_color", Color(0.08, 0.05, 0.02))
-			_hero_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			add_child(_hero_badge_label)
+	# ---- Team badge(右上角阵营色 + team 字母)取代原 hero badge ----
+	# M4.16+ 重构:每个单位右上角显示所属玩家阵营色块(red/blue/green/yellow)
+	# + team 字母(A/B/C/D)。1V1 free-for-all(team=None)→ 只显示色块,不显示字母。
+	# 英雄单位靠"完整 hero 立绘(anna/yun)"区分,不再用 H 角标。
+	_team_badge = ColorRect.new()
+	_team_badge.size = Vector2(14, 14)
+	_team_badge.position = Vector2(10, -24)
+	_team_badge.color = team_color  # 调用方传入的阵营色(red/blue/...)
+	_team_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_team_badge.visible = true
+	add_child(_team_badge)
+	_team_badge_label = Label.new()
+	_team_badge_label.size = Vector2(18, 14)
+	_team_badge_label.position = Vector2(8, -25)
+	_team_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_team_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_team_badge_label.add_theme_font_size_override("font_size", 10)
+	_team_badge_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_team_badge_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	_team_badge_label.add_theme_constant_override("shadow_offset_x", 1)
+	_team_badge_label.add_theme_constant_override("shadow_offset_y", 1)
+	# team_id 是 Variant:None(1V1)/ "team_a"~"team_d"。
+	var team_str: String = ""
+	if _team_id != null:
+		team_str = String(_team_id)
+	_team_badge_label.text = String(_TEAM_GLYPH.get(team_str, ""))
+	_team_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_team_badge_label)
 
 	# ---- 士气星(左上,小角) ----
 	_star_label = Label.new()
@@ -291,6 +318,20 @@ func _refresh() -> void:
 
 
 func has_hero_badge() -> bool:
-	if _hero_crest != null and is_instance_valid(_hero_crest) and _hero_crest.visible:
-		return true
-	return _hero_badge != null and is_instance_valid(_hero_badge) and _hero_badge.visible
+	# M4.16+:保持向后兼容 — 现在"hero badge"等同于"用了 hero 立绘"。
+	# 调用方原本判断"该单位是 hero",改用 _hero_sprite_path 是否非空。
+	var sprite := _hero_sprite_path(unit_data.get("hero_id", null))
+	return sprite != ""
+
+
+# M4.16+:hero_id → anna.png / yun.png 路径。没在 _HERO_SPRITES 注册返回 ""。
+static func _hero_sprite_path(hero_id_v: Variant) -> String:
+	if hero_id_v == null:
+		return ""
+	var hid := String(hero_id_v)
+	if hid == "":
+		return ""
+	var fn: String = String(_HERO_SPRITES.get(hid, ""))
+	if fn == "":
+		return ""
+	return _HERO_SPRITE_DIR + fn

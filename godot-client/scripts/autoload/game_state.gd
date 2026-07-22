@@ -285,7 +285,33 @@ func _on_event_delta(event: Dictionary) -> void:
 		"match_start":
 			match_started.emit()
 		"match_end":
-			match_ended.emit(int(context.get("winner_player_id", -1)), String(context.get("win_reason", "")))
+			# M4.16+ fix:server `bus.publish` sends `winner` (team_id) +
+			# `reason` (e.g. "rout"/"seize"/"reach"/"defend"/"draw").
+			# Resolve a player_id matching `winner_team` so the BattleResultPanel
+			# can render the winner name + color.
+			var winner_team_v: Variant = context.get("winner", null)
+			if winner_team_v == null or str(winner_team_v) == "":
+				# fallback for legacy / defensive: try winner_player_id
+				match_ended.emit(int(context.get("winner_player_id", -1)), String(context.get("win_reason", "unknown")))
+			else:
+				var winner_team_str: String = str(winner_team_v)
+				var winner_pid: int = -1
+				for p in players:
+					if not p is Dictionary: continue
+					# Server `utils._team_of`:player.team_id if set, else
+					# `f"player_{player.id}"` (1V1 free-for-all). Mirror that
+					# here so the lookup matches in both modes.
+					var p_team_v: Variant = p.get("team", null)
+					var p_team: String = ""
+					if p_team_v != null and str(p_team_v) != "":
+						p_team = String(p_team_v)
+					else:
+						# 1V1 free-for-all — server computed "player_{id}"
+						p_team = "player_%d" % int(p.get("id", -1))
+					if p_team == winner_team_str:
+						winner_pid = int(p.get("id", -1))
+						break
+				match_ended.emit(winner_pid, String(context.get("reason", context.get("win_reason", "unknown"))))
 		"low_hp_warning":
 			low_hp_warning.emit(actor_unit_id, int(context.get("current_hp", 0)), int(context.get("max_hp", 1)))
 		"comeback":

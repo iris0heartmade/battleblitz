@@ -137,6 +137,7 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
 @onready var battle_mainline_next_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn
+@onready var battle_back_lobby_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackLobbyBtn
 @onready var battle_back_menu_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackMenuBtn
 
 # V2 第 4 轮:行动气泡(5 按钮)
@@ -337,6 +338,12 @@ var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d
 var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
+# M4.16+ throttle:_show_threat_tiles() 上次绘制时间戳(ms)。初始设 -10000
+# 确保首次调用必执行,之后 1s 内重复调用直接 return。
+var _last_threat_show_ms: int = -10000
+# M4.16+:game-over 保险。_on_match_ended 触发后置 true,屏蔽后续 state
+# poll / AI 操作。重置场景时(_on_lobby_pressed / 新 game 创建)→ false。
+var _game_over: bool = false
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
 var _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
 var _selected_lobby_seat_index: int = 0
@@ -602,6 +609,8 @@ func _ready() -> void:
 	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.pressed.connect(_on_mainline_next_battle_pressed)
+	if battle_back_lobby_btn != null and is_instance_valid(battle_back_lobby_btn):
+		battle_back_lobby_btn.pressed.connect(_on_battle_back_lobby_pressed)
 	battle_back_menu_btn.pressed.connect(_on_battle_back_menu_pressed)
 	# T:4 招募 modal — CloseBtn
 	if recruit_close_btn != null and is_instance_valid(recruit_close_btn):
@@ -1500,6 +1509,12 @@ func _compute_threat_tiles() -> Array:
 func _show_threat_tiles() -> void:
 	if board == null:
 		return
+	# M4.16+ throttle:_on_state_updated 触发频率 ~200ms(REST poll 防抖),
+	# 无脑重画会感觉 outline "不停刷新"。限定 1s 内最多重画 1 次。
+	var now_ms: int = Time.get_ticks_msec()
+	if now_ms - _last_threat_show_ms < 1000:
+		return
+	_last_threat_show_ms = now_ms
 	var tiles: Array = _compute_threat_tiles()
 	# 去重 + 转 Vector2i
 	var seen: Dictionary = {}
@@ -1515,6 +1530,11 @@ func _show_threat_tiles() -> void:
 
 
 func _on_state_updated(_snapshot: Dictionary) -> void:
+	# M4.16+ game-over 保险:如果 game_summary.status == "finished",说明
+	# server 已经判定胜负,不再重画棋盘(防止循环 + AI 继续推事件导致卡死)。
+	var _sum: Dictionary = GameState.game_summary if GameState != null else {}
+	if String(_sum.get("status", "")) == "finished":
+		return
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
@@ -1556,6 +1576,10 @@ func _repaint_board_from_state() -> void:
 	if int(pseudo.get("__id", 0)) != _game_id:
 		return
 	board.load_map(pseudo)
+	# M4.16+:重建建筑阵营旗(从最新 GameState.tiles + owner_id)。
+	# 必须放在 load_map 之后 — board.tile_lookup 已建好,flag 需要 metrics。
+	if not GameState.tiles.is_empty():
+		board.rebuild_flags(GameState.tiles)
 
 
 func _snapshot_to_pseudo_map() -> Dictionary:
@@ -2262,6 +2286,14 @@ func _on_turn_ended(next_player_id, turn_number: int) -> void:
 
 
 func _on_match_ended(winner_player_id, win_reason: String) -> void:
+	# M4.16+ game-over 保险:置 flag 后,后续的 _on_state_updated /
+	# ai_thinking 都会被屏蔽,避免循环刷新或 AI 推事件导致卡死。
+	_game_over = true
+	# 关闭可能还在显示的 AI thinking / end-turn 提示
+	if ai_thinking_label != null and is_instance_valid(ai_thinking_label):
+		ai_thinking_label.visible = false
+	# Hide any in-flight action bubble so the result panel sits on a clean canvas
+	_hide_action_bubble()
 	_show_turn_banner("🏆 [color=#f0c75e]玩家 #%s[/color] 获胜! 原因: %s" % [
 		str(winner_player_id), win_reason
 	], 8.0)
@@ -2532,10 +2564,14 @@ func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 		_update_status("该兵营不属于你 (owner=%d)" % owner_id)
 		return {}
 	# 该 tile 上是否有单位(occupied → 不能招募)
-	for uu in _all_units_including_self():
-		if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
-			_update_status("该兵营已被单位驻守，请先让该单位移开")
-			return {}
+	# M4.16+ fix:直接用 server TileOut.occupied_unit_id(权威)而不是扫描
+	# 本地 _all_units_including_self。后者依赖 GameState.players 缓存同步,
+	# 在初始 spawn / polling 间隔期间会读到 stale 位置,误判 barracks"已驻守"。
+	var occ_v: Variant = tile.get("occupied_unit_id", null)
+	var occupied: bool = occ_v != null and int(occ_v) > 0
+	if occupied:
+		_update_status("该兵营已被单位驻守，请先让该单位移开")
+		return {}
 	var me: Dictionary = GameState.get_player(_player_id)
 	return {
 		"x": cell.x,
@@ -3308,6 +3344,18 @@ func _on_battle_detail_pressed() -> void:
 func _on_battle_back_menu_pressed() -> void:
 	hide_battle_result()
 	_show_view("menu")
+
+
+# M4.16+:战斗结束 → 返回联机大厅。复用 _on_lobby_pressed,但先清 game 状态
+# 否则 _lobby_commanders_fetched / _game_id 可能残留导致 lobby 加载错位。
+func _on_battle_back_lobby_pressed() -> void:
+	hide_battle_result()
+	_game_id = 0
+	_player_id = 0
+	_selected_mainline_id = ""
+	_mainline_battle_game_id = 0
+	# 复用主菜单"在线大厅"按钮处理流程(刷新 commander 列表 + 房间列表)
+	_on_lobby_pressed()
 
 
 # ============================================================
@@ -4793,11 +4841,14 @@ func _setup_lobby_join_options() -> void:
 		join_mode_option.select(0)
 	if team_option != null and is_instance_valid(team_option):
 		team_option.clear()
+		# M4.16+ fix:统一 team 命名为 team_a/b/c/d(与 _lobby_seat_team_ids + server
+		# JoinGameRequest.team 对齐)。原来用 color(red/blue/green/yellow)作 team_id
+		# 跟 _lobby_seat_team_ids(team_a/b/c/d)不一致,创房和手动 join 走两套字段。
 		team_option.add_item("自动分队")
-		team_option.add_item("红队")
-		team_option.add_item("蓝队")
-		team_option.add_item("绿队")
-		team_option.add_item("黄队")
+		team_option.add_item("队伍 A")
+		team_option.add_item("队伍 B")
+		team_option.add_item("队伍 C")
+		team_option.add_item("队伍 D")
 		team_option.select(0)
 	_on_join_mode_changed(0)
 
@@ -4814,19 +4865,23 @@ func _on_join_mode_changed(_index: int) -> void:
 
 
 func _selected_join_team() -> String:
+	# M4.16+ fix:返回 team_a/b/c/d(不再是 red/blue/green/yellow),
+	# 跟 _lobby_seat_team_ids + server JoinGameRequest.team 命名一致。
+	# 1V1 free-for-all: server 端 team=None → fallback 到 _team_of(player_id) → 各自独立。
+	# 2V2: 双方玩家传相同的 team_a 或 team_b → server AI 会把同 team 当 ally(不打)。
 	if team_option == null or not is_instance_valid(team_option):
 		return ""
 	if _selected_join_role() == "spectator":
 		return ""
 	match team_option.selected:
 		1:
-			return "red"
+			return "team_a"
 		2:
-			return "blue"
+			return "team_b"
 		3:
-			return "green"
+			return "team_c"
 		4:
-			return "yellow"
+			return "team_d"
 		_:
 			return ""
 

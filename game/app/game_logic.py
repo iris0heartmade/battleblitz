@@ -717,29 +717,34 @@ async def _alive_teams(session: AsyncSession, game: Game) -> list:
     return sorted(teams)
 
 
-def _finish_game(
+async def _finish_game(
     game: Game,
     winner_team: Optional[str],
     win_reason: str,
 ) -> None:
     """Mark a game as finished and stash the winner / reason so the
     front-end can render the right banner copy."""
+    if game.status == "finished":
+        return  # 防止重复触发(seize 后 rout 不会反复)
     game.status = "finished"
     game.win_reason = win_reason
     # Stash the winning team on a transient attribute so the state
     # endpoint can include it without us adding yet another column.
     game._winner_team = winner_team
-    # 07-21 F5A: publish match_end (the canonical win event)
-    import asyncio
+    # 07-21 F5A + M4.16+ fix:publish match_end (the canonical win event).
+    # Original code used `loop.create_task(bus.publish(...))` from a
+    # sync function, which silently no-op'd in many code paths and the
+    # Godot client's `match_ended` signal never fired → game appeared
+    # frozen with no UI. Now we await the publish directly so the WS
+    # broadcast happens before the caller commits + returns.
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(bus.publish(GameEvent(
-                type="match_end", game_id=game.id, turn=game.turn_number,
-                context={"winner": winner_team, "reason": win_reason},
-            )))
-    except RuntimeError:
-        pass  # 同步上下文, 跳过
+        from app.events.bus import GameEvent  # local import avoids cycle
+        await bus.publish(GameEvent(
+            type="match_end", game_id=game.id, turn=game.turn_number,
+            context={"winner": winner_team, "reason": win_reason},
+        ))
+    except Exception as e:  # pragma: no cover — never let publish failures kill the win
+        logger.warning(f"_finish_game: bus.publish failed: {e}")
 
 
 async def check_win_condition(session: AsyncSession, game: Game) -> bool:
@@ -782,13 +787,13 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
 
     # --- UNIVERSAL rout — fires regardless of game.win_condition ---
     if len(alive) == 0:
-        _finish_game(game, None, "draw")
+        await _finish_game(game, None, "draw")
         return True
     if len(alive) == 1:
         # In defend mode at the target turn, use "defend" as the
         # reason to preserve the original semantics; otherwise "rout".
         reason = "defend" if defend_winner_team is not None else "rout"
-        _finish_game(game, alive[0], reason)
+        await _finish_game(game, alive[0], reason)
         return True
 
     # --- UNIVERSAL seize — handled in claim_tile when ownership flips;
@@ -807,7 +812,7 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
                 winner_player = (await session.execute(
                     _sel(Player).where(Player.id == winner_unit.player_id)
                 )).scalars().first()
-                _finish_game(game, _team_of(winner_player), "reach")
+                await _finish_game(game, _team_of(winner_player), "reach")
                 return True
 
     return False
@@ -951,6 +956,11 @@ async def check_pending_claims(
     ).scalars().all()
 
     flipped: List[int] = []
+    # M4.16+:track (tile_id, old_owner_id, new_owner_id) for HQ flips so
+    # the cascade (kill old player's units + transfer their other tiles)
+    # below can act on concrete IDs. ActionLog description parsing would
+    # be brittle; a dedicated map is cleaner.
+    hq_flips: List[Tuple[int, int, int]] = []
     for cs in rows:
         tile = await session.get(Tile, cs.tile_id)
         if tile is None:
@@ -968,6 +978,8 @@ async def check_pending_claims(
         old_owner = tile.owner_id
         tile.owner_id = cs.target_player_id
         flipped.append(tile.id)
+        if tile.terrain == TERRAIN_CASTLE:
+            hq_flips.append((tile.id, int(old_owner or 0), int(cs.target_player_id)))
         session.add(ActionLog(
             game_id=game.id,
             turn_number=game.turn_number,
@@ -983,44 +995,109 @@ async def check_pending_claims(
     if flipped:
         await session.flush()
 
-    # P0.5 — seize check is UNIVERSAL (works on any game, not just
-    # those with win_condition=="seize"). Any HQ-ownership flip between
-    # different teams is an instant win. We do this AFTER all the
-    # flips so the win_reason reflects the LAST valid seize (and
-    # any earlier seizures are logged in the claim_complete rows
-    # above for the action log).
+    # P0.5 + M4.16+:seize check is UNIVERSAL (works on any game, not
+    # just win_condition=="seize"). For every HQ-ownership flip between
+    # different **players** we run a CASCADE on the captured player:
+    #
+    #   1) Kill every unit owned by the captured player (HP=0 →
+    #      cleanup_dead_units — does NOT touch team-mates, so the
+    #      team-mate still has units and can take revenge later).
+    #   2) Transfer the captured player's remaining income / castle
+    #      tiles (barracks / village / castle variants) to the new
+    #      owner. Their economic base is wiped.
+    #
+    # The actual game-end verdict is decided by `_alive_teams` AFTER
+    # the cascade. If the captured player was the last alive member of
+    # their team, the seizing team wins outright. If a team-mate still
+    # has units, the game CONTINUES — the ally gets a chance for
+    # revenge ("team 模式下 HQ 被夺不牵连队友,给队友复仇机会").
     if game.status == "playing":
-        for tile_id in flipped:
-            tile = await session.get(Tile, tile_id)
-            if tile is None or tile.terrain != TERRAIN_CASTLE:
-                continue  # only castle tiles can be a HQ
-            # The new owner's team vs the previous owner's team.
-            new_player = await session.get(Player, tile.owner_id) if tile.owner_id else None
-            # Find the team of the previous owner by reading the
-            # ActionLog we just wrote (it has the old owner id).
-            # In practice, 'seize' always involves a flip between
-            # different players (ClaimSession wouldn't have been
-            # created if the same player tried to claim their own
-            # tile), so old != new. We still treat an unchanged-team
-            # flip as 'no win' (defensive coding).
-            winner_team = _team_of(new_player) if new_player else None
-            if winner_team:
+        for tile_id, old_owner_id, new_owner_id in hq_flips:
+            if old_owner_id <= 0 or old_owner_id == new_owner_id:
+                continue  # no real flip (unowned / self-flip — defensive)
+            new_player = await session.get(Player, new_owner_id)
+            if new_player is None:
+                continue
+            winner_team = _team_of(new_player)
+            # --- 1) Cascade: kill every alive unit of the old HQ player
+            old_player_units = (
+                await session.execute(
+                    select(Unit).where(
+                        Unit.player_id == old_owner_id,
+                        Unit.hp > 0,
+                    )
+                )
+            ).scalars().all()
+            if old_player_units:
+                for u in old_player_units:
+                    u.hp = 0
+                # cleanup_dead_units handles FK SET NULL on tiles, claim
+                # cancellation, CO meter on_death, AND re-runs
+                # check_win_condition internally (rout verdict).
+                await cleanup_dead_units(session, old_player_units)
+                session.add(ActionLog(
+                    game_id=game.id,
+                    turn_number=game.turn_number,
+                    player_id=new_owner_id,
+                    action_type="cascade_rout",
+                    description=(
+                        f"🪦 阵营 {winner_team} 夺 HQ 后,"
+                        f"玩家 {old_owner_id} 的 {len(old_player_units)} 个单位被肃清"
+                    ),
+                ))
+            # --- 2) Cascade: transfer the old HQ player's remaining
+            #         CLAIMABLE tiles (barracks / village / castle
+            #         variants) to the new owner. Non-claimable tiles
+            #         (plain / forest / river) are left as-is — they
+            #         have no economic value anyway.
+            other_tiles = (
+                await session.execute(
+                    select(Tile).where(
+                        Tile.game_id == game.id,
+                        Tile.owner_id == old_owner_id,
+                        Tile.id != tile_id,  # the HQ itself already flipped
+                    )
+                )
+            ).scalars().all()
+            transferred = 0
+            for t in other_tiles:
+                if t.terrain in CLAIMABLE_TERRAINS:
+                    t.owner_id = new_owner_id
+                    transferred += 1
+            if transferred:
+                session.add(ActionLog(
+                    game_id=game.id,
+                    turn_number=game.turn_number,
+                    player_id=new_owner_id,
+                    action_type="cascade_transfer",
+                    description=(
+                        f"🏰 阵营 {winner_team} 接收玩家 {old_owner_id}"
+                        f" 的 {transferred} 处建筑"
+                    ),
+                ))
+            # --- 3) Game end. _alive_teams now reflects post-cleanup
+            #         state. If the captured team is fully wiped (only
+            #         alive team left) → seize win. Otherwise → game
+            #         continues, the ally can mount a counter-attack.
+            if game.status == "playing":
                 alive = await _alive_teams(session, game)
-                if len(alive) == 1 and alive[0] == winner_team:
-                    _finish_game(game, winner_team, "seize")
-                elif len(alive) == 0:
-                    _finish_game(game, None, "draw")
-                if game.status == "finished":
-                    session.add(ActionLog(
-                        game_id=game.id,
-                        turn_number=game.turn_number,
-                        player_id=new_player.id,
-                        action_type="victory",
-                        description=(
-                            f"🏆 {winner_team} 阵营占领了对方 HQ，胜利！"
-                        ),
-                    ))
-                    break  # no need to check further tiles
+                if len(alive) == 0:
+                    await _finish_game(game, None, "draw")
+                elif len(alive) == 1 and alive[0] == winner_team:
+                    await _finish_game(game, winner_team, "seize")
+                # else: team-mate still alive — keep playing, revenge
+                # chance open.
+            if game.status == "finished":
+                session.add(ActionLog(
+                    game_id=game.id,
+                    turn_number=game.turn_number,
+                    player_id=new_player.id,
+                    action_type="victory",
+                    description=(
+                        f"🏆 {winner_team} 阵营占领了对方 HQ，胜利！"
+                    ),
+                ))
+                break  # no need to check further tiles
     return flipped
 
 

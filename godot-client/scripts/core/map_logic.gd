@@ -41,17 +41,25 @@ static func neighbors(pos: Vector2i) -> Array:
 # Passability
 # ============================================================
 
-## Mirrors `utils.terrain_passable`. Note the explicit blacklist of
-## `castle_wall` / `gate` (impassable for everyone) and the `castle`
-## ownership check.
+## Mirrors `utils.terrain_passable` (server `can_end_on_terrain`).
+## Note the explicit blacklist of `castle_wall` / `gate` (impassable for
+## everyone).
+##
+## M4.16+ fix:REMOVED the `castle` ownership check that used to prevent
+## units from stepping on enemy HQ tiles. The server intentionally allows
+## stepping onto enemy castles (comment in actions.py:222 — "Enemy HQs
+## are valid movement targets. Claiming the HQ remains an explicit
+## two-turn action after the unit arrives."). Without this fix the unit
+## could never reach the enemy HQ to start a claim session, so the seize
+## win condition was unreachable in the Godot client.
 static func terrain_passable(terrain: String, owner_id: int, viewer_owner_id: int) -> bool:
+	# `owner_id` / `viewer_owner_id` are intentionally unused — see comment
+	# above. Server uses `DEFAULT_MOVEMENT_PROFILE` (no rules) so any
+	# terrain with a finite move cost is endable.
+	var _owner_unused: int = owner_id
+	var _viewer_unused: int = viewer_owner_id
 	if terrain == "castle_wall" or terrain == "gate":
 		return false
-	if terrain == "castle":
-		# -1 / 0 sentinel "no owner" → anyone can stand.
-		return owner_id < 0 or owner_id == viewer_owner_id
-	# All other terrains (river / mountain / village / barracks / road /
-	# castle_*) are passable; their move cost is in TERRAIN_MOVE_COST.
 	return Config.TERRAIN_MOVE_COST.has(terrain)
 
 
