@@ -14,15 +14,15 @@ class Berserker(BaseUnitClass):
     glyph = "狂"
 
     # 数值 — FE8 L10 1:1(Berserker L10 expected)
-    base_hp = 30
-    base_atk = 14
-    base_def = 5
+    base_hp = 48
+    base_atk = 28
+    base_def = 8
     base_mov = 4
-    mp_pool = 4
+    mp_pool = 5
 
     # Magic stats — physical, low magic vuln
     base_matk = 4
-    base_mdef = 4
+    base_mdef = 5
 
     default_skills = []
     attack_range = 1

@@ -33,6 +33,7 @@ from app.classes.heroes import get as get_hero
 from app.classes.units import get as get_class
 from app.progression.policies import (
     AutolevelPolicy,
+    BattleLanePolicy,
     STAT_KEYS,
     TIER2_TYPE_IDS,
     ClassBaseline,
@@ -121,14 +122,14 @@ def test_autolevel_policy_baseline_resolves_hero_correctly():
     assert "autolevel_boss" in bl.formula_note
 
 
-def test_autolevel_stat_at_level_matches_spawn_helper():
+def test_battle_lane_stat_at_level_matches_spawn_helper():
     """Cross-check: chart's stat_at_level matches app.modes.spawn_generic_stats
     at the same start_level for a plain class.  If this fails, either
-    AutolevelPolicy or spawn_generic_stats drifted apart."""
+    BattleLanePolicy or spawn_generic_stats drifted apart."""
     from app.modes import spawn_generic_stats
 
     bm = get_class("blade_master")
-    policy = AutolevelPolicy()
+    policy = BattleLanePolicy()
     bl = policy.baseline(class_profile=bm, hero_profile=None)
 
     for lv in (1, 5, 10, 20):
@@ -153,6 +154,63 @@ def test_autolevel_rejects_level_below_1():
     bl = policy.baseline(class_profile=bm, hero_profile=None)
     with pytest.raises(ValueError):
         policy.stat_at_level(baseline_=bl, level=0)
+
+
+def test_battle_lane_magic_class_grows_magic_lane_strongly_and_physical_lane_weakly():
+    policy = BattleLanePolicy()
+    warlock = get_class("warlock")
+    bl = policy.baseline(class_profile=warlock, hero_profile=None)
+
+    l20 = dict(policy.stat_at_level(baseline_=bl, level=20))
+
+    assert l20["matk"] == 31
+    assert l20["mdef"] == 14
+    assert l20["atk"] == 9
+    assert l20["def"] == 11
+
+
+def test_battle_lane_physical_class_grows_physical_lane_strongly_and_magic_lane_weakly():
+    policy = BattleLanePolicy()
+    swordsman = get_class("swordsman")
+    bl = policy.baseline(class_profile=swordsman, hero_profile=None)
+
+    l20 = dict(policy.stat_at_level(baseline_=bl, level=20))
+
+    assert l20["atk"] == 27
+    assert l20["def"] == 14
+    assert l20["matk"] == 5
+    assert l20["mdef"] == 5
+
+
+def test_battle_lane_hero_uses_base_class_attack_kind_for_growth_sides():
+    policy = BattleLanePolicy()
+    yun = get_hero("yun")
+    bl = policy.baseline(class_profile=get_class("warlock"), hero_profile=yun)
+
+    l20 = dict(policy.stat_at_level(baseline_=bl, level=20))
+
+    assert bl.attack_kind == "magic"
+    assert l20["matk"] == 36
+    assert l20["mdef"] == 14
+    assert l20["atk"] == 21
+    assert l20["def"] == 12
+
+
+def test_battle_lane_policy_matches_generic_spawn_helper():
+    from app.modes import spawn_generic_stats
+
+    policy = BattleLanePolicy()
+    for type_id in ("warlock", "swordsman"):
+        cls = get_class(type_id)
+        bl = policy.baseline(class_profile=cls, hero_profile=None)
+        for lv in (1, 10, 20):
+            from_policy = dict(policy.stat_at_level(baseline_=bl, level=lv))
+            from_spawn = spawn_generic_stats(type_id, start_level=lv)
+            assert from_policy["hp"] == from_spawn["hp"]
+            assert from_policy["atk"] == from_spawn["atk"]
+            assert from_policy["def"] == from_spawn["def"]
+            assert from_policy["matk"] == from_spawn["matk"]
+            assert from_policy["mdef"] == from_spawn["mdef"]
 
 
 # ============================================================
@@ -229,6 +287,12 @@ def test_get_policy_resolves_known_name():
     assert p.name == "autolevel_boss"
 
 
+def test_get_policy_resolves_battle_lane_default_name():
+    p = get_policy("battle_lane")
+    assert isinstance(p, BattleLanePolicy)
+    assert p.name == "battle_lane"
+
+
 def test_get_policy_rejects_unknown_name():
     with pytest.raises(KeyError):
         get_policy("curve_linear_does_not_exist_yet")
@@ -237,5 +301,17 @@ def test_get_policy_rejects_unknown_name():
 def test_infer_tier_uses_type_id_set_for_classes():
     assert infer_tier(type_id="swordsman", is_hero=False) == 1
     assert infer_tier(type_id="blade_master", is_hero=False) == 2
+    assert infer_tier(type_id="dragon_rider", is_hero=False) == 1
+    assert infer_tier(type_id="berserker", is_hero=False) == 2
     # Heroes are always tier-1 until the promotion system lands.
     assert infer_tier(type_id="yun", is_hero=True) == 1
+
+
+def test_berserker_and_dragon_rider_baselines_match_expected_tiers():
+    berserker = get_class("berserker")
+    dragon_rider = get_class("dragon_rider")
+
+    assert (berserker.base_hp, berserker.base_atk, berserker.base_def) == (48, 28, 8)
+    assert berserker.base_mov == 4
+    assert (dragon_rider.base_hp, dragon_rider.base_atk, dragon_rider.base_def) == (42, 16, 7)
+    assert dragon_rider.base_mov == 5

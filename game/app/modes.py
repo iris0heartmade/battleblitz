@@ -45,6 +45,7 @@ from enum import Enum
 from typing import Literal
 
 from app.classes.units import get
+from app.progression.policies import lane_growth_rates
 
 
 # ============================================================
@@ -141,9 +142,10 @@ def spawn_generic_stats(
 
     profile = get(type_id)
     levels_above_l1 = max(0, start_level - 1)
+    rates = lane_growth_rates(profile.attack_kind)
 
     def grow(base: int, rate_key: str) -> int:
-        rate = AUTOEVEL_RATES.get(rate_key, 0)
+        rate = rates.get(rate_key, 0)
         return base + int(levels_above_l1 * rate / 100)
 
     return {

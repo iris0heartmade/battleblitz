@@ -105,8 +105,8 @@ def test_level_up_scales_hero_snapshot_not_equipment_bonus():
     assert unit.atk == 22
 
 
-def test_magic_hero_level_up_grows_magic_lane_and_weak_defense():
-    """Magic classes grow MATK/MDEF while DEF still grows as the weak side."""
+def test_magic_hero_level_up_grows_magic_lane_and_weak_physical_side():
+    """Magic classes grow MATK/MDEF strongly while ATK/DEF grow as weak side."""
     from types import SimpleNamespace
 
     from app.config import EXP_TO_LEVEL
@@ -132,18 +132,18 @@ def test_magic_hero_level_up_grows_magic_lane_and_weak_defense():
 
     assert result is not None
     assert unit.campaign_base_stats["hp"] == 52
-    assert unit.campaign_base_stats["atk"] == 20
+    assert unit.campaign_base_stats["atk"] == 21
     assert unit.campaign_base_stats["def"] == 12
     assert unit.campaign_base_stats["matk"] == 29
     assert unit.campaign_base_stats["mdef"] == 14
-    assert unit.atk == 20
+    assert unit.atk == 21
     assert unit.def_ == 12
     assert unit.matk == 29
     assert unit.mdef == 14
 
 
-def test_physical_hero_level_up_grows_physical_lane_and_weak_magic_defense():
-    """Physical classes grow ATK/DEF while MDEF still grows as the weak side."""
+def test_physical_hero_level_up_grows_physical_lane_and_weak_magic_side():
+    """Physical classes grow ATK/DEF strongly while MATK/MDEF grow as weak side."""
     from types import SimpleNamespace
 
     from app.config import EXP_TO_LEVEL
@@ -171,9 +171,9 @@ def test_physical_hero_level_up_grows_physical_lane_and_weak_magic_defense():
     assert unit.campaign_base_stats["hp"] == 47
     assert unit.campaign_base_stats["atk"] == 20
     assert unit.campaign_base_stats["def"] == 14
-    assert unit.campaign_base_stats["matk"] == 4
+    assert unit.campaign_base_stats["matk"] == 5
     assert unit.campaign_base_stats["mdef"] == 5
-    assert unit.matk == 4
+    assert unit.matk == 5
     assert unit.mdef == 5
 
 

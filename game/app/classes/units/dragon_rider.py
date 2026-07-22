@@ -4,20 +4,19 @@ from app.classes.units.base import BaseUnitClass
 
 
 class DragonRider(BaseUnitClass):
-    """Fast cavalry-equivalent class for future terrain-mobility profiles."""
+    """Tier-1 flying melee class with mobility as its primary advantage."""
 
     type_id = "dragon_rider"
     display_cn = "飞龙骑士"
     display_en = "Dragon Rider"
     glyph = "龙"
 
-    # More durable than a knight, but with deliberately lower attack so the
-    # future flying terrain profile is the class's primary advantage.
-    base_hp = 60
-    base_atk = 20
-    base_def = 10
+    # Kept below promoted cavalry bodies; flying terrain access is the hook.
+    base_hp = 42
+    base_atk = 16
+    base_def = 7
     base_mov = 5
-    mp_pool = 8
+    mp_pool = 7
 
     base_matk = 3
     base_mdef = 6

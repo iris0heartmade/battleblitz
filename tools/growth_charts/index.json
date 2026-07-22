@@ -6,17 +6,17 @@
     "label_en": "Archer",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\archer.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
     "kind": "class",
-    "type_id": "berserker",
-    "label_cn": "狂战士",
-    "label_en": "Berserker",
+    "type_id": "dragon_rider",
+    "label_cn": "飞龙骑士",
+    "label_en": "Dragon Rider",
     "tier": 1,
-    "output": "tools\\growth_charts\\classes\\berserker.png",
-    "policy": "autolevel_boss",
+    "output": "tools\\growth_charts\\classes\\dragon_rider.png",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -26,7 +26,7 @@
     "label_en": "Falcon Knight",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\falcon_knight.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -36,7 +36,7 @@
     "label_en": "Healer",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\healer.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -46,7 +46,7 @@
     "label_en": "Knight",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\knight.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -56,7 +56,7 @@
     "label_en": "Lancer",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\lancer.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -66,7 +66,7 @@
     "label_en": "Swordsman",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\swordsman.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -76,7 +76,7 @@
     "label_en": "Warlock",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\warlock.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -86,7 +86,17 @@
     "label_en": "Warrior",
     "tier": 1,
     "output": "tools\\growth_charts\\classes\\warrior.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "berserker",
+    "label_cn": "狂战士",
+    "label_en": "Berserker",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\berserker.png",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -96,17 +106,7 @@
     "label_en": "Blade Master",
     "tier": 2,
     "output": "tools\\growth_charts\\classes\\blade_master.png",
-    "policy": "autolevel_boss",
-    "max_level": 20
-  },
-  {
-    "kind": "class",
-    "type_id": "dragon_rider",
-    "label_cn": "飞龙骑士",
-    "label_en": "Dragon Rider",
-    "tier": 2,
-    "output": "tools\\growth_charts\\classes\\dragon_rider.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -116,7 +116,7 @@
     "label_en": "Paladin",
     "tier": 2,
     "output": "tools\\growth_charts\\classes\\paladin.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -126,7 +126,7 @@
     "label_en": "Sage",
     "tier": 2,
     "output": "tools\\growth_charts\\classes\\sage.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -136,7 +136,7 @@
     "label_en": "Saint",
     "tier": 2,
     "output": "tools\\growth_charts\\classes\\saint.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -146,7 +146,7 @@
     "label_en": "Sniper",
     "tier": 2,
     "output": "tools\\growth_charts\\classes\\sniper.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -156,7 +156,7 @@
     "label_en": "Anna",
     "base_class_id": "healer",
     "output": "tools\\growth_charts\\heroes\\anna.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   },
   {
@@ -166,7 +166,7 @@
     "label_en": "Yun",
     "base_class_id": "warlock",
     "output": "tools\\growth_charts\\heroes\\yun.png",
-    "policy": "autolevel_boss",
+    "policy": "battle_lane",
     "max_level": 20
   }
 ]

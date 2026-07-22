@@ -60,8 +60,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     )
     p.add_argument("--out", default=DEFAULT_OUT,
                    help="Output root directory (default: tools/growth_charts)")
-    p.add_argument("--policy", default="autolevel_boss",
-                   help="Growth policy name (default: autolevel_boss)")
+    p.add_argument("--policy", default="battle_lane",
+                   help="Growth policy name (default: battle_lane)")
     p.add_argument("--max-level", type=int, default=20,
                    help="Max level to plot (default: 20)")
     p.add_argument("--entities", choices=["all", "classes", "heroes"], default="all",

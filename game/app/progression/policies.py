@@ -34,7 +34,7 @@ Public surface (this module's responsibility — additions belong here):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, Dict, Mapping, Optional, Protocol, Tuple
 
 from app.classes.heroes.base import BaseHero, HeroProfile
@@ -66,7 +66,7 @@ TIER2_TYPE_IDS: frozenset[str] = frozenset({
     "paladin",
     "sage",
     "saint",
-    "dragon_rider",
+    "berserker",
 })
 
 
@@ -292,6 +292,79 @@ class AutolevelPolicy:
         return out
 
 
+class BattleLanePolicy(AutolevelPolicy):
+    """Lane-aware battle growth.
+
+    Growth sides are selected from the class attack kind:
+      - physical: ATK/DEF are strong, MATK/MDEF are weak.
+      - magic: MATK/MDEF are strong, ATK/DEF are weak.
+
+    Heroes do not get a special formula here; their base class resolves
+    ``attack_kind``, so Yun/Anna use the same magic-lane rules as Warlock/
+    Healer until HeroDesign introduces per-character growth.
+    """
+
+    name: ClassVar[str] = "battle_lane"
+
+    STRONG_OFFENSE_RATE: ClassVar[int] = 50
+    WEAK_OFFENSE_RATE: ClassVar[int] = 10
+    STRONG_DEFENSE_RATE: ClassVar[int] = 15
+    WEAK_DEFENSE_RATE: ClassVar[int] = 10
+    HP_RATE: ClassVar[int] = 85
+
+    def baseline(
+        self,
+        *,
+        class_profile: UnitClassProfile,
+        hero_profile: Optional[HeroProfile] = None,
+    ) -> ClassBaseline:
+        bl = super().baseline(class_profile=class_profile, hero_profile=hero_profile)
+        if bl.is_hero:
+            note = (
+                "battle_lane: 英雄继承基础职业强/弱侧成长；"
+                "HeroDesign 独立成长表暂未启用"
+            )
+        else:
+            note = "battle_lane: 按职业 attack_kind 分配强侧/弱侧成长"
+        return replace(bl, formula_note=note)
+
+    def stat_at_level(
+        self,
+        *,
+        baseline_: ClassBaseline,
+        level: int,
+    ) -> Dict[str, int]:
+        if level < 1:
+            raise ValueError(f"level must be >= 1, got {level}")
+        levels_above = level - 1
+        rates = lane_growth_rates(baseline_.attack_kind)
+        out: Dict[str, int] = {}
+        for k in STAT_KEYS:
+            base = baseline_.base_stats[k]
+            rate = rates.get(k, 0)
+            out[k] = base + int(levels_above * rate / 100)
+        return out
+
+
+def lane_growth_rates(attack_kind: str) -> Dict[str, int]:
+    """Return per-stat fixed growth rates for a combat lane."""
+    if attack_kind == "magic":
+        return {
+            "hp": BattleLanePolicy.HP_RATE,
+            "atk": BattleLanePolicy.WEAK_OFFENSE_RATE,
+            "def": BattleLanePolicy.WEAK_DEFENSE_RATE,
+            "matk": BattleLanePolicy.STRONG_OFFENSE_RATE,
+            "mdef": BattleLanePolicy.STRONG_DEFENSE_RATE,
+        }
+    return {
+        "hp": BattleLanePolicy.HP_RATE,
+        "atk": BattleLanePolicy.STRONG_OFFENSE_RATE,
+        "def": BattleLanePolicy.STRONG_DEFENSE_RATE,
+        "matk": BattleLanePolicy.WEAK_OFFENSE_RATE,
+        "mdef": BattleLanePolicy.WEAK_DEFENSE_RATE,
+    }
+
+
 # ============================================================
 # Registry — single entry-point for the CLI & dataset layer
 # ============================================================
@@ -303,11 +376,13 @@ def get_policy(name: str) -> GrowthPolicy:
     (1) implementing the Protocol, (2) registering it here.  No
     ABC, no metaclass trickery.
     """
+    if name == BattleLanePolicy.name:
+        return BattleLanePolicy()
     if name == AutolevelPolicy.name:
         return AutolevelPolicy()
     raise KeyError(
         f"unknown growth policy: {name!r}. "
-        f"Known: {[AutolevelPolicy.name]}"
+        f"Known: {[BattleLanePolicy.name, AutolevelPolicy.name]}"
     )
 
 
@@ -317,6 +392,8 @@ __all__ = [
     "ClassBaseline",
     "GrowthPolicy",
     "AutolevelPolicy",
+    "BattleLanePolicy",
+    "lane_growth_rates",
     "resolve_effective_base",
     "infer_tier",
     "get_policy",

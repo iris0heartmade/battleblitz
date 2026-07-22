@@ -476,8 +476,8 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     """Auto-level when EXP crosses `EXP_TO_LEVEL` (single level per call).
 
     Each level grows HP plus the class's combat lane. Physical classes grow
-    ATK/DEF strongly and MDEF weakly; magic classes grow MATK/MDEF strongly
-    and DEF weakly. MOV does not scale.
+    ATK/DEF strongly and MATK/MDEF weakly; magic classes grow MATK/MDEF
+    strongly and ATK/DEF weakly. MOV does not scale.
     """
     if unit.level >= MAX_LEVEL:
         unit.exp = 0
@@ -493,8 +493,8 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     def strong_growth(base: int) -> int:
         return int(round(base * factor)) + 1
 
-    def weak_def_growth(base: int) -> int:
-        return max(int(round(base * factor)), base + 1)
+    def weak_growth(base: int) -> int:
+        return base + 1
 
     campaign_base = dict(unit.campaign_base_stats or {})
     if campaign_base:
@@ -509,13 +509,15 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
         old_base_mdef = int(campaign_base.get("mdef", unit.mdef))
         campaign_base["hp"] = int(round(old_base_hp * factor))
         if attack_kind == "magic":
+            campaign_base["atk"] = weak_growth(old_base_atk)
             campaign_base["matk"] = strong_growth(old_base_matk)
             campaign_base["mdef"] = strong_growth(old_base_mdef)
-            campaign_base["def"] = weak_def_growth(old_base_def)
+            campaign_base["def"] = weak_growth(old_base_def)
         else:
             campaign_base["atk"] = strong_growth(old_base_atk)
             campaign_base["def"] = strong_growth(old_base_def)
-            campaign_base["mdef"] = weak_def_growth(old_base_mdef)
+            campaign_base["matk"] = weak_growth(old_base_matk)
+            campaign_base["mdef"] = weak_growth(old_base_mdef)
         unit.max_hp += campaign_base["hp"] - old_base_hp
         unit.hp = min(unit.max_hp, unit.hp + campaign_base["hp"] - old_base_hp)
         unit.atk += campaign_base["atk"] - old_base_atk
@@ -535,15 +537,15 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
         unit.max_hp = new_max_hp
         unit.hp = min(unit.max_hp, unit.hp + hp_gain)
         if attack_kind == "magic":
-            unit.atk = old_atk
+            unit.atk = weak_growth(old_atk)
             unit.matk = strong_growth(old_matk)
-            unit.def_ = weak_def_growth(old_def)
+            unit.def_ = weak_growth(old_def)
             unit.mdef = strong_growth(old_mdef)
         else:
             unit.atk = strong_growth(old_atk)
-            unit.matk = old_matk
+            unit.matk = weak_growth(old_matk)
             unit.def_ = strong_growth(old_def)
-            unit.mdef = weak_def_growth(old_mdef)
+            unit.mdef = weak_growth(old_mdef)
 
     if unit.level >= MAX_LEVEL:
         unit.exp = 0
