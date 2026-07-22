@@ -160,6 +160,61 @@ def spawn_generic_stats(
 
 
 # ============================================================
+# Apply-to-Unit helper (Phase 2 Step 2)
+# ============================================================
+
+def apply_spawn_generic_to_unit(
+    unit,
+    type_id: str,
+    start_level: int = 1,
+) -> None:
+    """Mutate a Unit row in-place with generic spawn stats.
+
+    Writes only the fields a generic unit cares about (hp/max_hp/atk/def/
+    matk/mdef/mov).  Leaves hero_id, name, x/y, morale, skills, co_state
+    etc. alone — those are populated by the caller.
+
+    Per Phase 2 §6.5.3:
+      start_level = 1 → fields == class.base
+      start_level = N → fields += (N-1) × Boss autolevel rate.
+
+    Notes:
+      - Type-erased: takes ``unit`` as opaque object so this module
+        doesn't need to import the Unit model (avoids circular import
+        with app.models).
+      - Skills are NOT applied here; :func:`spawn_generic_stats`
+        doesn't carry skill info, and the existing spawn path adds
+        ``list(uc.default_skills)`` separately.
+      - Unit level is preserved from the caller's input — caller sets
+        ``unit.level`` if needed before invoking this.
+    """
+    stats = spawn_generic_stats(type_id, start_level=start_level)
+    unit.hp = stats["hp"]
+    unit.max_hp = stats["hp"]
+    unit.atk = stats["atk"]
+    unit.def_ = stats["def"]
+    unit.matk = stats["matk"]
+    unit.mdef = stats["mdef"]
+    unit.mov = stats["mov"]
+
+
+# ============================================================
+# Class-surface helper — also used during spawn to keep non-Generic
+# fields honest.
+# ============================================================
+
+def unit_default_mp_pool(type_id: str) -> int:
+    """Fallback mp_pool used when the spawn path needs an mp_pool number
+    but the caller hasn't picked one explicitly.
+
+    Pulled from :func:`app.classes.units.get` (the canonical mp_pool
+    per class) — wrappers exist so future callers can override mp_pool
+    via chapter config without editing game.py.
+    """
+    return get(type_id).mp_pool
+
+
+# ============================================================
 # Hero spawn — DEFERRED pending user's design draft
 # ============================================================
 

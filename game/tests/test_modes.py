@@ -185,3 +185,134 @@ def test_spawn_hero_raises_not_implemented():
     """Per Phase 2 §4 the function deliberately awaits Hero design draft."""
     with pytest.raises(NotImplementedError):
         spawn_hero_stats("swordsman", char_growth={"hp": 80}, level=1)
+
+
+# ── apply_spawn_generic_to_unit — Phase 2 Step 2 ───────────────
+
+
+def _make_unit(type_id: str, **overrides):
+    """Build a Unit row with sensible defaults for in-memory tests."""
+    from app.classes.units import get as get_class
+    from app.models import Unit
+
+    profile = get_class(type_id)
+    defaults = {
+        "player_id": 1,
+        "unit_type": type_id,
+        "name": f"Test {type_id}",
+        "level": 1,
+        "exp": 0,
+        "hp": 1,
+        "max_hp": 1,
+        "atk": 1,
+        "def_": 1,
+        "matk": 0,
+        "mdef": 0,
+        "mov": 1,
+        "mp": 0,
+        "morale": 0,
+        "x": 5,
+        "y": 5,
+        "has_acted": False,
+        "has_moved": False,
+        "skills": [],
+    }
+    defaults.update(overrides)
+    # Construct Unit object directly (in-memory, no DB flush needed for field mutation tests).
+    unit = Unit(**defaults)
+    return unit
+
+
+def test_apply_spawn_to_unit_mainline_l1_uses_class_base():
+    """Mainline at L1 = pure class.base, no autolevel bump."""
+    from app.modes import apply_spawn_generic_to_unit
+    from app.classes.units import get as get_class
+
+    for tid in ("lancer", "warrior", "berserker", "falcon_knight"):
+        unit = _make_unit(tid)
+        apply_spawn_generic_to_unit(unit, tid, start_level=1)
+        profile = get_class(tid)
+        assert unit.hp == profile.base_hp, f"{tid} hp"
+        assert unit.atk == profile.base_atk, f"{tid} atk"
+        assert unit.def_ == profile.base_def, f"{tid} def"
+        assert unit.matk == profile.base_matk
+        assert unit.mdef == profile.base_mdef
+        # mov uses class.base_mov (not mp_pool — autolevel would otherwise
+        # mid-attack-modify it, which the existing path was wrongly doing
+        # via mov=uc.mp_pool).
+        assert unit.mov == profile.base_mov, f"{tid} mov"
+
+
+def test_apply_spawn_to_unit_free_l10_autolevel_hp():
+    """Free mode L10 → hp grows by 9 × 85 / 100 = +7."""
+    from app.modes import apply_spawn_generic_to_unit
+
+    unit_l1 = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_l1, "lancer", start_level=1)
+
+    unit_l10 = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_l10, "lancer", start_level=10)
+
+    hp_bump = int(9 * 0.85)  # +7
+    assert unit_l10.hp == unit_l1.hp + hp_bump
+
+
+def test_apply_spawn_to_unit_skips_level_below_one():
+    """start_level=0 must not produce negative stats."""
+    from app.modes import apply_spawn_generic_to_unit
+
+    unit_l1 = _make_unit("warrior")
+    apply_spawn_generic_to_unit(unit_l1, "warrior", start_level=1)
+
+    unit_zero = _make_unit("warrior")
+    apply_spawn_generic_to_unit(unit_zero, "warrior", start_level=0)
+
+    assert unit_zero.hp == unit_l1.hp
+    assert unit_zero.atk == unit_l1.atk
+    assert unit_zero.def_ == unit_l1.def_
+
+
+def test_apply_spawn_preserves_max_hp_when_unit_is_alive():
+    """spawn writes BOTH hp and max_hp to the same value (no wounded-spawn via spawn)."""
+    from app.modes import apply_spawn_generic_to_unit
+
+    unit = _make_unit("warrior")
+    apply_spawn_generic_to_unit(unit, "warrior", start_level=1)
+    assert unit.hp == unit.max_hp, "spawn must keep hp == max_hp"
+
+
+def test_apply_spawn_to_unit_does_not_touch_position_or_skills():
+    """apply_spawn_generic_to_unit must preserve x/y/name/skills — those are caller-managed."""
+    from app.modes import apply_spawn_generic_to_unit
+
+    unit = _make_unit("lancer", name="Hero☆", x=7, y=9, skills=["snipe"])
+    apply_spawn_generic_to_unit(unit, "lancer", start_level=10)
+    assert unit.name == "Hero☆"
+    assert (unit.x, unit.y) == (7, 9)
+    assert unit.skills == ["snipe"]
+
+
+# ── New unit classes can spawn (Phase 2 Step 2 acceptance) ────────
+
+
+def test_four_new_classes_can_spawn_in_memory():
+    """All four Phase 2 new classes produce a valid Unit row.
+
+    Acceptance test for the commit's "ordinary units onto the board"
+    scope — no sprite/UI yet, but data path must succeed end-to-end.
+    """
+    from app.classes.units import get_or_none
+    from app.modes import apply_spawn_generic_to_unit
+
+    for tid in ("lancer", "warrior", "berserker", "falcon_knight"):
+        profile = get_or_none(tid)
+        assert profile is not None, f"{tid} must be in registry"
+        unit = _make_unit(tid, x=5, y=5)
+        apply_spawn_generic_to_unit(unit, tid, start_level=1)
+        # All four values are populated and non-negative.
+        for attr in ("hp", "max_hp", "atk", "def_", "matk", "mdef", "mov"):
+            value = getattr(unit, attr)
+            assert isinstance(value, int) and value >= 0, f"{tid} {attr}={value}"
+        assert unit.unit_type == tid
+        # Class-static fields come from compile().
+        assert unit.mov == profile.base_mov

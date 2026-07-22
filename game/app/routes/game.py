@@ -41,6 +41,7 @@ from app.game_logic import (
 )
 from app.mainline.spawn_overrides import apply_spawn_overrides
 from app.classes.units import get_or_none as _get_unit_or_none
+from app.modes import apply_spawn_generic_to_unit
 from app.battle_config import UnknownBattleTrackError, expand_battle_config
 from app.commanders.effects import bake_passive_into_units, can_fire_co_power
 from app.commanders.actions import can_player_fire_now
@@ -587,6 +588,15 @@ async def _start_battle_internal(
             has_acted=False, has_moved=False,
             skills=list(uc.default_skills),
         ))
+        # Phase 2 §6.5.3 — Generic units go through spawn_generic_stats
+        # so chapter / free-mode multipliers and Boss-autolevel rates apply.
+        # Skip when the caller passed an explicit hp override (test fixtures).
+        if u.get("hp") is None:
+            apply_spawn_generic_to_unit(
+                units[-1],
+                unit_type,
+                start_level=int(u.get("level", 1)),
+            )
     if units:
         session.add_all(units)
     await session.flush()
