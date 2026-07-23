@@ -140,6 +140,16 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var battle_back_lobby_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackLobbyBtn
 @onready var battle_back_menu_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackMenuBtn
 
+# 通用 Yes/No 确认弹窗 — 主菜单 / 大厅 / 游戏通用(置于 root,所以能浮在任意 view 上)
+@onready var confirm_dialog: Panel = $ConfirmDialog
+@onready var confirm_title_label: Label = $ConfirmDialog/ConfirmTitle
+@onready var confirm_body_label: Label = $ConfirmDialog/ConfirmBody
+@onready var confirm_yes_btn: Button = $ConfirmDialog/ButtonRow/ConfirmYesBtn
+@onready var confirm_no_btn: Button = $ConfirmDialog/ButtonRow/ConfirmNoBtn
+# 一次性 Callable — 触发后立刻清空,避免 modal 重复触发 / 旧 callback 残留。
+var _confirm_yes_callback: Callable = Callable()
+var _confirm_no_callback: Callable = Callable()
+
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
 @onready var cancel_btn: Button = $GameView/HUD/ActionBubble/ActionList/CancelBtn
@@ -583,6 +593,12 @@ func _ready() -> void:
 		attack_confirm_btn.pressed.connect(_on_attack_confirm_pressed)
 	if attack_cancel_btn != null and is_instance_valid(attack_cancel_btn):
 		attack_cancel_btn.pressed.connect(_on_attack_cancel_pressed)
+	# 通用 ConfirmDialog 信号接线 — 必须 null/instance_valid 守护,$ConfirmDialog
+	# 是顶层节点,但若 godot 编辑器临时缺失也能跑通。
+	if confirm_yes_btn != null and is_instance_valid(confirm_yes_btn):
+		confirm_yes_btn.pressed.connect(_on_confirm_yes_pressed)
+	if confirm_no_btn != null and is_instance_valid(confirm_no_btn):
+		confirm_no_btn.pressed.connect(_on_confirm_no_pressed)
 	# V2 第 6 轮:设置 + 暂停面板
 	settings_close_btn.pressed.connect(_on_settings_close_pressed)
 	settings_apply_btn.pressed.connect(_on_settings_apply_pressed)
@@ -3052,6 +3068,16 @@ func _reset_game_state_for_main_menu() -> void:
 	# resume 会再拉一次。
 	# 8) 注意:不调 UserSettings.set_value 清 last_game_id — 玩家
 	# 还可以用 Resume 按钮回到刚才那局。
+	# 9) 清旧 player_id + lobby 快照 — 不清的话,新房间的 lobby 渲染 / cycle
+	# 会带着上一局的 _player_id,触发 400(后端找不到旧 id / status 已翻 playing)。
+	# Resume 走 _resume_game_id/_resume_player_id,跟 _player_id 解耦,所以这里
+	# 清掉不影响 Resume 流程。
+	_player_id = 0
+	_game_id = 0
+	_lobby_seat_commander_indices = [0, 0, 0, 0]
+	_lobby_commander_ids = [""]
+	_selected_ai_player_id = 0
+	_lobby_is_host = false
 
 
 func _on_pause_quit_pressed() -> void:
@@ -4491,6 +4517,69 @@ func _on_editor_save_response(body: Variant, code: int = 0) -> void:
 
 
 func _on_lobby_pressed() -> void:
+	# P0 UX gate:进联机大厅前先看主菜单里有没有中断存档。
+	# 有的话弹「已经有中断存档,将放弃该中断,是否继续?」
+	# - 是 → 调 discard_suspend,然后 _enter_lobby_view()
+	# - 否 → 留在主菜单,不进 lobby(避免 stale suspend 污染新房间)
+	# 没有就跳过 gate,直接进 lobby。
+	if _user_name == "" or _user_name == "Player":
+		# 没 user_name 的早期流程不挡人 — 跟原行为一致。
+		_enter_lobby_view()
+		return
+	NetworkClient.list_saves(
+		_user_name, Callable(self, "_on_lobby_list_saves_for_suspend_check")
+	)
+
+
+func _on_lobby_list_saves_for_suspend_check(body: Variant, _code: int = 0) -> void:
+	if not (body is Dictionary):
+		# 拉失败兜底:不进 lobby,避免在用户不知情的情况下与 suspend 冲突。
+		_update_status("无法检查中断存档,请稍后重试")
+		return
+	var suspend: Variant = body.get("suspend", null)
+	if not (suspend is Dictionary):
+		_enter_lobby_view()
+		return
+	var suspend_game_id: int = int(suspend.get("game_id", 0))
+	if suspend_game_id <= 0:
+		_enter_lobby_view()
+		return
+	_show_confirm(
+		"放弃中断存档",
+		"已经有中断存档,将放弃该中断,是否继续?",
+		Callable(self, "_on_lobby_discard_suspend_yes"),
+		Callable(self, "_on_lobby_discard_suspend_no"),
+	)
+
+
+func _on_lobby_discard_suspend_yes() -> void:
+	# 用户点「继续」→ 先调 discard_suspend,等服务端 ack 后再进 lobby。
+	# 注意:_hide_confirm() 已在 _on_confirm_yes_pressed 里调用过了。
+	if _user_name == "" or _user_name == "Player":
+		_enter_lobby_view()
+		return
+	_update_status("正在放弃中断存档...")
+	NetworkClient.discard_suspend(
+		_user_name, Callable(self, "_on_lobby_discard_suspend_response")
+	)
+
+
+func _on_lobby_discard_suspend_no() -> void:
+	# 用户点「取消」→ 留在主菜单。什么都不做。
+	_update_status("已取消,可继续点 ▶ 继续中断战斗")
+
+
+func _on_lobby_discard_suspend_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		_update_status("放弃中断失败,请重试")
+		return
+	var cleared: bool = bool((body as Dictionary).get("cleared", false)) if body is Dictionary else false
+	if not cleared:
+		_update_status("没有可放弃的中断存档")
+	_enter_lobby_view()
+
+
+func _enter_lobby_view() -> void:
 	_entry_flow = "lobby"
 	_show_view("lobby")
 	_apply_lobby_theme()
@@ -7744,6 +7833,48 @@ func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
 	return MapLogic.attack_range_tiles(pos, max_range, min_range, size_v)
+
+
+# ============================================================
+# ConfirmDialog — 通用 Yes/No 弹窗 helper
+# 用法: _show_confirm("标题", "正文", Callable(self, "_on_yes"), Callable(self, "_on_no"))
+# 设计要点:
+#   * 一次性 Callable — yes/no 触发后立刻清空,避免重复点 / 旧 callback 残留
+#   * on_no 可省略(取消按钮 = 关闭即可,不做事)
+#   * 顶层 Panel,与 view 切换解耦 — 不依赖 _show_view()
+# ============================================================
+
+func _show_confirm(title: String, body: String, on_yes: Callable, on_no: Callable = Callable()) -> void:
+	_confirm_yes_callback = on_yes
+	_confirm_no_callback = on_no
+	if confirm_title_label != null and is_instance_valid(confirm_title_label):
+		confirm_title_label.text = title
+	if confirm_body_label != null and is_instance_valid(confirm_body_label):
+		confirm_body_label.text = body
+	if confirm_dialog != null and is_instance_valid(confirm_dialog):
+		confirm_dialog.visible = true
+
+
+func _hide_confirm() -> void:
+	_confirm_yes_callback = Callable()
+	_confirm_no_callback = Callable()
+	if confirm_dialog != null and is_instance_valid(confirm_dialog):
+		confirm_dialog.visible = false
+
+
+func _on_confirm_yes_pressed() -> void:
+	# 在 hide 之前先 cache callback,hide() 会立刻清空
+	var cb: Callable = _confirm_yes_callback
+	_hide_confirm()
+	if cb.is_valid():
+		cb.call()
+
+
+func _on_confirm_no_pressed() -> void:
+	var cb: Callable = _confirm_no_callback
+	_hide_confirm()
+	if cb.is_valid():
+		cb.call()
 
 
 func _show_attack_confirm(attacker_id: int, target_id: int) -> void:

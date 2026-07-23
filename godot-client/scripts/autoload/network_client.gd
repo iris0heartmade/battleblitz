@@ -727,6 +727,13 @@ func capture_suspend(game_id: int, user_name: String, callback: Callable = Calla
 	}, callback)
 
 
+func discard_suspend(user_name: String, callback: Callable = Callable()) -> void:
+	# Wire format mirrors GET /saves?user_name=... — query-style, no body.
+	# Returns {"ok": True, "cleared": bool}; "cleared" is False when no
+	# suspend existed (the call is idempotent — see DiscardSuspendOut).
+	request("DELETE", "/saves/suspend?user_name=%s" % user_name.uri_encode(), {}, callback)
+
+
 # T:94 — 拉战斗 BGM 列表
 # 详见 game/app/routes/audio.py:GET /audio/tracks
 # 返回: {"tracks": [{track_id, title, category, file, volume, fade_in_ms, ...}, ...]}

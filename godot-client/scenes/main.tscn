@@ -2139,3 +2139,64 @@ offset_top = -78.0
 offset_right = 120.0
 offset_bottom = -24.0
 text = "关 闭"
+
+; ============================================================
+; ConfirmDialog — generic Yes/No modal overlay
+; Top-level (parented to Main) so it can float over any view
+; (menu, lobby, game). Driven from main.gd::_show_confirm.
+; Hidden by default — main.gd toggles .visible when needed.
+; ============================================================
+[node name="ConfirmDialog" type="Panel" parent="."]
+visible = false
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -270.0
+offset_top = -120.0
+offset_right = 270.0
+offset_bottom = 120.0
+mouse_filter = 0
+
+[node name="ConfirmTitle" type="Label" parent="ConfirmDialog"]
+anchor_right = 1.0
+offset_left = 21.0
+offset_top = 15.0
+offset_right = -21.0
+offset_bottom = 51.0
+text = "确认"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 24
+
+[node name="ConfirmBody" type="Label" parent="ConfirmDialog"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 27.0
+offset_top = 66.0
+offset_right = -27.0
+offset_bottom = -87.0
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 16
+
+[node name="ButtonRow" type="HBoxContainer" parent="ConfirmDialog"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -180.0
+offset_top = -69.0
+offset_right = 180.0
+offset_bottom = -18.0
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="ConfirmYesBtn" type="Button" parent="ConfirmDialog/ButtonRow"]
+custom_minimum_size = Vector2(156, 48)
+text = "确认"
+
+[node name="ConfirmNoBtn" type="Button" parent="ConfirmDialog/ButtonRow"]
+custom_minimum_size = Vector2(156, 48)
+text = "取消"
