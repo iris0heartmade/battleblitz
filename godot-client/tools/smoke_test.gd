@@ -797,7 +797,7 @@ func _ready() -> void:
 		"editor width selector should expose common map sizes")
 	_assert_gte("Editor height selector lists sizes", editor_height_option.item_count, 4,
 		"editor height selector should expose common map sizes")
-	main_check.call("_on_editor_maps_response", [
+	editor_view.call("_on_editor_maps_response", [
 		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
 		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
 	], 200)
@@ -808,10 +808,10 @@ func _ready() -> void:
 	_assert_true("Editor delete enables with saved map", not editor_delete_btn.disabled,
 		"delete should enable when a saved map is selected")
 	editor_map_select.select(1)
-	main_check.call("_on_editor_map_selected", 1)
-	_assert_eq("Editor selected map id updates", str(main_check.get("_selected_editor_map_id")), "map_beta",
+	editor_view.call("_on_editor_map_selected", 1)
+	_assert_eq("Editor selected map id updates", str(editor_view.get("_selected_editor_map_id")), "map_beta",
 		"selecting a saved map should store its id")
-	main_check.call("_on_editor_load_response", {
+	editor_view.call("_on_editor_load_response", {
 		"id": "map_beta",
 		"name": "Beta",
 		"size": {"width": 15, "height": 15},
@@ -819,18 +819,18 @@ func _ready() -> void:
 		"layout": ["S".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
 		"initial_units": [],
 	}, 200)
-	var loaded_editor_map: Dictionary = main_check.get("_editor_map")
+	var loaded_editor_map: Dictionary = editor_view.get("_editor_map")
 	_assert_eq("Editor load response replaces current map", str(loaded_editor_map.get("id", "")), "map_beta",
 		"loading a saved map should replace the editor map")
-	main_check.call("_on_editor_delete_response", {}, 204)
-	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
+	editor_view.call("_on_editor_delete_response", {}, 204)
+	_assert_eq("Editor delete clears selected map id", str(editor_view.get("_selected_editor_map_id")), "",
 		"successful delete should clear the selected map id")
 	editor_mode_option.select(2)
 	editor_unit_option.select(1)
 	editor_unit_color_option.select(1)
 	editor_unit_level_option.select(2)
-	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
-	var unit_editor_map: Dictionary = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	var unit_editor_map: Dictionary = editor_view.get("_editor_map")
 	var editor_units: Array = unit_editor_map.get("initial_units", [])
 	_assert_eq("Editor unit mode places one unit", editor_units.size(), 1,
 		"unit mode should add an initial unit at the clicked tile")
@@ -841,8 +841,8 @@ func _ready() -> void:
 	_assert_eq("Editor unit mode stores selected level", int((editor_units[0] as Dictionary).get("level", 0)), 3,
 		"unit placement should use the selected level")
 	editor_unit_tool_option.select(1)
-	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	unit_editor_map = editor_view.get("_editor_map")
 	editor_units = unit_editor_map.get("initial_units", [])
 	_assert_eq("Editor unit erase removes unit", editor_units.size(), 0,
 		"unit erase mode should remove the unit at the clicked tile")
@@ -850,8 +850,8 @@ func _ready() -> void:
 	editor_mode_option.select(1)
 	editor_surface_option.select(1)
 	editor_surface_owner_option.select(2)
-	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = editor_view.get("_editor_map")
 	var surface_layout: Array = unit_editor_map.get("layout", [])
 	var tile_owners: Array = unit_editor_map.get("tile_owners", [])
 	_assert_true("Editor surface mode paints building", str(surface_layout[3])[3] == "v",
@@ -859,21 +859,21 @@ func _ready() -> void:
 	_assert_eq("Editor surface mode stores owner", str((tile_owners[0] as Dictionary).get("color", "")), "blue",
 		"surface deployment should store the selected owner color")
 	editor_surface_owner_option.select(0)
-	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = editor_view.get("_editor_map")
 	tile_owners = unit_editor_map.get("tile_owners", [])
 	_assert_eq("Editor surface unowned clears owner", tile_owners.size(), 0,
 		"painting an unowned surface should remove ownership metadata")
 	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorBiomeOption")
 	editor_biome_option.select(1)
 	editor_apply_biome_btn.pressed.emit()
-	unit_editor_map = main_check.get("_editor_map")
+	unit_editor_map = editor_view.get("_editor_map")
 	_assert_eq("Editor biome apply updates map", str(unit_editor_map.get("biome", "")), "snow",
 		"one-click biome branch switching should update the editor map immediately")
 	editor_width_option.select(1)
 	editor_height_option.select(0)
-	main_check.call("_on_editor_resize_pressed")
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_resize_pressed")
+	unit_editor_map = editor_view.get("_editor_map")
 	var editor_size: Dictionary = unit_editor_map.get("size", {})
 	var resized_layout: Array = unit_editor_map.get("layout", [])
 	_assert_eq("Editor resize updates width", int(editor_size.get("width", 0)), 20,
@@ -882,7 +882,7 @@ func _ready() -> void:
 		"resize should update the saved map height")
 	_assert_eq("Editor resize pads row width", str(resized_layout[0]).length(), 20,
 		"resize should pad layout rows to the selected width")
-	main_check.call("_on_editor_save_response", {
+	editor_view.call("_on_editor_save_response", {
 		"id": "saved_alpha",
 		"name": "Saved Alpha",
 		"size": {"width": 15, "height": 15},
@@ -895,8 +895,8 @@ func _ready() -> void:
 		"saving an editor map should immediately expose custom:{id} in lobby presets")
 	editor_terrain_option.select(1)
 	editor_mode_option.select(0)
-	main_check.call("_paint_editor_tile", Vector2i(1, 1))
-	var editor_map: Dictionary = main_check.get("_editor_map")
+	editor_view.call("_paint_editor_tile", Vector2i(1, 1))
+	var editor_map: Dictionary = editor_view.get("_editor_map")
 	var editor_layout: Array = editor_map.get("layout", [])
 	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
 		"painting with the forest brush should mutate the editor layout")
@@ -906,15 +906,15 @@ func _ready() -> void:
 		"painting should push a history entry that can be undone")
 	_assert_true("Editor redo disabled before undo", editor_redo_btn.disabled,
 		"redo should stay disabled until an undo is performed")
-	main_check.call("_on_editor_undo_pressed")
-	editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_undo_pressed")
+	editor_map = editor_view.get("_editor_map")
 	editor_layout = editor_map.get("layout", [])
 	_assert_true("Editor undo restores terrain", str(editor_layout[1])[1] == "P",
 		"undo should restore the previous terrain at the painted tile")
 	_assert_true("Editor redo enables after undo", not editor_redo_btn.disabled,
 		"undo should make redo available")
-	main_check.call("_on_editor_redo_pressed")
-	editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_redo_pressed")
+	editor_map = editor_view.get("_editor_map")
 	editor_layout = editor_map.get("layout", [])
 	_assert_true("Editor redo reapplies terrain", str(editor_layout[1])[1] == "F",
 		"redo should reapply the terrain change")
