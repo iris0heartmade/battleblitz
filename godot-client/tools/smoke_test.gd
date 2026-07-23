@@ -625,7 +625,9 @@ func _ready() -> void:
 	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
 		"resume button should appear when a filtered playable save exists")
 
-	main_check.call("_on_saves_response", [
+	# P2:saves 域已搬到 saves_controller;测试改走 saves_view 回调
+	var saves_view: Node = main_check.get_node("SavesView")
+	saves_view.call("_on_saves_response", [
 		{"id": 88, "name": "Free Save", "status": "playing", "turn_number": 3, "map_seed": 77},
 		{"id": 99, "name": "mainline:chapter_01_steel_rebellion:battle_01", "status": "waiting", "turn_number": 1},
 	], 200)

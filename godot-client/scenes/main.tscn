@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
 [ext_resource type="Script" path="res://scripts/ui/editor_controller.gd" id="3_editor"]
+[ext_resource type="Script" path="res://scripts/ui/saves_controller.gd" id="4_saves"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -911,6 +912,7 @@ custom_minimum_size = Vector2(180, 60)
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
+script = ExtResource("4_saves")
 
 [node name="SaveFrame" type="ColorRect" parent="SavesView"]
 anchor_left = 0.5
