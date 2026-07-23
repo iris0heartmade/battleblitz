@@ -314,7 +314,9 @@ func _ready() -> void:
 	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
 		"attack forecast should render in the right-side information panel")
 	main_check.call("_show_view", "mainline")
-	main_check.call("_on_mainline_prepare_response", {
+	# P2 Batch A+B:提前定义 mainline_view 引用(批量 redirect 都需要它)
+	var mainline_view: Node = main_check.get_node("MainlineView")
+	mainline_view.call("_on_mainline_prepare_response", {
 		"battle_index": 0,
 		"total_battles": 2,
 		"inventory": {"gold": 320, "iron_sword": 1},
@@ -365,21 +367,21 @@ func _ready() -> void:
 	_assert_gte("Prepare equipment selector lists catalog", prep_equipment_select.item_count, 1,
 		"equipment selector should list warehouse items")
 	prep_hero_select.select(1)
-	main_check.call("_on_prepare_hero_selected", 1)
+	mainline_view.call("_on_prepare_hero_selected", 1)
 	_assert_true("Prepare hero selector changes sheet", prep_content.text.contains("Yun"),
 		"selecting another hero should update the hero paper sheet")
-	main_check.call("_on_prepare_shop_response", {
+	mainline_view.call("_on_prepare_shop_response", {
 		"mainline_id": "chapter_test",
 		"gold": 320,
 		"items": [{"item_id": "hero_crest", "name": "Hero Crest", "price": 100, "description": "Promote a hero"}],
 	}, 200)
-	main_check.call("_on_prepare_tab_pressed", "shop")
+	mainline_view.call("_on_prepare_tab_pressed", "shop")
 	var prep_shop_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect")
 	_assert_gte("Prepare shop selector lists stock", prep_shop_select.item_count, 1,
 		"shop selector should list buyable stock")
 	_assert_true("Prepare shop renders item", prep_content.text.contains("Hero Crest"),
 		"shop tab should render post-battle shop stock")
-	main_check.call("_on_prepare_mercenary_response", {
+	mainline_view.call("_on_prepare_mercenary_response", {
 		"mainline_id": "chapter_test",
 		"balance": {
 			"allowed_unit_types": ["swordsman"],
@@ -388,7 +390,7 @@ func _ready() -> void:
 		"allocation": {"unit_type_upgrades": {"swordsman": {"atk": 1}}},
 		"mercenary_points": 2,
 	}, 200)
-	main_check.call("_on_prepare_tab_pressed", "mercenary")
+	mainline_view.call("_on_prepare_tab_pressed", "mercenary")
 	var prep_merc_unit_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect")
 	var prep_merc_stat_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect")
 	_assert_gte("Prepare mercenary unit selector lists types", prep_merc_unit_select.item_count, 1,
@@ -703,8 +705,7 @@ func _ready() -> void:
 	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
 		"recruit success status should include remaining gold")
 
-	# P2 Batch A:redirect 到 mainline_view(matches saves_flow_screenshot 同样模式)
-	var mainline_view: Node = main_check.get_node("MainlineView")
+	# P2 Batch A:redirect _on_ml_list_response(已在上面定义 mainline_view)
 	mainline_view.call("_on_ml_list_response", [
 		{
 			"id": "chapter_01_steel_rebellion",
@@ -926,7 +927,7 @@ func _ready() -> void:
 		"redo should reapply the terrain change")
 
 	main_check.set("_user_name", "Alice")
-	main_check.call("_on_mainline_start_response", {
+	mainline_view.call("_on_mainline_start_response", {
 		"game_id": 123,
 		"player_id": 456,
 		"mainline_id": "chapter_01_steel_rebellion",
@@ -943,7 +944,7 @@ func _ready() -> void:
 	_assert_true("Mainline start status includes progress", main_status_label.text.contains("1/2"),
 		"mainline start should show battle progress")
 
-	main_check.call("_on_mainline_advance_response", {
+	mainline_view.call("_on_mainline_advance_response", {
 		"state": "dialogue",
 		"mainline_id": "chapter_01_steel_rebellion",
 		"battle_index": 1,
@@ -960,7 +961,7 @@ func _ready() -> void:
 	# no UI gate).  See commit f96753b (refactor/extract-mainline-modules).
 	_assert_true("Mainline advance hides next battle button (FE8 auto-advance)", not ml_next_btn.visible,
 		"non-victory advance should hide the next-battle button — advance now auto-calls NetworkClient.next_battle_mainline")
-	main_check.call("_on_mainline_next_battle_response", {
+	mainline_view.call("_on_mainline_next_battle_response", {
 		"game_id": 321,
 		"player_id": 654,
 		"mainline_id": "chapter_01_steel_rebellion",
@@ -970,7 +971,7 @@ func _ready() -> void:
 	}, 201)
 	_assert_eq("Mainline next stores game id", int(main_check.get("_game_id")), 321,
 		"next battle should store the spawned game id")
-	main_check.call("_on_mainline_advance_response", {
+	mainline_view.call("_on_mainline_advance_response", {
 		"state": "victory",
 		"mainline_id": "chapter_01_steel_rebellion",
 		"battle_index": 2,
@@ -982,7 +983,7 @@ func _ready() -> void:
 	_assert_true("Mainline victory hides next battle button", not ml_next_btn.visible,
 		"mainline victory should hide the next-battle button")
 	main_check.set("_active_mainline_id", "chapter_01_steel_rebellion")
-	main_check.call("_on_mainline_abandon_response", {
+	mainline_view.call("_on_mainline_abandon_response", {
 		"ok": true,
 		"mainline_id": "chapter_01_steel_rebellion",
 		"abandoned_at": "2026-07-16T00:00:00Z",
