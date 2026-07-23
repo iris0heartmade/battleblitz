@@ -60,28 +60,35 @@ def test_godot_free_lobby_create_sends_free_mode_to_backend():
 
 
 def test_godot_save_views_use_save_api_not_game_delete_api():
-    source = _read(MAIN_GD)
-    assert 'NetworkClient.list_saves(_user_name, Callable(self, "_on_saves_response"))' in source
-    assert 'NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))' in source
-    assert "NetworkClient.load_save(" in source
-    assert "NetworkClient.erase_save(" in source
-    assert 'NetworkClient.delete_game(_selected_save_id' not in source
-    assert 'NetworkClient.list_games(Callable(self, "_on_saves_response")' not in source
-    assert 'NetworkClient.list_games(Callable(self, "_on_ml_slots_response")' not in source
+    # P2: saves 域已抽到 saves_controller.gd;mainline 域到 mainline_controller.gd。
+    # 测试断言搬到对应组件文件,而不是 main.gd。
+    saves_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "saves_controller.gd")
+    mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    main_src = _read(MAIN_GD)
+    combined = saves_src + mainline_src + main_src
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in saves_src
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))' in mainline_src
+    assert "NetworkClient.load_save(" in combined
+    assert "NetworkClient.erase_save(" in combined
+    assert 'NetworkClient.delete_game(_selected_save_id' not in combined
+    assert 'NetworkClient.list_games(Callable(self, "_on_saves_response")' not in combined
+    assert 'NetworkClient.list_games(Callable(self, "_on_ml_slots_response")' not in combined
 
 
 def test_godot_mainline_start_passes_prepare_compatible_arguments():
-    source = _read(MAIN_GD)
-    assert "NetworkClient.get_mainline_prepare(" in source
-    assert "func _on_prepare_start_pressed() -> void:" in source
-    assert 'NetworkClient.start_mainline(_selected_mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))' in source
-    assert 'NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"), true)' in source
-    assert 'NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, [], Callable(self, "_on_mainline_next_battle_response"))' in source
-    assert "NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, \"_on_mainline_start_response\"))" not in source
+    # P2: mainline 域已抽到 mainline_controller.gd(main.gd 还保留 _on_ml_slot_resume_response
+    # 等 thin wrapper,但 start/prepare/start_response 等已搬走)。
+    src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    assert "NetworkClient.get_mainline_prepare(" in src
+    assert "func _on_prepare_start_pressed() -> void:" in src
+    assert 'NetworkClient.start_mainline(_main._selected_mainline_id, _main._user_name, false, [], Callable(self, "_on_mainline_start_response"))' in src
+    assert 'NetworkClient.start_mainline(mainline_id, _main._user_name, false, [], Callable(self, "_on_mainline_start_response"), true)' in src
+    assert 'NetworkClient.next_battle_mainline(_main._active_mainline_id, _main._user_name, [], Callable(self, "_on_mainline_next_battle_response"))' in src
 
 
 def test_godot_prepare_ui_uses_hero_backend_actions():
-    source = _read(MAIN_GD)
+    # P2: prepare UI 已抽到 mainline_controller.gd(plan §Batch B)。
+    src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
     required_snippets = [
         "func _render_mainline_prepare() -> void:",
         "func _build_prepare_heroes_text(payload: Dictionary) -> String:",
@@ -96,7 +103,7 @@ def test_godot_prepare_ui_uses_hero_backend_actions():
         "NetworkClient.allocate_mercenary_points(",
     ]
     for snippet in required_snippets:
-        assert snippet in source
+        assert snippet in src
 
 
 def test_godot_empty_barracks_recruit_uses_tile_click_path():

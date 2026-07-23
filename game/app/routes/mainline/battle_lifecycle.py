@@ -514,17 +514,16 @@ async def start_mainline(
             },
         )
 
-    profile.active_mainline = progress_summary.active_mainline
-    profile.mainline_progress = dict(progress_summary.mainline_progress)
-    await session.flush()
+    # P3 start 重复写清理(plan §P3.3):下面这段 _spawn_battle 后的 active_mainline
+    # / mainline_progress 赋值是显式 UPDATE 唯一一次写入;之前在 try/except 之后
+    # 还有一次同样赋值 + flush(冗余 — _spawn_battle_for_index 内部不读 profile
+    # .active_mainline),删之。进度更新走 session.execute(update(...))。
 
     # Spawn the first battle (always index 0 on /start).
     game, human, total_battles = await _spawn_battle_for_index(
         session, profile, mainline_id, 0,
         disabled_unit_indices=body.disabled_unit_indices,
     )
-    profile.active_mainline = progress_summary.active_mainline
-    profile.mainline_progress = dict(progress_summary.mainline_progress)
     await session.execute(
         update(PlayerProfile)
         .where(PlayerProfile.user_name == body.user_name)
@@ -673,23 +672,18 @@ async def advance_mainline(
     is_last = next_index >= total_battles
 
     # Auto-save at chapter-end (per FE8 design v2 §2.3).  Fires on
-    # both the victory path and the next-battle path — the player
-    # gets a fresh checkpoint after every settlement so they can
-    # always reload to "post-this-battle" state.  The FE uses
-    # ``auto_save`` to render "自动存档中…… 自动存档完毕".
-    auto_save_out = await auto_save_checkpoint(
-        session,
-        profile,
-        mainline_id=mainline_id,
-        chapter_index=next_index,
-        label=f"{mainline_id}-结束",
-    )
+    # P3 auto-save 顺序统一(plan §P3.1):先 apply 奖励 + 推 cursor,再 auto-save,
+    # 这样 snapshot.cursor 与 slot.chapter_index 都 = next_index(推进后),
+    # "载入结束档 = 准备打下一章"。
+    rewards = None
+    next_mainline_id = None
+    next_mainline_title = None
+    post_url = None
+    post_key = None
+    battle = ml.battles[battle_index]
     if is_last:
-        rewards = await engine.apply_victory(
-            completed_battle=ml.battles[battle_index]
-        )
+        rewards = await engine.apply_victory(completed_battle=battle)
         next_mainline_id = ml.next_mainline_id
-        next_mainline_title = None
         if next_mainline_id:
             try:
                 next_mainline_title = mainline_pkg.load_mainline(next_mainline_id).title
@@ -699,6 +693,44 @@ async def advance_mainline(
                     mainline_id, next_mainline_id,
                 )
                 next_mainline_id = None
+        logger.info(
+            "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=victory "
+            "gold=+%d unlock=%s exp_per_unit=+%d",
+            body.user_name, mainline_id, battle_index, next_index,
+            rewards.gold or 0, rewards.unlock_class or "-",
+            rewards.exp_per_unit or 0,
+        )
+    else:
+        # 非 last:apply 战斗奖励 + mark_scene_done 推 cursor(snapshot 会包含全部)
+        engine.apply_battle_victory(battle)
+        post_key = battle.post_battle_dialogue
+        post_url = ml.dialogues.get(post_key) if post_key else None
+        if post_key:
+            await engine.mark_scene_done(post_key, next_battle=True)
+        else:
+            # No post-battle dialogue; just bump the cursor with no scene change.
+            await engine.mark_scene_done(
+                ml.battles[next_index - 1].pre_battle_dialogue or "intro",
+                next_battle=True,
+            )
+        logger.info(
+            "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=%s post_dlg=%s",
+            body.user_name, mainline_id, battle_index, next_index,
+            "dialogue" if post_url else "battle", post_key or "-",
+        )
+
+    # Auto-save at chapter-end(per FE8 design v2 §2.3)。snapshot cursor
+    # 已推到 next_index(应用奖励 + mark_scene_done 之后),slot.chapter_index
+    # 也是 next_index — 单一真相一致(plan §P3.1)。
+    auto_save_out = await auto_save_checkpoint(
+        session,
+        profile,
+        mainline_id=mainline_id,
+        chapter_index=next_index,
+        label=f"{mainline_id}-结束",
+    )
+
+    if is_last:
         logger.info(
             "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=victory "
             "gold=+%d unlock=%s exp_per_unit=+%d",
@@ -726,27 +758,7 @@ async def advance_mainline(
             auto_save=auto_save_out.model_dump(),
         )
 
-    # Otherwise: advance the cursor and return the post-battle dialogue
-    # for the battle we just won (so the frontend can play it before
-    # requesting /next-battle).
-    battle = ml.battles[battle_index]
-    engine.apply_battle_victory(battle)
-    post_key = battle.post_battle_dialogue
-    post_url = ml.dialogues.get(post_key) if post_key else None
-
-    # Bump the cursor via the service so the JSON column is well-formed.
-    # We use next_battle=True here to advance battle_index by 1, AND set
-    # the cursor's scene_id to the post_battle_dialogue key (or fall back
-    # to the only dialogue key if the battle has no post_battle_dialogue).
-    if post_key:
-        await engine.mark_scene_done(post_key, next_battle=True)
-    else:
-        # No post-battle dialogue; just bump the cursor with no scene change.
-        await engine.mark_scene_done(
-            ml.battles[next_index - 1].pre_battle_dialogue or "intro",
-            next_battle=True,
-        )
-
+    # 非 last:return with dialogue/battle post-battle state
     logger.info(
         "mainline_advance ok: user=%s mainline=%s battle_index=%d→%d state=%s post_dlg=%s",
         body.user_name, mainline_id, battle_index, next_index,
