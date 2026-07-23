@@ -1,10 +1,11 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
 [ext_resource type="Script" path="res://scripts/ui/editor_controller.gd" id="3_editor"]
 [ext_resource type="Script" path="res://scripts/ui/saves_controller.gd" id="4_saves"]
 [ext_resource type="Script" path="res://scripts/mainline/mainline_controller.gd" id="5_mainline"]
+[ext_resource type="Script" path="res://scripts/ui/in_progress_controller.gd" id="6_in_progress"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -175,6 +176,10 @@ disabled = true
 
 [node name="SavesButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "存档管理"
+custom_minimum_size = Vector2(0, 48)
+
+[node name="InProgressButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
+text = "▶ 进行中"
 custom_minimum_size = Vector2(0, 48)
 
 [node name="HelpButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
@@ -968,7 +973,9 @@ offset_bottom = 168.0
 text = "主线存档"
 theme_override_font_sizes/font_size = 24
 
+; --- 旧版控件保留(visible=false)以兼容 contract test + 旧断点 ---
 [node name="SaveOpenList" type="RichTextLabel" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 48.0
 offset_top = 177.0
 offset_right = 612.0
@@ -978,6 +985,7 @@ fit_content = false
 scroll_active = true
 
 [node name="SaveMainlineList" type="RichTextLabel" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 696.0
 offset_top = 177.0
 offset_right = 1242.0
@@ -987,12 +995,14 @@ fit_content = false
 scroll_active = true
 
 [node name="SaveSelectOption" type="OptionButton" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 48.0
 offset_top = 609.0
 offset_right = 804.0
 offset_bottom = 663.0
 
 [node name="SaveResumeBtn" type="Button" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 828.0
 offset_top = 609.0
 offset_right = 1008.0
@@ -1000,6 +1010,7 @@ offset_bottom = 663.0
 text = "继续存档"
 
 [node name="SaveDeleteBtn" type="Button" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 1032.0
 offset_top = 609.0
 offset_right = 1212.0
@@ -1007,20 +1018,15 @@ offset_bottom = 663.0
 text = "删除存档"
 
 [node name="SaveNewBtn" type="Button" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 1236.0
 offset_top = 609.0
 offset_right = 1434.0
 offset_bottom = 663.0
 text = "💾 新建"
 
-[node name="SaveRefreshBtn" type="Button" parent="SavesView/SaveFrame"]
-offset_left = 378.0
-offset_top = 738.0
-offset_right = 588.0
-offset_bottom = 792.0
-text = "刷新存档"
-
 [node name="SaveSlotOption" type="OptionButton" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 48.0
 offset_top = 687.0
 offset_right = 300.0
@@ -1034,18 +1040,137 @@ popup/item_2/text = "槽 3"
 popup/item_2/id = 2
 
 [node name="SaveSlotLabel" type="Label" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 318.0
 offset_top = 693.0
 offset_right = 468.0
 offset_bottom = 726.0
 text = "→ 写入:"
 
+; --- 新版三槽卡片布局(#16)— 3 manual + 1 auto + 1 suspend ---
+[node name="SaveSlotsTitle" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 120.0
+offset_right = 1242.0
+offset_bottom = 156.0
+text = "三存档槽  (按需手存,每槽独立 — 3 槽可各停不同章节,允许重玩)"
+theme_override_font_sizes/font_size = 22
+
+[node name="SaveSlotsContainer" type="VBoxContainer" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 162.0
+offset_right = 1242.0
+offset_bottom = 516.0
+theme_override_constants/separation = 8
+
+[node name="SaveAutoTitle" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 528.0
+offset_right = 1242.0
+offset_bottom = 558.0
+text = "自动存档  (章节胜利/准备完毕时由系统写入,只读)"
+theme_override_font_sizes/font_size = 20
+modulate = Color(0.65, 0.6, 0.45, 1)
+
+[node name="SaveAutoRow" type="PanelContainer" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 564.0
+offset_right = 1242.0
+offset_bottom = 636.0
+
+[node name="SaveSuspendTitle" type="Label" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 648.0
+offset_right = 1242.0
+offset_bottom = 678.0
+text = "中断存档  (战斗中保存的临时进度,resume 后会失效)"
+theme_override_font_sizes/font_size = 20
+modulate = Color(0.65, 0.6, 0.45, 1)
+
+[node name="SaveSuspendRow" type="PanelContainer" parent="SavesView/SaveFrame"]
+offset_left = 48.0
+offset_top = 684.0
+offset_right = 1242.0
+offset_bottom = 756.0
+
+[node name="SaveRefreshBtn" type="Button" parent="SavesView/SaveFrame"]
+offset_left = 378.0
+offset_top = 768.0
+offset_right = 588.0
+offset_bottom = 810.0
+text = "刷新存档"
+
 [node name="SaveBackBtn" type="Button" parent="SavesView/SaveFrame"]
 offset_left = 702.0
-offset_top = 738.0
+offset_top = 768.0
 offset_right = 912.0
-offset_bottom = 792.0
+offset_bottom = 810.0
 text = "返回上级"
+
+; ============================================================
+; T:#16 InProgressView — 进行中视图(中断 + active games + 活动主线存档)
+; ============================================================
+[node name="InProgressView" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("6_in_progress")
+
+[node name="IPFrame" type="ColorRect" parent="InProgressView"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -645.0
+offset_top = -420.0
+offset_right = 645.0
+offset_bottom = 420.0
+color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="IPBorder" type="ReferenceRect" parent="InProgressView/IPFrame"]
+editor_only = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+border_color = Color(0.788, 0.631, 0.29, 1)
+border_width = 6
+
+[node name="IPTitle" type="Label" parent="InProgressView/IPFrame"]
+anchor_right = 1.0
+offset_top = 18.0
+offset_bottom = 66.0
+text = "进行中"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 33
+
+[node name="IPStatus" type="Label" parent="InProgressView/IPFrame"]
+anchor_right = 1.0
+offset_left = 36.0
+offset_top = 72.0
+offset_right = -36.0
+offset_bottom = 108.0
+text = "加载中..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 20
+modulate = Color(0.65, 0.6, 0.45, 1)
+
+[node name="IPScroll" type="ScrollContainer" parent="InProgressView/IPFrame"]
+offset_left = 48.0
+offset_top = 120.0
+offset_right = 1242.0
+offset_bottom = 720.0
+follow_focus = true
+
+[node name="IPList" type="VBoxContainer" parent="InProgressView/IPFrame/IPScroll"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="IPBackBtn" type="Button" parent="InProgressView/IPFrame"]
+offset_left = 540.0
+offset_top = 740.0
+offset_right = 750.0
+offset_bottom = 786.0
+text = "返回主菜单"
 
 ; ============================================================
 ; T:96 MainlineView — 章节列表 + 详情 + 对话

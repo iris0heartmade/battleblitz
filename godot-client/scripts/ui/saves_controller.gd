@@ -1,128 +1,463 @@
 extends Control
-## saves_controller.gd — 存档视图控制器(P2 从 main.gd 抽离)。
-## 挂在场景 SavesView 节点上,自管面板内部逻辑;view 可见性仍由 main._show_view 控制。
+## saves_controller.gd — 存档视图控制器(P2 从 main.gd 抽离,#16 三槽卡片重做)。
+##
+## 三槽卡片布局(对齐 FE8 设计):
+##   - SaveSlotsContainer: 3 manual 槽固定渲染(空 / 手动 / 自动覆盖)
+##   - SaveAutoRow:        1 自动存档只读行
+##   - SaveSuspendRow:     1 中断存档行(继续/放弃)
+##
+## 每行操作内联(无 SaveSelectOption)— 选槽不再需要 dropdown。
+## 旧 SaveOpenList / SaveMainlineList / SaveSelectOption / SaveSlotOption 节点保留
+## (visible=false)以兼容 contract test 与外部节点引用,本组件不再使用。
+##
 ## 对外接口:
-##   open()                  — main 切到 saves view 后调用:刷新存档列表
-##   var _main: Node         — main 注入;跨域访问 _user_name / _active_mainline_id
-##                              / _selected_mainline_id / _resume_game_id / _game_id
-##                              / _show_view / _on_mainline_pressed / _update_status
+##   open()                       — main 切到 saves view 后调用:刷新存档列表
+##   var _main: Node              — main 注入;跨域访问 _user_name / _active_mainline_id
+##                                   / _selected_mainline_id / _resume_game_id / _game_id
+##                                   / _show_view / _on_mainline_pressed / _update_status
 ## 节点路径相对 SavesView: $SaveFrame/<X>(原 main.gd 用 $SavesView/SaveFrame/<X>)
-## 保留 Callable 跨域转发,所有 _on_save_* 内部回调仍写 self。
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+
+const _MANUAL_SLOT_COUNT := 3
 
 var _main: Node = null
 
 @onready var save_status: Label = $SaveFrame/SaveStatus
-@onready var save_open_list: RichTextLabel = $SaveFrame/SaveOpenList
-@onready var save_mainline_list: RichTextLabel = $SaveFrame/SaveMainlineList
-@onready var save_select_option: OptionButton = $SaveFrame/SaveSelectOption
-@onready var save_resume_btn: Button = $SaveFrame/SaveResumeBtn
-@onready var save_delete_btn: Button = $SaveFrame/SaveDeleteBtn
+@onready var save_slots_container: VBoxContainer = $SaveFrame/SaveSlotsContainer
+@onready var save_auto_row: PanelContainer = $SaveFrame/SaveAutoRow
+@onready var save_suspend_row: PanelContainer = $SaveFrame/SaveSuspendRow
 @onready var save_refresh_btn: Button = $SaveFrame/SaveRefreshBtn
-@onready var save_new_btn: Button = $SaveFrame/SaveNewBtn
-@onready var save_slot_option: OptionButton = $SaveFrame/SaveSlotOption
 @onready var save_back_btn: Button = $SaveFrame/SaveBackBtn
 
-var _save_records: Array = []
-var _selected_save_id: int = 0
+# Per-manual-slot row data(3 固定槽,由 _ready() 构建)
+var _manual_rows: Array = []  # Array[Dictionary] {container, slot_index, badge, status, resume_btn, delete_btn, overwrite_btn}
+# Current save state(from /saves response)
+var _manual_slot_records: Array = []  # Array[Dictionary] aligned with slot 0/1/2;{} if empty
+var _auto_record: Dictionary = {}
+var _suspend_record: Dictionary = {}
 
 
 func _ready() -> void:
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.item_selected.connect(_on_save_selected)
-	if save_resume_btn != null and is_instance_valid(save_resume_btn):
-		save_resume_btn.pressed.connect(_on_save_resume_pressed)
-	if save_delete_btn != null and is_instance_valid(save_delete_btn):
-		save_delete_btn.pressed.connect(_on_save_delete_pressed)
-	if save_refresh_btn != null and is_instance_valid(save_refresh_btn):
-		save_refresh_btn.pressed.connect(_refresh_saves)
-	if save_new_btn != null and is_instance_valid(save_new_btn):
-		save_new_btn.pressed.connect(_on_save_new_pressed)
-	if save_back_btn != null and is_instance_valid(save_back_btn):
-		save_back_btn.pressed.connect(_on_save_back_pressed)
-	# P2: GBA 火纹主题(原 main._apply_gba_theme 按钮列表里的 saves 按钮,随组件搬来)
-	var theme_btns := [save_resume_btn, save_delete_btn, save_refresh_btn, save_new_btn, save_back_btn]
+	# 新版按钮主题
+	var theme_btns := [save_refresh_btn, save_back_btn]
 	for btn in theme_btns:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
+	# 新版事件接线
+	if save_refresh_btn != null and is_instance_valid(save_refresh_btn):
+		save_refresh_btn.pressed.connect(_refresh_saves)
+	if save_back_btn != null and is_instance_valid(save_back_btn):
+		save_back_btn.pressed.connect(_on_save_back_pressed)
+	# 构建 3 槽固定行
+	_build_manual_rows()
+	# 初始空态
+	_render_manual_rows()
+	_render_auto_row()
+	_render_suspend_row()
 
+
+# ── Public ──────────────────────────────────────────────────
 
 func open() -> void:
 	_refresh_saves()
 
 
+# ── 3 固定槽行构建(代码生成,避免 tscn 复制粘贴 3 份)──
+
+func _build_manual_rows() -> void:
+	if save_slots_container == null or not is_instance_valid(save_slots_container):
+		return
+	for child in save_slots_container.get_children():
+		child.queue_free()
+	_manual_rows.clear()
+	for slot_index in range(_MANUAL_SLOT_COUNT):
+		var row := PanelContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.custom_minimum_size = Vector2(0, 110)
+		var hbox := HBoxContainer.new()
+		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(hbox)
+		# Slot badge
+		var badge := Label.new()
+		badge.custom_minimum_size = Vector2(70, 0)
+		badge.text = "槽 %d" % (slot_index + 1)
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.add_theme_font_size_override("font_size", 22)
+		hbox.add_child(badge)
+		# Status RichTextLabel
+		var status := RichTextLabel.new()
+		status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		status.bbcode_enabled = true
+		status.fit_content = true
+		status.scroll_active = false
+		status.custom_minimum_size = Vector2(0, 96)
+		hbox.add_child(status)
+		# Buttons vertical group
+		var btn_box := VBoxContainer.new()
+		btn_box.custom_minimum_size = Vector2(330, 0)
+		btn_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		btn_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn_box.add_theme_constant_override("separation", 4)
+		var resume_btn := Button.new()
+		resume_btn.text = "▶ 继续"
+		resume_btn.custom_minimum_size = Vector2(0, 36)
+		MenuTheme.apply_button_theme(resume_btn, MenuTheme.FS_BTN)
+		resume_btn.pressed.connect(_on_manual_resume_pressed.bind(slot_index))
+		btn_box.add_child(resume_btn)
+		var action_row := HBoxContainer.new()
+		action_row.add_theme_constant_override("separation", 6)
+		var delete_btn := Button.new()
+		delete_btn.text = "🗑 删除"
+		delete_btn.custom_minimum_size = Vector2(150, 36)
+		MenuTheme.apply_button_theme(delete_btn, MenuTheme.FS_BTN)
+		delete_btn.pressed.connect(_on_manual_delete_pressed.bind(slot_index))
+		action_row.add_child(delete_btn)
+		var overwrite_btn := Button.new()
+		overwrite_btn.text = "💾 覆盖"
+		overwrite_btn.custom_minimum_size = Vector2(150, 36)
+		MenuTheme.apply_button_theme(overwrite_btn, MenuTheme.FS_BTN)
+		overwrite_btn.pressed.connect(_on_manual_overwrite_pressed.bind(slot_index))
+		action_row.add_child(overwrite_btn)
+		btn_box.add_child(action_row)
+		hbox.add_child(btn_box)
+		save_slots_container.add_child(row)
+		_manual_rows.append({
+			"container": row,
+			"slot_index": slot_index,
+			"badge": badge,
+			"status": status,
+			"resume_btn": resume_btn,
+			"delete_btn": delete_btn,
+			"overwrite_btn": overwrite_btn,
+		})
+
+
+# ── Data fetch ─────────────────────────────────────────────
+
 func _refresh_saves() -> void:
-	_selected_save_id = 0
-	_save_records.clear()
 	if save_status != null and is_instance_valid(save_status):
 		save_status.text = "加载存档..."
-	if save_open_list != null and is_instance_valid(save_open_list):
-		save_open_list.text = "[color=#a69a73]加载中...[/color]"
-	if save_mainline_list != null and is_instance_valid(save_mainline_list):
-		save_mainline_list.text = "[color=#a69a73]加载中...[/color]"
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.clear()
+	# 同步重置,以防响应慢时旧数据仍在
+	_manual_slot_records = [{}, {}, {}]
+	_auto_record = {}
+	_suspend_record = {}
+	_render_manual_rows()
+	_render_auto_row()
+	_render_suspend_row()
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))
 
 
 func _on_saves_response(body: Variant, _code: int = 0) -> void:
-	var games: Array = _save_records_from_response(body)
-	_save_records = []
-	var open_lines: Array[String] = []
-	var mainline_lines: Array[String] = []
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.clear()
-	for record_index in range(games.size()):
-		var g: Variant = games[record_index]
-		if not (g is Dictionary):
+	var parsed := _save_records_from_response(body)
+	_manual_slot_records = [{}, {}, {}]
+	_auto_record = {}
+	_suspend_record = {}
+	for rec in parsed:
+		if not (rec is Dictionary):
 			continue
-		_save_records.append(g)
-		var line := _format_save_line(g)
-		var name := str(g.get("name", ""))
-		var mainline_id := str(g.get("mainline_id", ""))
-		var kind := str(g.get("kind", "manual"))
-		if mainline_id != "" or kind == "suspend" or name.begins_with("mainline:"):
-			mainline_lines.append(line)
-		else:
-			open_lines.append(line)
-		if save_select_option != null and is_instance_valid(save_select_option):
-			save_select_option.add_item(_save_option_label(g), record_index + 1)
-	if open_lines.is_empty():
-		open_lines.append("[color=#a69a73]暂无开房模式存档[/color]")
-	if mainline_lines.is_empty():
-		mainline_lines.append("[color=#a69a73]暂无主线模式存档[/color]")
-	if save_open_list != null and is_instance_valid(save_open_list):
-		save_open_list.text = "\n".join(open_lines)
-	if save_mainline_list != null and is_instance_valid(save_mainline_list):
-		save_mainline_list.text = "\n".join(mainline_lines)
-	if save_select_option != null and is_instance_valid(save_select_option) and save_select_option.item_count > 0:
-		save_select_option.select(0)
-		_on_save_selected(0)
-	else:
-		_selected_save_id = 0
+		var kind := str(rec.get("kind", ""))
+		if kind == "suspend":
+			_suspend_record = rec
+			continue
+		if kind == "auto":
+			_auto_record = rec
+			continue
+		if kind == "manual":
+			var idx := int(rec.get("slot_index", -1))
+			if idx >= 0 and idx < _MANUAL_SLOT_COUNT:
+				_manual_slot_records[idx] = rec
+	_render_manual_rows()
+	_render_auto_row()
+	_render_suspend_row()
 	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "共 %d 个存档" % _save_records.size()
-
-
-func _format_save_line(g: Dictionary) -> String:
-	var save_id: int = int(g.get("id", 0))
-	var kind := str(g.get("kind", "manual"))
-	if kind == "suspend":
-		var game_id := int(g.get("game_id", 0))
-		return "[b]中断存档[/b] [color=#a69a73]game #%d[/color]\n[color=#d8c48a]%s · %s[/color]" % [
-			game_id, str(g.get("mainline_id", "自由战斗")), str(g.get("suspend_point", "manual"))
+		var filled := 0
+		for r in _manual_slot_records:
+			if not r.is_empty():
+				filled += 1
+		save_status.text = "三槽已用 %d / 3  ·  自动 %s  ·  中断 %s" % [
+			filled,
+			"✓" if not _auto_record.is_empty() else "—",
+			"✓" if not _suspend_record.is_empty() else "—",
 		]
-	var label := _format_save_name(str(g.get("label", g.get("name", ""))))
-	var mainline_id := str(g.get("mainline_id", ""))
-	var chapter_index := int(g.get("chapter_index", 0)) + 1
-	var detail := "%s · 第 %d 章 · %s" % [mainline_id, chapter_index, kind] if mainline_id != "" else "%s · 回合 %d · 种子 %s" % [
-		_format_save_status(str(g.get("status", kind))),
-		int(g.get("turn_number", 0)),
-		str(g.get("map_seed", g.get("seed", "?"))),
-	]
-	return "[b]%s[/b] [color=#a69a73]#%d[/color]\n[color=#d8c48a]%s[/color]" % [label, save_id, detail]
 
+
+# ── Manual slot rendering ─────────────────────────────────
+
+func _render_manual_rows() -> void:
+	for i in range(_manual_rows.size()):
+		var row: Dictionary = _manual_rows[i]
+		var rec: Dictionary = _manual_slot_records[i] if i < _manual_slot_records.size() else {}
+		var status: RichTextLabel = row.get("status")
+		var resume: Button = row.get("resume_btn")
+		var delete_btn: Button = row.get("delete_btn")
+		var overwrite: Button = row.get("overwrite_btn")
+		if rec.is_empty():
+			if status: status.text = "[color=#a69a73][i]空 — 可写入或被自动填充[/i][/color]"
+			if resume: resume.disabled = true
+			if delete_btn: delete_btn.disabled = true
+			if overwrite: overwrite.text = "💾 新建"
+		else:
+			var label := _format_save_name(str(rec.get("label", "")))
+			var mid := str(rec.get("mainline_id", ""))
+			var chidx := int(rec.get("chapter_index", 0)) + 1
+			var kind_lbl := "主线" if mid != "" else "自由战"
+			if status:
+				status.text = "[b]%s[/b]\n[color=#d8c48a]%s · 第 %d 章 · %s[/color]" % [
+					_bb(label), kind_lbl, chidx, _format_save_status(str(rec.get("status", "manual"))),
+				]
+			if resume: resume.disabled = false
+			if delete_btn: delete_btn.disabled = false
+			if overwrite: overwrite.text = "💾 覆盖"
+
+
+func _render_auto_row() -> void:
+	if save_auto_row == null or not is_instance_valid(save_auto_row):
+		return
+	for child in save_auto_row.get_children():
+		child.queue_free()
+	if _auto_record.is_empty():
+		var empty := Label.new()
+		empty.text = "(暂无自动存档 — 完成章节或点「准备好了」后自动写入)"
+		empty.modulate = Color(0.65, 0.6, 0.45)
+		save_auto_row.add_child(empty)
+		return
+	var hbox := HBoxContainer.new()
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var label := _format_save_name(str(_auto_record.get("label", "")))
+	var mid := str(_auto_record.get("mainline_id", ""))
+	var chidx := int(_auto_record.get("chapter_index", 0)) + 1
+	var info := RichTextLabel.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.bbcode_enabled = true
+	info.fit_content = true
+	info.text = "[b]%s[/b]\n[color=#d8c48a]%s · 第 %d 章 · 自动[/color]" % [_bb(label), mid if mid != "" else "—", chidx]
+	hbox.add_child(info)
+	var load_btn := Button.new()
+	load_btn.text = "▶ 载入(会清除自动)"
+	load_btn.custom_minimum_size = Vector2(220, 40)
+	MenuTheme.apply_button_theme(load_btn, MenuTheme.FS_BTN)
+	load_btn.pressed.connect(_on_auto_load_pressed)
+	hbox.add_child(load_btn)
+	save_auto_row.add_child(hbox)
+
+
+func _render_suspend_row() -> void:
+	if save_suspend_row == null or not is_instance_valid(save_suspend_row):
+		return
+	for child in save_suspend_row.get_children():
+		child.queue_free()
+	if _suspend_record.is_empty():
+		var empty := Label.new()
+		empty.text = "(无中断存档 — 游戏中按「暂停 → 中断退出」会写入此处)"
+		empty.modulate = Color(0.65, 0.6, 0.45)
+		save_suspend_row.add_child(empty)
+		return
+	var hbox := HBoxContainer.new()
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var game_id := int(_suspend_record.get("game_id", 0))
+	var mid := str(_suspend_record.get("mainline_id", ""))
+	var info := RichTextLabel.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.bbcode_enabled = true
+	info.fit_content = true
+	info.text = "[b]中断存档[/b] game #%d\n[color=#d8c48a]%s · 触发点: %s[/color]" % [
+		game_id, mid if mid != "" else "自由战", str(_suspend_record.get("suspend_point", "manual"))
+	]
+	hbox.add_child(info)
+	var btn_box := VBoxContainer.new()
+	btn_box.add_theme_constant_override("separation", 4)
+	var resume_btn := Button.new()
+	resume_btn.text = "▶ 继续"
+	resume_btn.custom_minimum_size = Vector2(180, 36)
+	MenuTheme.apply_button_theme(resume_btn, MenuTheme.FS_BTN)
+	resume_btn.pressed.connect(_on_suspend_resume_pressed)
+	btn_box.add_child(resume_btn)
+	var discard_btn := Button.new()
+	discard_btn.text = "🗑 放弃"
+	discard_btn.custom_minimum_size = Vector2(180, 36)
+	MenuTheme.apply_button_theme(discard_btn, MenuTheme.FS_BTN)
+	discard_btn.pressed.connect(_on_suspend_discard_pressed)
+	btn_box.add_child(discard_btn)
+	hbox.add_child(btn_box)
+	save_suspend_row.add_child(hbox)
+
+
+# ── Manual slot actions ───────────────────────────────────
+
+func _on_manual_resume_pressed(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _manual_slot_records.size():
+		return
+	var rec: Dictionary = _manual_slot_records[slot_index]
+	if rec.is_empty():
+		_update_status("槽 %d 是空的" % (slot_index + 1))
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在载入槽 %d..." % (slot_index + 1)
+	NetworkClient.load_save(
+		_main._user_name,
+		str(rec.get("kind", "manual")),
+		int(rec.get("slot_index", slot_index)),
+		Callable(self, "_on_save_load_response").bind(rec)
+	)
+
+
+func _on_manual_delete_pressed(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _manual_slot_records.size():
+		return
+	var rec: Dictionary = _manual_slot_records[slot_index]
+	if rec.is_empty():
+		_update_status("槽 %d 是空的,无需删除" % (slot_index + 1))
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在删除槽 %d..." % (slot_index + 1)
+	NetworkClient.erase_save(
+		_main._user_name,
+		str(rec.get("kind", "manual")),
+		int(rec.get("slot_index", slot_index)),
+		Callable(self, "_on_save_delete_response").bind(slot_index)
+	)
+
+
+func _on_manual_overwrite_pressed(slot_index: int) -> void:
+	# 覆盖/新建:语义相同,都是写当前进度到指定 slot
+	if _main._user_name == "":
+		_main._update_status("请先在设置填写玩家昵称")
+		return
+	var mid: String = _current_save_mainline_id()
+	if mid == "":
+		_main._update_status("无法存档:当前没有关联主线/对局")
+		return
+	var chidx: int = _current_save_chapter_index()
+	var label: String = ("第 %d 章 - 手动" % (chidx + 1)) if _main._active_mainline_id != "" else ("自由战 #%d - 手动" % _main._game_id)
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在写入槽 %d ..." % (slot_index + 1)
+	NetworkClient.save_manual(
+		_main._user_name,
+		slot_index,
+		mid,
+		chidx,
+		label,
+		Callable(self, "_on_save_new_response").bind(slot_index)
+	)
+
+
+# ── Auto / suspend actions ────────────────────────────────
+
+func _on_auto_load_pressed() -> void:
+	if _auto_record.is_empty():
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在载入自动存档..."
+	NetworkClient.load_save(
+		_main._user_name,
+		"auto",
+		0,
+		Callable(self, "_on_save_load_response").bind(_auto_record)
+	)
+
+
+func _on_suspend_resume_pressed() -> void:
+	if _suspend_record.is_empty():
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在恢复中断存档..."
+	NetworkClient.load_suspend(_main._user_name, Callable(self, "_on_save_suspend_load_response"))
+
+
+func _on_suspend_discard_pressed() -> void:
+	if _suspend_record.is_empty():
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "正在放弃中断存档..."
+	NetworkClient.discard_suspend(_main._user_name, Callable(self, "_on_suspend_discard_response"))
+
+
+# ── Network callbacks ─────────────────────────────────────
+
+func _on_save_load_response(body: Variant, code: int, record: Dictionary) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "载入失败"
+		return
+	_main._active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
+	_main._selected_mainline_id = _main._active_mainline_id if _main._active_mainline_id != "" else _main._selected_mainline_id
+	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "已载入 %s" % _save_option_label(record)
+	_main._show_view("mainline")
+	_main._on_mainline_pressed()
+
+
+func _on_save_delete_response(_body: Variant, code: int, slot_index: int) -> void:
+	if code >= 200 and code < 300:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "已删除槽 %d" % (slot_index + 1)
+		_refresh_saves()
+	else:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "删除失败"
+
+
+func _on_save_new_response(body: Variant, code: int, slot_index: int) -> void:
+	if code < 200 or code >= 300:
+		var msg: String = "存档失败"
+		if body is Dictionary and body.has("detail"):
+			msg = "存档失败: %s" % str(body.get("detail"))
+		_main._update_status(msg)
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = msg
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "已保存到槽 %d" % (slot_index + 1)
+	_main._update_status("💾 已写入槽 %d" % (slot_index + 1))
+	_refresh_saves()
+
+
+func _on_save_suspend_load_response(body: Variant, code: int) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "恢复中断存档失败"
+		return
+	var game_id := int(body.get("game_id", 0))
+	if game_id <= 0:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "中断存档没有可恢复对局"
+		return
+	_main._resume_game_id = game_id
+	_main._active_mainline_id = str(body.get("mainline_id", ""))
+	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
+	# #16 — 复用了 main._on_resume_rejoin_response(与 _on_ml_slot_resume_response 等价)
+	NetworkClient.rejoin_game_by_name(game_id, _main._user_name, Callable(_main, "_on_resume_rejoin_response"))
+
+
+func _on_suspend_discard_response(body: Variant, code: int) -> void:
+	if code >= 200 and code < 300:
+		var cleared := false
+		if body is Dictionary:
+			cleared = bool(body.get("cleared", false))
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "已放弃中断存档" if cleared else "无中断存档可放弃"
+		_refresh_saves()
+	else:
+		if save_status != null and is_instance_valid(save_status):
+			save_status.text = "放弃中断存档失败"
+
+
+# ── Back / helpers ────────────────────────────────────────
+
+func _on_save_back_pressed() -> void:
+	_main._show_view("menu")
+
+
+func _update_status(msg: String) -> void:
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = msg
+	_main._update_status(msg)
+
+
+# ── Format helpers (kept for save_load / suspend labels) ─
 
 func _format_save_name(raw_name: String) -> String:
 	if raw_name.begins_with("mainline:"):
@@ -146,190 +481,16 @@ func _format_save_status(status: String) -> String:
 			return status
 
 
-func _on_save_selected(index: int) -> void:
-	if save_select_option == null or not is_instance_valid(save_select_option):
-		return
-	if index < 0 or index >= save_select_option.item_count:
-		_selected_save_id = 0
-		return
-	_selected_save_id = save_select_option.get_item_id(index)
-	if save_status != null and is_instance_valid(save_status):
-		var record := _selected_save_record()
-		save_status.text = "已选择 %s" % (_save_option_label(record) if not record.is_empty() else "存档")
-
-
-func _on_save_resume_pressed() -> void:
-	var record := _selected_save_record()
+func _save_option_label(record: Dictionary) -> String:
 	if record.is_empty():
-		return
+		return "存档"
 	var kind := str(record.get("kind", "manual"))
 	if kind == "suspend":
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "正在恢复中断存档..."
-		NetworkClient.load_suspend(_main._user_name, Callable(self, "_on_save_suspend_load_response"))
-		return
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "正在载入 %s..." % _save_option_label(record)
-	NetworkClient.load_save(
-		_main._user_name,
-		kind,
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_save_load_response").bind(record)
-	)
-
-
-func _on_save_load_response(body: Variant, code: int, record: Dictionary) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "载入失败"
-		return
-	_main._active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
-	_main._selected_mainline_id = _main._active_mainline_id if _main._active_mainline_id != "" else _main._selected_mainline_id
-	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "已载入 %s" % _save_option_label(record)
-	_main._show_view("mainline")
-	_main._on_mainline_pressed()
-
-
-# P0:主菜单存档页"新建存档"按钮 — 手动存档
-# 优先选 SaveSlotOption(用户指定)或第一个空 slot,全部占用则覆盖选定 slot
-func _find_free_save_slot() -> int:
-	if save_slot_option != null and is_instance_valid(save_slot_option):
-		var chosen: int = int(save_slot_option.get_selected_id() if save_slot_option.get_selected_id() >= 0 else save_slot_option.selected)
-		return clamp(chosen, 0, 2)
-	# 没选 slot_option 时找第一个不在 _save_records 的 manual slot
-	var used := {}
-	for rec in _save_records:
-		if str(rec.get("kind", "")) == "manual":
-			used[int(rec.get("slot_index", -1))] = true
-	for i in range(3):
-		if not used.has(i):
-			return i
-	return 0
-
-
-func _current_save_mainline_id() -> String:
-	# 主线模式优先;无主线时用当前 game.name(FE8 风格的 mainline:chapter_N:battle_N:seed)
-	if _main._active_mainline_id != "":
-		return _main._active_mainline_id
-	if GameState != null:
-		var gs: Dictionary = GameState.game_summary if GameState else {}
-		var name: String = str(gs.get("name", ""))
-		if name.begins_with("mainline:"):
-			var parts := name.split(":")
-			if parts.size() >= 2:
-				return parts[1]
-	if _main._game_id > 0:
-		return "freeplay"
-	return ""
-
-
-func _current_save_chapter_index() -> int:
-	if _main._active_mainline_id != "" and GameState != null:
-		var gs: Dictionary = GameState.game_summary
-		return int(gs.get("chapter_index", 0))
-	if GameState != null:
-		var gs2: Dictionary = GameState.game_summary
-		var name: String = str(gs2.get("name", ""))
-		if name.begins_with("mainline:"):
-			var parts := name.split(":")
-			if parts.size() >= 3:
-				# battle_id 数字作为 chapter 索引
-				return int(parts[2]) if parts[2].is_valid_int() else 0
-	return 0
-
-
-func _on_save_new_pressed() -> void:
-	if _main._user_name == "":
-		_main._update_status("请先在设置填写玩家昵称")
-		return
-	if save_new_btn != null and is_instance_valid(save_new_btn):
-		save_new_btn.disabled = true
-	var mid: String = _current_save_mainline_id()
-	if mid == "":
-		_main._update_status("无法存档:当前没有关联主线/对局")
-		if save_new_btn != null and is_instance_valid(save_new_btn):
-			save_new_btn.disabled = false
-		return
-	var slot: int = _find_free_save_slot()
-	var chidx: int = _current_save_chapter_index()
-	var label: String = ("第 %d 章 - 手动" % (chidx + 1)) if _main._active_mainline_id != "" else ("自由战 #%d - 手动" % _main._game_id)
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "正在写入存档 %d ..." % (slot + 1)
-	NetworkClient.save_manual(
-		_main._user_name,
-		slot,
-		mid,
-		chidx,
-		label,
-		Callable(self, "_on_save_new_response")
-	)
-
-
-func _on_save_new_response(body: Variant, code: int) -> void:
-	if save_new_btn != null and is_instance_valid(save_new_btn):
-		save_new_btn.disabled = false
-	if code < 200 or code >= 300:
-		var msg: String = "存档失败"
-		if body is Dictionary and body.has("detail"):
-			msg = "存档失败: %s" % str(body.get("detail"))
-		_main._update_status(msg)
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = msg
-		return
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "已保存到存档"
-	_main._update_status("💾 已写入手动存档")
-	_refresh_saves()
-
-
-func _on_save_suspend_load_response(body: Variant, code: int) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "恢复中断存档失败"
-		return
-	var game_id := int(body.get("game_id", 0))
-	if game_id <= 0:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "中断存档没有可恢复对局"
-		return
-	_main._resume_game_id = game_id
-	_main._active_mainline_id = str(body.get("mainline_id", ""))
-	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
-	NetworkClient.rejoin_game_by_name(game_id, _main._user_name, Callable(_main, "_on_ml_slot_resume_response").bind(game_id))
-
-
-func _on_save_delete_pressed() -> void:
-	var record := _selected_save_record()
-	if record.is_empty():
-		return
-	if str(record.get("kind", "")) == "suspend":
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "中断存档暂不支持手动删除"
-		return
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "删除 %s..." % _save_option_label(record)
-	NetworkClient.erase_save(
-		_main._user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_save_delete_response").bind(record)
-	)
-
-
-func _on_save_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
-	if code >= 200 and code < 300:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "已删除 %s" % _save_option_label(record)
-		_refresh_saves()
-	else:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "删除失败"
-
-
-func _on_save_back_pressed() -> void:
-	_main._show_view("menu")
+		return "中断存档 game #%d" % int(record.get("game_id", 0))
+	var label := _format_save_name(str(record.get("label", "")))
+	if label == "":
+		label = "%s slot %d" % [kind, int(record.get("slot_index", 0)) + 1]
+	return "%s · %s" % [label, kind]
 
 
 func _save_records_from_response(body: Variant) -> Array:
@@ -361,21 +522,36 @@ func _save_records_from_response(body: Variant) -> Array:
 	return out
 
 
-func _selected_save_record() -> Dictionary:
-	var idx := _selected_save_id - 1
-	if idx < 0 or idx >= _save_records.size():
-		return {}
-	var record: Variant = _save_records[idx]
-	return record if record is Dictionary else {}
+# 当前主线 / 章节取自 _main,跨域访问
+func _current_save_mainline_id() -> String:
+	if _main._active_mainline_id != "":
+		return _main._active_mainline_id
+	if GameState != null:
+		var gs: Dictionary = GameState.game_summary if GameState else {}
+		var name: String = str(gs.get("name", ""))
+		if name.begins_with("mainline:"):
+			var parts := name.split(":")
+			if parts.size() >= 2:
+				return parts[1]
+	if _main._game_id > 0:
+		return "freeplay"
+	return ""
 
 
-func _save_option_label(record: Dictionary) -> String:
-	if record.is_empty():
-		return "存档"
-	var kind := str(record.get("kind", "manual"))
-	if kind == "suspend":
-		return "中断存档 game #%d" % int(record.get("game_id", 0))
-	var label := _format_save_name(str(record.get("label", "")))
-	if label == "":
-		label = "%s slot %d" % [kind, int(record.get("slot_index", 0)) + 1]
-	return "%s · %s" % [label, kind]
+func _current_save_chapter_index() -> int:
+	if _main._active_mainline_id != "" and GameState != null:
+		var gs: Dictionary = GameState.game_summary
+		return int(gs.get("chapter_index", 0))
+	if GameState != null:
+		var gs2: Dictionary = GameState.game_summary
+		var name: String = str(gs2.get("name", ""))
+		if name.begins_with("mainline:"):
+			var parts := name.split(":")
+			if parts.size() >= 3:
+				return int(parts[2]) if parts[2].is_valid_int() else 0
+	return 0
+
+
+# Tiny BB escape so RichTextLabel 不会把 label 里的冒号/方括号当 markup
+func _bb(s: String) -> String:
+	return s.replace("[", "\\[").replace("]", "\\]")

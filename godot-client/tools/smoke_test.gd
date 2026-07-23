@@ -273,6 +273,17 @@ func _ready() -> void:
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
 		"save management should expose delete action")
+	# T:#16 — in_progress 视图存在性
+	_assert_true("Main has InProgressView", main_check.get_node_or_null("InProgressView") != null,
+		"in_progress view should be wired in main.tscn")
+	_assert_true("Main menu has InProgressButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/InProgressButton") != null,
+		"in_progress view should be reachable from main menu")
+	_assert_true("InProgressView has IPFrame", main_check.get_node_or_null("InProgressView/IPFrame") != null,
+		"in_progress view should expose IPFrame container")
+	_assert_true("InProgressView has IPList", main_check.get_node_or_null("InProgressView/IPFrame/IPScroll/IPList") != null,
+		"in_progress view should expose a list container")
+	_assert_true("InProgressView has IPBackBtn", main_check.get_node_or_null("InProgressView/IPFrame/IPBackBtn") != null,
+		"in_progress view should expose a back button")
 	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
 		"attack flow should expose a confirm panel before POSTing")
 	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
@@ -316,6 +327,28 @@ func _ready() -> void:
 	main_check.call("_show_view", "mainline")
 	# P2 Batch A+B:提前定义 mainline_view 引用(批量 redirect 都需要它)
 	var mainline_view: Node = main_check.get_node("MainlineView")
+	# T:#16 — 章节 cleared 标注测试
+	mainline_view.call("_on_ml_list_response", [
+		{"id": "chapter_01_steel_rebellion", "title": "钢铁叛乱", "battle_count": 3, "synopsis": "测试"},
+		{"id": "chapter_02_eirika", "title": "圣剑之光", "battle_count": 5, "synopsis": "测试"},
+	], 200)
+	_assert_eq("Mainline list cache holds 2 entries", mainline_view._mainline_list_cache.size(), 2,
+		"mainline_controller should cache /mainlines response for cleared join")
+	# 模拟 cleared:chapter_01 通关(chapter_index == 2 == battle_count-1)
+	mainline_view.call("_on_ml_saves_for_cleared", {
+		"manual_slots": [
+			{"id": 1, "kind": "manual", "slot_index": 0, "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 2},
+		],
+		"auto_slot": {"id": 50, "kind": "auto", "slot_index": 0, "mainline_id": "chapter_02_eirika", "label": "chapter_02_eirika-结束", "chapter_index": 5},
+		"suspend": null,
+	}, 200)
+	_assert_true("Cleared set contains chapter_01", mainline_view._cleared_mainline_ids.has("chapter_01_steel_rebellion"),
+		"manual slot with chapter_index == battle_count-1 should mark mainline as cleared")
+	_assert_true("Cleared set contains chapter_02", mainline_view._cleared_mainline_ids.has("chapter_02_eirika"),
+		"auto slot with label ending '-结束' should mark mainline as cleared")
+	var ml_list_after: VBoxContainer = mainline_view.get_node("MLFrame/MLListContainer")
+	_assert_true("Chapter list renders cleared badge", ml_list_after.get_child_count() > 0 and ml_list_after.get_child(0).text.contains("已通关"),
+		"chapter card for cleared mainline should show '已通关' annotation")
 	mainline_view.call("_on_mainline_prepare_response", {
 		"battle_index": 0,
 		"total_battles": 2,
@@ -627,21 +660,40 @@ func _ready() -> void:
 	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
 		"resume button should appear when a filtered playable save exists")
 
-	# P2:saves 域已搬到 saves_controller;测试改走 saves_view 回调
+	# P2 + #16:saves 域已搬到 saves_controller;测试走 saves_view 回调
+	# #16 — 改用 /saves 新 schema(manual_slots/auto_slot/suspend),验证 3 槽卡片渲染
 	var saves_view: Node = main_check.get_node("SavesView")
-	saves_view.call("_on_saves_response", [
-		{"id": 88, "name": "Free Save", "status": "playing", "turn_number": 3, "map_seed": 77},
-		{"id": 99, "name": "mainline:chapter_01_steel_rebellion:battle_01", "status": "waiting", "turn_number": 1},
-	], 200)
+	saves_view.call("_on_saves_response", {
+		"manual_slots": [
+			{"id": 1, "kind": "manual", "slot_index": 0, "label": "第 3 章 - 手动", "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 2},
+			{"id": 2, "kind": "manual", "slot_index": 1, "label": "自由战 #42 - 手动", "mainline_id": "", "chapter_index": 0},
+		],
+		"auto_slot": {"id": 50, "kind": "auto", "slot_index": 0, "label": "chapter_01_steel_rebellion-结束", "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 3},
+		"suspend": {"user_name": "Player", "game_id": 77, "mainline_id": "chapter_01_steel_rebellion", "battle_id": "battle_02", "suspend_point": "manual"},
+	}, 200)
+	# contract test:旧节点保留(visible=false)
 	var save_open_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveOpenList")
-	var save_ml_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveMainlineList")
 	var save_select: OptionButton = main_check.get_node("SavesView/SaveFrame/SaveSelectOption")
-	_assert_true("Save manager renders open save", save_open_list.text.contains("Free Save"),
-		"open-mode saves should render in the open save list")
-	_assert_true("Save manager renders mainline save", save_ml_list.text.contains("chapter_01_steel_rebellion"),
-		"mainline saves should render in the mainline save list")
-	_assert_gte("Save manager populates select options", save_select.item_count, 2,
-		"save manager should populate operation selector")
+	_assert_true("Save manager exposes legacy SaveOpenList node", save_open_list != null,
+		"legacy SaveOpenList node should remain in tree for contract test")
+	_assert_true("Save manager exposes legacy SaveSelectOption node", save_select != null,
+		"legacy SaveSelectOption node should remain in tree for contract test")
+	# #16 — 新 3 槽卡片验证
+	var save_slots_container: VBoxContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveSlotsContainer")
+	var save_auto_row: PanelContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveAutoRow")
+	var save_suspend_row: PanelContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveSuspendRow")
+	_assert_true("SavesView has SaveSlotsContainer", save_slots_container != null,
+		"saves view should expose a slots container for the 3 manual cards")
+	_assert_true("SavesView has SaveAutoRow", save_auto_row != null,
+		"saves view should expose an auto-save row")
+	_assert_true("SavesView has SaveSuspendRow", save_suspend_row != null,
+		"saves view should expose a suspend row")
+	_assert_eq("SavesView renders 3 manual rows", save_slots_container.get_child_count() if save_slots_container else 0, 3,
+		"3 manual slot cards should always be rendered (空/手/自)")
+	_assert_true("Auto row renders auto-save label", save_auto_row.get_child_count() > 0 and save_auto_row.get_child(0) is HBoxContainer,
+		"auto row should contain an HBox with info + load button when present")
+	_assert_true("Suspend row renders suspend info", save_suspend_row.get_child_count() > 0,
+		"suspend row should render an HBox with game_id + actions")
 
 	var confirm_text: String = main_check.call("_build_attack_confirm_text", {
 		"name": "Knight", "unit_type": "knight", "x": 1, "y": 1, "hp": 10

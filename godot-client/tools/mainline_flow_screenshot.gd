@@ -51,15 +51,13 @@ func _ready() -> void:
 	await _await_frames(5)
 	var ml_title: Label = mainline_view.get_node_or_null("MLFrame/MLTitle")
 	var ml_list_container: VBoxContainer = mainline_view.get_node_or_null("MLFrame/MLListContainer")
-	var ml_slots_container: VBoxContainer = mainline_view.get_node_or_null("MLFrame/MLSlotsContainer")
 	var ml_commander_status: Label = mainline_view.get_node_or_null("MLFrame/CommanderStatus")
 	_save("03_ml_loaded.png")
-	print("[mainline_flow] 3: after list_*, title=%s ml_list_children=%d ml_slots_children=%d commander_status=%s _ml_slot_records=%d" % [
+	# #16 — MLSlotsContainer 删了(三槽 UI 合并到 saves_view);null 防御
+	print("[mainline_flow] 3: after list_*, title=%s ml_list_children=%d commander_status=%s" % [
 		str(ml_title.text) if ml_title else "?",
 		ml_list_container.get_child_count() if ml_list_container else 0,
-		ml_slots_container.get_child_count() if ml_slots_container else 0,
 		str(ml_commander_status.text) if ml_commander_status else "?",
-		main_app._ml_slot_records.size()
 	])
 
 	# 4) 返回主菜单(目前 batch B 的 _on_ml_back_pressed 还在 main.gd — thin wrapper)

@@ -21,7 +21,6 @@ var _main: Node = null
 @onready var ml_apply_commander_btn: Button = $MLFrame/ApplyCommanderBtn
 @onready var ml_back_btn: Button = $MLFrame/MLBackBtn
 @onready var ml_abandon_btn: Button = $MLFrame/MLAbandonBtn
-@onready var ml_slots_container: VBoxContainer = $MLFrame/MLSlotsContainer
 @onready var ml_prep_summary: RichTextLabel = $MLFrame/MLPrepSummary
 @onready var ml_prep_tabs: HBoxContainer = $MLFrame/MLPrepTabs
 @onready var ml_prep_content: RichTextLabel = $MLFrame/MLPrepContent
@@ -42,7 +41,6 @@ var _main: Node = null
 @onready var ml_prep_shop_tab_btn: Button = $MLFrame/MLPrepTabs/ShopTabBtn
 @onready var ml_prep_saves_tab_btn: Button = $MLFrame/MLPrepTabs/SavesTabBtn
 
-var _ml_slot_records: Array = []
 var _mainline_page: String = "chapter_list"
 var _mainline_prepare_payload: Dictionary = {}
 var _mainline_prepare_tab: String = "heroes"
@@ -55,6 +53,9 @@ var _mainline_shop_payload: Dictionary = {}
 var _mainline_mercenary_payload: Dictionary = {}
 var _mainline_auto_retry_pending: bool = false
 var _mainline_commander_ids: Array[String] = [""]
+# T:#16 — 章节 cleared 标注(join /saves → 算 mainline_id → "✓ 已通关" badge)
+var _mainline_list_cache: Array = []  # 缓存 /mainlines 响应,等 /saves 回来后统一渲染
+var _cleared_mainline_ids: Dictionary = {}  # { mainline_id: true }
 
 
 func _ready() -> void:
@@ -96,14 +97,8 @@ func open() -> void:
 		NetworkClient.list_heroes(Callable(_main, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
 	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"), _main._user_name)
-	if ml_slots_container != null and is_instance_valid(ml_slots_container):
-		for child in ml_slots_container.get_children():
-			child.queue_free()
-		var loading_lbl := Label.new()
-		loading_lbl.text = "存档格: 加载中..."
-		loading_lbl.modulate = Color(0.65, 0.6, 0.45)
-		ml_slots_container.add_child(loading_lbl)
-	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
+	# T:#16 — 并行拉 /saves 用于 cleared 标注(不阻塞主流程)
+	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_saves_for_cleared"))
 
 
 func _set_node_visible(node: Node, value: bool) -> void:
@@ -111,10 +106,10 @@ func _set_node_visible(node: Node, value: bool) -> void:
 		(node as CanvasItem).visible = value
 
 
+# #16 — 主线存档格 UI 已搬到 saves_view 三槽卡片;saves tab 改为跳转存档页。
 func _set_mainline_page(page: String) -> void:
 	_main._mainline_page = page
 	var showing_prepare := page == "prepare"
-	_set_node_visible(ml_slots_container, not showing_prepare)
 	_set_node_visible(ml_list_container, not showing_prepare)
 	_set_node_visible(ml_commander_status, not showing_prepare)
 	_set_node_visible(ml_commander_option, not showing_prepare)
@@ -130,118 +125,63 @@ func _set_mainline_page(page: String) -> void:
 		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
 
 
-func _on_ml_slots_response(body: Variant, _code: int = 0) -> void:
-	# 主线存档格:取该用户 mainline save slot,最多 3 格(web MAINLINE_SLOT_COUNT=3)。
-	# P2:save helper 权威在 saves_view;saves_view 为 null 时降级到空 list(异常防御)。
-	var saves_view: Node = _main.saves_view
-	var games: Array = (saves_view._save_records_from_response(body) if saves_view != null and is_instance_valid(saves_view) else [])
-	_main._ml_slot_records = []
-	for g in games:
-		if not (g is Dictionary): continue
-		if str(g.get("kind", "")) == "suspend": continue
-		if str(g.get("mainline_id", "")) == "": continue
-		_main._ml_slot_records.append(g)
-		if _main._ml_slot_records.size() >= 3: break
-	_render_mainline_slots()
-
-
-func _render_mainline_slots() -> void:
-	if ml_slots_container == null or not is_instance_valid(ml_slots_container):
-		return
-	for child in ml_slots_container.get_children():
-		child.queue_free()
-	var saves_view: Node = _main.saves_view
-	var shown: int = _main._ml_slot_records.size()
-	for i in range(3):
-		if i < shown:
-			var g: Dictionary = _main._ml_slot_records[i]
-			var save_id: int = int(g.get("id", 0))
-			var disp: String = saves_view._format_save_name(str(g.get("label", "")))
-			var chapter_index: int = int(g.get("chapter_index", 0)) + 1
-			var row := HBoxContainer.new()
-			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var lbl := Label.new()
-			lbl.text = "💾 %s · 第 %d 章 · #%d" % [disp, chapter_index, save_id]
-			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(lbl)
-			var resume_btn := Button.new()
-			resume_btn.text = "▶ 继续"
-			resume_btn.pressed.connect(_on_ml_slot_resume.bind(g))
-			row.add_child(resume_btn)
-			var del_btn := Button.new()
-			del_btn.text = "🗑"
-			del_btn.pressed.connect(_on_ml_slot_delete.bind(g))
-			row.add_child(del_btn)
-			ml_slots_container.add_child(row)
-		else:
-			var empty := Label.new()
-			empty.text = "▢ 空存档 %d" % (i + 1)
-			empty.modulate = Color(0.5, 0.46, 0.35)
-			ml_slots_container.add_child(empty)
-
-
-func _on_ml_slot_resume(record: Dictionary) -> void:
-	if record.is_empty(): return
-	var saves_view: Node = _main.saves_view
-	var label: String = saves_view._save_option_label(record)
-	_main._show_view("connecting")
-	_main.connecting_label.text = "正在载入 %s..." % label
-	NetworkClient.load_save(
-		_main._user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_ml_slot_loaded_response").bind(record)
-	)
-
-
-func _on_ml_slot_loaded_response(body: Variant, code: int, record: Dictionary) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		_main._update_status("主线存档载入失败")
-		_main._show_view("mainline")
-		return
-	_main._active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
-	_main._selected_mainline_id = _main._active_mainline_id if _main._active_mainline_id != "" else _main._selected_mainline_id
-	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
-	var saves_view: Node = _main.saves_view
-	_main._update_status("已载入 %s" % saves_view._save_option_label(record))
-	_main._show_view("mainline")
-	open()
-
-
-func _on_ml_slot_delete(record: Dictionary) -> void:
-	if record.is_empty(): return
-	var saves_view: Node = _main.saves_view
-	_main._update_status("删除 %s..." % saves_view._save_option_label(record))
-	NetworkClient.erase_save(
-		_main._user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_ml_slot_delete_response").bind(record)
-	)
-
-
-func _on_ml_slot_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
-	if code >= 200 and code < 300:
-		var saves_view: Node = _main.saves_view
-		_main._update_status("已删除 %s" % saves_view._save_option_label(record))
-		NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
-	else:
-		_main._update_status("删除主线存档失败")
-
-
 func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 	ml_title.text = "📖 主线章节"
+	# T:#16 — 缓存列表响应,等 cleared 集合就绪后重渲
+	_mainline_list_cache = (body as Array).duplicate(true) if body is Array else []
+	_render_mainline_list()
+
+
+# T:#16 — 章节 cleared 集合构建(join /saves 后的 manual_slots + auto_slot)
+# 规则:有任意 save 记录 chapter_index >= mainline.battle_count - 1(0-based)即视为通关
+func _on_ml_saves_for_cleared(body: Variant, _code: int = 0) -> void:
+	_cleared_mainline_ids = {}
+	if not (body is Dictionary):
+		_render_mainline_list()
+		return
+	# 1) 收集所有 save 的 (mainline_id → max chapter_index) — 这里只关心是否通关,简化用 set
+	#    如果有 manual slot 推进到 chapter_index >= battle_count - 1 → cleared
+	#    如果 auto slot 标 "结束"(label 以 "-结束" 结尾) → cleared
+	var auto_slot: Variant = body.get("auto_slot", null)
+	if auto_slot is Dictionary:
+		var mid: String = str((auto_slot as Dictionary).get("mainline_id", ""))
+		var label: String = str((auto_slot as Dictionary).get("label", ""))
+		if mid != "" and label.ends_with("-结束"):
+			_cleared_mainline_ids[mid] = true
+	var manual_slots: Array = body.get("manual_slots", []) if body.get("manual_slots", []) is Array else []
+	for slot in manual_slots:
+		if not (slot is Dictionary): continue
+		var mid2: String = str(slot.get("mainline_id", ""))
+		if mid2 == "": continue
+		# manual slot 通关判定:chapter_index == battle_count - 1 (即已完成最后一场)
+		# 严格判定需要 battle_count,从 mainline_list_cache 反查
+		var chidx: int = int(slot.get("chapter_index", 0))
+		var battle_count: int = _battle_count_for_mainline(mid2)
+		if battle_count > 0 and chidx >= battle_count - 1:
+			_cleared_mainline_ids[mid2] = true
+	_render_mainline_list()
+
+
+func _battle_count_for_mainline(mainline_id: String) -> int:
+	for ml in _mainline_list_cache:
+		if not (ml is Dictionary): continue
+		if str(ml.get("id", "")) == mainline_id:
+			return int(ml.get("battle_count", ml.get("total_battles", 0)))
+	return 0
+
+
+func _render_mainline_list() -> void:
+	if ml_list_container == null or not is_instance_valid(ml_list_container):
+		return
 	for child in ml_list_container.get_children():
 		child.queue_free()
-	# /mainlines 返回 Array[MainlineSummaryOut]
-	var items: Array = body if body is Array else []
-	if items.is_empty():
+	if _mainline_list_cache.is_empty():
 		var empty := Label.new()
 		empty.text = "(暂无可用章节)"
 		empty.add_theme_color_override("font_color", Color(0.65, 0.6, 0.45))
 		ml_list_container.add_child(empty)
 		return
-	for ml in items:
+	for ml in _mainline_list_cache:
 		if not ml is Dictionary: continue
 		var id: String = str(ml.get("id", ""))
 		if id == "": continue
@@ -250,8 +190,10 @@ func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
 		var title: String = str(ml.get("title", "?"))
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
 		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
+		var cleared := _cleared_mainline_ids.has(id)
 		var btn := Button.new()
-		btn.text = "%s · %d 场战斗" % [title, battles]
+		# T:#16 — cleared 标注 + 金色微调(不影响 disabled,可重玩)
+		btn.text = ("✓  %s · %d 场战斗  [已通关]" % [title, battles]) if cleared else ("%s · %d 场战斗" % [title, battles])
 		btn.tooltip_text = desc
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(_on_ml_card_pressed.bind(id))
@@ -651,8 +593,9 @@ func _on_prepare_primary_action_pressed() -> void:
 		"shop":
 			_purchase_first_shop_item()
 		"saves":
-			NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
-			_main._update_status("正在刷新主线存档...")
+			# #16 — 主线存档已搬到 saves_view 三槽卡片。这里提示玩家切到存档页管理。
+			_main._update_status("请到「存档管理」页查看三存档槽")
+			_render_mainline_prepare()
 		_:
 			_main._mainline_prepare_tab = "roster"
 			_render_mainline_prepare()
@@ -673,6 +616,7 @@ func _on_prepare_secondary_action_pressed() -> void:
 			_main._mainline_shop_payload = {}
 			_on_prepare_tab_pressed("shop")
 		"saves":
+			# #16 — 切回 heroes tab;saves 管理已搬到 saves_view
 			_main._mainline_prepare_tab = "heroes"
 			_render_mainline_prepare()
 		_:
@@ -803,14 +747,8 @@ func _build_prepare_equipment_text(payload: Dictionary) -> String:
 # ── _build_prepare_saves_text ────────────────────────────────────────
 
 func _build_prepare_saves_text() -> String:
-	var lines: Array[String] = ["[b]存档[/b]  主线存档格"]
-	if _main._ml_slot_records.is_empty():
-		lines.append("[color=#a69a73]暂无主线存档。[/color]")
-		return "\n".join(lines)
-	for record in _main._ml_slot_records:
-		if record is Dictionary:
-			lines.append(_bb_escape(_main.saves_view._save_option_label(record)))
-	return "\n".join(lines)
+	# #16 — 主线存档管理已搬到 saves_view 三槽卡片。这里只给提示。
+	return "[b]存档[/b]  请到主菜单的「存档管理」页查看三存档槽(各槽独立、可重玩)。"
 
 
 

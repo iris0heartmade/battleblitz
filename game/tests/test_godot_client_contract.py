@@ -60,19 +60,26 @@ def test_godot_free_lobby_create_sends_free_mode_to_backend():
 
 
 def test_godot_save_views_use_save_api_not_game_delete_api():
-    # P2: saves 域已抽到 saves_controller.gd;mainline 域到 mainline_controller.gd。
-    # 测试断言搬到对应组件文件,而不是 main.gd。
+    # #16: saves 域已抽到 saves_controller.gd(三槽卡片);
+    # mainline 域到 mainline_controller.gd(章节 cleared 标注 join /saves);
+    # in_progress 域到 in_progress_controller.gd。
     saves_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "saves_controller.gd")
     mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    in_progress_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "in_progress_controller.gd")
     main_src = _read(MAIN_GD)
-    combined = saves_src + mainline_src + main_src
+    combined = saves_src + mainline_src + in_progress_src + main_src
     assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in saves_src
-    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))' in mainline_src
+    # #16 — mainline 走 cleared 标注分支(不再有 _on_ml_slots_response,主存档管理在 saves_view)
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_saves_for_cleared"))' in mainline_src
+    assert "_on_ml_slots_response" not in mainline_src
+    assert "_render_mainline_slots" not in mainline_src
+    assert "ml_slots_container" not in mainline_src
+    # in_progress 视图
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in in_progress_src
     assert "NetworkClient.load_save(" in combined
     assert "NetworkClient.erase_save(" in combined
     assert 'NetworkClient.delete_game(_selected_save_id' not in combined
     assert 'NetworkClient.list_games(Callable(self, "_on_saves_response")' not in combined
-    assert 'NetworkClient.list_games(Callable(self, "_on_ml_slots_response")' not in combined
 
 
 def test_godot_mainline_start_passes_prepare_compatible_arguments():

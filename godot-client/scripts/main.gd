@@ -221,6 +221,10 @@ var _resume_kind: String = ""
 # P2:saves 视图独立为 saves_controller.gd,仅保留节点引用(无类型避开 class_name 缓存)
 @onready var saves_view = $SavesView
 
+# T:#16 in_progress 视图独立为 in_progress_controller.gd
+@onready var in_progress_view = $InProgressView
+@onready var in_progress_button: Button = $Menu/CenterContainer/FooterRow/InProgressButton
+
 # T:3 基础大厅视图
 @onready var editor_view = $EditorView  # -> editor_controller.gd (P2)
 
@@ -346,7 +350,6 @@ var _selected_prepare_merc_unit_type: String = ""
 var _selected_prepare_merc_stat: String = ""
 var _mainline_shop_payload: Dictionary = {}
 var _mainline_mercenary_payload: Dictionary = {}
-var _ml_slot_records: Array = []
 var _mainline_auto_retry_pending: bool = false
 
 
@@ -426,11 +429,17 @@ func _ready() -> void:
 		lobby_to_spec_btn.pressed.connect(_on_lobby_to_spec_pressed)
 	settings_button.pressed.connect(_on_settings_open_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
+	# T:#16 — InProgressButton 接线(主菜单"▶ 进行中"按钮)
+	if in_progress_button != null and is_instance_valid(in_progress_button):
+		in_progress_button.pressed.connect(_on_in_progress_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
 		resume_button.pressed.connect(_on_resume_pressed)
 	# P2: saves_controller.gd 组件接线(跨域引用 + 回调绑定)
 	if saves_view != null and is_instance_valid(saves_view):
 		saves_view._main = self
+	# T:#16 in_progress_controller.gd 组件接线
+	if in_progress_view != null and is_instance_valid(in_progress_view):
+		in_progress_view._main = self
 	# P2: mainline_controller.gd 组件接线
 	if mainline_view != null and is_instance_valid(mainline_view):
 		mainline_view._main = self
@@ -696,6 +705,7 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	in_progress_view.visible = (name == "in_progress")
 	# HUD 是 CanvasLayer,不受 GameView.visible 控制 — 手动同步显隐
 	if name == "game":
 		_show_hud()
@@ -1044,6 +1054,13 @@ func _on_saves_pressed() -> void:
 	_show_view("saves")
 	if saves_view != null and is_instance_valid(saves_view):
 		saves_view.open()
+
+
+# T:#16 — in_progress 视图入口(主菜单"▶ 进行中"按钮)
+func _on_in_progress_pressed() -> void:
+	_show_view("in_progress")
+	if in_progress_view != null and is_instance_valid(in_progress_view):
+		in_progress_view.open()
 
 
 # P1:主菜单"按号加入"按钮接 — 解析输入房间号 → 入大厅选队入场
@@ -5263,28 +5280,6 @@ func _set_mainline_page(page: String) -> void:
 	_set_node_visible(ml_prep_alt_action_btn, showing_prepare)
 	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
 		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
-
-
-func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> void:
-	if not (body is Dictionary):
-		_update_status("主线存档恢复失败: 响应异常")
-		_show_view("mainline")
-		return
-	var p_dict: Dictionary = body.get("player", body)
-	var resp_game_id: int = int(body.get("game_id", game_id))
-	var resp_player_id: int = int(p_dict.get("id", 0))
-	if resp_game_id > 0:
-		_game_id = resp_game_id
-	if resp_player_id > 0:
-		_player_id = resp_player_id
-		GameState.local_player_id = _player_id
-		UserSettings.set_value("session.v1.last_player_id", _player_id)
-	if _game_id > 0:
-		UserSettings.set_value("session.v1.last_game_id", _game_id)
-	_update_status("已恢复主线存档 #%d,进入棋盘..." % _game_id)
-	_show_view("game")
-	NetworkClient.connect_to_game(_game_id, _player_id)
-	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
 # P2:主线"准备好了"按钮 — 触发 /prepare/complete 写自动存档,
