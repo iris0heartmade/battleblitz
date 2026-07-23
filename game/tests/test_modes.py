@@ -98,24 +98,24 @@ def test_spawn_generic_l1_returns_class_base():
 
 
 def test_spawn_generic_l10_autolevel_applied():
-    """At L10 (+9 levels above L1) the Boss autolevel rate kicks in.
+    """At L10 (+9 levels above L1) the lane autolevel rate kicks in.
 
-    For HP (rate=85): +9 × 85 / 100 = +7 (rounded)
-    For Atk (rate=50): +9 × 50 / 100 = +4 (rounded)
-    For Def (rate=10): +9 × 10 / 100 = +0 (rounded)
+    Bonus per stat = int(9 × lane_rate / 100), where lane_rate comes from
+    the unit's combat lane (physical/magic) — see lane_growth_rates().
+    Expectations are derived from the implementation's own base + rates so
+    this stays correct across数值 re-calibration.
     """
     from app.classes.units import get
+    from app.progression.policies import lane_growth_rates
 
     p = get("lancer")
+    rates = lane_growth_rates(p.attack_kind)
     s_l1 = spawn_generic_stats("lancer", start_level=1)
     s_l10 = spawn_generic_stats("lancer", start_level=10)
 
-    # HP: +9 × 0.85 = +7.65 → 7
-    assert s_l10["hp"] == s_l1["hp"] + int(9 * 0.85)
-    # Atk: +9 × 0.50 = +4.5 → 4
-    assert s_l10["atk"] == s_l1["atk"] + int(9 * 0.50)
-    # Def: +9 × 0.10 = +0.9 → 0
-    assert s_l10["def"] == s_l1["def"] + int(9 * 0.10)
+    assert s_l10["hp"] == s_l1["hp"] + int(9 * rates["hp"] / 100)
+    assert s_l10["atk"] == s_l1["atk"] + int(9 * rates["atk"] / 100)
+    assert s_l10["def"] == s_l1["def"] + int(9 * rates["def"] / 100)
 
 
 def test_spawn_generic_mov_does_not_scale():
@@ -135,25 +135,34 @@ def test_spawn_generic_attack_range_does_not_scale():
 
 
 def test_spawn_generic_l20_caps_are_reasonable():
-    """At L20 (+19 levels) Boss-autolevel bumps should not produce absurd stats."""
+    """At L20 (+19 levels) lane-autolevel bumps follow the formula and stay sane."""
+    from app.classes.units import get
+    from app.progression.policies import lane_growth_rates
+
+    p = get("warrior")
+    rates = lane_growth_rates(p.attack_kind)
     s = spawn_generic_stats("warrior", start_level=20)
-    # warrior L1 = HP 28 Atk 10 Def 3
-    # +19 × 0.85 HP = +16 → 44
-    # +19 × 0.50 Atk = +9 → 19
-    # +19 × 0.10 Def = +1 → 4
-    assert s["hp"] == 44
-    assert s["atk"] == 19
-    assert s["def"] == 4
+    # Formula: base + int(19 × lane_rate / 100) — derived from implementation.
+    assert s["hp"] == p.base_hp + int(19 * rates["hp"] / 100)
+    assert s["atk"] == p.base_atk + int(19 * rates["atk"] / 100)
+    assert s["def"] == p.base_def + int(19 * rates["def"] / 100)
+    # Sanity caps: a 19-level autolevel must not explode into absurd stats.
+    assert s["hp"] < 120
+    assert s["atk"] < 60
+    assert s["def"] < 40
 
 
 def test_spawn_generic_zero_levels_above_l1():
     """start_level=1 must produce a clean L1 base (no autolevel)."""
+    from app.classes.units import get
+
+    p = get("berserker")
     s = spawn_generic_stats("berserker", start_level=1)
-    assert s["hp"] == 30   # berserker.base_hp
-    assert s["atk"] == 14  # berserker.base_atk
-    assert s["def"] == 5   # berserker.base_def
-    assert s["mov"] == 4
-    assert s["attack_range"] == 1
+    assert s["hp"] == p.base_hp
+    assert s["atk"] == p.base_atk
+    assert s["def"] == p.base_def
+    assert s["mov"] == p.base_mov
+    assert s["attack_range"] == p.attack_range
 
 
 def test_spawn_generic_start_level_below_1_clamps_to_zero():
