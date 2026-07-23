@@ -48,7 +48,6 @@ from app.save import AutoSaveCheckpointOut, PrepCompleteRequest
 from ._common import (
     _build_prepare_payload,
     _ensure_profile_or_create,
-    _ensure_test_mainline_unlocked,
     _load_profile,
 )
 
@@ -89,7 +88,6 @@ async def get_mainline_prepare(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
     profile = await _ensure_profile_or_create(session, user_name)
-    await _ensure_test_mainline_unlocked(session, user_name, mainline_id)
     payload = await _build_prepare_payload(session, profile, mainline_id)
     logger.info(
         "get_mainline_prepare ok: mainline=%s user=%s battle=%s heroes=%d",

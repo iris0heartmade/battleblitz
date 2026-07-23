@@ -114,23 +114,17 @@ def _campaign_chain_name(mainline_id: str) -> Optional[str]:
 # ============================================================
 
 
-async def _current_mainline_for_user(
-    session: AsyncSession,
-    user_name: str,
-    chain: tuple[str, ...],
-) -> str:
-    for mainline_id in chain:
-        if not await _has_cleared_mainline(session, user_name, mainline_id):
-            return mainline_id
-    return chain[-1]
-
-
 async def _has_cleared_mainline(
     session: AsyncSession,
     user_name: str,
     mainline_id: str,
 ) -> bool:
-    """Return True when a formal save proves this chapter is cleared."""
+    """Return True when a formal save proves this chapter is cleared.
+
+    P2(FE8 对齐):章节锁已删除,此函数不再用于门控(不再抛 403)。
+    保留为**只读查询**,供前端/UI 给章节列表标注 cleared 状态
+    (前端也可直接 join /saves 自行判断)。
+    """
     # Late-bound lookup so test monkeypatches (``monkeypatch.setattr(
     # "app.routes.mainline.load_mainline", ...``) propagate.
     import app.routes.mainline as mainline_pkg
@@ -147,42 +141,6 @@ async def _has_cleared_mainline(
         )
     )).scalars().all()
     return bool(rows)
-
-
-async def _current_test_mainline_for_user(
-    session: AsyncSession,
-    user_name: str,
-) -> str:
-    """Back-compat wrapper for the test chain."""
-    return await _current_mainline_for_user(session, user_name, TEST_MAINLINE_CHAIN)
-
-
-async def _ensure_test_mainline_unlocked(
-    session: AsyncSession,
-    user_name: str,
-    mainline_id: str,
-) -> None:
-    """Back-compat wrapper: gate any mainline that belongs to a chain.
-
-    Reads ``CAMPAIGN_CHAINS`` so the same routine now governs future
-    chains. ``TEST_MAINLINE_CHAIN`` remains the only declared chain;
-    adding a second key here is enough to enable a new campaign.
-    """
-    chain = _chain_for(mainline_id)
-    if chain is None:
-        return
-    allowed = await _current_mainline_for_user(session, user_name, chain)
-    if mainline_id != allowed:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            {
-                "error": "mainline_locked",
-                "mainline_id": mainline_id,
-                "available_mainline_id": allowed,
-                "chain": _campaign_chain_name(mainline_id),
-                "hint": "Clear the previous chapter from a formal save before entering this one.",
-            },
-        )
 
 
 # ============================================================
@@ -492,9 +450,6 @@ __all__ = [
     "game_root",
     "_chain_for",
     "_campaign_chain_name",
-    "_current_mainline_for_user",
-    "_current_test_mainline_for_user",
-    "_ensure_test_mainline_unlocked",
     "_has_cleared_mainline",
     "_build_prepare_payload",
     "_persist_mainline_hero_results",

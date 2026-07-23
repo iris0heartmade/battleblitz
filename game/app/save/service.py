@@ -31,19 +31,22 @@ from app.save.models import (
 logger = logging.getLogger(__name__)
 
 
-# Profile fields that round-trip in a Game save (everything we need
-# to fully restore the player's state minus the live battle).
+# Profile fields that round-trip in a Game save.
+#
+# 分档策略(对齐 FE8「养成随档 / 解锁账户永久」):
+#   - 档案态(下方元组):随读档整体回滚到存档时刻,是 per-playthrough 养成态。
+#   - 账户态(NOT here):unlocked_classes / unlocked_commanders /
+#     unlocked_cosmetics / rating / current_season —— 账户级永久解锁,
+#     不进 snapshot、load 时不覆盖,读旧档也不丢失(避免读旧档打不开
+#     需要新解锁的后续章节)。
+# 注:unlock_points 是养成货币,必须随档,否则读旧档后残留新章节值 = 串档。
 _PROFILE_SNAPSHOT_FIELDS = (
     "hero_campaign_states",
     "mercenary_roster_state",
     "hero_inventory",
     "gold",
-    "rating",
-    "unlocked_classes",
-    "unlocked_cosmetics",
-    "unlocked_commanders",
+    "unlock_points",
     "mainline_commanders",
-    "current_season",
 )
 
 

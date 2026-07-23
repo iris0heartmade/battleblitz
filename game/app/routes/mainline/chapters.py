@@ -34,8 +34,6 @@ from app.mainline.schemas import (
 from ._common import (
     _GAME_ROOT,
     _battle_track_id,
-    _chain_for,
-    _current_mainline_for_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,28 +59,15 @@ async def list_mainlines_endpoint(
 ):
     """Return mainlines for the lobby view.
 
-    Without ``user_name`` this remains a pure all-chapter listing for
-    tools and tests. With ``user_name`` the temporary test campaign is
-    exposed as a Fire Emblem-style current chapter: only the first
-    uncleared test chapter appears.
+    Always returns the full chapter list. Chapter locking was removed
+    (FE8 alignment): players may freely replay any cleared chapter, so
+    the ``user_name`` filter no longer collapses the list to a single
+    "current chapter". Cleared status is annotated client-side by joining
+    /saves (each slot carries its own mainline_id + chapter_index).
+    ``user_name`` is kept for backward-compat with existing callers.
     """
     logger.debug("list_mainlines entry")
     items = list_mainlines()
-    if user_name:
-        # For every declared campaign chain, only the first uncleared
-        # chapter is visible. Chains with no progress show their first
-        # chapter; chains the user has finished collapse to the final
-        # chapter (current chapter semantics).
-        filtered: list = []
-        for item in items:
-            chain = _chain_for(item.id)
-            if chain is None:
-                filtered.append(item)
-                continue
-            allowed = await _current_mainline_for_user(session, user_name, chain)
-            if item.id == allowed:
-                filtered.append(item)
-        items = filtered
     logger.info("list_mainlines ok: count=%d", len(items))
     return items
 

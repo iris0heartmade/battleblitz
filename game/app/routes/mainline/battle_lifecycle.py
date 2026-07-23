@@ -70,7 +70,6 @@ from sqlalchemy import func as _sa_func
 from ._common import (
     _battle_track_id,
     _ensure_profile_or_create,
-    _ensure_test_mainline_unlocked,
     _load_profile,
     _persist_mainline_hero_results,
 )
@@ -459,7 +458,6 @@ async def start_mainline(
     # _load_profile (strict 404) so a typo'd user_name never silently
     # creates the wrong profile.
     profile = await _ensure_profile_or_create(session, body.user_name)
-    await _ensure_test_mainline_unlocked(session, body.user_name, mainline_id)
 
     # Class prerequisite check (the mainline declares required_classes).
     unlocked = set(profile.unlocked_classes or [])
