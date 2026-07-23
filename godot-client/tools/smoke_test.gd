@@ -703,7 +703,9 @@ func _ready() -> void:
 	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
 		"recruit success status should include remaining gold")
 
-	main_check.call("_on_ml_list_response", [
+	# P2 Batch A:redirect 到 mainline_view(matches saves_flow_screenshot 同样模式)
+	var mainline_view: Node = main_check.get_node("MainlineView")
+	mainline_view.call("_on_ml_list_response", [
 		{
 			"id": "chapter_01_steel_rebellion",
 			"title": "Steel Rebellion",
@@ -720,7 +722,8 @@ func _ready() -> void:
 			"mainline button should render backend battle_count")
 		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
 			"mainline button tooltip should use backend synopsis")
-	main_check.call("_on_commanders_response", {
+	# P2 Batch A:redirect commander response 到 mainline_view(组件 self)
+	mainline_view.call("_on_commanders_response", {
 		"user_name": "Alice",
 		"unlocked_commanders": ["yun", "anna"],
 		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
@@ -748,7 +751,8 @@ func _ready() -> void:
 		"room creation should map the selected AI commander to the first AI replacement seat")
 	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("云"),
 		"commander response should show the selected commander in Chinese")
-	main_check.call("_on_select_mainline_commander_response", {
+	# P2 Batch A:redirect select commander response 到 mainline_view
+	mainline_view.call("_on_select_mainline_commander_response", {
 		"mainline_id": "chapter_01_steel_rebellion",
 		"commander_id": "anna",
 	}, 200)
