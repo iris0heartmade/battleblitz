@@ -759,6 +759,29 @@ async def _finish_game(
     # Stash the winning team on a transient attribute so the state
     # endpoint can include it without us adding yet another column.
     game._winner_team = winner_team
+    # T:#21 — 游戏胜利时清掉所有参与者的 suspend 存档(防御双重保险):
+    #   1. capture_suspend / _capture_disconnect_suspend 已经按
+    #      game.status != "playing" 拦掉新写入
+    #   2. 但旧对局遗留的脏 suspend 还可能在 saves view 显示 —
+    #      这里主动 clear 一遍,玩家 wins 后进入存档页只剩 3 槽 + 自动存档
+    try:
+        from app.models import Player as _Player
+        from app.save import SaveService as _SaveService
+        winners = (await session.execute(
+            select(_Player).where(_Player.game_id == game.id)
+        )).scalars().all()
+        svc = _SaveService(session)
+        for p in winners:
+            if p.is_ai or p.is_spectator:
+                continue
+            cleared = await svc.clear_suspend(p.user_name)
+            if cleared:
+                logger.info(
+                    "_finish_game: cleared stale suspend for winner=%s game=%d",
+                    p.user_name, game.id,
+                )
+    except Exception as e:  # pragma: no cover
+        logger.warning(f"_finish_game: clear_suspend failed: {e}")
     # 07-21 F5A + M4.16+ fix:publish match_end (the canonical win event).
     # Original code used `loop.create_task(bus.publish(...))` from a
     # sync function, which silently no-op'd in many code paths and the
@@ -1871,10 +1894,11 @@ def _ai_pick_move_target(
         when an enemy is within that radius of our castle.
     """
     # Don't move healers/archers into melee of multiple enemies
-    blocked = {
-        c for c, uid in snap.occ.items()
-        if uid is not None and uid != unit.id
-    }
+    # T:#20 — 火纹风格:enemy 完全阻挡,ally 可穿过但不能结束在同一格
+    ally_unit_ids = {u.id for u in snap.ally_units}
+    enemy_unit_ids = {u.id for u in snap.enemy_units}
+    blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+    no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
     reachable = bfs_reachable(
         start=(unit.x, unit.y),
         terrain=snap.terrain,
@@ -1882,6 +1906,7 @@ def _ai_pick_move_target(
         mov=unit.mp,
         viewer_owner_id=None,  # AI shouldn't be blocked from entering enemy castles
         blocked_units=blocked,
+        no_end_units=no_end,
         movement_profile=resolve_movement_profile(unit),
     )
     if not reachable:
@@ -2403,14 +2428,16 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
         if _ai_should_flee(unit, profile):
             # Try to move toward our castle / away from enemies.
             from app.utils import bfs_reachable
-            blocked = {
-                c for c, uid in snap.occ.items()
-                if uid is not None and uid != unit.id
-            }
+            # T:#20 — 火纹风格:enemy 阻挡,ally 可穿过
+            ally_unit_ids = {u.id for u in snap.ally_units}
+            enemy_unit_ids = {u.id for u in snap.enemy_units}
+            blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+            no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
             reachable = bfs_reachable(
                 start=(unit.x, unit.y), terrain=snap.terrain,
                 owners=snap.owners, mov=unit.mp,
                 viewer_owner_id=None, blocked_units=blocked,
+                no_end_units=no_end,
                 movement_profile=resolve_movement_profile(unit),
             )
             if reachable:
@@ -2506,14 +2533,16 @@ async def ai_take_one_action(
     # 0. Flee?
     if _ai_should_flee(unit, profile):
         from app.utils import bfs_reachable
-        blocked = {
-            c for c, uid in snap.occ.items()
-            if uid is not None and uid != unit.id
-        }
+        # T:#20 — 火纹风格阻挡
+        ally_unit_ids = {u.id for u in snap.ally_units}
+        enemy_unit_ids = {u.id for u in snap.enemy_units}
+        blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+        no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
         reachable = bfs_reachable(
             start=(unit.x, unit.y), terrain=snap.terrain,
             owners=snap.owners, mov=unit.mp,
             viewer_owner_id=None, blocked_units=blocked,
+            no_end_units=no_end,
             movement_profile=resolve_movement_profile(unit),
         )
         if reachable:

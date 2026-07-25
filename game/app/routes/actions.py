@@ -223,7 +223,30 @@ async def move_unit(
     tile_terrain = terrain.get(target)
 
     # Pathfind with movement budget
-    blocked = {(x, y) for (x, y), u in occ.items() if u is not None and u != unit.id}
+    # T:#20 — 火纹风格:enemy 完全阻挡,ally 可穿过但不能结束在同一格
+    players_in_game = (
+        await session.execute(
+            select(Player).where(Player.game_id == game_id)
+        )
+    ).scalars().all()
+    ally_unit_ids: set[int] = set()
+    enemy_unit_ids: set[int] = set()
+    all_units = (
+        await session.execute(
+            select(Unit).where(Unit.player_id.in_([p.id for p in players_in_game]))
+        )
+    ).scalars().all()
+    for u in all_units:
+        if u.id == unit.id:
+            continue
+        if u.hp <= 0:
+            continue
+        if u.player_id == player.id:
+            ally_unit_ids.add(u.id)
+        else:
+            enemy_unit_ids.add(u.id)
+    blocked = {(x, y) for (x, y), uid in occ.items() if uid in enemy_unit_ids}
+    no_end = {(x, y) for (x, y), uid in occ.items() if uid in ally_unit_ids}
     path = pathfind(
         start=(unit.x, unit.y),
         goal=target,
@@ -232,6 +255,7 @@ async def move_unit(
         mov=unit.mp,
         viewer_owner_id=player.id,
         blocked_units=blocked,
+        no_end_units=no_end,
         movement_profile=movement_profile,
     )
     if path is None or path[-1] != target:

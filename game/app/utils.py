@@ -109,6 +109,7 @@ def bfs_reachable(
     *,
     viewer_owner_id: Optional[int],
     blocked_units: Optional[Set[Coord]] = None,
+    no_end_units: Optional[Set[Coord]] = None,
     movement_profile: Optional[MovementProfile] = None,
     size: int = MAP_SIZE,
 ) -> Dict[Coord, int]:
@@ -119,8 +120,12 @@ def bfs_reachable(
     0.5) can be represented without floats. The internal budget is
     `mov * 2`, and returned costs are also in "half-MP" units — callers
     that want to compare to MP should divide by 2.
+
+    `blocked_units`: 坐标集,完全阻挡 — 既不能穿过也不能结束
+    `no_end_units`:   坐标集,可穿过但不能结束在同一格(火纹风格 ally 占用)
     """
     blocked_units = blocked_units or set()
+    no_end_units = no_end_units or set()
     movement_profile = movement_profile or DEFAULT_MOVEMENT_PROFILE
     if start not in terrain:
         return {}
@@ -160,7 +165,8 @@ def bfs_reachable(
                 dist[key] = new_cost
                 counter += 1
                 heapq.heappush(queue, (new_cost, counter, key))
-                if can_end_on_terrain(movement_profile, t):
+                # T:#20 — ally 占用格可穿过但不能结束在同一格
+                if key not in no_end_units and can_end_on_terrain(movement_profile, t):
                     reachable[key] = new_cost
 
     return reachable
@@ -175,6 +181,7 @@ def pathfind(
     *,
     viewer_owner_id: Optional[int],
     blocked_units: Optional[Set[Coord]] = None,
+    no_end_units: Optional[Set[Coord]] = None,
     movement_profile: Optional[MovementProfile] = None,
     size: int = MAP_SIZE,
 ) -> Optional[List[Coord]]:
@@ -183,10 +190,14 @@ def pathfind(
     MP-to-cost conversion: internal cost budget is `mov * 2` (so road's
     cost=1 means "half a MP"). Returns the list of coords from start to
     goal, or None if unreachable.
+
+    `blocked_units`: 完全阻挡(不能穿过、不能结束)
+    `no_end_units`:   可穿过但不能结束在同一格(ally 占用格)
     """
     if start == goal:
         return [start]
     blocked_units = (blocked_units or set()) - {start}  # allow standing on own tile
+    no_end_units = (no_end_units or set()) - {start}
     movement_profile = movement_profile or DEFAULT_MOVEMENT_PROFILE
     budget = mov * 2
 
@@ -205,7 +216,13 @@ def pathfind(
         # P2.5 — must check budget BEFORE accepting the goal, otherwise
         # `_ai_move` lets a unit teleport across the map (pathfind
         # returned a path even when the cost was > mov).
-        if node == goal and cost <= budget and can_end_on_terrain(movement_profile, terrain[goal]):
+        # T:#20 — ally 占用格可穿过但不能结束在同一格
+        if (
+            node == goal
+            and cost <= budget
+            and node not in no_end_units
+            and can_end_on_terrain(movement_profile, terrain[goal])
+        ):
             # Reconstruct path
             path = [node]
             while path[-1] in came_from:
