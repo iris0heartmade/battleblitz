@@ -38,6 +38,11 @@ var _manual_rows: Array = []  # Array[Dictionary] {container, slot_index, badge,
 var _manual_slot_records: Array = []  # Array[Dictionary] aligned with slot 0/1/2;{} if empty
 var _auto_record: Dictionary = {}
 var _suspend_record: Dictionary = {}
+# T:V5 — 状态条拆 3 个 StatusBadge 组件 + 最近存档时间戳
+var _status_filled_badge: StatusBadge
+var _status_auto_badge: StatusBadge
+var _status_suspend_badge: StatusBadge
+var _status_timestamp_label: Label
 
 
 func _ready() -> void:
@@ -53,10 +58,41 @@ func _ready() -> void:
 		save_back_btn.pressed.connect(_on_save_back_pressed)
 	# 构建 3 槽固定行
 	_build_manual_rows()
+	# T:V5 — 状态条:3 个 StatusBadge + 最近存档时间戳
+	_build_status_row()
 	# 初始空态
 	_render_manual_rows()
 	_render_auto_row()
 	_render_suspend_row()
+
+
+# T:V5 — 把 save_status Label 旁边挂一行:已用 X/3 / 自动 / 中断 三个 Badge + 时间戳
+func _build_status_row() -> void:
+	if save_status == null or not is_instance_valid(save_status):
+		return
+	var row := HBoxContainer.new()
+	row.name = "StatusBadgeRow"
+	row.add_theme_constant_override("separation", MenuTheme.GAP_L)
+	row.position = Vector2(save_status.position.x, save_status.position.y + save_status.size.y + MenuTheme.GAP_S)
+	row.size = Vector2(save_status.size.x, 24)
+	# 3 个 badge 占位,setup 时填 text 和 kind
+	_status_filled_badge = StatusBadge.new()
+	_status_filled_badge.setup(StatusBadge.Kind.WARNING, "已用 0 / 3")
+	_status_auto_badge = StatusBadge.new()
+	_status_auto_badge.setup(StatusBadge.Kind.EMPTY, "自动 无")
+	_status_suspend_badge = StatusBadge.new()
+	_status_suspend_badge.setup(StatusBadge.Kind.EMPTY, "中断 无")
+	row.add_child(_status_filled_badge)
+	row.add_child(_status_auto_badge)
+	row.add_child(_status_suspend_badge)
+	# 时间戳(右侧)
+	_status_timestamp_label = Label.new()
+	_status_timestamp_label.add_theme_font_size_override("font_size", MenuTheme.FS_HINT)
+	_status_timestamp_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+	_status_timestamp_label.text = ""
+	row.add_child(_status_timestamp_label)
+	# 直接挂到 SaveFrame(用绝对位置,不依赖 layout)
+	save_status.get_parent().add_child(row)
 
 
 # ── Public ──────────────────────────────────────────────────
@@ -150,6 +186,7 @@ func _on_saves_response(body: Variant, _code: int = 0) -> void:
 	_manual_slot_records = [{}, {}, {}]
 	_auto_record = {}
 	_suspend_record = {}
+	var latest_ts: int = 0
 	for rec in parsed:
 		if not (rec is Dictionary):
 			continue
@@ -164,19 +201,39 @@ func _on_saves_response(body: Variant, _code: int = 0) -> void:
 			var idx := int(rec.get("slot_index", -1))
 			if idx >= 0 and idx < _MANUAL_SLOT_COUNT:
 				_manual_slot_records[idx] = rec
+		# T:V5 — 找最近 updated_at 时间戳
+		var ts := int(rec.get("updated_at", 0))
+		if ts > latest_ts:
+			latest_ts = ts
 	_render_manual_rows()
 	_render_auto_row()
 	_render_suspend_row()
+	# T:V5 — 状态条:3 个 StatusBadge + 时间戳
 	if save_status != null and is_instance_valid(save_status):
-		var filled := 0
-		for r in _manual_slot_records:
-			if not r.is_empty():
-				filled += 1
-		save_status.text = "三槽已用 %d / 3  ·  自动 %s  ·  中断 %s" % [
-			filled,
-			"✓" if not _auto_record.is_empty() else "—",
-			"✓" if not _suspend_record.is_empty() else "—",
-		]
+		save_status.text = "三存档槽"
+	_update_status_row(latest_ts)
+
+
+# T:V5 — 更新 3 个 StatusBadge + 时间戳
+func _update_status_row(latest_ts: int) -> void:
+	var filled := 0
+	for r in _manual_slot_records:
+		if not r.is_empty():
+			filled += 1
+	if _status_filled_badge != null and is_instance_valid(_status_filled_badge):
+		var filled_kind := StatusBadge.Kind.OK if filled > 0 else StatusBadge.Kind.EMPTY
+		_status_filled_badge.setup(filled_kind, "已用 %d / %d" % [filled, _MANUAL_SLOT_COUNT])
+	if _status_auto_badge != null and is_instance_valid(_status_auto_badge):
+		var auto_kind := StatusBadge.Kind.OK if not _auto_record.is_empty() else StatusBadge.Kind.EMPTY
+		_status_auto_badge.setup(auto_kind, "自动 " + ("✓" if not _auto_record.is_empty() else "无"))
+	if _status_suspend_badge != null and is_instance_valid(_status_suspend_badge):
+		var sus_kind := StatusBadge.Kind.WARNING if not _suspend_record.is_empty() else StatusBadge.Kind.EMPTY
+		_status_suspend_badge.setup(sus_kind, "中断 " + ("✓" if not _suspend_record.is_empty() else "无"))
+	if _status_timestamp_label != null and is_instance_valid(_status_timestamp_label):
+		if latest_ts > 0:
+			_status_timestamp_label.text = "  ·  最近存档 %s" % Time.get_datetime_string_from_unix_time(latest_ts)
+		else:
+			_status_timestamp_label.text = "  ·  暂无存档"
 
 
 # ── Manual slot rendering ─────────────────────────────────

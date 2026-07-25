@@ -234,9 +234,8 @@ func _render_mainline_list() -> void:
 	for child in ml_list_container.get_children():
 		child.queue_free()
 	if _mainline_list_cache.is_empty():
-		var empty := Label.new()
-		empty.text = "(暂无可用章节)"
-		empty.add_theme_color_override("font_color", Color(0.65, 0.6, 0.45))
+		var empty := StatusBadge.new()
+		empty.setup(StatusBadge.Kind.EMPTY, "暂无可用章节")
 		ml_list_container.add_child(empty)
 		return
 	for ml in _mainline_list_cache:
@@ -248,20 +247,138 @@ func _render_mainline_list() -> void:
 		var title: String = str(ml.get("title", "?"))
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
 		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
+		var req_classes: Array = ml.get("required_classes", [])
+		var classes_text: String = " · ".join(req_classes.map(func(c): return str(c)))
 		var cleared := _cleared_mainline_ids.has(id)
-		var btn := Button.new()
-		# T:#16 — cleared 标注 + 金色微调(不影响 disabled,可重玩)
-		btn.text = ("✓  %s · %d 场战斗  [已通关]" % [title, battles]) if cleared else ("%s · %d 场战斗" % [title, battles])
-		btn.tooltip_text = desc
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.pressed.connect(_on_ml_card_pressed.bind(id))
-		ml_list_container.add_child(btn)
+		# T:V5 — 章节行用 PanelContainer + HBox(title + meta + cleared badge),
+		# 整个 PanelContainer 接 pressed 信号当 button 用。meta 行用 STATUS_BADGE
+		# 显示战斗数 / 推荐职业 / cleared 状态。
+		var row := PanelContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.custom_minimum_size = Vector2(0, 56)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = MenuTheme.C_BG_PANEL
+		sb.border_color = MenuTheme.C_GOLD if cleared else MenuTheme.C_BORDER_THIN
+		sb.set_border_width_all(1 if cleared else 1)
+		sb.set_corner_radius_all(2)
+		sb.content_margin_left = MenuTheme.PAD_M
+		sb.content_margin_right = MenuTheme.PAD_M
+		sb.content_margin_top = MenuTheme.PAD_S
+		sb.content_margin_bottom = MenuTheme.PAD_S
+		row.add_theme_stylebox_override("panel", sb)
+		var hbox := HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", MenuTheme.GAP_M)
+		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(hbox)
+		# 标题(主标题)
+		var title_label := Label.new()
+		title_label.text = title
+		title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
+		title_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+		hbox.add_child(title_label)
+		# meta 信息
+		var meta_label := Label.new()
+		var meta_text := "%d 场战斗" % battles
+		if classes_text != "":
+			meta_text += "  · 推荐: %s" % classes_text
+		meta_label.text = meta_text
+		meta_label.add_theme_font_size_override("font_size", MenuTheme.FS_HINT)
+		meta_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
+		hbox.add_child(meta_label)
+		# cleared 状态徽章
+		if cleared:
+			var badge := StatusBadge.new()
+			badge.setup(StatusBadge.Kind.OK, "✓ 已通关")
+			hbox.add_child(badge)
+		row.tooltip_text = desc
+		row.gui_input.connect(_on_ml_row_gui_input.bind(id))
+		ml_list_container.add_child(row)
 
 
 func _on_ml_card_pressed(mainline_id: String) -> void:
 	_main._selected_mainline_id = mainline_id
+	# T:V5 — 选中章节后,把右侧 placeholder 换成详情卡
+	_render_selected_chapter_preview(mainline_id)
 	# 拉详情 → show_dialog(pre-battle dialogue)→ start
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
+
+
+# T:V5 — PanelContainer 章节行用 gui_input 触发点击(代替 Button 的 pressed)
+func _on_ml_row_gui_input(event: InputEvent, mainline_id: String) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_on_ml_card_pressed(mainline_id)
+
+
+# T:V5 — 在右侧 placeholder 里渲染选中章节的摘要
+func _render_selected_chapter_preview(mainline_id: String) -> void:
+	if ml_right_placeholder == null or not is_instance_valid(ml_right_placeholder):
+		return
+	for child in ml_right_placeholder.get_children():
+		child.queue_free()
+	var ml: Dictionary = {}
+	for m in _mainline_list_cache:
+		if m is Dictionary and str(m.get("id", "")) == mainline_id:
+			ml = m
+			break
+	if ml.is_empty():
+		ml_rp_hint.text = "(章节信息不可用)"
+		ml_rp_hint.add_theme_color_override("font_color", MenuTheme.C_PLACEHOLDER)
+		ml_right_placeholder.add_child(ml_rp_hint)
+		return
+	var title: String = str(ml.get("title", "?"))
+	var battles: int = int(ml.get("battle_count", 0))
+	var desc: String = str(ml.get("synopsis", ""))
+	var req_classes: Array = ml.get("required_classes", [])
+	var classes_text: String = " · ".join(req_classes.map(func(c): return str(c)))
+	var cleared := _cleared_mainline_ids.has(mainline_id)
+	# 用 VBoxContainer 装 4 行:标题 / 描述 / meta badges / 提示
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ml_right_placeholder.add_child(vbox)
+	# 标题
+	var title_label := Label.new()
+	title_label.text = "📖  %s" % title
+	title_label.add_theme_font_size_override("font_size", MenuTheme.FS_TITLE)
+	title_label.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	vbox.add_child(title_label)
+	# 描述
+	var desc_label := Label.new()
+	desc_label.text = desc if desc != "" else "(无章节简介)"
+	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY_SM)
+	desc_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	vbox.add_child(desc_label)
+	# meta badges 一行
+	var badge_row := HBoxContainer.new()
+	badge_row.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	badge_row.add_child(StatusBadge.new())
+	for ch in badge_row.get_children():
+		ch.queue_free()
+	# 战斗数 badge
+	var battles_badge := StatusBadge.new()
+	battles_badge.setup(StatusBadge.Kind.OK, "⚔ %d 场战斗" % battles)
+	badge_row.add_child(battles_badge)
+	# 推荐职业
+	if classes_text != "":
+		var class_badge := StatusBadge.new()
+		class_badge.setup(StatusBadge.Kind.WARNING, "推荐: %s" % classes_text)
+		badge_row.add_child(class_badge)
+	# cleared
+	if cleared:
+		var cleared_badge := StatusBadge.new()
+		cleared_badge.setup(StatusBadge.Kind.OK, "✓ 已通关")
+		badge_row.add_child(cleared_badge)
+	vbox.add_child(badge_row)
+	# 底部提示
+	var hint_label := Label.new()
+	hint_label.text = "点 \"✅ 准备好了\" 进入准备页 / 点章节行重新查看"
+	hint_label.add_theme_font_size_override("font_size", MenuTheme.FS_HINT)
+	hint_label.add_theme_color_override("font_color", MenuTheme.C_PLACEHOLDER)
+	vbox.add_child(hint_label)
 
 
 func _on_ml_detail_response(body: Variant, _code: int = 0, mainline_id: String = "") -> void:
