@@ -1545,17 +1545,17 @@ mouse_filter = 2
 ; 的整块面积,TextureRect 以原始尺寸放进槽里,溢出部分由 panel 的
 ; clip_contents 截掉(不动原图缩放)。
 [node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]
-; T:#18 — 锚定左上,尺寸 408x768(对应 portrait_yun.png 800x1400 按 0.51x 等比
-; 缩放,只显示面部 + 上半身,避免之前 532x770 大面板下 50% 全是空背景
-; 让玩家误以为"立绘不显示、只剩不透明面版")。TextureRect 由
-; _set_unit_info_portrait 程序化写入,clip_contents 截溢出。
+; T:V6 — 锚定左上,尺寸 440x768(匹配 portrait_yun.png 800:1400 比例:
+; 440/768 ≈ 0.572 ≈ 800/1400 ≈ 0.571)。
+; TextureRect 用 STRETCH_KEEP_ASPECT_CENTERED 缩放到面板大小,
+; 高度一致(768),宽度按比例自适应(约 439),原图比例不变。
 anchor_left = 0.0
 anchor_top = 0.0
 anchor_right = 0.0
 anchor_bottom = 0.0
 offset_left = 28.0
 offset_top = 110.0
-offset_right = 436.0
+offset_right = 468.0
 offset_bottom = 878.0
 clip_contents = true
 mouse_filter = 2

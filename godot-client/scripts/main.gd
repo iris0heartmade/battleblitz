@@ -4629,6 +4629,16 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	while _lobby_seat_occupants.size() <= seat_index:
 		_lobby_seat_occupants.append("")
 	_lobby_seat_ai_replacements[seat_index] = pressed
+	# T:#19 — 不变式:同一玩家/AI 至多占 1 槽。先把当前用户从其它座位挪走,
+	# 再清掉其它 AI 占位(乐观显示,后端 remove_player 后续会同步)。
+	if pressed:
+		_clear_player_from_other_seats(_user_name, exclude_seat = seat_index)
+		# 同理清掉其它 AI 占位(以防之前多槽同 AI 的脏状态)
+		for i in range(_lobby_seat_ai_replacements.size()):
+			if i != seat_index and _lobby_seat_ai_replacements[i]:
+				_lobby_seat_ai_replacements[i] = false
+				if i < _lobby_seat_occupants.size() and _lobby_seat_occupants[i].begins_with("电脑-"):
+					_lobby_seat_occupants[i] = ""
 	if _game_id <= 0 or seat_index < 0:
 		_render_lobby_seat_columns()
 		return
@@ -4760,11 +4770,14 @@ func _on_lobby_seat_commander_response(body: Variant, _code: int, seat_index: in
 
 func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 	_selected_lobby_seat_index = clampi(seat_index, 0, MapPreviewSummary.SEAT_COLORS.size() - 1)
+	# T:#19 — 不变式:同一玩家至多占 1 个座位(同样 AI 至多占 1 槽)。
+	# 在写入目标座位前,先把其它座位里出现的 _user_name / ai placeholder 全部清掉。
+	_clear_player_from_other_seats(_user_name, exclude_seat = seat_index)
 	while _lobby_seat_occupants.size() <= seat_index:
 		_lobby_seat_occupants.append("")
-	_lobby_seat_occupants[seat_index] = _user_name
 	while _lobby_seat_ai_replacements.size() <= seat_index:
 		_lobby_seat_ai_replacements.append(false)
+	_lobby_seat_occupants[seat_index] = _user_name
 	_lobby_seat_ai_replacements[seat_index] = false
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "%s 已入座 %d席。" % [_user_name, seat_index + 1]
@@ -4777,6 +4790,19 @@ func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 			_selected_lobby_seat_index,
 			Callable(self, "_on_lobby_seat_update_response")
 		)
+
+
+# T:#19 — 清掉所有其它座位里出现的 player_name / ai 占位(确保"一个玩家最多一槽")。
+# exclude_seat = -1 表示所有座位都清。
+func _clear_player_from_other_seats(player_name: String, exclude_seat: int = -1) -> void:
+	for i in range(_lobby_seat_occupants.size()):
+		if i == exclude_seat:
+			continue
+		if _lobby_seat_occupants[i] == player_name:
+			_lobby_seat_occupants[i] = ""
+		if _lobby_seat_ai_replacements[i] and not _lobby_seat_occupants[i].begins_with("电脑-"):
+			# AI 占位的占位符是"电脑-N",已经被 reset 了上面的条件不再匹配。
+			pass
 
 
 func _on_lobby_seat_update_response(_body: Variant, code: int = 0) -> void:
@@ -6061,15 +6087,9 @@ func _set_unit_info_portrait(hero_id: String) -> void:
 		return
 	if _unit_info_portrait_tex == null:
 		_unit_info_portrait_tex = TextureRect.new()
-		_unit_info_portrait_tex.anchor_right = 0.0
-		_unit_info_portrait_tex.anchor_bottom = 0.0
-		_unit_info_portrait_tex.offset_left = 0.0
-		_unit_info_portrait_tex.offset_top = 0.0
-		_unit_info_portrait_tex.offset_right = 0.0
-		_unit_info_portrait_tex.offset_bottom = 0.0
-		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP
 		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero_portrait_panel.add_child(_unit_info_portrait_tex)
 	if hero_id == "":
 		_unit_info_portrait_tex.visible = false
@@ -6083,16 +6103,9 @@ func _set_unit_info_portrait(hero_id: String) -> void:
 	var tex := _load_portrait(portrait_path)
 	_unit_info_portrait_tex.texture = tex
 	if tex != null:
-		# T:#18 — 立绘保持原始尺寸(800x1400 类竖图,STRETCH_KEEP + EXPAND_IGNORE_SIZE),
-		# 顶部对齐面板、水平居中。面板的 clip_contents 负责把多余的下半身裁掉,
-		# 不动原图缩放;玩家看到的是人物面部 + 上半身。
-		_unit_info_portrait_tex.size = tex.get_size()
-		var panel_size := hero_portrait_panel.size
-		var portrait_size := _unit_info_portrait_tex.size
-		_unit_info_portrait_tex.position = Vector2(
-			maxf(2.0, (panel_size.x - portrait_size.x) * 0.5),
-			2.0
-		)
+		# T:V6 — 立绘按比例缩放到面板大小(高度一致,宽度按 800:1400 自适应,原图比例不变)。
+		# STRETCH_KEEP_ASPECT_CENTERED 自动居中,clip_contents 截溢出。
+		_unit_info_portrait_tex.size = hero_portrait_panel.size
 	_unit_info_portrait_tex.visible = tex != null
 	hero_portrait_panel.visible = tex != null
 

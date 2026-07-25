@@ -388,6 +388,26 @@ def test_godot_saves_view_sections_have_explicit_vertical_order():
         assert "visible = false" in frame[title_start:title_end]
 
 
+def test_godot_lobby_seat_invariant_one_player_one_seat():
+    # T:#19 — 同一玩家(_user_name)最多出现在 1 个座位的 occupants;
+    # 同一 AI 占位最多出现在 1 个座位(避免 toggle AI 后多槽同 AI)。
+    # _on_lobby_seat_action_pressed 入座前必须先清掉其它座位里的 _user_name;
+    # _on_lobby_seat_ai_toggled ON 之前必须先清掉其它 AI 占位。
+    src = _read(MAIN_GD)
+    func_idx = src.index("func _on_lobby_seat_action_pressed(")
+    func_end = src.index("\n\n", func_idx)
+    body = src[func_idx:func_end]
+    assert "_clear_player_from_other_seats" in body, "入座前必须清掉其它座位里的 _user_name"
+    ai_idx = src.index("func _on_lobby_seat_ai_toggled(")
+    ai_end = src.index("\n\n", ai_idx)
+    ai_body = src[ai_idx:ai_end]
+    assert "_clear_player_from_other_seats" in ai_body, "AI 切换前必须清掉其它座位里的 _user_name + 其它 AI 占位"
+    helper_idx = src.index("func _clear_player_from_other_seats(")
+    helper_end = src.index("\n\n", helper_idx)
+    helper = src[helper_idx:helper_end]
+    assert "exclude_seat" in helper, "helper 必须支持 exclude_seat 参数"
+
+
 def test_godot_lobby_start_success_enters_game_without_connecting_view():
     source = _read(MAIN_GD)
     start = source.index("func _on_lobby_start_response(")
@@ -402,9 +422,10 @@ def test_godot_portrait_uses_native_size_inside_target_panel():
     source = _read(MAIN_GD)
     scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
     assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in scene
-    assert "EXPAND_IGNORE_SIZE" in source
-    assert "STRETCH_KEEP" in source
-    assert "_unit_info_portrait_tex.size = tex.get_size()" in source
+    # T:V6 — 立绘改 STRETCH_KEEP_ASPECT_CENTERED 缩放到 panel 大小(用户要求
+    # 高度一致、宽度按比例自适应、原图比例不变)
+    assert "STRETCH_KEEP_ASPECT_CENTERED" in source
+    assert "_unit_info_portrait_tex.size = hero_portrait_panel.size" in source
     assert "unit_info.offset_right = -108" not in source
 
 

@@ -247,53 +247,14 @@ func _render_mainline_list() -> void:
 		var title: String = str(ml.get("title", "?"))
 		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
 		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
-		var req_classes: Array = ml.get("required_classes", [])
-		var classes_text: String = " · ".join(req_classes.map(func(c): return str(c)))
 		var cleared := _cleared_mainline_ids.has(id)
-		# T:V5 — 章节行用 PanelContainer + HBox(title + meta + cleared badge),
-		# 整个 PanelContainer 接 pressed 信号当 button 用。meta 行用 STATUS_BADGE
-		# 显示战斗数 / 推荐职业 / cleared 状态。
-		var row := PanelContainer.new()
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.custom_minimum_size = Vector2(0, 56)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = MenuTheme.C_BG_PANEL
-		sb.border_color = MenuTheme.C_GOLD if cleared else MenuTheme.C_BORDER_THIN
-		sb.set_border_width_all(1 if cleared else 1)
-		sb.set_corner_radius_all(2)
-		sb.content_margin_left = MenuTheme.PAD_M
-		sb.content_margin_right = MenuTheme.PAD_M
-		sb.content_margin_top = MenuTheme.PAD_S
-		sb.content_margin_bottom = MenuTheme.PAD_S
-		row.add_theme_stylebox_override("panel", sb)
-		var hbox := HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", MenuTheme.GAP_M)
-		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(hbox)
-		# 标题(主标题)
-		var title_label := Label.new()
-		title_label.text = title
-		title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title_label.add_theme_font_size_override("font_size", MenuTheme.FS_BODY)
-		title_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-		hbox.add_child(title_label)
-		# meta 信息
-		var meta_label := Label.new()
-		var meta_text := "%d 场战斗" % battles
-		if classes_text != "":
-			meta_text += "  · 推荐: %s" % classes_text
-		meta_label.text = meta_text
-		meta_label.add_theme_font_size_override("font_size", MenuTheme.FS_HINT)
-		meta_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
-		hbox.add_child(meta_label)
-		# cleared 状态徽章
-		if cleared:
-			var badge := StatusBadge.new()
-			badge.setup(StatusBadge.Kind.OK, "✓ 已通关")
-			hbox.add_child(badge)
-		row.tooltip_text = desc
-		row.gui_input.connect(_on_ml_row_gui_input.bind(id))
-		ml_list_container.add_child(row)
+		# V4 简洁 Button 样式(V5 的 PanelContainer + HBox 太大太散)
+		var btn := Button.new()
+		btn.text = ("✓  %s · %d 场战斗  [已通关]" % [title, battles]) if cleared else ("%s · %d 场战斗" % [title, battles])
+		btn.tooltip_text = desc
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_ml_card_pressed.bind(id))
+		ml_list_container.add_child(btn)
 
 
 func _on_ml_card_pressed(mainline_id: String) -> void:
@@ -302,12 +263,6 @@ func _on_ml_card_pressed(mainline_id: String) -> void:
 	_render_selected_chapter_preview(mainline_id)
 	# 拉详情 → show_dialog(pre-battle dialogue)→ start
 	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
-
-
-# T:V5 — PanelContainer 章节行用 gui_input 触发点击(代替 Button 的 pressed)
-func _on_ml_row_gui_input(event: InputEvent, mainline_id: String) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_on_ml_card_pressed(mainline_id)
 
 
 # T:V5 — 在右侧 placeholder 里渲染选中章节的摘要
