@@ -36,6 +36,8 @@ var _main: Node = null
 @onready var ml_prep_merc_unit_select: OptionButton = $MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect
 @onready var ml_prep_merc_stat_select: OptionButton = $MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect
 @onready var ml_prep_shop_select: OptionButton = $MLFrame/MLPrepSelectorRow/MLPrepShopSelect
+@onready var ml_right_placeholder: Panel = $MLFrame/MLRightPlaceholder
+@onready var ml_rp_hint: Label = $MLFrame/MLRightPlaceholder/MLRPHint
 @onready var ml_prep_heroes_tab_btn: Button = $MLFrame/MLPrepTabs/HeroesTabBtn
 @onready var ml_prep_roster_tab_btn: Button = $MLFrame/MLPrepTabs/RosterTabBtn
 @onready var ml_prep_equipment_tab_btn: Button = $MLFrame/MLPrepTabs/EquipmentTabBtn
@@ -108,6 +110,20 @@ func _ready() -> void:
 	for btn in theme_btns:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
+	# T:V4 — 右半屏占位卡主题:深绿底 + 烫金边 + placeholder 文字 PLACEHOLDER 色
+	if ml_right_placeholder != null and is_instance_valid(ml_right_placeholder):
+		MenuTheme.apply_panel_theme(ml_right_placeholder, MenuTheme.C_BG_PANEL)
+	if ml_rp_hint != null and is_instance_valid(ml_rp_hint):
+		ml_rp_hint.add_theme_color_override("font_color", MenuTheme.C_PLACEHOLDER)
+	# T:V4 — 主操作分组:
+	# - ✅ 准备好了 + 选定指挥官 走 PRIMARY(金底烫金亮边)— 关键确认操作
+	# - 放弃主线 走 SECONDARY(蓝底)— 默认次要按钮
+	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
+		MenuTheme.apply_primary_button_theme(ml_prep_complete_btn, MenuTheme.FS_BTN)
+	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
+		MenuTheme.apply_primary_button_theme(ml_apply_commander_btn, MenuTheme.FS_BODY_SM)
+	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
+		MenuTheme.apply_secondary_button_theme(ml_abandon_btn, MenuTheme.FS_BODY_SM)
 
 
 func open() -> void:
@@ -151,6 +167,8 @@ func _set_mainline_page(page: String) -> void:
 	_set_node_visible(ml_commander_status, not showing_prepare)
 	_set_node_visible(ml_commander_option, not showing_prepare)
 	_set_node_visible(ml_apply_commander_btn, not showing_prepare)
+	# T:V4 — 章节列表右侧 placeholder 卡,prepare 模式被 prep 控件覆盖
+	_set_node_visible(ml_right_placeholder, not showing_prepare)
 	_set_node_visible(ml_prep_summary, showing_prepare)
 	_set_node_visible(ml_prep_tabs, showing_prepare)
 	_set_node_visible(ml_prep_content, showing_prepare)

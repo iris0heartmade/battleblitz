@@ -1225,6 +1225,30 @@ offset_bottom = -213.0
 theme_override_constants/separation = 12
 scroll_following = true
 
+; T:V4 — 章节列表右侧占位卡(chapter_list 模式填死区 600px),
+; prepare 模式由 MLPrepSummary / MLPrepTabs / MLPrepContent 占满右侧。
+[node name="MLRightPlaceholder" type="Panel" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 531.0
+offset_top = 75.0
+offset_right = -36.0
+offset_bottom = -213.0
+mouse_filter = 2
+
+[node name="MLRPHint" type="Label" parent="MainlineView/MLFrame/MLRightPlaceholder"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = -24.0
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "←  选个章节开始
+或点下面的「准备好了」从存档进入"
+theme_override_font_sizes/font_size = 18
+
 [node name="MLPrepSummary" type="RichTextLabel" parent="MainlineView/MLFrame"]
 anchor_right = 1.0
 offset_left = 531.0
