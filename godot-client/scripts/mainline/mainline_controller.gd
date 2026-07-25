@@ -62,6 +62,41 @@ func _ready() -> void:
 	# Batch A: commander apply 由组件接(bind 内的函数都在 self)
 	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
 		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
+	if ml_back_btn != null and is_instance_valid(ml_back_btn):
+		ml_back_btn.pressed.connect(_on_ml_back_pressed)
+	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
+		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
+	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
+		ml_prep_start_btn.pressed.connect(_on_prepare_start_pressed)
+	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
+		ml_prep_complete_btn.pressed.connect(_on_prepare_complete_pressed)
+	if ml_prep_refresh_btn != null and is_instance_valid(ml_prep_refresh_btn):
+		ml_prep_refresh_btn.pressed.connect(_on_prepare_refresh_pressed)
+	if ml_prep_action_btn != null and is_instance_valid(ml_prep_action_btn):
+		ml_prep_action_btn.pressed.connect(_on_prepare_primary_action_pressed)
+	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+		ml_prep_alt_action_btn.pressed.connect(_on_prepare_secondary_action_pressed)
+	var prep_tabs := {
+		ml_prep_heroes_tab_btn: "heroes",
+		ml_prep_roster_tab_btn: "roster",
+		ml_prep_equipment_tab_btn: "equipment",
+		ml_prep_mercenary_tab_btn: "mercenary",
+		ml_prep_shop_tab_btn: "shop",
+		ml_prep_saves_tab_btn: "saves",
+	}
+	for tab_btn in prep_tabs:
+		if tab_btn != null and is_instance_valid(tab_btn):
+			tab_btn.pressed.connect(_on_prepare_tab_pressed.bind(prep_tabs[tab_btn]))
+	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
+		ml_prep_hero_select.item_selected.connect(_on_prepare_hero_selected)
+	if ml_prep_equipment_select != null and is_instance_valid(ml_prep_equipment_select):
+		ml_prep_equipment_select.item_selected.connect(_on_prepare_equipment_selected)
+	if ml_prep_merc_unit_select != null and is_instance_valid(ml_prep_merc_unit_select):
+		ml_prep_merc_unit_select.item_selected.connect(_on_prepare_merc_unit_selected)
+	if ml_prep_merc_stat_select != null and is_instance_valid(ml_prep_merc_stat_select):
+		ml_prep_merc_stat_select.item_selected.connect(_on_prepare_merc_stat_selected)
+	if ml_prep_shop_select != null and is_instance_valid(ml_prep_shop_select):
+		ml_prep_shop_select.item_selected.connect(_on_prepare_shop_item_selected)
 	# P2: GBA 火纹主题(原 main._apply_gba_theme 按钮列表里的 ml_* 按钮,随组件搬来)
 	var theme_btns := [ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 		ml_prep_start_btn, ml_prep_complete_btn, ml_prep_refresh_btn,
@@ -118,6 +153,9 @@ func _set_mainline_page(page: String) -> void:
 	_set_node_visible(ml_prep_tabs, showing_prepare)
 	_set_node_visible(ml_prep_content, showing_prepare)
 	_set_node_visible(ml_prep_start_btn, showing_prepare)
+	# T:#17 — ml_prep_complete_btn (✅ 准备好了) 在 chapter_list 也常驻可见,
+	# 让玩家在选章节后能立刻点"准备好了"进对战。刷新整备 / 开始战斗
+	# 等 prepare 模式专属控件才在 chapter_list 隐藏。
 	_set_node_visible(ml_prep_refresh_btn, showing_prepare)
 	_set_node_visible(ml_prep_action_btn, showing_prepare)
 	_set_node_visible(ml_prep_alt_action_btn, showing_prepare)
@@ -528,6 +566,11 @@ func _on_prepare_merc_stat_selected(index: int) -> void:
 
 func _update_prepare_action_buttons() -> void:
 	if ml_prep_action_btn == null or not is_instance_valid(ml_prep_action_btn):
+		return
+	if _main._mainline_page != "prepare":
+		ml_prep_action_btn.visible = false
+		if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
+			ml_prep_alt_action_btn.visible = false
 		return
 	var has_prepare: bool = not _main._mainline_prepare_payload.is_empty()
 	ml_prep_action_btn.visible = true

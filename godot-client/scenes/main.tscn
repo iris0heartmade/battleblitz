@@ -958,6 +958,7 @@ theme_override_font_sizes/font_size = 20
 modulate = Color(0.65, 0.6, 0.45, 1)
 
 [node name="OpenTitle" type="Label" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 48.0
 offset_top = 129.0
 offset_right = 594.0
@@ -966,6 +967,7 @@ text = "对局存档"
 theme_override_font_sizes/font_size = 24
 
 [node name="MainlineTitle" type="Label" parent="SavesView/SaveFrame"]
+visible = false
 offset_left = 696.0
 offset_top = 129.0
 offset_right = 1242.0
@@ -1326,9 +1328,9 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -234.0
+offset_left = -666.0
 offset_top = -153.0
-offset_right = -36.0
+offset_right = -468.0
 offset_bottom = -99.0
 text = "刷新整备"
 
@@ -1511,6 +1513,23 @@ vertical_alignment = 1
 mouse_filter = 2
 
 ; COBar removed — 能量由 CORoster(顶部)+ InfoPanel/CommanderCOBar 显示
+
+; --- 英雄立绘槽(由 _set_unit_info_portrait 程序化写入 TextureRect)---
+; 之前 hero portrait 塞在 info_panel 右侧,遮挡 "Lv.1" / 攻击射程等文字;
+; 现在单独锚定到 HUD 左上,TurnBadge 下方、GoldPanel 上方 — 占用截图红框
+; 的整块面积,TextureRect 以原始尺寸放进槽里,溢出部分由 panel 的
+; clip_contents 截掉(不动原图缩放)。
+[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 28.0
+offset_top = 110.0
+offset_right = 560.0
+offset_bottom = 880.0
+clip_contents = true
+mouse_filter = 2
 
 ; --- 顶部中央:CO Roster — 全玩家头像 + meter + 发动按钮 ---
 ; 动态生成:每玩家一个 Panel(头像 + 名字 + ProgressBar + 发动按钮)
@@ -2171,15 +2190,18 @@ text = "🏆 战 斗 结 束"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 33
 
-[node name="WinnerBanner" type="Label" parent="GameView/HUD/BattleResultPanel"]
+[node name="WinnerBanner" type="RichTextLabel" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0
 offset_left = 24.0
 offset_top = 96.0
 offset_right = -24.0
 offset_bottom = 150.0
+bbcode_enabled = true
 text = "🎉 学长 获胜!"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 27
+fit_content = true
+scroll_active = false
 
 [node name="StatsList" type="RichTextLabel" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0

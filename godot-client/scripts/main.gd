@@ -85,6 +85,9 @@ var _recruit_mode_unit_id: int = -1
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
+# T:#18 — 英雄立绘槽,挂载到 HUD 左下角(GoldPanel 上方),不再塞在 InfoPanel 里
+# 遮挡 "Lv.1" / 攻击射程等文字。TextureRect 由 _set_unit_info_portrait 程序化写入。
+@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel
 @onready var turn_banner: ColorRect = $GameView/TurnBannerFrame
 @onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
 var _turn_banner_tween: Tween = null
@@ -133,7 +136,7 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
 @onready var battle_result_panel: Panel = $GameView/HUD/BattleResultPanel
-@onready var battle_result_winner: Label = $GameView/HUD/BattleResultPanel/WinnerBanner
+@onready var battle_result_winner: RichTextLabel = $GameView/HUD/BattleResultPanel/WinnerBanner
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
 @onready var battle_mainline_next_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn
@@ -1921,9 +1924,11 @@ func _winner_player_id_from_finished_snapshot() -> int:
 		var key: String = _player_team_key(pid)
 		if not alive_team_to_pid.has(key):
 			alive_team_to_pid[key] = pid
+	# 唯一活着的队伍 = 真正的胜者;0 队伍(全员阵亡的 draw)或 ≥2 队伍
+	# 都返回 -1,让 show_battle_result 把 winner 留空、不冒认"学长 获胜!"。
 	if alive_team_to_pid.size() == 1:
 		return int(alive_team_to_pid.values()[0])
-	return _player_id
+	return -1
 
 
 func _handle_finished_snapshot(summary: Dictionary) -> void:
@@ -3111,6 +3116,18 @@ func _apply_hud_theme() -> void:
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# T:#18 — 英雄立绘槽主题(深绿底 + 烫金边),跟 InfoPanel / ActionBubble 同款
+	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
+		var sb_portrait := StyleBoxFlat.new()
+		sb_portrait.bg_color = MenuTheme.C_BG_PANEL
+		sb_portrait.border_color = MenuTheme.C_GOLD
+		sb_portrait.set_border_width_all(2)
+		sb_portrait.set_corner_radius_all(3)
+		sb_portrait.content_margin_left = 2
+		sb_portrait.content_margin_right = 2
+		sb_portrait.content_margin_top = 2
+		sb_portrait.content_margin_bottom = 2
+		hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.add_theme_font_size_override("normal_font_size", 13)
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -3248,7 +3265,7 @@ func _apply_hud_theme() -> void:
 		res_header.add_theme_font_size_override("font_size", 22)
 		res_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 	if battle_result_winner != null and is_instance_valid(battle_result_winner):
-		battle_result_winner.add_theme_font_size_override("font_size", 18)
+		battle_result_winner.add_theme_font_size_override("normal_font_size", 18)
 	if battle_result_stats != null and is_instance_valid(battle_result_stats):
 		battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
 		battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -3470,7 +3487,11 @@ func _enter_lobby_view() -> void:
 	if lobby_name_input != null and is_instance_valid(lobby_name_input):
 		lobby_name_input.text = "%s 的房间" % _user_name
 	_setup_lobby_join_options()
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
+	# T:#16 — commander 拉取统一收口在 mainline_controller._on_commanders_response,
+	# 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
+	# 之前挂 Callable(self, ...) 是死链:main.gd 没有这个方法,导致不先点过主线的话
+	# lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander。
+	NetworkClient.get_unlocked_commanders(_user_name, Callable(mainline_view, "_on_commanders_response"))
 	_load_lobby_presets()
 	_load_lobby_audio_tracks()
 	_setup_lobby_win_condition_options()
@@ -3895,8 +3916,10 @@ func _on_lobby_configured_team_updated(_body: Variant, _code: int = 0) -> void:
 func _start_configured_lobby_game() -> void:
 	if not _pending_lobby_start_after_create:
 		return
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "配置完成，正在开启游戏..."
+	# T:#17 — 不在大厅里插一句"配置完成，正在开启游戏...":这条文案
+	# 会在 _on_lobby_start_response 跳到 game view 之前短暂闪在大厅,
+	# 让玩家误以为有中间过渡页面要再点一次。直接发 start_game,等
+	# 响应里 _show_view("game") 切走即可,大厅文本不更新。
 	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
 
 
@@ -4356,8 +4379,7 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	status_box.add_child(seat_name)
 	var occupant := Label.new()
 	occupant.name = "SeatOccupant"
-	var occupant_name := _lobby_seat_occupant_name(index)
-	occupant.text = "等待玩家入座" if occupant_name == "" else "%s 已入座" % occupant_name
+	occupant.text = _lobby_seat_status_text(index)
 	occupant.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
 	status_box.add_child(occupant)
 	var control_row := HBoxContainer.new()
@@ -4514,6 +4536,15 @@ func _lobby_seat_occupant_name(seat_index: int) -> String:
 	if seat_index >= 0 and seat_index < _lobby_seat_occupants.size():
 		return str(_lobby_seat_occupants[seat_index])
 	return ""
+
+
+func _lobby_seat_status_text(seat_index: int) -> String:
+	var occupant_name := _lobby_seat_occupant_name(seat_index)
+	if occupant_name != "":
+		return "%s 已入座" % occupant_name
+	if _lobby_ai_replacement_for_seat(seat_index):
+		return "电脑-%d（入座中…）" % (seat_index + 1)
+	return "等待玩家入座"
 
 
 func _lobby_seat_commander_id(seat_index: int) -> String:
@@ -6005,32 +6036,47 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 
 
 func _set_unit_info_portrait(hero_id: String) -> void:
-	if info_panel == null or not is_instance_valid(info_panel):
+	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
+	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
+	# 还原默认 -12.0。
+	if hero_portrait_panel == null or not is_instance_valid(hero_portrait_panel):
 		return
 	if _unit_info_portrait_tex == null:
 		_unit_info_portrait_tex = TextureRect.new()
-		_unit_info_portrait_tex.size = Vector2(86, 118)
-		_unit_info_portrait_tex.position = Vector2(282, 108)
-		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_unit_info_portrait_tex.anchor_right = 0.0
+		_unit_info_portrait_tex.anchor_bottom = 0.0
+		_unit_info_portrait_tex.offset_left = 0.0
+		_unit_info_portrait_tex.offset_top = 0.0
+		_unit_info_portrait_tex.offset_right = 0.0
+		_unit_info_portrait_tex.offset_bottom = 0.0
+		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP
 		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_panel.add_child(_unit_info_portrait_tex)
+		hero_portrait_panel.add_child(_unit_info_portrait_tex)
 	if hero_id == "":
 		_unit_info_portrait_tex.visible = false
-		if unit_info != null and is_instance_valid(unit_info):
-			unit_info.offset_right = -12.0
+		hero_portrait_panel.visible = false
 		return
 	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
 	if not FileAccess.file_exists(portrait_path):
 		_unit_info_portrait_tex.visible = false
-		if unit_info != null and is_instance_valid(unit_info):
-			unit_info.offset_right = -12.0
+		hero_portrait_panel.visible = false
 		return
 	var tex := _load_portrait(portrait_path)
 	_unit_info_portrait_tex.texture = tex
+	if tex != null:
+		# T:#18 — 立绘保持原始尺寸(800x1400 类竖图,STRETCH_KEEP + EXPAND_IGNORE_SIZE),
+		# 顶部对齐面板、水平居中。面板的 clip_contents 负责把多余的下半身裁掉,
+		# 不动原图缩放;玩家看到的是人物面部 + 上半身。
+		_unit_info_portrait_tex.size = tex.get_size()
+		var panel_size := hero_portrait_panel.size
+		var portrait_size := _unit_info_portrait_tex.size
+		_unit_info_portrait_tex.position = Vector2(
+			maxf(2.0, (panel_size.x - portrait_size.x) * 0.5),
+			2.0
+		)
 	_unit_info_portrait_tex.visible = tex != null
-	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_right = -108.0 if tex != null else -12.0
+	hero_portrait_panel.visible = tex != null
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)

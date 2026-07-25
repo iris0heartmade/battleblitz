@@ -82,6 +82,127 @@ def test_godot_save_views_use_save_api_not_game_delete_api():
     assert 'NetworkClient.list_games(Callable(self, "_on_saves_response")' not in combined
 
 
+def test_godot_hero_portrait_renders_in_bottom_left_not_info_panel():
+    # T:#18 — 英雄立绘原本嵌在 InfoPanel 右侧 position=(282, 108) size=(86,118),
+    # 遮挡 "Lv.1" / 攻击射程 等文字。改成挂在独立的 HeroPortraitPanel 槽位,
+    # 该槽位锚定到 GameView/HUD 左下角(GoldPanel 上方),
+    # 不再嵌进 InfoPanel;unit_info.offset_right 也不再为立绘腾空间。
+    main_src = _read(MAIN_GD)
+    main_tscn = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    # 1) .tscn 里有 HeroPortraitPanel,挂在 GameView/HUD 下(不在 BottomLeft HBox 里)
+    assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in main_tscn
+    assert "HeroPortraitPanel" in main_tscn
+    # 2) 锚定到左上(TurnBadge 下方、GoldPanel 上方),offset_left=28
+    hp_idx = main_tscn.index('[node name="HeroPortraitPanel"')
+    hp_end = main_tscn.index("\n\n", hp_idx)
+    hp_block = main_tscn[hp_idx:hp_end]
+    assert "anchor_top = 0.0" in hp_block
+    assert "anchor_bottom = 0.0" in hp_block
+    assert "offset_left = 28.0" in hp_block
+    # 3) main.gd @onready var 指向新路径
+    assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel" in main_src
+    # 4) _set_unit_info_portrait 把 TextureRect 挂到 hero_portrait_panel(不再挂 info_panel)
+    func_idx = main_src.index("func _set_unit_info_portrait(")
+    func_end = main_src.index("\n\n", func_idx)
+    func_body = main_src[func_idx:func_end]
+    assert "hero_portrait_panel.add_child(_unit_info_portrait_tex)" in func_body
+    # 5) 不再调 unit_info.offset_right = -108 (那是给 InfoPanel 内嵌立绘腾空间的)
+    assert "unit_info.offset_right = -108" not in func_body
+    # 6) 旧硬编码位置 (282, 108) 已删
+    assert "position = Vector2(282, 108)" not in func_body
+
+
+def test_godot_winner_resolution_returns_no_winner_for_draw_or_ambiguous():
+    # T:#18 — _winner_player_id_from_finished_snapshot 之前在 0 队伍或 ≥2 队伍时
+    # fallback 到 _player_id,导致"全员阵亡"或"多队伍并存"的 draw / 异常情况下
+    # 错误地显示"学长 获胜!"。改:0 队伍(全员死光)和 ≥2 队伍(未决出胜者)都返回 -1,
+    # 让 show_battle_result 把 winner 留空("—")而不是冒认。
+    main_src = _read(MAIN_GD)
+    func_idx = main_src.index("func _winner_player_id_from_finished_snapshot(")
+    func_end = main_src.index("\n\n", func_idx)
+    func_body = main_src[func_idx:func_end]
+    # 唯一队伍时仍正确返回那个 pid
+    assert "alive_team_to_pid.size() == 1" in func_body
+    assert "alive_team_to_pid.values()[0]" in func_body
+    # 兜底必须是 -1,不能是 _player_id(否则 draw 会被认成"自己赢")
+    fallback_lines = [ln.strip() for ln in func_body.splitlines() if ln.strip().startswith("return ")]
+    last_return = fallback_lines[-1]
+    assert "return -1" in last_return
+    assert "return _player_id" not in func_body
+
+
+def test_godot_battle_result_winner_uses_rich_text_label_for_bbcode():
+    # T:#18 — show_battle_result (main.gd:2967) 把 bbcode_enabled = true 赋给
+    # battle_result_winner,但 #18 之前 WinnerBanner 是 Label 节点 → SCRIPT ERROR:
+    # "Invalid assignment of property or key 'bbcode_enabled' with value of type
+    # 'bool' on a base object of type 'Label'"。
+    # 这会让 _on_match_ended 直接崩,GameView 卡死,玩家以为对局没结束。
+    # 修法:WinnerBanner 节点类型必须是 RichTextLabel,@onready 变量类型也要对齐。
+    main_src = _read(MAIN_GD)
+    main_tscn = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    # 1) main.gd 里 show_battle_result 真的在用 bbcode_enabled
+    assert "battle_result_winner.bbcode_enabled = true" in main_src
+    # 2) 节点必须是 RichTextLabel
+    assert '[node name="WinnerBanner" type="RichTextLabel"' in main_tscn
+    # 3) @onready 变量类型也必须对齐
+    assert "battle_result_winner: RichTextLabel" in main_src
+    # 4) 字体覆盖要走 normal_font_size(RichTextLabel 字段名),不是 Label 的 font_size
+    winner_idx = main_src.index("func show_battle_result(")
+    winner_end = main_src.index("\n\n", winner_idx)
+    winner_body = main_src[winner_idx:winner_end]
+    assert "add_theme_font_size_override(\"normal_font_size\"" in winner_body or "battle_result_stats" in winner_body
+    # 5) .tscn 里 bbcode_enabled 已默认打开
+    assert "WinnerBanner" in main_tscn
+    winner_block = main_tscn[main_tscn.index("WinnerBanner"):main_tscn.index("StatsList")]
+    assert 'type="RichTextLabel"' in winner_block
+
+
+def test_godot_in_progress_view_only_reads_saves_not_active_games():
+    # T:#17 — 进行中视图语义收窄到"存档域":
+    #  - suspend(中断存档, 至多 1 个)
+    #  - 已存的活动主线 manual 槽
+    # 故意不渲染 /games 里的活动对局 — 那跟"中断存档"是两回事,
+    # 活动对局应通过联机大厅的 room list 找回。
+    in_progress_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "in_progress_controller.gd")
+    # 1) InProgressView 仍然只拉 /saves(不破坏已有 _on_saves_response 解析)
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in in_progress_src
+    # 2) InProgressView 不应该再拉 /games
+    assert "NetworkClient.list_games" not in in_progress_src
+    # 3) 不应该再有 _active_games 字段 / 活动对局渲染块 / _render_game_row / _on_game_resume_pressed
+    assert "_active_games" not in in_progress_src
+    assert "_on_games_response" not in in_progress_src
+    assert "_render_game_row" not in in_progress_src
+    assert "_on_game_resume_pressed" not in in_progress_src
+    # 4) 空态文案要跟新语义对齐
+    assert "中断存档" in in_progress_src
+    assert "活动主线" in in_progress_src
+    # 5) 旧 UI 文案"进行中游戏"已删
+    assert "进行中游戏" not in in_progress_src
+    assert "🎮" not in in_progress_src
+
+
+def test_godot_lobby_commander_fetch_forwards_to_mainline_controller():
+    # T:#16 — commanders 拉取统一收口在 mainline_controller._on_commanders_response,
+    # 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
+    # 联机大厅 _enter_lobby_view 调 get_unlocked_commanders 时,回调必须
+    # 转发到 mainline_view,不能挂到 self(main.gd 根本没有 _on_commanders_response,
+    # 否则 lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander)。
+    main_src = _read(MAIN_GD)
+    mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    # 1) mainline_controller 仍是 commander 拉取的唯一所有者
+    assert "func _on_commanders_response(" in mainline_src
+    # 2) main.gd 不应有这个方法(避免重入 / 误用)
+    assert "func _on_commanders_response(" not in main_src
+    # 3) _enter_lobby_view 里调用 get_unlocked_commanders 时,callback 必须是
+    #    Callable(mainline_view, "_on_commanders_response"),不能是 self
+    lobby_start = main_src.index("func _enter_lobby_view(")
+    lobby_end = main_src.index("\n\n", lobby_start)
+    lobby_body = main_src[lobby_start:lobby_end]
+    assert "NetworkClient.get_unlocked_commanders" in lobby_body
+    assert 'Callable(mainline_view, "_on_commanders_response")' in lobby_body
+    assert 'Callable(self, "_on_commanders_response")' not in lobby_body
+
+
 def test_godot_mainline_start_passes_prepare_compatible_arguments():
     # P2: mainline 域已抽到 mainline_controller.gd(main.gd 还保留 _on_ml_slot_resume_response
     # 等 thin wrapper,但 start/prepare/start_response 等已搬走)。
@@ -192,6 +313,99 @@ def test_godot_team_badge_color_comes_from_team_not_player_color():
     assert '"team_a": return Config.player_color("red")' in board
     assert '"team_b": return Config.player_color("blue")' in board
     assert "presenter.setup(unit_dict, _team_color_for_unit(unit_dict), _team_id_for_unit(unit_dict))" in board
+
+
+
+
+
+def test_godot_lobby_ai_replacement_renders_ai_state_not_waiting_player():
+    source = _read(MAIN_GD)
+    start = source.index("func _build_lobby_seat_card(")
+    end = source.index("func _lobby_team_index_for_seat(", start)
+    body = source[start:end]
+    helper_start = source.index("func _lobby_seat_status_text(")
+    helper_end = source.index("func _lobby_seat_commander_id(", helper_start)
+    helper = source[helper_start:helper_end]
+    assert "_lobby_seat_status_text(index)" in body
+    assert "等待玩家入座" in helper
+    assert "入座中" in helper
+    assert "_lobby_ai_replacement_for_seat" in helper
+    assert '"%s 已入座" % occupant_name' not in body
+
+
+def test_godot_mainline_page_switch_hides_prepare_controls_except_ready():
+    source = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    start = source.index("func _set_mainline_page(")
+    end = source.index("func _on_ml_list_response(", start)
+    body = source[start:end]
+    # ✅ 准备好了 在 chapter_list 常驻可见(start/refresh/action/alt_action 只在 prepare 显示)
+    for control in [
+        "ml_prep_start_btn",
+        "ml_prep_refresh_btn",
+        "ml_prep_action_btn",
+        "ml_prep_alt_action_btn",
+    ]:
+        assert control in body
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    complete_start = scene.index('[node name="MLPrepCompleteBtn"')
+    complete_end = scene.index("\n\n", complete_start)
+    refresh_start = scene.index('[node name="MLPrepRefreshBtn"')
+    refresh_end = scene.index("\n\n", refresh_start)
+    assert scene[complete_start:complete_end] != scene[refresh_start:refresh_end].replace(
+        "MLPrepRefreshBtn", "MLPrepCompleteBtn"
+    ).replace("刷新整备", "✅ 准备好了")
+    ready_start = source.index("func _ready() -> void:")
+    ready_end = source.index("func open() -> void:", ready_start)
+    ready_body = source[ready_start:ready_end]
+    for callback in [
+        "_on_ml_back_pressed",
+        "_on_ml_abandon_pressed",
+        "_on_prepare_start_pressed",
+        "_on_prepare_complete_pressed",
+        "_on_prepare_refresh_pressed",
+        "_on_prepare_primary_action_pressed",
+        "_on_prepare_secondary_action_pressed",
+    ]:
+        assert callback in ready_body
+    action_start = source.index("func _update_prepare_action_buttons() -> void:")
+    action_end = source.index("func _on_prepare_primary_action_pressed()", action_start)
+    action_body = source[action_start:action_end]
+    assert '_main._mainline_page != "prepare"' in action_body
+
+
+def test_godot_saves_view_sections_have_explicit_vertical_order():
+    source = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    frame_start = source.index('[node name="SaveFrame"')
+    frame_end = source.index("; ============================================================", frame_start + 1)
+    frame = source[frame_start:frame_end]
+    assert 'type="VBoxContainer"' in frame or 'type="ScrollContainer"' in frame
+    assert "SaveSlotsContainer" in frame
+    assert "SaveAutoRow" in frame
+    assert "SaveSuspendRow" in frame
+    for legacy_title in ['[node name="OpenTitle"', '[node name="MainlineTitle"']:
+        title_start = frame.index(legacy_title)
+        title_end = frame.index("\n\n", title_start)
+        assert "visible = false" in frame[title_start:title_end]
+
+
+def test_godot_lobby_start_success_enters_game_without_connecting_view():
+    source = _read(MAIN_GD)
+    start = source.index("func _on_lobby_start_response(")
+    end = source.index("func _on_lobby_back_pressed(", start)
+    body = source[start:end]
+    assert '_show_view("game")' in body
+    assert '_show_view("connecting")' not in body
+    assert "NetworkClient.connect_to_game" in body
+
+
+def test_godot_portrait_uses_native_size_inside_target_panel():
+    source = _read(MAIN_GD)
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in scene
+    assert "EXPAND_IGNORE_SIZE" in source
+    assert "STRETCH_KEEP" in source
+    assert "_unit_info_portrait_tex.size = tex.get_size()" in source
+    assert "unit_info.offset_right = -108" not in source
 
 
 def test_legacy_web_attack_targets_use_manhattan_range_only():
