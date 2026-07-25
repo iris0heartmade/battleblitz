@@ -18,6 +18,8 @@ extends Control
 ## 节点路径相对 SavesView: $SaveFrame/<X>(原 main.gd 用 $SavesView/SaveFrame/<X>)
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+# Components registered with class_name — use global name, not preload
+# (preload on a script with class_name returns GDScript resource without .new())
 
 const _MANUAL_SLOT_COUNT := 3
 
@@ -106,20 +108,14 @@ func _build_manual_rows() -> void:
 		MenuTheme.apply_button_theme(resume_btn, MenuTheme.FS_BTN)
 		resume_btn.pressed.connect(_on_manual_resume_pressed.bind(slot_index))
 		btn_box.add_child(resume_btn)
-		var action_row := HBoxContainer.new()
-		action_row.add_theme_constant_override("separation", 6)
-		var delete_btn := Button.new()
-		delete_btn.text = "🗑 删除"
+		var action_row := ButtonRow.new()
+		action_row.custom_minimum_size = Vector2(0, 36)
+		var delete_btn := action_row.add_button("🗑 删除", ButtonRow.ButtonKind.DANGER)
 		delete_btn.custom_minimum_size = Vector2(150, 36)
-		MenuTheme.apply_button_theme(delete_btn, MenuTheme.FS_BTN)
 		delete_btn.pressed.connect(_on_manual_delete_pressed.bind(slot_index))
-		action_row.add_child(delete_btn)
-		var overwrite_btn := Button.new()
-		overwrite_btn.text = "💾 覆盖"
+		var overwrite_btn := action_row.add_button("💾 覆盖", ButtonRow.ButtonKind.SECONDARY)
 		overwrite_btn.custom_minimum_size = Vector2(150, 36)
-		MenuTheme.apply_button_theme(overwrite_btn, MenuTheme.FS_BTN)
 		overwrite_btn.pressed.connect(_on_manual_overwrite_pressed.bind(slot_index))
-		action_row.add_child(overwrite_btn)
 		btn_box.add_child(action_row)
 		hbox.add_child(btn_box)
 		save_slots_container.add_child(row)
@@ -194,7 +190,7 @@ func _render_manual_rows() -> void:
 		var delete_btn: Button = row.get("delete_btn")
 		var overwrite: Button = row.get("overwrite_btn")
 		if rec.is_empty():
-			if status: status.text = "[color=#a69a73][i]空 — 可写入或被自动填充[/i][/color]"
+			if status: status.text = "[color=%s][i]空 — 可写入或被自动填充[/i][/color]" % MenuTheme.C_PLACEHOLDER.to_html(false)
 			if resume: resume.disabled = true
 			if delete_btn: delete_btn.disabled = true
 			if overwrite: overwrite.text = "💾 新建"
@@ -218,13 +214,13 @@ func _render_auto_row() -> void:
 	for child in save_auto_row.get_children():
 		child.queue_free()
 	if _auto_record.is_empty():
-		var empty := Label.new()
-		empty.text = "(暂无自动存档 — 完成章节或点「准备好了」后自动写入)"
-		empty.modulate = Color(0.65, 0.6, 0.45)
+		var empty := StatusBadge.new()
+		empty.setup(StatusBadge.Kind.EMPTY, "暂无自动存档 — 完成章节或点「准备好了」后自动写入")
 		save_auto_row.add_child(empty)
 		return
 	var hbox := HBoxContainer.new()
 	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_theme_constant_override("separation", MenuTheme.GAP_M)
 	var label := _format_save_name(str(_auto_record.get("label", "")))
 	var mid := str(_auto_record.get("mainline_id", ""))
 	var chidx := int(_auto_record.get("chapter_index", 0)) + 1
@@ -249,9 +245,8 @@ func _render_suspend_row() -> void:
 	for child in save_suspend_row.get_children():
 		child.queue_free()
 	if _suspend_record.is_empty():
-		var empty := Label.new()
-		empty.text = "(无中断存档 — 游戏中按「暂停 → 中断退出」会写入此处)"
-		empty.modulate = Color(0.65, 0.6, 0.45)
+		var empty := StatusBadge.new()
+		empty.setup(StatusBadge.Kind.EMPTY, "无中断存档 — 游戏中按「暂停 → 中断退出」会写入此处")
 		save_suspend_row.add_child(empty)
 		return
 	var hbox := HBoxContainer.new()

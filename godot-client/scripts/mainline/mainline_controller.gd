@@ -11,6 +11,8 @@ extends Control
 ## 节点路径相对 MainlineView: $MLFrame/<X>(原 main.gd 用 $MainlineView/MLFrame/<X>)
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const StatusBadge = preload("res://scripts/ui/_components/status_badge.gd")
+const SectionHeader = preload("res://scripts/ui/_components/section_header.gd")
 
 var _main: Node = null
 

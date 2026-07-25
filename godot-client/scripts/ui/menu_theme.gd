@@ -30,24 +30,48 @@ const C_BORDER_THIN: Color = Color("#5a4426")    # 细线(深棕)
 const C_DIVIDER: Color = Color("#5a4426")         # 分隔线色(同 BORDER_THIN)
 const C_DISABLED: Color = Color("#5a5640")        # disabled 文字底色
 
+# === 新增(UI V3:状态可读)===
+const C_LOADING: Color = Color("#7a8c70")         # 加载中文案(灰绿,跟 disabled 区别)
+const C_ERROR: Color = Color("#ff6868")           # 错误文案(比 FIRE_RED 更亮)
+const C_PLACEHOLDER: Color = Color("#6b6450")     # placeholder / 空态文案(比 DIM 更暗)
+
 # === 字体大小 ===
 const FS_HERO: int = 56      # 主标题(主菜单唯一)
 const FS_TITLE: int = 32     # 子页标题(Lobby / Saves 等)
 const FS_SECTION: int = 22   # 视图内 section header
-const FS_BODY: int = 16      # 默认正文/表单 label
+const FS_SUBTITLE: int = 20  # 大字号正文(存档行标题)
+const FS_BODY: int = 17      # 默认正文/表单 label
+const FS_BODY_SM: int = 15   # 副正文(表单 label / 章节列表)
 const FS_SUB: int = 18       # 副标题/版本号
 const FS_BTN: int = 17       # 按钮
 const FS_HINT: int = 13      # 提示/暗色副文
 const FS_FOOT: int = 12      # footer 小字
 const FS_PILL: int = 14      # 顶部小角标(HUD 4 角)
+const FS_LOADING: int = 14   # 加载中文案(斜体,LOADING 色)
+const FS_PLACEHOLDER: int = 13  # 占位文案(PLACEHOLDER 色)
 
-# === 尺寸常量(8px 网格) ===
-const PAD_X: int = 24        # 外框内边距
-const PAD_Y: int = 18        # 外框内边距
-const PAD: int = 16          # 通用内边距(已用)
-const GAP_SM: int = 6        # 紧凑间距(说明文字)
-const GAP: int = 12          # 标准间距
-const GAP_LG: int = 18       # 大间距(分隔区)
+# === 尺寸常量(8px 网格 — UI V3)===
+const GRID_1: int = 4        # 微间距(标签 ↔ 数值)
+const GRID_2: int = 8        # 紧凑间距(行内)
+const GRID_3: int = 16       # 标准间距(控件间)
+const GRID_4: int = 24       # section 内 padding
+const GRID_5: int = 32       # section 间 padding
+const GRID_6: int = 48       # 大块留白
+
+const PAD_S: int = GRID_2    # 8  — 紧凑(icon ↔ label)
+const PAD_M: int = GRID_3    # 16 — 通用(控件内 padding)
+const PAD_L: int = GRID_4    # 24 — section 内 padding
+const PAD_X: int = GRID_5    # 32 — section 间 padding(沿用 V2 名字)
+const PAD_Y: int = 18        # 外框内边距(沿用 V2)
+const PAD: int = 16          # 通用内边距(沿用 V2)
+
+const GAP_S: int = GRID_2    # 8  — 行内元素
+const GAP_M: int = GRID_3    # 16 — 控件之间
+const GAP_L: int = GRID_4    # 24 — section 之间
+const GAP_SM: int = 6        # 紧凑间距(沿用 V2,放在 GRID_2 和 GRID_1 之间)
+const GAP: int = 12          # 标准间距(沿用 V2)
+const GAP_LG: int = 18       # 大间距(沿用 V2)
+
 const ROW_H: int = 36        # 默认 row 高度
 const BTN_W: int = 280       # 主菜单按钮宽
 const BTN_H: int = 40        # 主菜单按钮高(从 52 降到 40)

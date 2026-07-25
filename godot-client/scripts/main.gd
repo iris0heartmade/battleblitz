@@ -3116,12 +3116,14 @@ func _apply_hud_theme() -> void:
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# T:#18 — 英雄立绘槽主题(深绿底 + 烫金边),跟 InfoPanel / ActionBubble 同款
+	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
 	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
-		var sb_portrait := StyleBoxFlat.new()
-		sb_portrait.bg_color = MenuTheme.C_BG_PANEL
-		sb_portrait.border_color = MenuTheme.C_GOLD
-		sb_portrait.set_border_width_all(2)
+		MenuTheme.apply_panel_theme(hero_portrait_panel, MenuTheme.C_BG_PANEL)
+		var sb_portrait: StyleBoxFlat = hero_portrait_panel.get_theme_stylebox("panel").duplicate()
+		sb_portrait.border_width_left = 2
+		sb_portrait.border_width_right = 2
+		sb_portrait.border_width_top = 2
+		sb_portrait.border_width_bottom = 2
 		sb_portrait.set_corner_radius_all(3)
 		sb_portrait.content_margin_left = 2
 		sb_portrait.content_margin_right = 2
@@ -4456,10 +4458,15 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	commander_row.add_child(prev_btn)
 	var commander_label := Label.new()
 	commander_label.name = "CommanderName"
-	commander_label.text = _lobby_seat_commander_label(index) if commanders_loaded else "加载中…"
+	if commanders_loaded:
+		commander_label.text = _lobby_seat_commander_label(index)
+		commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	else:
+		# T:V3 — 加载中用 LOADING 色,跟 EMPTY 的 PLACEHOLDER 色区分开
+		commander_label.text = "⏳ 加载中…"
+		commander_label.add_theme_color_override("font_color", MenuTheme.C_LOADING)
 	commander_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	commander_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	commander_row.add_child(commander_label)
 	var next_btn := Button.new()
 	next_btn.name = "NextCommanderBtn"
