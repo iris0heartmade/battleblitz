@@ -4632,7 +4632,7 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	# T:#19 — 不变式:同一玩家/AI 至多占 1 槽。先把当前用户从其它座位挪走,
 	# 再清掉其它 AI 占位(乐观显示,后端 remove_player 后续会同步)。
 	if pressed:
-		_clear_player_from_other_seats(_user_name, exclude_seat = seat_index)
+		_clear_player_from_other_seats(_user_name, seat_index)
 		# 同理清掉其它 AI 占位(以防之前多槽同 AI 的脏状态)
 		for i in range(_lobby_seat_ai_replacements.size()):
 			if i != seat_index and _lobby_seat_ai_replacements[i]:
@@ -4772,7 +4772,7 @@ func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 	_selected_lobby_seat_index = clampi(seat_index, 0, MapPreviewSummary.SEAT_COLORS.size() - 1)
 	# T:#19 — 不变式:同一玩家至多占 1 个座位(同样 AI 至多占 1 槽)。
 	# 在写入目标座位前,先把其它座位里出现的 _user_name / ai placeholder 全部清掉。
-	_clear_player_from_other_seats(_user_name, exclude_seat = seat_index)
+	_clear_player_from_other_seats(_user_name, seat_index)
 	while _lobby_seat_occupants.size() <= seat_index:
 		_lobby_seat_occupants.append("")
 	while _lobby_seat_ai_replacements.size() <= seat_index:
@@ -4800,9 +4800,9 @@ func _clear_player_from_other_seats(player_name: String, exclude_seat: int = -1)
 			continue
 		if _lobby_seat_occupants[i] == player_name:
 			_lobby_seat_occupants[i] = ""
-		if _lobby_seat_ai_replacements[i] and not _lobby_seat_occupants[i].begins_with("电脑-"):
-			# AI 占位的占位符是"电脑-N",已经被 reset 了上面的条件不再匹配。
-			pass
+		if _lobby_seat_ai_replacements[i] and _lobby_seat_occupants[i].begins_with("电脑-"):
+			_lobby_seat_ai_replacements[i] = false
+			_lobby_seat_occupants[i] = ""
 
 
 func _on_lobby_seat_update_response(_body: Variant, code: int = 0) -> void:
