@@ -3540,6 +3540,7 @@ func _show_lobby_create_view() -> void:
 		create_room_btn.text = "开启游戏"
 	_restore_lobby_default_layout()
 	_layout_lobby_entry_form()
+	_refresh_lobby_create_start_gate()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -3807,11 +3808,12 @@ func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
 		UserSettings.set_value("session.v1.last_player_id", _player_id)
 	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
 		lobby_game_id_label.text = "对局 #%d" % _game_id
+	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
+		_continue_lobby_create_pipeline()
+		return
 	_show_lobby_in_room()
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
-	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
-		_continue_lobby_create_pipeline()
 
 
 func _auto_add_ai_after_lobby_create() -> void:
@@ -3875,7 +3877,8 @@ func _continue_lobby_ai_creation() -> void:
 		_selected_ai_difficulty(),
 		_selected_ai_kind(),
 		_lobby_ai_personality_for_seat(seat_index),
-		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index)
+		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index),
+		seat_index
 	)
 
 
@@ -3886,14 +3889,10 @@ func _on_lobby_configured_ai_added(body: Variant, code: int = 0, seat_index: int
 		if pid <= 0 and player is Dictionary:
 			pid = int(player.get("id", 0))
 		if pid > 0:
-			NetworkClient.update_player_seat(
-				_game_id,
-				pid,
-				_player_id,
-				seat_index,
-				Callable(self, "_on_lobby_configured_ai_seated").bind(pid, seat_index)
-			)
-			return
+			_pending_lobby_team_updates.append({
+				"player_id": pid,
+				"team": _selected_lobby_seat_team(seat_index),
+			})
 	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "AI 座位配置失败，继续尝试开启游戏..."
 	_continue_lobby_ai_creation()
@@ -4238,10 +4237,12 @@ func _on_lobby_map_player_count_selected(index: int) -> void:
 	_lobby_preset_filter_players = index + 1 if index > 0 else 0
 	_render_lobby_map_picker_options()
 	_render_lobby_map_preview()
+	_refresh_lobby_create_start_gate()
 
 
 func _on_lobby_map_preset_selected(_index: int) -> void:
 	_render_lobby_map_preview()
+	_refresh_lobby_create_start_gate()
 
 
 func _render_lobby_map_picker_options() -> void:
@@ -4279,6 +4280,7 @@ func _render_lobby_map_preview() -> void:
 		if map_preview_texture != null and is_instance_valid(map_preview_texture):
 			map_preview_texture.texture = null
 		_render_lobby_seat_columns({})
+		_refresh_lobby_create_start_gate()
 		return
 	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
 	var title := str(summary.get("name", summary.get("id", "Map")))
@@ -4288,6 +4290,7 @@ func _render_lobby_map_preview() -> void:
 	if map_preview_texture != null and is_instance_valid(map_preview_texture):
 		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
 	_render_lobby_seat_columns(summary)
+	_refresh_lobby_create_start_gate()
 
 
 func _selected_lobby_map_data() -> Dictionary:
@@ -4303,6 +4306,33 @@ func _selected_lobby_map_data() -> Dictionary:
 		for key in disk_map.keys():
 			map_data[key] = disk_map[key]
 	return map_data
+
+
+func _configured_lobby_create_participant_count() -> int:
+	var required := _selected_lobby_player_count()
+	var host_seat := clampi(_selected_lobby_seat_index, 0, required - 1)
+	var configured: Dictionary = {host_seat: true}
+	for seat_index in range(required):
+		if _lobby_ai_replacement_for_seat(seat_index):
+			configured[seat_index] = true
+		if _lobby_seat_occupant_name(seat_index) != "":
+			configured[seat_index] = true
+	return configured.size()
+
+
+func _refresh_lobby_create_start_gate() -> void:
+	if create_room_btn == null or not is_instance_valid(create_room_btn):
+		return
+	if _lobby_mode != "create":
+		create_room_btn.disabled = false
+		return
+	var required := _selected_lobby_player_count()
+	var configured := _configured_lobby_create_participant_count()
+	create_room_btn.disabled = configured < required
+	if configured < required:
+		create_room_btn.text = "开启游戏 (%d/%d)" % [configured, required]
+	else:
+		create_room_btn.text = "开启游戏"
 
 
 func _selected_lobby_preset_record() -> Dictionary:
@@ -4359,7 +4389,7 @@ func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
 func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	var card := Panel.new()
 	card.name = "Seat%d" % (index + 1)
-	card.custom_minimum_size = Vector2(0, 160)
+	card.custom_minimum_size = Vector2(0, 190)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	MenuTheme.apply_panel_theme(card, Color(0.08, 0.13, 0.1, 0.96))
 	var box := VBoxContainer.new()
@@ -4493,6 +4523,9 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	var ability := Label.new()
 	ability.name = "CommanderAbility"
 	ability.text = _lobby_seat_commander_ability_text(index)
+	ability.custom_minimum_size = Vector2(0, 34)
+	ability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ability.clip_text = true
 	ability.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	box.add_child(ability)
 	return card
@@ -4629,23 +4662,19 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	while _lobby_seat_occupants.size() <= seat_index:
 		_lobby_seat_occupants.append("")
 	_lobby_seat_ai_replacements[seat_index] = pressed
-	# T:#19 — 不变式:同一玩家/AI 至多占 1 槽。先把当前用户从其它座位挪走,
-	# 再清掉其它 AI 占位(乐观显示,后端 remove_player 后续会同步)。
+	# T:#19 — 不变式:同一真人玩家至多占 1 槽。AI 替补是逐座位状态,
+	# 多个空座可以同时由不同 AI 补位。
 	if pressed:
 		_clear_player_from_other_seats(_user_name, seat_index)
-		# 同理清掉其它 AI 占位(以防之前多槽同 AI 的脏状态)
-		for i in range(_lobby_seat_ai_replacements.size()):
-			if i != seat_index and _lobby_seat_ai_replacements[i]:
-				_lobby_seat_ai_replacements[i] = false
-				if i < _lobby_seat_occupants.size() and _lobby_seat_occupants[i].begins_with("电脑-"):
-					_lobby_seat_occupants[i] = ""
 	if _game_id <= 0 or seat_index < 0:
 		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
 		return
 	# 只房主能换人。/start 后 game.status != "waiting",后端会拒绝。
 	if not _lobby_is_host:
 		_update_status("只有房主可以替换该席位为 AI。")
 		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
 		return
 	var existing_pid: int = 0
 	var existing_is_ai: bool = false
@@ -4663,6 +4692,7 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 			NetworkClient.remove_player(_game_id, existing_pid,
 				Callable(self, "_on_lobby_seat_ai_remove_response").bind(seat_index))
 		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
 		return
 	# 按下 AI → 乐观显示"入座中"→ 先删旧的(人类或 AI),再加 AI。
 	var ai_placeholder := "电脑-%d (入座中…)" % (seat_index + 1)
@@ -4673,6 +4703,7 @@ func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	else:
 		_request_add_ai_for_seat(seat_index)
 	_render_lobby_seat_columns()
+	_refresh_lobby_create_start_gate()
 
 
 func _request_add_ai_for_seat(seat_index: int) -> void:
@@ -4680,7 +4711,8 @@ func _request_add_ai_for_seat(seat_index: int) -> void:
 		return
 	var personality := _lobby_ai_personality_for_seat(seat_index)
 	NetworkClient.add_ai_player(_game_id, "normal", "rules", personality,
-		Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index))
+		Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index),
+		seat_index)
 
 
 func _on_lobby_seat_ai_remove_response(body: Variant, _code: int, seat_index: int) -> void:
@@ -4782,6 +4814,7 @@ func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "%s 已入座 %d席。" % [_user_name, seat_index + 1]
 	_render_lobby_seat_columns()
+	_refresh_lobby_create_start_gate()
 	if _game_id > 0 and _player_id > 0:
 		NetworkClient.update_player_seat(
 			_game_id,
@@ -4799,9 +4832,6 @@ func _clear_player_from_other_seats(player_name: String, exclude_seat: int = -1)
 		if i == exclude_seat:
 			continue
 		if _lobby_seat_occupants[i] == player_name:
-			_lobby_seat_occupants[i] = ""
-		if _lobby_seat_ai_replacements[i] and _lobby_seat_occupants[i].begins_with("电脑-"):
-			_lobby_seat_ai_replacements[i] = false
 			_lobby_seat_occupants[i] = ""
 
 
@@ -4910,6 +4940,11 @@ func _render_room_list() -> void:
 
 
 func _on_create_room_pressed() -> void:
+	if _configured_lobby_create_participant_count() < _selected_lobby_player_count():
+		_refresh_lobby_create_start_gate()
+		if lobby_status_label != null and is_instance_valid(lobby_status_label):
+			lobby_status_label.text = "请先补齐地图要求的玩家或 AI 座位。"
+		return
 	_entry_flow = "lobby_create"
 	var room_name := "%s room" % _user_name
 	if lobby_name_input != null and is_instance_valid(lobby_name_input):
@@ -5018,6 +5053,7 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	var lines: Array = []
 	var spec_count: int = 0
 	var real_count: int = 0
+	var fighter_count: int = 0
 	for p in players:
 		if not p is Dictionary: continue
 		var pname_v = p.get("user_name")
@@ -5036,8 +5072,10 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 		var seat: int = int(seat_v) if seat_v is int else -1
 		if is_spec:
 			spec_count += 1
-		elif not is_ai:
-			real_count += 1
+		else:
+			fighter_count += 1
+			if not is_ai:
+				real_count += 1
 		var emoji: String = "👀" if is_spec else _color_emoji(color)
 		var tag: String = ""
 		if is_self: tag = " (你)"
@@ -5052,10 +5090,11 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d · 观战 %d/%d)" % [
 		total_count, real_count, spec_count, max_spec
 	]
-	# Start 按钮:只要有 1 名真人(非 AI/非观战)即可,后端会校验 MIN_PLAYERS
-	lobby_start_btn.disabled = real_count < 1
+	var required_count: int = int(game.get("capacity", _selected_lobby_player_count()))
+	# Start 按钮:参战玩家 + AI 必须补齐地图要求席位。
+	lobby_start_btn.disabled = fighter_count < required_count
 	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.disabled = real_count < 1
+		start_game_inline_btn.disabled = fighter_count < required_count
 
 
 func _render_lobby_ai_options(players: Array) -> void:

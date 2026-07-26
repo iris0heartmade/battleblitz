@@ -333,6 +333,103 @@ def test_godot_lobby_ai_replacement_renders_ai_state_not_waiting_player():
     assert '"%s 已入座" % occupant_name' not in body
 
 
+def test_godot_lobby_ai_replacement_is_per_seat_not_global():
+    source = _read(MAIN_GD)
+    toggle_start = source.index("func _on_lobby_seat_ai_toggled(")
+    toggle_end = source.index("func _request_add_ai_for_seat(", toggle_start)
+    toggle_body = source[toggle_start:toggle_end]
+    clear_start = source.index("func _clear_player_from_other_seats(")
+    clear_end = source.index("func _on_lobby_seat_update_response(", clear_start)
+    clear_body = source[clear_start:clear_end]
+
+    assert "_clear_player_from_other_seats(_user_name, seat_index)" in toggle_body
+    assert "for i in range(_lobby_seat_ai_replacements.size()):" not in toggle_body
+    assert "_lobby_seat_ai_replacements[i] = false" not in clear_body
+
+
+def test_godot_lobby_add_ai_passes_target_seat_and_auto_start_skips_room_page():
+    main = _read(MAIN_GD)
+    network = _read(NETWORK_CLIENT)
+
+    request_start = main.index("func _request_add_ai_for_seat(")
+    request_end = main.index("func _on_lobby_seat_ai_remove_response(", request_start)
+    request_body = main[request_start:request_end]
+    assert 'Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index),' in request_body
+    assert "seat_index)" in request_body
+
+    pipeline_start = main.index("func _continue_lobby_ai_creation(")
+    pipeline_end = main.index("func _on_lobby_configured_ai_added(", pipeline_start)
+    pipeline_body = main[pipeline_start:pipeline_end]
+    assert 'Callable(self, "_on_lobby_configured_ai_added").bind(seat_index),' in pipeline_body
+    assert "seat_index\n\t)" in pipeline_body
+
+    configured_start = main.index("func _on_lobby_configured_ai_added(")
+    configured_end = main.index("func _on_lobby_configured_ai_seated(", configured_start)
+    configured_body = main[configured_start:configured_end]
+    assert "NetworkClient.update_player_seat" not in configured_body
+
+    join_start = main.index("func _on_lobby_join_response(")
+    join_end = main.index("func _auto_add_ai_after_lobby_create(", join_start)
+    join_body = main[join_start:join_end]
+    pending_line = "if _entry_flow == \"lobby_create\" and _game_id > 0 and _pending_lobby_start_after_create:"
+    assert pending_line in join_body
+    assert join_body.index(pending_line) < join_body.index("_show_lobby_in_room()")
+
+    assert "seat: int = -1" in network
+    assert 'body["seat"] = seat' in network
+
+
+def test_godot_lobby_start_requires_all_map_seats_configured():
+    source = _read(MAIN_GD)
+
+    assert "func _configured_lobby_create_participant_count() -> int:" in source
+    assert "func _refresh_lobby_create_start_gate() -> void:" in source
+    assert "configured < required" in source
+
+    create_start = source.index("func _on_create_room_pressed() -> void:")
+    create_end = source.index("func _on_join_selected_pressed() -> void:", create_start)
+    create_body = source[create_start:create_end]
+    assert "_configured_lobby_create_participant_count() < _selected_lobby_player_count()" in create_body
+    assert "return" in create_body
+
+    lobby_state_start = source.index("func _on_lobby_state(")
+    lobby_state_end = source.index("func _render_lobby_ai_options(", lobby_state_start)
+    lobby_state_body = source[lobby_state_start:lobby_state_end]
+    assert "fighter_count < required_count" in lobby_state_body
+    assert "lobby_start_btn.disabled = fighter_count < required_count" in lobby_state_body
+    assert "start_game_inline_btn.disabled = fighter_count < required_count" in lobby_state_body
+
+
+def test_godot_lobby_four_player_seat_cards_have_room_for_commander_text():
+    source = _read(MAIN_GD)
+    start = source.index("func _build_lobby_seat_card(")
+    end = source.index("func _lobby_team_index_for_seat(", start)
+    body = source[start:end]
+
+    assert "card.custom_minimum_size = Vector2(0, 190)" in body
+    assert "ability.custom_minimum_size = Vector2(0, 34)" in body
+    assert "ability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART" in body
+    assert "ability.clip_text = true" in body
+
+
+def test_godot_home_buttons_are_connected_or_intentionally_dynamic():
+    source = _read(MAIN_GD)
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+
+    for node_name, callback in [
+        ("HelpButton", "_on_help_pressed"),
+        ("SettingsButton", "_on_settings_open_pressed"),
+        ("InProgressButton", "_on_in_progress_pressed"),
+        ("SavesButton", "_on_saves_pressed"),
+        ("EditorButton", "_on_editor_pressed"),
+    ]:
+        assert f'[node name="{node_name}" type="Button"' in scene
+        assert callback in source
+        assert f".pressed.connect({callback})" in source
+    assert '[node name="ResumeButton" type="Button"' in scene
+    assert "resume_button.visible = _resume_game_id > 0" in source
+
+
 def test_godot_mainline_page_switch_hides_prepare_controls_except_ready():
     source = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
     start = source.index("func _set_mainline_page(")

@@ -524,12 +524,15 @@ func forecast_attack(game_id: int, player_id: int, attacker_id: int, target_id: 
 	request("GET", path, {}, callback)
 
 
-func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable()) -> void:
-	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", {
+func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable(), seat: int = -1) -> void:
+	var body := {
 		"difficulty": difficulty,
 		"agent_kind": agent_kind,
 		"personality": personality,
-	}, callback)
+	}
+	if seat >= 0:
+		body["seat"] = seat
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", body, callback)
 
 
 func remove_player(game_id: int, player_id: int, callback: Callable = Callable()) -> void:

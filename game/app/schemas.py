@@ -132,6 +132,7 @@ class RejoinGameResponse(BaseModel):
 class AddAIRequest(BaseModel):
     """Body of POST /games/{id}/add-ai. AI name auto-generated if missing."""
     difficulty: str = Field(default="normal", pattern="^(easy|normal|hard)$")
+    seat: Optional[int] = Field(default=None, ge=0)
     # "rules" (built-in) or "llm" (LLMAgent). Defaults to "rules" to keep
     # existing behaviour; set to "llm" to opt in to LLM-driven opponent.
     agent_kind: str = Field(default="rules", pattern="^(rules|llm)$")

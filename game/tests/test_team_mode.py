@@ -236,6 +236,42 @@ async def test_update_player_seat_swaps_players_for_host(db_session, tmp_db_path
 
 
 @pytest.mark.asyncio
+async def test_add_ai_can_target_multiple_specific_open_seats(db_session, tmp_db_path):
+    """Per-seat lobby AI fill must not collapse to "next append" behavior."""
+    from app.models import Game, Player
+
+    game = Game(
+        name="target-ai-seats", status="waiting", map_seed=0,
+        map_preset="classic", current_player_index=0, phase="player",
+        capacity=4,
+    )
+    db_session.add(game)
+    await db_session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        host = await c.post(f"/games/{game.id}/join", json={
+            "user_name": "Host", "seat": 0,
+        })
+        assert host.status_code == 201, host.text
+
+        ai_one = await c.post(f"/games/{game.id}/add-ai", json={"seat": 2})
+        assert ai_one.status_code == 201, ai_one.text
+        ai_two = await c.post(f"/games/{game.id}/add-ai", json={
+            "seat": 1,
+            "personality": "aggressive",
+        })
+        assert ai_two.status_code == 201, ai_two.text
+
+    rows = (await db_session.execute(
+        select(Player).where(Player.game_id == game.id).order_by(Player.seat)
+    )).scalars().all()
+    ai_by_seat = {p.seat: p for p in rows if p.is_ai}
+    assert sorted(ai_by_seat) == [1, 2]
+    assert ai_by_seat[1].agent_personality == "aggressive"
+
+
+@pytest.mark.asyncio
 async def test_same_user_cannot_join_multiple_player_seats(db_session, tmp_db_path):
     from app.models import Game, Player
 

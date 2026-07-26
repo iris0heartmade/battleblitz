@@ -1604,14 +1604,22 @@ async def add_ai_player(
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len([p for p in players if not p.is_spectator]) >= game.capacity:
+    real_players = [p for p in players if not p.is_spectator]
+    if len(real_players) >= game.capacity:
         raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
-    used_colors = [p.color for p in players]
-    color = _next_color(used_colors)
+    used_real_seats = {p.seat for p in real_players}
     # P2.4 — AI seats must ONLY consider real players; spectator
     # seats live in [MAX_PLAYERS..], separate from the castable
     # range, so an add_ai call must not "jump past" them.
-    seat = max((p.seat for p in players if not p.is_spectator), default=-1) + 1
+    if body.seat is not None:
+        if body.seat >= game.capacity:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "座位不存在")
+        if body.seat in used_real_seats:
+            raise HTTPException(status.HTTP_409_CONFLICT, "座位已被占用")
+        seat = body.seat
+    else:
+        seat = next((s for s in range(game.capacity) if s not in used_real_seats), len(real_players))
+    color = _color_for_seat(seat)
     # Generate a unique AI name
     ai_count = sum(1 for p in players if p.is_ai)
     backend_tag = body.agent_kind  # "rules" or "llm"
