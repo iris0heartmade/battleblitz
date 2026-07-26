@@ -2,16 +2,8 @@
 Regression test for the "can't end turn after moving" bug.
 
 Original bug: `move_unit` did not set `unit.has_acted = True`, so a player
-who only moved (no attack) was stuck — `end_turn` counted has_acted units
-and refused to let them end with 0 has_acted.
-
-This file is a focused end-to-end check that:
-  1. Create game + 2 players + start
-  2. Move ONE unit
-  3. End turn — should succeed (not 400)
-
-If this test ever fails again, someone removed `unit.has_acted = True`
-from the move handler.
+who only moved (no attack) was stuck because `end_turn` counted has_acted
+units and refused to let them end with 0 has_acted.
 """
 from __future__ import annotations
 
@@ -35,27 +27,32 @@ async def game_client():
     await dispose_db()
 
 
+async def _create_started_two_player_game(game_client, name: str):
+    game = (await game_client.post("/games", json={"name": name})).json()
+    p1 = (await game_client.post(
+        f"/games/{game['id']}/join", json={"user_name": "p1"}
+    )).json()
+    await game_client.post(
+        f"/games/{game['id']}/join", json={"user_name": "p2"}
+    )
+    await game_client.post(f"/games/{game['id']}/start")
+    return game, p1
+
+
+async def _first_player_unit(game_client, game_id: int, player_id: int):
+    state = (await game_client.get(f"/games/{game_id}/state")).json()
+    player = next(p for p in state["players"] if p["id"] == player_id)
+    return player["units"][0]
+
+
 @pytest.mark.integration
 async def test_end_turn_works_after_a_single_move(game_client):
-    # Create + 2 players + start
-    g = (await game_client.post("/games", json={"name": "regression"})).json()
-    p1 = (await game_client.post(
-        f"/games/{g['id']}/join", json={"user_name": "p1"}
-    )).json()
-    p2 = (await game_client.post(
-        f"/games/{g['id']}/join", json={"user_name": "p2"}
-    )).json()
-    await game_client.post(f"/games/{g['id']}/start")
+    game, p1 = await _create_started_two_player_game(game_client, "regression")
+    unit = await _first_player_unit(game_client, game["id"], p1["id"])
 
-    # Find p1's first unit
-    state = (await game_client.get(f"/games/{g['id']}/state")).json()
-    p1_data = next(p for p in state["players"] if p["id"] == p1["id"])
-    unit = p1_data["units"][0]
-
-    # Move the unit (1 step, plenty of MP)
     from_x, from_y = unit["x"], unit["y"]
     r = await game_client.post(
-        f"/games/{g['id']}/move",
+        f"/games/{game['id']}/move",
         json={
             "player_id": p1["id"],
             "unit_id": unit["id"],
@@ -65,12 +62,45 @@ async def test_end_turn_works_after_a_single_move(game_client):
     )
     assert r.status_code == 200, f"move failed: {r.status_code} {r.text}"
 
-    # End turn — should NOT be 400 "本回合至少需要操作..."
     r = await game_client.post(
-        f"/games/{g['id']}/end-turn",
+        f"/games/{game['id']}/end-turn",
         json={"player_id": p1["id"]},
     )
     assert r.status_code == 200, (
         f"end_turn failed after move: {r.status_code} {r.text}. "
-        "This is the regression — move probably doesn't set has_acted."
+        "This is the regression: move probably does not set has_acted."
     )
+
+
+@pytest.mark.integration
+async def test_move_event_context_includes_authoritative_path(game_client, monkeypatch):
+    from app.routes import actions
+
+    published = []
+
+    async def capture_event(event):
+        published.append(event)
+
+    monkeypatch.setattr(actions.bus, "publish", capture_event)
+
+    game, p1 = await _create_started_two_player_game(game_client, "move-path-event")
+    unit = await _first_player_unit(game_client, game["id"], p1["id"])
+
+    from_x, from_y = unit["x"], unit["y"]
+    to_x, to_y = from_x + 1, from_y
+    r = await game_client.post(
+        f"/games/{game['id']}/move",
+        json={
+            "player_id": p1["id"],
+            "unit_id": unit["id"],
+            "to_x": to_x,
+            "to_y": to_y,
+        },
+    )
+    assert r.status_code == 200, f"move failed: {r.status_code} {r.text}"
+
+    move_events = [event for event in published if event.type == "move"]
+    assert move_events, "move route should publish a move event"
+    ctx = move_events[-1].context
+    assert ctx["path"][0] == {"x": from_x, "y": from_y}
+    assert ctx["path"][-1] == {"x": to_x, "y": to_y}

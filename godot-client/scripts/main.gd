@@ -1507,6 +1507,13 @@ func _refresh_commander_section() -> void:
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
 # T:95 — 鼠标 hover 时用 MapLogic.pathfind 算路径并渲染
 var _path_hover_last: Vector2i = Vector2i(-1, -1)
+var _move_preview_path: Array = []
+var _move_preview_target: Vector2i = Vector2i(-1, -1)
+
+
+func _clear_move_preview_path() -> void:
+	_move_preview_path = []
+	_move_preview_target = Vector2i(-1, -1)
 
 
 func _update_path_dots_on_hover(global_pos: Vector2) -> void:
@@ -1521,6 +1528,7 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 		return
 	_path_hover_last = target_cell
 	if not _move_reachable_set.has(target_cell):
+		_clear_move_preview_path()
 		# hover 离开 reachable → 保留 outline(没 path)
 		if board != null:
 			board.clear_selection_marks()
@@ -1557,6 +1565,8 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	var path: Array = MapLogic.pathfind(
 		src_cell, target_cell, terrain, owners, mov * 2, _player_id, blocked, size_v
 	)
+	_move_preview_path = path.duplicate()
+	_move_preview_target = target_cell
 	var path_dots: Array = []
 	for p in path:
 		if Vector2i(p) != src_cell:
@@ -1590,6 +1600,7 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	_update_status("单位 #%d 已移动到 (%d,%d)" % [unit_id, to_x, to_y])
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	if board != null:
 		board.clear_selection_marks()
 	# M4.13:post-move bubble — 移动后若 can_move_after_action,
@@ -2319,23 +2330,42 @@ func _on_board_tile_clicked(tile: Vector2i) -> void:
 func _cancel_move_mode() -> void:
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	if board != null:
 		board.clear_selection_marks()
 	_update_status("已取消移动")
 
 
 # M4.1:发 POST /games/{id}/move
+func _apply_immediate_move_feedback(unit_id: int, to_cell: Vector2i, path_cells: Array = []) -> void:
+	var spent_mp: int = -1
+	if _move_reachable_set.has(to_cell):
+		spent_mp = int(_move_reachable_set.get(to_cell, 0)) / 2
+	if GameState != null and GameState.has_method("apply_local_move_preview"):
+		GameState.apply_local_move_preview(unit_id, to_cell, spent_mp)
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	_clear_move_preview_path()
+	if board != null:
+		if path_cells.size() >= 2 and board.has_method("preview_unit_path"):
+			board.preview_unit_path(unit_id, path_cells, 0.45)
+		elif board.has_method("preview_unit_move"):
+			board.preview_unit_move(unit_id, to_cell, 0.28)
+		board.clear_selection_marks()
+	_hide_action_bubble()
+	_show_post_action_bubble(unit_id, "移动")
+	_update_status("移动指令已下达: #%d -> (%d, %d)" % [unit_id, to_cell.x, to_cell.y])
+
+
 func _move_unit_to(unit_id: int, to_x: int, to_y: int) -> void:
 	if _game_id <= 0 or _player_id <= 0:
 		return
-	_update_status("正在移动单位 #%d → (%d, %d)..." % [unit_id, to_x, to_y])
+	var to_cell := Vector2i(to_x, to_y)
+	var path_cells: Array = []
+	if _move_preview_target == to_cell and _move_preview_path.size() >= 2:
+		path_cells = _move_preview_path.duplicate()
+	_apply_immediate_move_feedback(unit_id, to_cell, path_cells)
 	NetworkClient.action_move(_game_id, _player_id, unit_id, to_x, to_y)
-	# 清掉移动模式 + highlights
-	_move_mode_unit_id = -1
-	_move_reachable_set = {}
-	if board != null:
-		board.clear_selection_marks()
-	_hide_action_bubble()
 
 
 func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
@@ -2355,6 +2385,7 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		# 不进入移动/攻击模式
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
 		_hide_attack_confirm()
@@ -2374,11 +2405,13 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
 		_move_reachable_set = reach_dict
+		_clear_move_preview_path()
 		if tiles.size() > 0 and board != null:
 			board.show_path_marks([], tiles)
 	elif board != null:
 		board.clear_selection_marks()
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
@@ -2623,6 +2656,7 @@ func _reset_game_state_for_main_menu() -> void:
 	# 2) 重置所有行动模式
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
 	_skill_mode_unit_id = -1
@@ -3684,8 +3718,8 @@ func _restore_lobby_default_layout() -> void:
 		# 还原 tscn 默认 anchor(右下角)
 		bb.anchor_left = 1.0
 		bb.anchor_right = 1.0
-		bb.anchor_top = 0.0
-		bb.anchor_bottom = 0.0
+		bb.anchor_top = 1.0
+		bb.anchor_bottom = 1.0
 		bb.offset_left = -340.0
 		bb.offset_top = -56.0
 		bb.offset_right = -16.0
@@ -5594,6 +5628,7 @@ func _cancel_action_mode() -> void:
 	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
 		_skill_mode_unit_id = -1
@@ -5846,21 +5881,25 @@ func _on_attack_cancel_pressed() -> void:
 
 
 # M4.2:发 POST /games/{id}/attack
-func _attack_unit_to(attacker_id: int, target_id: int) -> void:
-	if _game_id <= 0 or _player_id <= 0:
-		return
-	var info: Dictionary = _attack_targets.get(target_id, {})
-	var tgt_name: String = str(info.get("defender_name", "单位 #%d" % target_id))
-	_update_status("正在攻击 %s (单位 #%d → #%d)..." % [tgt_name, attacker_id, target_id])
-	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
-	# 客户端不预测伤害 - server 推 unit_attacked 事件后,从 signal args
-	# 拿到 (damage, is_crit, is_kill) 直接显示。
+func _apply_immediate_attack_feedback(attacker_id: int, target_id: int) -> void:
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
 	_hide_attack_confirm()
 	if board != null:
+		var target: Dictionary = GameState.get_unit(target_id) if GameState != null else {}
+		if not target.is_empty():
+			var cell := Vector2i(int(target.get("x", 0)), int(target.get("y", 0)))
+			board.spawn_floating_text_at_cell(cell, "!", "#f0c75e", "attack_preview")
 		board.clear_selection_marks()
 	_hide_action_bubble()
+	_update_status("攻击指令已下达: #%d -> #%d" % [attacker_id, target_id])
+
+
+func _attack_unit_to(attacker_id: int, target_id: int) -> void:
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	_apply_immediate_attack_feedback(attacker_id, target_id)
+	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
 
 
 func _active_skill_of(ud: Dictionary) -> String:

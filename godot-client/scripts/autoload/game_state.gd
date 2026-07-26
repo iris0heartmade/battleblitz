@@ -135,6 +135,19 @@ func get_units_for_player(player_id) -> Array:
 	return out
 
 
+func apply_local_move_preview(unit_id: int, to_cell: Vector2i, spent_mp: int = -1) -> bool:
+	var changed := _update_unit_in_cache(unit_id, func(u: Dictionary) -> void:
+		u["x"] = to_cell.x
+		u["y"] = to_cell.y
+		u["has_moved"] = true
+		if spent_mp >= 0:
+			u["mp"] = max(0, int(u.get("mp", 0)) - spent_mp)
+	)
+	if changed:
+		units_changed.emit(_flatten_units(players))
+	return changed
+
+
 # ============================================================
 # Signal handlers
 # ============================================================

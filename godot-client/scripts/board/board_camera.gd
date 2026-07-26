@@ -25,6 +25,12 @@ func apply_metrics(metrics) -> void:
 	enabled = true
 
 
+func apply_new_map_metrics(metrics) -> void:
+	_metrics = metrics
+	reset_to_fit()
+	enabled = true
+
+
 func _on_viewport_size_changed() -> void:
 	_refresh_from_metrics(false)
 

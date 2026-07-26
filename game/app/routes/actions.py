@@ -326,6 +326,7 @@ async def move_unit(
         context={
             "from_x": path[0][0], "from_y": path[0][1],
             "to_x": target[0], "to_y": target[1],
+            "path": [{"x": x, "y": y} for x, y in path],
             "mp_cost": spent_mp, "mp_remaining": unit.mp,
             "castle_captured": castle_captured,
         },
