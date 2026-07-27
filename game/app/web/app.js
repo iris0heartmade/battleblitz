@@ -3755,9 +3755,19 @@ async function doClaim(unit) {
 const RECRUIT_UNIT_TYPES = [
   { id: "swordsman", display_cn: "剑士", cost: 200 },
   { id: "archer",    display_cn: "弓箭手", cost: 250 },
+  { id: "warrior",   display_cn: "斧战士", cost: 260 },
+  { id: "lancer",    display_cn: "枪兵", cost: 280 },
   { id: "warlock",   display_cn: "术士", cost: 300 },
   { id: "healer",    display_cn: "治疗师", cost: 350 },
   { id: "knight",    display_cn: "骑士", cost: 400 },
+  { id: "falcon_knight", display_cn: "天马骑士", cost: 450 },
+  { id: "dragon_rider",  display_cn: "飞龙骑士", cost: 500 },
+  { id: "berserker", display_cn: "狂战士", cost: 500 },
+  { id: "blade_master", display_cn: "剑圣", cost: 650 },
+  { id: "sniper",    display_cn: "狙击手", cost: 650 },
+  { id: "saint",     display_cn: "圣者", cost: 650 },
+  { id: "paladin",   display_cn: "圣骑士", cost: 700 },
+  { id: "sage",      display_cn: "贤者", cost: 700 },
 ];
 
 // P0.4 — showRecruitModal opens the recruit picker for an EMPTY

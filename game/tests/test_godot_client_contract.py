@@ -69,10 +69,9 @@ def test_godot_save_views_use_save_api_not_game_delete_api():
     main_src = _read(MAIN_GD)
     combined = saves_src + mainline_src + in_progress_src + main_src
     assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in saves_src
-    # #16 — mainline 走 cleared 标注分支(不再有 _on_ml_slots_response,主存档管理在 saves_view)
-    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_saves_for_cleared"))' in mainline_src
-    assert "_on_ml_slots_response" not in mainline_src
-    assert "_render_mainline_slots" not in mainline_src
+    # FE8-style entry — mainline now starts from the three formal slots.
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))' in mainline_src
+    assert "func _render_mainline_slots() -> void:" in mainline_src
     assert "ml_slots_container" not in mainline_src
     # in_progress 视图
     assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))' in in_progress_src
@@ -212,6 +211,31 @@ def test_godot_mainline_start_passes_prepare_compatible_arguments():
     assert 'NetworkClient.start_mainline(_main._selected_mainline_id, _main._user_name, false, [], Callable(self, "_on_mainline_start_response"))' in src
     assert 'NetworkClient.start_mainline(mainline_id, _main._user_name, false, [], Callable(self, "_on_mainline_start_response"), true)' in src
     assert 'NetworkClient.next_battle_mainline(_main._active_mainline_id, _main._user_name, [], Callable(self, "_on_mainline_next_battle_response"))' in src
+
+
+def test_godot_mainline_entry_is_slot_first_not_chapter_list():
+    # FE8-style mainline entry: choose one of the three formal save slots first.
+    # The full chapter list may still exist as an internal/debug helper, but it
+    # must not be the default player-facing entry path.
+    src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    open_start = src.index("func open() -> void:")
+    open_end = src.index("func _set_node_visible(", open_start)
+    open_body = src[open_start:open_end]
+    assert 'NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))' in open_body
+    assert "NetworkClient.list_mainlines" not in open_body
+    assert "NetworkClient.list_mainlines" in src
+    assert "func _on_ml_slots_response(" in src
+    assert "func _on_slot_continue_pressed(" in src
+    assert "func _on_slot_new_game_pressed(" in src
+
+
+def test_godot_mainline_slots_continue_and_new_game_use_save_cursor():
+    src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+    assert 'NetworkClient.load_save(_main._user_name, "manual", slot_index' in src
+    assert 'NetworkClient.start_mainline(_DEFAULT_MAINLINE_ID, _main._user_name, false, [], Callable(self, "_on_slot_new_start_response").bind(slot_index), true)' in src
+    assert "NetworkClient.save_manual(" in src
+    assert '_main._selected_mainline_id = str(body.get("mainline_id"' in src
+    assert 'NetworkClient.get_mainline_detail(_main._selected_mainline_id' in src
 
 
 def test_godot_prepare_ui_uses_hero_backend_actions():

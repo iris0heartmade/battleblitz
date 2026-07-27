@@ -50,11 +50,21 @@ const _ACTION_CONTEXT_POST_MOVE := "post_move"
 const _ACTION_CONTEXT_POST_ACTION := "post_action"
 # M4.5 招募状态机(unit_type → name 也在用)
 const _RECRUIT_OPTIONS := [
-	{"type": "swordsman", "name": "剑士",   "cost": 200},
-	{"type": "archer",    "name": "弓箭手", "cost": 250},
-	{"type": "warlock",   "name": "术士",   "cost": 300},
-	{"type": "healer",    "name": "治疗师", "cost": 350},
-	{"type": "knight",    "name": "骑士",   "cost": 400},
+	{"type": "swordsman", "cost": 200},
+	{"type": "archer", "cost": 250},
+	{"type": "warrior", "cost": 260},
+	{"type": "lancer", "cost": 280},
+	{"type": "warlock", "cost": 300},
+	{"type": "healer", "cost": 350},
+	{"type": "knight", "cost": 400},
+	{"type": "falcon_knight", "cost": 450},
+	{"type": "dragon_rider", "cost": 500},
+	{"type": "berserker", "cost": 500},
+	{"type": "blade_master", "cost": 650},
+	{"type": "sniper", "cost": 650},
+	{"type": "saint", "cost": 650},
+	{"type": "paladin", "cost": 700},
+	{"type": "sage", "cost": 700},
 ]
 var _recruit_mode_unit_id: int = -1
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
@@ -2248,7 +2258,7 @@ func _show_recruit_at(info: Dictionary) -> void:
 	for opt in _RECRUIT_OPTIONS:
 		var btn := Button.new()
 		var unit_type: String = str(opt.get("type", "?"))
-		var name: String = str(opt.get("name", "?"))
+		var name: String = _unit_type_cn(unit_type)
 		var cost: int = int(opt.get("cost", 0))
 		btn.text = "%s  💰 %d" % [name, cost]
 		btn.disabled = gold_i < cost

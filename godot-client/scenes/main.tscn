@@ -127,7 +127,7 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 21
 
 [node name="MainlineButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
-text = "主线章节"
+text = "主线存档"
 custom_minimum_size = Vector2(0, 66)
 
 ; --- Group B: 多人对战 ---
@@ -1206,7 +1206,7 @@ border_width = 6
 anchor_right = 1.0
 offset_top = 18.0
 offset_bottom = 66.0
-text = "主线章节"
+text = "主线存档"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 33
 

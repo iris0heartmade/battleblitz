@@ -168,9 +168,19 @@ INCOME_PER_TURN: Final[Dict[str, int]] = {
 RECRUIT_COST: Final[Dict[str, int]] = {
     "swordsman": 200,
     "archer":    250,
-    "knight":    400,
+    "warrior":   260,
+    "lancer":    280,
     "warlock":   300,
     "healer":    350,
+    "knight":    400,
+    "falcon_knight": 450,
+    "dragon_rider": 500,
+    "berserker": 500,
+    "blade_master": 650,
+    "sniper":    650,
+    "saint":     650,
+    "paladin":   700,
+    "sage":      700,
 }
 
 # Relative spawn weight for procedural map generation (excluding castle).

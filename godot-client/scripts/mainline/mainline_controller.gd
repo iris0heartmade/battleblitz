@@ -1,10 +1,10 @@
 extends Control
 ## mainline_controller.gd — 主线视图控制器(P2 从 main.gd 抽离, Batch A)。
 ## 挂在场景 MainlineView 节点上,自管面板内部逻辑;view 可见性仍由 main._show_view 控制。
-## 包含:章节列表 + 存档格 UI + 章节详情 + 指挥官 UI + page 切换。
+## 包含:FE8 风格三存档槽入口 + 章节详情 + 指挥官 UI + page 切换。
 ## Batch B 后续接管 prepare 流程 + start/advance/abandon 流。
 ## 对外接口:
-##   open()                  — main 切到 mainline view 后调用:初始化 + 拉取列表
+##   open()                  — main 切到 mainline view 后调用:初始化 + 拉取三槽
 ##   var _main: Node         — main 注入;跨域访问 _user_name / _active_mainline_id
 ##                              / _selected_mainline_id / _show_view / _update_status
 ##                              / saves_view.<helpers> / _setup_lobby_commander_options
@@ -13,6 +13,9 @@ extends Control
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const StatusBadge = preload("res://scripts/ui/_components/status_badge.gd")
 const SectionHeader = preload("res://scripts/ui/_components/section_header.gd")
+
+const _DEFAULT_MAINLINE_ID := "chapter_01_steel_rebellion"
+const _MANUAL_SLOT_COUNT := 3
 
 var _main: Node = null
 
@@ -57,6 +60,8 @@ var _mainline_shop_payload: Dictionary = {}
 var _mainline_mercenary_payload: Dictionary = {}
 var _mainline_auto_retry_pending: bool = false
 var _mainline_commander_ids: Array[String] = [""]
+var _manual_slot_records: Array = [{}, {}, {}]
+var _active_slot_index: int = -1
 # T:#16 — 章节 cleared 标注(join /saves → 算 mainline_id → "✓ 已通关" badge)
 var _mainline_list_cache: Array = []  # 缓存 /mainlines 响应,等 /saves 回来后统一渲染
 var _cleared_mainline_ids: Dictionary = {}  # { mainline_id: true }
@@ -128,8 +133,8 @@ func _ready() -> void:
 
 func open() -> void:
 	_main._show_view("mainline")
-	_set_mainline_page("chapter_list")
-	ml_title.text = "主线章节 · 加载中..."
+	_set_mainline_page("slot_select")
+	ml_title.text = "主线存档 · 加载中..."
 	_main._mainline_prepare_payload = {}
 	_main._mainline_shop_payload = {}
 	_main._mainline_mercenary_payload = {}
@@ -142,6 +147,7 @@ func open() -> void:
 	_render_mainline_prepare()
 	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
 	for child in ml_list_container.get_children():
+		ml_list_container.remove_child(child)
 		child.queue_free()
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
@@ -149,9 +155,7 @@ func open() -> void:
 	if _main._hero_speaker_map.is_empty():
 		NetworkClient.list_heroes(Callable(_main, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
-	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"), _main._user_name)
-	# T:#16 — 并行拉 /saves 用于 cleared 标注(不阻塞主流程)
-	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_saves_for_cleared"))
+	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
 
 
 func _set_node_visible(node: Node, value: bool) -> void:
@@ -163,24 +167,197 @@ func _set_node_visible(node: Node, value: bool) -> void:
 func _set_mainline_page(page: String) -> void:
 	_main._mainline_page = page
 	var showing_prepare := page == "prepare"
-	_set_node_visible(ml_list_container, not showing_prepare)
-	_set_node_visible(ml_commander_status, not showing_prepare)
-	_set_node_visible(ml_commander_option, not showing_prepare)
-	_set_node_visible(ml_apply_commander_btn, not showing_prepare)
-	# T:V4 — 章节列表右侧 placeholder 卡,prepare 模式被 prep 控件覆盖
-	_set_node_visible(ml_right_placeholder, not showing_prepare)
+	var showing_entry := page == "slot_select" or page == "chapter_list"
+	_set_node_visible(ml_list_container, showing_entry)
+	_set_node_visible(ml_commander_status, showing_entry)
+	_set_node_visible(ml_commander_option, showing_entry)
+	_set_node_visible(ml_apply_commander_btn, showing_entry)
+	_set_node_visible(ml_right_placeholder, showing_entry)
 	_set_node_visible(ml_prep_summary, showing_prepare)
 	_set_node_visible(ml_prep_tabs, showing_prepare)
 	_set_node_visible(ml_prep_content, showing_prepare)
 	_set_node_visible(ml_prep_start_btn, showing_prepare)
-	# T:#17 — ml_prep_complete_btn (✅ 准备好了) 在 chapter_list 也常驻可见,
-	# 让玩家在选章节后能立刻点"准备好了"进对战。刷新整备 / 开始战斗
-	# 等 prepare 模式专属控件才在 chapter_list 隐藏。
+	_set_node_visible(ml_prep_complete_btn, showing_prepare)
 	_set_node_visible(ml_prep_refresh_btn, showing_prepare)
 	_set_node_visible(ml_prep_action_btn, showing_prepare)
 	_set_node_visible(ml_prep_alt_action_btn, showing_prepare)
 	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
 		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
+
+
+# FE8-style entry: mainline starts from the three formal save slots.
+func _on_ml_slots_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		ml_title.text = "主线存档"
+		_main._update_status("读取主线存档失败")
+		_manual_slot_records = [{}, {}, {}]
+		_render_mainline_slots()
+		return
+	_manual_slot_records = [{}, {}, {}]
+	var manual_slots: Array = body.get("manual_slots", []) if body.get("manual_slots", []) is Array else []
+	for i in range(min(_MANUAL_SLOT_COUNT, manual_slots.size())):
+		var slot: Variant = manual_slots[i]
+		if slot is Dictionary:
+			var rec: Dictionary = (slot as Dictionary).duplicate(true)
+			rec["kind"] = "manual"
+			rec["slot_index"] = int(rec.get("slot_index", i))
+			_manual_slot_records[i] = rec
+	ml_title.text = "主线存档"
+	_render_mainline_slots()
+
+
+func _render_mainline_slots() -> void:
+	if ml_list_container == null or not is_instance_valid(ml_list_container):
+		return
+	for child in ml_list_container.get_children():
+		ml_list_container.remove_child(child)
+		child.queue_free()
+	for slot_index in range(_MANUAL_SLOT_COUNT):
+		var rec: Dictionary = _manual_slot_records[slot_index] if slot_index < _manual_slot_records.size() else {}
+		ml_list_container.add_child(_build_slot_row(slot_index, rec))
+	_render_slot_entry_hint()
+
+
+func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
+	var row := PanelContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size = Vector2(0, 96)
+	var box := HBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	row.add_child(box)
+
+	var badge := Label.new()
+	badge.custom_minimum_size = Vector2(76, 0)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.add_theme_font_size_override("font_size", MenuTheme.FS_TITLE)
+	badge.text = "槽 %d" % (slot_index + 1)
+	box.add_child(badge)
+
+	var info := RichTextLabel.new()
+	info.bbcode_enabled = true
+	info.fit_content = true
+	info.scroll_active = false
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.custom_minimum_size = Vector2(0, 82)
+	if rec.is_empty():
+		info.text = "[b]空槽[/b]\n[color=#a69a73]新游戏将从第一章开始,并绑定到此槽。[/color]"
+	else:
+		var label := str(rec.get("label", ""))
+		if label == "":
+			label = str(rec.get("mainline_id", "主线存档"))
+		info.text = "[b]%s[/b]\n[color=#d8c48a]%s · 第 %d 章[/color]" % [
+			_bb_escape(label),
+			_bb_escape(str(rec.get("mainline_id", ""))),
+			int(rec.get("chapter_index", 0)) + 1,
+		]
+	box.add_child(info)
+
+	var action := Button.new()
+	action.custom_minimum_size = Vector2(180, 40)
+	if rec.is_empty():
+		action.text = "新游戏"
+		action.pressed.connect(_on_slot_new_game_pressed.bind(slot_index))
+	else:
+		action.text = "继续"
+		action.pressed.connect(_on_slot_continue_pressed.bind(slot_index))
+	MenuTheme.apply_primary_button_theme(action, MenuTheme.FS_BTN)
+	box.add_child(action)
+	return row
+
+
+func _render_slot_entry_hint() -> void:
+	if ml_right_placeholder == null or not is_instance_valid(ml_right_placeholder):
+		return
+	for child in ml_right_placeholder.get_children():
+		ml_right_placeholder.remove_child(child)
+		child.queue_free()
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", MenuTheme.GAP_M)
+	ml_right_placeholder.add_child(vbox)
+	var title := Label.new()
+	title.text = "选择存档槽"
+	title.add_theme_font_size_override("font_size", MenuTheme.FS_TITLE)
+	title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	vbox.add_child(title)
+	var hint := Label.new()
+	hint.text = "继续会载入该槽记录的最新章节。空槽会从第一章开始。"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.add_theme_font_size_override("font_size", MenuTheme.FS_BODY_SM)
+	hint.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	vbox.add_child(hint)
+	var manage := Button.new()
+	manage.text = "打开存档管理"
+	manage.custom_minimum_size = Vector2(220, 40)
+	MenuTheme.apply_secondary_button_theme(manage, MenuTheme.FS_BTN)
+	manage.pressed.connect(_on_slot_manage_pressed)
+	vbox.add_child(manage)
+
+
+func _on_slot_continue_pressed(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _manual_slot_records.size():
+		return
+	var rec: Dictionary = _manual_slot_records[slot_index]
+	if rec.is_empty():
+		_on_slot_new_game_pressed(slot_index)
+		return
+	_active_slot_index = slot_index
+	_main._update_status("正在载入槽 %d..." % (slot_index + 1))
+	NetworkClient.load_save(_main._user_name, "manual", slot_index, Callable(self, "_on_slot_load_response").bind(rec))
+
+
+func _on_slot_new_game_pressed(slot_index: int) -> void:
+	_active_slot_index = slot_index
+	_main._selected_mainline_id = _DEFAULT_MAINLINE_ID
+	_main._update_status("槽 %d: 创建新游戏..." % (slot_index + 1))
+	NetworkClient.start_mainline(_DEFAULT_MAINLINE_ID, _main._user_name, false, [], Callable(self, "_on_slot_new_start_response").bind(slot_index), true)
+
+
+func _on_slot_load_response(body: Variant, code: int, record: Dictionary) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_main._update_status("载入主线存档失败")
+		return
+	_main._selected_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
+	_main._active_mainline_id = _main._selected_mainline_id
+	UserSettings.set_value("session.v1.mainline_id", _main._active_mainline_id)
+	if _main._selected_mainline_id == "":
+		_main._update_status("存档缺少主线章节")
+		return
+	NetworkClient.get_mainline_detail(_main._selected_mainline_id, Callable(self, "_on_ml_detail_response").bind(_main._selected_mainline_id))
+
+
+func _on_slot_new_start_response(body: Variant, code: int, slot_index: int) -> void:
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_on_mainline_start_response(body, code)
+		return
+	var mainline_id := str(body.get("mainline_id", _DEFAULT_MAINLINE_ID))
+	var battle_index := int(body.get("battle_index", 0))
+	var label := "第 %d 章 - 新游戏" % (battle_index + 1)
+	NetworkClient.save_manual(
+		_main._user_name,
+		slot_index,
+		mainline_id,
+		battle_index,
+		label,
+		Callable(self, "_on_slot_new_manual_save_response").bind(body, code)
+	)
+
+
+func _on_slot_new_manual_save_response(_save_body: Variant, _save_code: int, start_body: Dictionary, start_code: int) -> void:
+	_on_mainline_start_response(start_body, start_code)
+
+
+func _on_slot_manage_pressed() -> void:
+	_main._show_view("saves")
+	if _main.saves_view != null and is_instance_valid(_main.saves_view) and _main.saves_view.has_method("open"):
+		_main.saves_view.open()
+
+
+func _open_chapter_debug_list() -> void:
+	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"), _main._user_name)
 
 
 func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
@@ -232,6 +409,7 @@ func _render_mainline_list() -> void:
 	if ml_list_container == null or not is_instance_valid(ml_list_container):
 		return
 	for child in ml_list_container.get_children():
+		ml_list_container.remove_child(child)
 		child.queue_free()
 	if _mainline_list_cache.is_empty():
 		var empty := StatusBadge.new()
@@ -270,6 +448,7 @@ func _render_selected_chapter_preview(mainline_id: String) -> void:
 	if ml_right_placeholder == null or not is_instance_valid(ml_right_placeholder):
 		return
 	for child in ml_right_placeholder.get_children():
+		ml_right_placeholder.remove_child(child)
 		child.queue_free()
 	var ml: Dictionary = {}
 	for m in _mainline_list_cache:

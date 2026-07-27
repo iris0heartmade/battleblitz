@@ -482,3 +482,43 @@ async def test_2v2_team_survives_until_all_member_factions_are_defeated(db_sessi
     assert ended is True
     assert game.status == "finished"
     assert game.win_reason == "rout"
+
+
+@pytest.mark.asyncio
+async def test_rules_ai_enemy_castle_targets_exclude_teammate_hq(db_session, tmp_db_path):
+    """Rules AI should pull toward enemy HQs, not a teammate's HQ."""
+    from app.config import TERRAIN_CASTLE
+    from app.models import Game, Player, Tile
+    from app.game_logic import _load_enemy_castles_xy
+
+    game = Game(
+        name="ai-team-hq-targeting", status="playing", map_seed=0,
+        map_preset="classic", current_player_index=0, phase="player",
+        win_condition="rout",
+    )
+    db_session.add(game)
+    await db_session.flush()
+
+    human_ally = Player(
+        game_id=game.id, user_name="human", color="red", seat=0,
+        team_id="team_a", is_alive=True, has_ended_turn=False,
+    )
+    ai_ally = Player(
+        game_id=game.id, user_name="ai-ally", color="green", seat=1,
+        team_id="team_a", is_ai=True, is_alive=True, has_ended_turn=False,
+    )
+    enemy = Player(
+        game_id=game.id, user_name="enemy", color="blue", seat=2,
+        team_id="team_b", is_ai=True, is_alive=True, has_ended_turn=False,
+    )
+    db_session.add_all([human_ally, ai_ally, enemy])
+    await db_session.flush()
+
+    db_session.add_all([
+        Tile(game_id=game.id, x=1, y=1, terrain=TERRAIN_CASTLE, owner_id=human_ally.id),
+        Tile(game_id=game.id, x=5, y=1, terrain=TERRAIN_CASTLE, owner_id=ai_ally.id),
+        Tile(game_id=game.id, x=9, y=9, terrain=TERRAIN_CASTLE, owner_id=enemy.id),
+    ])
+    await db_session.flush()
+
+    assert await _load_enemy_castles_xy(db_session, game, ai_ally) == [(9, 9)]

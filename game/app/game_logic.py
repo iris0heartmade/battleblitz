@@ -634,6 +634,12 @@ async def cleanup_dead_units(
     if not dead:
         return []
     dead_ids = [u.id for u in dead]
+    game_id: Optional[int] = None
+    for player_id in {u.player_id for u in dead}:
+        owning_player = await session.get(Player, player_id)
+        if owning_player is not None:
+            game_id = owning_player.game_id
+            break
     from app.commanders.meter import on_death
     from sqlalchemy.orm.attributes import flag_modified
 
@@ -655,18 +661,14 @@ async def cleanup_dead_units(
         await cancel_claim_sessions_for_unit(session, u.id)
     for u in dead:
         await session.delete(u)
+    await session.flush()
     # P2.3 — re-evaluate the win condition after the dead are gone.
     # For "rout" mode this is the trigger: a team dropping to 0
     # units is the rout condition. Other modes (seize / reach /
     # defend) re-check here too so they always have a chance to
     # finish even if no other trigger fires.
-    # NOTE: Unit has no game_id column (only Player does), so we
-    # resolve the game via the unit's owning player.
-    if dead:
-        owning_player = await session.get(Player, dead[0].player_id)
-        game_id = owning_player.game_id if owning_player else None
-    else:
-        game_id = None
+    # NOTE: Unit has no game_id column (only Player does), so game_id
+    # is captured before the units enter SQLAlchemy's deleted state.
     game = await _resolve_game(session, game_id) if game_id is not None else None
     if evaluate_win and game is not None and game.status == "playing":
         await check_win_condition(session, game)
@@ -746,6 +748,7 @@ async def _alive_teams(session: AsyncSession, game: Game) -> list:
 
 
 async def _finish_game(
+    session: AsyncSession,
     game: Game,
     winner_team: Optional[str],
     win_reason: str,
@@ -767,17 +770,17 @@ async def _finish_game(
     try:
         from app.models import Player as _Player
         from app.save import SaveService as _SaveService
-        winners = (await session.execute(
+        participants = (await session.execute(
             select(_Player).where(_Player.game_id == game.id)
         )).scalars().all()
         svc = _SaveService(session)
-        for p in winners:
+        for p in participants:
             if p.is_ai or p.is_spectator:
                 continue
             cleared = await svc.clear_suspend(p.user_name)
             if cleared:
                 logger.info(
-                    "_finish_game: cleared stale suspend for winner=%s game=%d",
+                    "_finish_game: cleared stale suspend for user=%s game=%d",
                     p.user_name, game.id,
                 )
     except Exception as e:  # pragma: no cover
@@ -838,13 +841,13 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
 
     # --- UNIVERSAL rout — fires regardless of game.win_condition ---
     if len(alive) == 0:
-        await _finish_game(game, None, "draw")
+        await _finish_game(session, game, None, "draw")
         return True
     if len(alive) == 1:
         # In defend mode at the target turn, use "defend" as the
         # reason to preserve the original semantics; otherwise "rout".
         reason = "defend" if defend_winner_team is not None else "rout"
-        await _finish_game(game, alive[0], reason)
+        await _finish_game(session, game, alive[0], reason)
         return True
 
     # --- UNIVERSAL seize — handled in claim_tile when ownership flips;
@@ -863,7 +866,7 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
                 winner_player = (await session.execute(
                     _sel(Player).where(Player.id == winner_unit.player_id)
                 )).scalars().first()
-                await _finish_game(game, _team_of(winner_player), "reach")
+                await _finish_game(session, game, _team_of(winner_player), "reach")
                 return True
 
     return False
@@ -1133,9 +1136,9 @@ async def check_pending_claims(
             if game.status == "playing":
                 alive = await _alive_teams(session, game)
                 if len(alive) == 0:
-                    await _finish_game(game, None, "draw")
+                    await _finish_game(session, game, None, "draw")
                 elif len(alive) == 1 and alive[0] == winner_team:
-                    await _finish_game(game, winner_team, "seize")
+                    await _finish_game(session, game, winner_team, "seize")
                 # else: team-mate still alive — keep playing, revenge
                 # chance open.
             if game.status == "finished":
@@ -2357,6 +2360,14 @@ async def _load_enemy_castles_xy(
     session: AsyncSession, game: Game, ai_player: Player,
 ) -> list:
     """All enemy HQ positions — for the castle_pull move bonus."""
+    players = (
+        await session.execute(select(Player).where(Player.game_id == game.id))
+    ).scalars().all()
+    my_team = _team_of(ai_player)
+    ally_player_ids = {
+        p.id for p in players
+        if p.id != ai_player.id and _team_of(p) == my_team
+    }
     rows = (await session.execute(
         select(Tile).where(
             Tile.game_id == game.id,
@@ -2364,7 +2375,9 @@ async def _load_enemy_castles_xy(
         )
     )).scalars().all()
     return [(t.x, t.y) for t in rows
-            if t.owner_id is not None and t.owner_id != ai_player.id]
+            if t.owner_id is not None
+            and t.owner_id != ai_player.id
+            and t.owner_id not in ally_player_ids]
 
 
 async def _load_active_claim_tile_set(

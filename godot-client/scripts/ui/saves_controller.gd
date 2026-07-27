@@ -107,6 +107,7 @@ func _build_manual_rows() -> void:
 	if save_slots_container == null or not is_instance_valid(save_slots_container):
 		return
 	for child in save_slots_container.get_children():
+		save_slots_container.remove_child(child)
 		child.queue_free()
 	_manual_rows.clear()
 	for slot_index in range(_MANUAL_SLOT_COUNT):
@@ -269,6 +270,7 @@ func _render_auto_row() -> void:
 	if save_auto_row == null or not is_instance_valid(save_auto_row):
 		return
 	for child in save_auto_row.get_children():
+		save_auto_row.remove_child(child)
 		child.queue_free()
 	if _auto_record.is_empty():
 		var empty := StatusBadge.new()
@@ -300,6 +302,7 @@ func _render_suspend_row() -> void:
 	if save_suspend_row == null or not is_instance_valid(save_suspend_row):
 		return
 	for child in save_suspend_row.get_children():
+		save_suspend_row.remove_child(child)
 		child.queue_free()
 	if _suspend_record.is_empty():
 		var empty := StatusBadge.new()

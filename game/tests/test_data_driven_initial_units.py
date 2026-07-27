@@ -18,6 +18,7 @@ from app.game_logic import _resolve_size
 
 
 TEST_MAP_ID = "test_arena_10x10_2v2"
+RED_FULL_ROSTER_MAP_ID = "red_full_roster_4p_20"
 MAPS_DIR = Path(__file__).resolve().parent.parent / "maps"
 
 
@@ -120,6 +121,52 @@ class TestTestArenaMap:
         assert len(result.tiles) == 10
         for row in result.tiles:
             assert len(row) == 10
+
+
+class TestRedFullRosterMap:
+    @pytest.fixture
+    def map_data(self) -> dict:
+        from app.game_logic import MAP_PRESETS
+        assert RED_FULL_ROSTER_MAP_ID in MAP_PRESETS
+        return MAP_PRESETS[RED_FULL_ROSTER_MAP_ID]
+
+    def test_size_and_capacity(self, map_data):
+        assert _resolve_size(map_data["size"]) == {"width": 20, "height": 20}
+        assert map_data["recommended_players"] == 4
+
+    def test_red_has_every_registered_unit_type_once(self, map_data):
+        from app.classes.units import type_ids
+
+        red_types = [u["type"] for u in map_data["initial_units"] if u["color"] == "red"]
+        assert sorted(red_types) == sorted(type_ids())
+        assert len(red_types) == len(set(red_types))
+
+    def test_other_colors_have_only_one_hq_unit_each(self, map_data):
+        from collections import Counter
+
+        counts = Counter(u["color"] for u in map_data["initial_units"])
+        assert counts["blue"] == 1
+        assert counts["green"] == 1
+        assert counts["yellow"] == 1
+
+    def test_red_corner_has_required_economy_buildings(self, map_data):
+        layout = map_data["layout"]
+        red_corner = [
+            layout[y][x]
+            for y in range(0, 8)
+            for x in range(0, 8)
+        ]
+        assert "b" in red_corner
+        assert "v" in red_corner
+        assert "$" in red_corner
+
+    def test_generate_map_preset_materializes_expected_units(self):
+        from app.classes.units import type_ids
+        from app.game_logic import generate_map_preset
+
+        result = generate_map_preset(RED_FULL_ROSTER_MAP_ID, seed=1, num_castles=4)
+        red_types = [u["type"] for u in result.initial_units if u["color"] == "red"]
+        assert sorted(red_types) == sorted(type_ids())
 
 
 # ============================================================
