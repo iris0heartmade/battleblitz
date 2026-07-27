@@ -21,7 +21,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.config import (
     COUNTER_DAMAGE_MULT,
     COUNTER_IMMUNE_SKILLS,
-    MAP_SIZE,
     SKILL_DOUBLE_STRIKE,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
@@ -169,6 +168,12 @@ async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coo
     return terrain, owners, occ
 
 
+def _pathfinder_size_for_grid(terrain: Dict[Coord, str]) -> int:
+    if not terrain:
+        return 0
+    return max(max(x, y) for x, y in terrain.keys()) + 1
+
+
 def _blocker_set(terrain: Dict[Coord, str]) -> Set[Coord]:
     """Tiles that block line of sight (forest/mountain/river block; castle does not)."""
     from app.config import TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER
@@ -207,11 +212,13 @@ async def move_unit(
     # the unit can keep walking while MP lasts.
     if unit.has_acted and not _get_unit(unit.unit_type).can_move_after_action:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动且无法继续移动")
-    if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
+    if body.to_x < 0 or body.to_y < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
 
     terrain, owners, occ = await _load_tile_grid(session, game_id)
     target = (body.to_x, body.to_y)
+    if target not in terrain:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
     movement_profile = resolve_movement_profile(unit)
 
     # Target must be empty (no unit on it)
@@ -257,6 +264,7 @@ async def move_unit(
         blocked_units=blocked,
         no_end_units=no_end,
         movement_profile=movement_profile,
+        size=_pathfinder_size_for_grid(terrain),
     )
     if path is None or path[-1] != target:
         logger.info(f"move_unit: pathfinding FAILED (game {game_id}, unit {unit.id} at ({unit.x},{unit.y}) -> {target}, mp={unit.mp})")

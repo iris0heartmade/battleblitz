@@ -357,7 +357,7 @@ func _handle_camera_input(event: InputEvent) -> void:
 			_zoom_at_point(mb.global_position, -ZOOM_STEP)
 			get_viewport().set_input_as_handled()
 			return
-		if mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.button_index == MOUSE_BUTTON_LEFT or mb.button_index == MOUSE_BUTTON_MIDDLE:
 			if mb.pressed:
 				_press_start_mouse = mb.global_position
 				_pan_start_mouse = mb.global_position

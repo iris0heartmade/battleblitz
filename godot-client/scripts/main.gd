@@ -337,6 +337,7 @@ var _tutorial_shown: bool = false
 var _game_id: int = 0
 var _player_id: int = 0
 var _user_name: String = "Player"
+var _loaded_board_signature: String = ""
 var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
@@ -1204,7 +1205,18 @@ func _repaint_board_from_state() -> void:
 	# (state.snapshot updates on every WS event; the layout rarely does).
 	if int(pseudo.get("__id", 0)) != _game_id:
 		return
-	board.load_map(pseudo)
+	var board_signature := "%s:%sx%s:%s" % [
+		str(pseudo.get("__id", 0)),
+		str(pseudo.get("width", 0)),
+		str(pseudo.get("height", 0)),
+		str(pseudo.get("layout", [])),
+	]
+	if board_signature != _loaded_board_signature:
+		board.load_map(pseudo)
+		_loaded_board_signature = board_signature
+	else:
+		board.initial_units = pseudo.get("initial_units", [])
+		board._on_units_changed(board.initial_units)
 	# M4.16+:重建建筑阵营旗(从最新 GameState.tiles + owner_id)。
 	# 必须放在 load_map 之后 — board.tile_lookup 已建好,flag 需要 metrics。
 	if not GameState.tiles.is_empty():
@@ -1264,13 +1276,13 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 		for u in p.get("units", []):
 			if not u is Dictionary:
 				continue
-			initial_units.append({
-				"x": int(u.get("x", 0)),
-				"y": int(u.get("y", 0)),
-				"type": str(u.get("unit_type", "swordsman")),
-				"color": color,
-				"level": int(u.get("level", 1)),
-			})
+			var unit_copy: Dictionary = u.duplicate()
+			unit_copy["x"] = int(unit_copy.get("x", 0))
+			unit_copy["y"] = int(unit_copy.get("y", 0))
+			unit_copy["type"] = str(unit_copy.get("unit_type", unit_copy.get("type", "swordsman")))
+			unit_copy["color"] = color
+			unit_copy["level"] = int(unit_copy.get("level", 1))
+			initial_units.append(unit_copy)
 	return {
 		"__id": _game_id,
 		"size": {"width": w, "height": h},

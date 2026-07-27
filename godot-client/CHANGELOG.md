@@ -2,6 +2,8 @@
 
 ## 2026-07-28
 
+- Fixed large-map camera refresh: state polling no longer reloads the same board every tick, so manual zoom and pan stay in place.
+- Added middle-mouse panning support on the Godot board while keeping wheel zoom.
 - Fixed rules-AI HQ targeting in team games: AI now excludes teammate HQs from enemy castle pull targets, so allied AI advances toward enemy HQs instead of the player's HQ.
 - Added `red_full_roster_4p_20`, a 20x20 four-player free-mode map where red starts with one of every registered unit type and nearby village, barracks, and vault economy tiles.
 - Expanded barracks recruitment across backend, Web, and Godot clients so every registered unit type is available from recruit UI paths.

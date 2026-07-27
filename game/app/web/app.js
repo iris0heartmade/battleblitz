@@ -89,6 +89,17 @@ const state = {
   actionsTaken: 0,
   actionsRequired: 2,
   bannerTimeout: null,
+  boardView: {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    manual: false,
+    dragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+  },
   // ----- 主线模式状态 -----
   mainline: null,             // { id, title, total_battles, battle_index, state }  活跃主线
   mainlineGameId: null,       // 主线中正在进行的 game.id
@@ -2115,7 +2126,7 @@ function updateActionCounter() {
 // template and .cell width/height read from the same var. Bound to
 // resize / orientationchange, plus called once at startup and at the
 // start of every renderBoard (cheap: ~5 arithmetic ops + 1 setProperty).
-const BOARD_SIZE = 15;            // MAP_SIZE — keep in sync with backend
+const BOARD_SIZE = 15;            // fallback before state tiles arrive
 // Terrain movement costs (doubled to match server TERRAIN_MOVE_COST, so
 // road=1 means 0.5 MP, plain=2 means 1 MP).  Budget is also doubled:
 // unit.mp × 2.  This avoids floating-point comparisons for road=0.5.
@@ -2167,6 +2178,24 @@ function terrainCostX2ForUnit(unit, terrain) {
 
 const CELL_MIN = 14;              // hard floor so tiles stay readable
 const CELL_MAX = 48;              // hard ceiling (desktop default 44)
+const BOARD_ZOOM_MIN = 0.6;
+const BOARD_ZOOM_MAX = 2.4;
+
+function currentBoardDimensions(st = state.game) {
+  let boardW = BOARD_SIZE, boardH = BOARD_SIZE;
+  for (const t of st?.tiles || []) {
+    if (t.x + 1 > boardW) boardW = t.x + 1;
+    if (t.y + 1 > boardH) boardH = t.y + 1;
+  }
+  return { boardW, boardH };
+}
+
+function applyBoardView() {
+  const board = document.getElementById("board");
+  if (!board) return;
+  const v = state.boardView;
+  board.style.transform = `translate(${v.offsetX}px, ${v.offsetY}px) scale(${v.scale})`;
+}
 
 function fitBoard() {
   const board = document.getElementById("board");
@@ -2185,8 +2214,9 @@ function fitBoard() {
   const BOARD_BOX_W = 34;
   const BOARD_BOX_H = 34;
 
-  const maxByW = (viewportW - BOARD_BOX_W) / BOARD_SIZE;
-  const maxByH = (viewportH - RESERVED_H - BOARD_BOX_H) / BOARD_SIZE;
+  const { boardW, boardH } = currentBoardDimensions();
+  const maxByW = (viewportW - BOARD_BOX_W) / boardW;
+  const maxByH = (viewportH - RESERVED_H - BOARD_BOX_H) / boardH;
   const cellSize = Math.max(
     CELL_MIN,
     Math.min(CELL_MAX, Math.floor(Math.min(maxByW, maxByH)))
@@ -2196,6 +2226,12 @@ function fitBoard() {
   console.log("[fitBoard]", { viewportW, viewportH, maxByW, maxByH, cellSize });
 
   board.style.setProperty("--cell-size", cellSize + "px");
+  if (!state.boardView.manual) {
+    state.boardView.scale = 1;
+    state.boardView.offsetX = 0;
+    state.boardView.offsetY = 0;
+  }
+  applyBoardView();
 }
 
 window.addEventListener("resize",            fitBoard);
@@ -2290,11 +2326,7 @@ function terrainNameFromChar(ch) {
 function renderBoard(st) {
   const board = document.getElementById("board");
   // Determine board dimensions from tiles (supports custom-sized maps)
-  let boardW = BOARD_SIZE, boardH = BOARD_SIZE;
-  for (const t of st.tiles) {
-    if (t.x + 1 > boardW) boardW = t.x + 1;
-    if (t.y + 1 > boardH) boardH = t.y + 1;
-  }
+  const { boardW, boardH } = currentBoardDimensions(st);
   const biome = st.game?.map_biome || "grass";
   // Phase indicator + board gray-out for AI phase.
   const phase = st.game?.phase || "player";
@@ -2595,6 +2627,7 @@ function computeReachable(unit) {
   // Client-side BFS mirroring server's bfs_reachable() for instant preview.
   // Budget is doubled (unit.mp × 2) to match TERRAIN_COST_X2.
   const st = state.game;
+  const { boardW, boardH } = currentBoardDimensions(st);
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
   const occupied = new Set();
@@ -2611,7 +2644,7 @@ function computeReachable(unit) {
     const cur = queue.shift();
     for (const [dx, dy] of dirs) {
       const nx = cur.x + dx, ny = cur.y + dy;
-      if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+      if (nx < 0 || nx >= boardW || ny < 0 || ny >= boardH) continue;
       const key = `${nx},${ny}`;
       const t = tileMap.get(key);
       if (!t) continue;
@@ -2805,6 +2838,7 @@ function computeThreatArea(unit, reachableTiles) {
   const prof = getUnitAttackProfile(unit);
 
   const threat = new Set();
+  const { boardW, boardH } = currentBoardDimensions();
 
   function addFromPosition(px, py) {
     for (let dx = -prof.maxRange; dx <= prof.maxRange; dx++) {
@@ -2814,7 +2848,7 @@ function computeThreatArea(unit, reachableTiles) {
         if (d > prof.maxRange) continue;
         const nx = px + dx;
         const ny = py + dy;
-        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+        if (nx < 0 || nx >= boardW || ny < 0 || ny >= boardH) continue;
         threat.add(`${nx},${ny}`);
       }
     }
@@ -3331,6 +3365,7 @@ function computeClientPath(unit, toX, toY, reachable) {
   // Returns array of {x, y} steps (unit position first, destination last).
   if (!reachable?.has(`${toX},${toY}`)) return null;
   const st = state.game;
+  const { boardW, boardH } = currentBoardDimensions(st);
   const tileMap = new Map();
   for (const t of st.tiles) tileMap.set(`${t.x},${t.y}`, t);
   const occupied = new Set();
@@ -3364,7 +3399,7 @@ function computeClientPath(unit, toX, toY, reachable) {
     if (cur.cost > bestCost.get(ck)) continue;
     for (const [dx, dy] of dirs) {
       const nx = cur.x + dx, ny = cur.y + dy;
-      if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+      if (nx < 0 || nx >= boardW || ny < 0 || ny >= boardH) continue;
       const k = `${nx},${ny}`;
       const t = tileMap.get(k);
       if (!t) continue;
@@ -6215,6 +6250,62 @@ function initSplitDivider() {
   }
 }
 
+function initBoardPanZoom() {
+  const board = document.getElementById("board");
+  if (!board || board.dataset.panZoomReady === "1") return;
+  board.dataset.panZoomReady = "1";
+
+  board.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const v = state.boardView;
+    const oldScale = v.scale;
+    const nextScale = Math.max(
+      BOARD_ZOOM_MIN,
+      Math.min(BOARD_ZOOM_MAX, oldScale * (e.deltaY < 0 ? 1.12 : 0.88))
+    );
+    if (nextScale === oldScale) return;
+
+    const rect = board.getBoundingClientRect();
+    const anchorX = e.clientX - rect.left;
+    const anchorY = e.clientY - rect.top;
+    const ratio = nextScale / oldScale;
+    v.offsetX -= anchorX * (ratio - 1);
+    v.offsetY -= anchorY * (ratio - 1);
+    v.scale = nextScale;
+    v.manual = true;
+    applyBoardView();
+  }, { passive: false });
+
+  board.addEventListener("mousedown", (e) => {
+    if (e.button !== 1 && e.button !== 2) return;
+    e.preventDefault();
+    const v = state.boardView;
+    v.dragging = true;
+    v.manual = true;
+    v.dragStartX = e.clientX;
+    v.dragStartY = e.clientY;
+    v.startOffsetX = v.offsetX;
+    v.startOffsetY = v.offsetY;
+    board.classList.add("is-panning");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    const v = state.boardView;
+    if (!v.dragging) return;
+    v.offsetX = v.startOffsetX + e.clientX - v.dragStartX;
+    v.offsetY = v.startOffsetY + e.clientY - v.dragStartY;
+    applyBoardView();
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!state.boardView.dragging) return;
+    state.boardView.dragging = false;
+    board.classList.remove("is-panning");
+  });
+
+  board.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
 // ============================================================
 // Wiring
 // ============================================================
@@ -6247,6 +6338,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   // Initialize vertical split divider for left-column panes
   initSplitDivider();
+  initBoardPanZoom();
 
   // Settings first + fetch unit metadata
   renderSettings();
