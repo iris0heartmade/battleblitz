@@ -88,6 +88,7 @@ func _ready() -> void:
 		var sid: int = TileSetBuilder.source_id_for(String(terrain), "")
 		_assert_gte("fe8 source_id(%s,)" % terrain, sid, 0,
 			"missing FE8 source for %s" % terrain)
+	_assert_new_tileset_atlas_sources(ts)
 	_assert_tiles_fill_48px_regions(ts)
 	_assert_unit_sprite_preserves_aspect()
 
@@ -1316,12 +1317,68 @@ func _assert_tiles_fill_48px_regions(ts: TileSet) -> void:
 			"terrain texture must cover a 48px cell")
 		_assert_gte("tile image height(%s)" % terrain, img.get_height(), 48,
 			"terrain texture must cover a 48px cell")
-		var bottom_right: Color = img.get_pixel(47, 47)
-		_assert_true("tile fills bottom-right(%s)" % terrain, bottom_right.a > 0.05,
-			"48px tile region should not leave transparent padding")
+		var atlas_coord: Vector2i = TileSetBuilder.atlas_coord_for(String(terrain), biome)
+		if atlas_coord != Vector2i(-1, -1):
+			var tile_has_pixels := _atlas_tile_has_visible_pixels(img, atlas_coord)
+			_assert_true("atlas tile has visible pixels(%s)" % terrain, tile_has_pixels,
+				"configured atlas tile should contain visible art in its 48px cell")
+		else:
+			var bottom_right: Color = img.get_pixel(47, 47)
+			_assert_true("tile fills bottom-right(%s)" % terrain, bottom_right.a > 0.05,
+				"48px tile region should not leave transparent padding")
 		var center: Color = img.get_pixel(24, 24)
 		_assert_true("tile avoids debug fill(%s)" % terrain, not _is_debug_magenta(center),
 			"missing tile assets should fall back to real terrain art, not debug color")
+
+
+func _atlas_tile_has_visible_pixels(img: Image, atlas_coord: Vector2i) -> bool:
+	var x0 := atlas_coord.x * MAP_METRICS_SCRIPT.TILE_SIZE.x
+	var y0 := atlas_coord.y * MAP_METRICS_SCRIPT.TILE_SIZE.y
+	for y in range(y0, min(y0 + MAP_METRICS_SCRIPT.TILE_SIZE.y, img.get_height())):
+		for x in range(x0, min(x0 + MAP_METRICS_SCRIPT.TILE_SIZE.x, img.get_width())):
+			if img.get_pixel(x, y).a > 0.05:
+				return true
+	return false
+
+
+func _assert_new_tileset_atlas_sources(ts: TileSet) -> void:
+	var checks := {
+		"plain|": {
+			"path": "res://assets/tilesets/base_terrain_roads.png",
+			"coord": Vector2i(0, 0),
+		},
+		"road|": {
+			"path": "res://assets/tilesets/base_terrain_roads.png",
+			"coord": Vector2i(0, 1),
+		},
+		"village|": {
+			"path": "res://assets/tilesets/village_castle_mountains.png",
+			"coord": Vector2i(0, 0),
+		},
+		"forest|grass": {
+			"path": "res://assets/tilesets/trees_mountains.png",
+			"coord": Vector2i(0, 0),
+		},
+	}
+	for key in checks.keys():
+		var parts := String(key).split("|", false)
+		var terrain := String(parts[0])
+		var biome := String(parts[1]) if parts.size() > 1 else ""
+		var sid: int = TileSetBuilder.source_id_for(terrain, biome)
+		_assert_gte("atlas source id(%s)" % key, sid, 0,
+			"terrain should resolve to the committed atlas sheet")
+		if sid < 0:
+			continue
+		var source: TileSetSource = ts.get_source(sid)
+		if not (source is TileSetAtlasSource):
+			_fail("atlas source for %s is not TileSetAtlasSource" % key)
+			continue
+		var atlas_source: TileSetAtlasSource = source
+		_assert_eq("atlas source path(%s)" % key, atlas_source.resource_name, str(checks[key]["path"]),
+			"terrain should keep a stable atlas source path for resource replacement")
+		var coords: Array = TileSetBuilder.atlas_coords_for(terrain, biome)
+		_assert_true("atlas coord pool(%s)" % key, coords.has(checks[key]["coord"]),
+			"terrain should include the documented tile inside the new atlas sheet")
 
 
 func _assert_unit_sprite_preserves_aspect() -> void:
