@@ -124,7 +124,8 @@ godot-client/
 ├── project.godot
 ├── README.md
 ├── assets/
-│   └── tiles/                 # synced from game/app/web/assets/tiles/
+│   ├── tiles/                 # legacy 48x48 per-terrain fallback tiles
+│   └── tilesets/              # preferred 48px-grid atlas sheets + same-name .txt label maps
 ├── scripts/
 │   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings
 │   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, types
