@@ -1543,13 +1543,9 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for p in GameState.players:
-		if not p is Dictionary: continue
-		for u in p.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(src_unit)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	var owners: Dictionary = {}
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -1563,7 +1559,7 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 			terrain[k] = str(t.get("terrain", "plain"))
 	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
 	var path: Array = MapLogic.pathfind(
-		src_cell, target_cell, terrain, owners, mov * 2, _player_id, blocked, size_v
+		src_cell, target_cell, terrain, owners, mov, _player_id, blocked, no_end, size_v
 	)
 	_move_preview_path = path.duplicate()
 	_move_preview_target = target_cell
@@ -2421,13 +2417,9 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(unit_data)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	var owners: Dictionary = {}
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -2441,7 +2433,7 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 			terrain[k] = str(t.get("terrain", "plain"))
 	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
 	)
 	print("DEBUG reachable: result_size=%s" % result.size())
 	return result
@@ -2453,13 +2445,9 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(unit_data)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	# terrain: tile (Vector2i) → terrain_name(String);owner 编码另外从
 	# tile_lookup_inverse 或 Players 推,这里先用 0 当占位
 	var terrain: Dictionary = {}
@@ -2471,13 +2459,42 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 			var owner_v = t.get("owner_id", null)
 			owners[k] = int(owner_v) if owner_v != null else 0
 	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
-	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, size)
+	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, no_end, size)
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
 	)
 	# 移除起点(不要把自身高亮成可达)
 	result.erase(unit_pos)
 	return result.keys()
+
+
+func _movement_occupancy_for_unit(unit_data: Dictionary) -> Dictionary:
+	var blocked: Dictionary = {}
+	var no_end: Dictionary = {}
+	if GameState == null:
+		return {"blocked": blocked, "no_end": no_end}
+	var mover_pid: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
+	var mover_team: String = _player_team_key(mover_pid)
+	var mover_id: int = int(unit_data.get("id", -1))
+	for player in GameState.players:
+		if not player is Dictionary:
+			continue
+		var other_pid: int = int(player.get("id", -1))
+		var same_team: bool = other_pid > 0 and _player_team_key(other_pid) == mover_team
+		for unit in player.get("units", []):
+			if not unit is Dictionary:
+				continue
+			var unit_id: int = int(unit.get("id", -1))
+			if unit_id == mover_id:
+				continue
+			if int(unit.get("hp", 1)) == 0:
+				continue
+			var cell := Vector2i(int(unit.get("x", 0)), int(unit.get("y", 0)))
+			if same_team:
+				no_end[cell] = true
+			else:
+				blocked[cell] = true
+	return {"blocked": blocked, "no_end": no_end}
 
 
 func _toggle_pause() -> void:

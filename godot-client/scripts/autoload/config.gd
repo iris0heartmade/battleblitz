@@ -79,6 +79,27 @@ const FE8_ATLAS_SIZE := Vector2i(512, 512)    # master tilemap dimensions
 const FE8_TILE_SIZE := Vector2i(16, 16)       # sub-tile dimensions in the master
 const FE8_ATLAS_PATH := "res://FE8/OverworldRegular.png"
 const USE_FE8_ATLAS: bool = false
+const USE_TILESET_ATLASES: bool = true
+const TILESET_ATLAS_COORDS: Dictionary = {
+	# Key format: "{terrain}|{biome}". Empty biome means every biome unless
+	# a more specific key exists.
+	"plain|": {"path": "res://assets/tilesets/base_terrain_roads.png", "coord": Vector2i(0, 0)},
+	"road|": {"path": "res://assets/tilesets/base_terrain_roads.png", "coord": Vector2i(0, 1)},
+	"desert|": {"path": "res://assets/tilesets/base_terrain_roads.png", "coord": Vector2i(0, 2)},
+	"snow|": {"path": "res://assets/tilesets/base_terrain_roads.png", "coord": Vector2i(0, 3)},
+	"river|": {"path": "res://assets/tilesets/base_terrain_roads.png", "coord": Vector2i(0, 5)},
+	"forest|grass": {"path": "res://assets/tilesets/trees_mountains.png", "coord": Vector2i(0, 0)},
+	"forest|snow": {"path": "res://assets/tilesets/trees_mountains.png", "coord": Vector2i(0, 1)},
+	"forest|desert": {"path": "res://assets/tilesets/trees_mountains.png", "coord": Vector2i(0, 2)},
+	"village|": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(0, 0)},
+	"barracks|": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(1, 1)},
+	"castle|grass": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(1, 2)},
+	"castle|desert": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(1, 3)},
+	"castle|snow": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(1, 4)},
+	"mountain|": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(0, 5)},
+	"snow_peak|": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(0, 6)},
+	"gate|": {"path": "res://assets/tilesets/village_castle_mountains.png", "coord": Vector2i(3, 2)},
+}
 
 # 4×4 autotile block origins in the FE8 master tilemap. Each block
 # holds 16 16×16 sub-tiles (one per bitmask state) following the

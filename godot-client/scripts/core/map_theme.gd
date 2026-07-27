@@ -9,6 +9,9 @@ const _GROUND_OVERLAY_TERRAINS := {
 	"village": true,
 	"barracks": true,
 	"gate": true,
+	"forest": true,
+	"mountain": true,
+	"snow_peak": true,
 }
 
 const _STRUCTURE_SOURCE_KEYS := {
@@ -24,17 +27,33 @@ const _STRUCTURE_SOURCE_KEYS := {
 	"castle_door": true,
 }
 
+const _DECOR_SOURCE_KEYS := {
+	"forest": true,
+	"mountain": true,
+	"snow_peak": true,
+}
+
 
 static func layer_for_cell(terrain: String, subtype: String) -> int:
 	var lookup_key := source_lookup_key(terrain, subtype)
 	if _STRUCTURE_SOURCE_KEYS.has(lookup_key):
 		return LayerKind.STRUCTURE
+	if _DECOR_SOURCE_KEYS.has(lookup_key):
+		return LayerKind.DECOR
 	return LayerKind.GROUND
 
 
-static func ground_lookup_key(terrain: String, subtype: String = "") -> String:
+static func ground_lookup_key(terrain: String, subtype: String = "", biome: String = Config.DEFAULT_BIOME) -> String:
 	if terrain == "castle" and subtype != "":
 		return "castle"
+	if terrain == "forest" or terrain == "mountain":
+		if biome == "desert":
+			return "desert"
+		if biome == "snow":
+			return "snow"
+		return "plain"
+	if terrain == "snow_peak":
+		return "snow"
 	if _GROUND_OVERLAY_TERRAINS.has(terrain):
 		return "plain"
 	return terrain
