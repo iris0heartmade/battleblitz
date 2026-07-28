@@ -18,6 +18,9 @@ func _await_frames(n: int) -> void:
 
 
 func _ready() -> void:
+	NetworkClient.api_error.connect(func(method: String, path: String, error: String, code: int):
+		print("[saves_flow] API_ERROR %s %s code=%d error=%s" % [method, path, code, error])
+	)
 	DirAccess.make_dir_recursive_absolute(_OUT_DIR)
 	await _await_frames(6)
 	var main_app: Node = get_tree().current_scene
@@ -50,6 +53,17 @@ func _ready() -> void:
 	var save_slots_container: VBoxContainer = saves_view.get_node_or_null("SaveFrame/SaveSlotsContainer")
 	var save_auto_row: PanelContainer = saves_view.get_node_or_null("SaveFrame/SaveAutoRow")
 	var save_suspend_row: PanelContainer = saves_view.get_node_or_null("SaveFrame/SaveSuspendRow")
+	# Verify the live backend response before the richer mock data below replaces
+	# it. This catches the exact regression where the screen stayed loading.
+	if save_status == null or save_status.text != "三存档槽":
+		printerr("[saves_flow] live /saves response did not complete: %s" % (save_status.text if save_status else "missing status"))
+		get_tree().quit(1)
+		return
+	if save_slots_container == null or save_slots_container.get_child_count() != 3:
+		printerr("[saves_flow] live /saves did not render three manual slots")
+		get_tree().quit(1)
+		return
+	print("[saves_flow] live backend response rendered 3 manual slots")
 	# 注入 mock 数据(模拟后端响应,确保 3 槽 + auto + suspend 都能渲染)
 	saves_view.call("_on_saves_response", {
 		"manual_slots": [

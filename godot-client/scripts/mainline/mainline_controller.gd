@@ -225,7 +225,7 @@ func _set_mainline_page(page: String) -> void:
 # FE8-style entry: mainline starts from the three formal save slots.
 func _on_ml_slots_response(body: Variant, code: int = 0) -> void:
 	if code < 200 or code >= 300 or not (body is Dictionary):
-		ml_title.text = "主线存档"
+		ml_title.text = "主线存档 · 读取失败"
 		_main._update_status("读取主线存档失败")
 		_manual_slot_records = [{}, {}, {}]
 		_render_mainline_slots()
