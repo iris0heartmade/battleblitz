@@ -1204,7 +1204,7 @@ offset_bottom = 98.0
 texture = ExtResource("7_chapter_banner")
 expand_mode = 1
 stretch_mode = 6
-modulate = Color(1, 1, 1, 0.28)
+modulate = Color(1, 1, 1, 0.12)
 mouse_filter = 2
 
 [node name="MLBorder" type="ReferenceRect" parent="MainlineView/MLFrame"]

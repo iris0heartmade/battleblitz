@@ -190,7 +190,6 @@ func open() -> void:
 	# The save response drives the entry screen, so it must be first in the
 	# serialized request queue. The other data can arrive afterwards.
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
-	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
 	if _main._hero_speaker_map.is_empty():
 		NetworkClient.list_heroes(Callable(_main, "_on_heroes_response"))
 
@@ -206,9 +205,9 @@ func _set_mainline_page(page: String) -> void:
 	var showing_prepare := page == "prepare"
 	var showing_entry := page == "slot_select" or page == "chapter_list"
 	_set_node_visible(ml_list_container, showing_entry)
-	_set_node_visible(ml_commander_status, showing_entry)
-	_set_node_visible(ml_commander_option, showing_entry)
-	_set_node_visible(ml_apply_commander_btn, showing_entry)
+	_set_node_visible(ml_commander_status, showing_prepare)
+	_set_node_visible(ml_commander_option, showing_prepare)
+	_set_node_visible(ml_apply_commander_btn, showing_prepare)
 	_set_node_visible(ml_right_placeholder, showing_entry)
 	_set_node_visible(ml_prep_summary, showing_prepare)
 	_set_node_visible(ml_prep_tabs, showing_prepare)
@@ -218,6 +217,7 @@ func _set_mainline_page(page: String) -> void:
 	_set_node_visible(ml_prep_refresh_btn, showing_prepare)
 	_set_node_visible(ml_prep_action_btn, showing_prepare)
 	_set_node_visible(ml_prep_alt_action_btn, showing_prepare)
+	_set_node_visible(ml_abandon_btn, showing_prepare)
 	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
 		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
 
@@ -672,6 +672,7 @@ func _on_mainline_prepare_response(body: Variant, code: int = 0, mainline_id: St
 	if _main._selected_prepare_hero_id == "" and not heroes.is_empty() and heroes[0] is Dictionary:
 		_main._selected_prepare_hero_id = str((heroes[0] as Dictionary).get("hero_id", ""))
 	_main._mainline_prepare_tab = "heroes"
+	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
 	_set_mainline_page("prepare")
 	_render_mainline_prepare()
 

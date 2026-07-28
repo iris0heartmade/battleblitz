@@ -12,7 +12,6 @@ const C_RUBY: Color = Color("#9b3142")
 const C_RUBY_DARK: Color = Color("#5b1725")
 const C_TEXT: Color = Color("#fff0cb")
 const C_TEXT_DIM: Color = Color("#b6a783")
-const PANEL_SKIN: Texture2D = preload("res://assets/ui/mainline_panel_skin_v1.png")
 
 
 static func _box(fill: Color, border: Color, width: int = 1, radius: int = 4) -> StyleBoxFlat:
@@ -107,7 +106,7 @@ static func apply_option(option: OptionButton) -> void:
 
 
 static func apply_section_panel(panel: Control, accent: Color) -> void:
-	var style := _box(Color("#09172acc"), accent, 1, 5)
+	var style := _box(Color("#0c1d34"), accent, 1, 5)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.22)
 	style.shadow_size = 5
 	panel.add_theme_stylebox_override("panel", style)
@@ -127,18 +126,8 @@ static func apply_frame(frame: Panel, border: ReferenceRect, title: Label, summa
 	frame_style.shadow_offset = Vector2(0, 6)
 	frame.add_theme_stylebox_override("panel", frame_style)
 	var skin := frame.get_node_or_null("ArtSkin") as TextureRect
-	if skin == null:
-		skin = TextureRect.new()
-		skin.name = "ArtSkin"
-		skin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		skin.anchor_right = 1.0
-		skin.anchor_bottom = 1.0
-		skin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		skin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		skin.texture = PANEL_SKIN
-		skin.modulate = Color(1.0, 1.0, 1.0, 0.20)
-		frame.add_child(skin)
-		frame.move_child(skin, 0)
+	if skin != null:
+		skin.queue_free()
 	border.border_color = Color(C_GOLD_BRIGHT.r, C_GOLD_BRIGHT.g, C_GOLD_BRIGHT.b, 0.65)
 	border.border_width = 1.0
 	border.offset_left = 10
