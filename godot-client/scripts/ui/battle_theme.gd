@@ -10,7 +10,6 @@ const C_TEXT: Color = Color("#fff0cb")
 const C_TEXT_DIM: Color = Color("#b6a783")
 const C_RUBY: Color = Color("#8c273b")
 const C_RUBY_DARK: Color = Color("#4e1421")
-const SIDE_PANEL_ART: Texture2D = preload("res://assets/ui/battle_side_panel_translucent_v1.png")
 
 
 static func _box(fill: Color, border: Color, width: int = 1, radius: int = 3) -> StyleBoxFlat:
@@ -41,25 +40,16 @@ static func apply_panel(panel: Panel, border: Color = C_GOLD) -> void:
 
 
 static func apply_floating_panel(panel: Panel, border: Color = C_GOLD) -> void:
-	# Side intelligence panels should reveal the battlefield beneath them.
-	var style := _box(Color(C_INK.r, C_INK.g, C_INK.b, 0.18), border, 1, 5)
+	# Side intelligence panels need readable tactical text.  They are hidden until
+	# selected, so a deep translucent surface is clearer than a permanent overlay.
+	var style := _box(Color(C_INK.r, C_INK.g, C_INK.b, 0.84), border, 1, 5)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.28)
 	style.shadow_size = 6
 	style.shadow_offset = Vector2(0, 2)
 	panel.add_theme_stylebox_override("panel", style)
 	var skin := panel.get_node_or_null("ArtSkin") as TextureRect
-	if skin == null:
-		skin = TextureRect.new()
-		skin.name = "ArtSkin"
-		skin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		skin.anchor_right = 1.0
-		skin.anchor_bottom = 1.0
-		skin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		skin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		skin.texture = SIDE_PANEL_ART
-		skin.modulate = Color(1.0, 1.0, 1.0, 0.24)
-		panel.add_child(skin)
-		panel.move_child(skin, 0)
+	if skin != null:
+		skin.queue_free()
 
 
 static func apply_primary(button: Button) -> void:

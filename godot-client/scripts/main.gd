@@ -3150,6 +3150,10 @@ func _apply_gba_theme() -> void:
 
 
 func _apply_hud_theme() -> void:
+	# Do not reserve a large opaque column before the player selects a unit.
+	# The tactical board remains the primary surface until inspection is needed.
+	if info_panel != null and is_instance_valid(info_panel):
+		info_panel.visible = false
 	# Pills are ColorRect containers with ReferenceRect borders added
 	# in _ready. We only need to set font sizes / colors on inner Labels.
 	var pill_size := 14
@@ -6099,6 +6103,8 @@ func _on_recruit_response(body: Variant, code: int = 0) -> void:
 func _refresh_unit_info(ud: Dictionary) -> void:
 	if unit_info == null or not is_instance_valid(unit_info):
 		return
+	if info_panel != null and is_instance_valid(info_panel):
+		info_panel.visible = true
 	unit_info.bbcode_enabled = true
 	var name: String = _unit_cn_name(ud, "单位")
 	var lvl: int = int(ud.get("level", 1))

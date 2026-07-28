@@ -1338,6 +1338,15 @@ bbcode_enabled = true
 scroll_active = true
 text = "[color=#a69a73]尚未载入整备资料。[/color]"
 
+[node name="MLPrepFocusCard" type="Panel" parent="MainlineView/MLFrame"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 531.0
+offset_top = 327.0
+offset_right = -36.0
+offset_bottom = -174.0
+
 [node name="MLPrepStartBtn" type="Button" parent="MainlineView/MLFrame"]
 anchor_left = 1.0
 anchor_top = 1.0

@@ -32,6 +32,7 @@ var _main: Node = null
 @onready var ml_prep_summary: RichTextLabel = $MLFrame/MLPrepSummary
 @onready var ml_prep_tabs: HBoxContainer = $MLFrame/MLPrepTabs
 @onready var ml_prep_content: RichTextLabel = $MLFrame/MLPrepContent
+@onready var ml_prep_focus_card: Panel = $MLFrame/MLPrepFocusCard
 @onready var ml_prep_start_btn: Button = $MLFrame/MLPrepStartBtn
 @onready var ml_prep_complete_btn: Button = $MLFrame/MLPrepCompleteBtn
 @onready var ml_prep_refresh_btn: Button = $MLFrame/MLPrepRefreshBtn
@@ -139,6 +140,7 @@ func _ready() -> void:
 # split from main.gd, so styling it there silently stopped affecting this view.
 func _apply_mainline_visual_theme() -> void:
 	MainlineTheme.apply_frame(ml_frame, ml_border, ml_title, ml_prep_summary, ml_prep_content)
+	MainlineTheme.apply_section_panel(ml_prep_focus_card, MainlineTheme.C_GOLD)
 	MainlineTheme.apply_section_panel(ml_right_placeholder, MainlineTheme.C_GOLD)
 	for tab in [
 		ml_prep_heroes_tab_btn, ml_prep_roster_tab_btn, ml_prep_equipment_tab_btn,
@@ -212,6 +214,7 @@ func _set_mainline_page(page: String) -> void:
 	_set_node_visible(ml_prep_summary, showing_prepare)
 	_set_node_visible(ml_prep_tabs, showing_prepare)
 	_set_node_visible(ml_prep_content, showing_prepare)
+	_set_node_visible(ml_prep_focus_card, false)
 	_set_node_visible(ml_prep_start_btn, showing_prepare)
 	_set_node_visible(ml_prep_complete_btn, showing_prepare)
 	_set_node_visible(ml_prep_refresh_btn, showing_prepare)
@@ -792,6 +795,11 @@ func _render_mainline_prepare() -> void:
 		_bb_escape(_main._selected_mainline_id), battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
 	]
 	_sync_prepare_selectors()
+	var uses_focus_card: bool = _main._mainline_prepare_tab == "heroes" or _main._mainline_prepare_tab == "equipment"
+	_set_node_visible(ml_prep_focus_card, uses_focus_card)
+	_set_node_visible(ml_prep_content, not uses_focus_card)
+	if uses_focus_card:
+		_render_prepare_focus_card(_main._mainline_prepare_tab)
 	match _main._mainline_prepare_tab:
 		"roster":
 			_main._set_prepare_content(_build_prepare_roster_text(_main._mainline_prepare_payload))
@@ -805,6 +813,70 @@ func _render_mainline_prepare() -> void:
 			_main._set_prepare_content(_build_prepare_saves_text())
 		_:
 			_main._set_prepare_content(_build_prepare_heroes_text(_main._mainline_prepare_payload))
+
+
+func _render_prepare_focus_card(tab: String) -> void:
+	for child in ml_prep_focus_card.get_children():
+		ml_prep_focus_card.remove_child(child)
+		child.queue_free()
+	var hero := _focused_prepare_hero()
+	if hero.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 14)
+	row.add_theme_constant_override("separation", 16)
+	ml_prep_focus_card.add_child(row)
+	var portrait_frame := Panel.new()
+	portrait_frame.custom_minimum_size = Vector2(176, 0)
+	portrait_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	MainlineTheme.apply_section_panel(portrait_frame, MainlineTheme.C_GOLD)
+	row.add_child(portrait_frame)
+	var portrait := TextureRect.new()
+	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var portrait_path := "res://assets/heroes/portrait_%s.png" % str(hero.get("hero_id", ""))
+	if ResourceLoader.exists(portrait_path):
+		portrait.texture = load(portrait_path) as Texture2D
+	portrait_frame.add_child(portrait)
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details.add_theme_constant_override("separation", 10)
+	row.add_child(details)
+	var title := Label.new()
+	title.text = "%s  ·  %s  ·  Lv.%d" % [str(hero.get("name", "英雄")), str(hero.get("class_id", "")), int(hero.get("level", 1))]
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", MainlineTheme.C_GOLD_BRIGHT)
+	details.add_child(title)
+	var stats: Dictionary = hero.get("base_stats", {}) if hero.get("base_stats", {}) is Dictionary else {}
+	var stat_label := Label.new()
+	stat_label.text = "生命 %s    攻击 %s    防御 %s\n速度 %s    魔攻 %s    魔防 %s" % [stats.get("hp", "-"), stats.get("atk", "-"), stats.get("def", "-"), stats.get("spd", "-"), stats.get("matk", "-"), stats.get("mdef", "-")]
+	stat_label.add_theme_font_size_override("font_size", 16)
+	stat_label.add_theme_color_override("font_color", MainlineTheme.C_TEXT)
+	details.add_child(stat_label)
+	var equipment: Dictionary = hero.get("equipment", {}) if hero.get("equipment", {}) is Dictionary else {}
+	var section := Label.new()
+	section.text = "装备槽" if tab == "equipment" else "当前装备与技能"
+	section.add_theme_font_size_override("font_size", 17)
+	section.add_theme_color_override("font_color", MainlineTheme.C_GOLD)
+	details.add_child(section)
+	for slot in ["weapon", "armor", "accessory"]:
+		var slot_card := Label.new()
+		var slot_name: String = str({"weapon": "武器", "armor": "防具", "accessory": "饰品"}.get(slot, slot))
+		slot_card.text = "%s  ·  %s" % [slot_name, str(equipment.get(slot, "未装备"))]
+		slot_card.add_theme_font_size_override("font_size", 16)
+		slot_card.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM if str(equipment.get(slot, "")) == "" else MainlineTheme.C_TEXT)
+		details.add_child(slot_card)
+	if tab == "equipment":
+		var inventory: Dictionary = _main._mainline_prepare_payload.get("inventory", {}) if _main._mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
+		var selected := _selected_equippable_item()
+		var hint := Label.new()
+		hint.text = "背包选中：%s · 库存 %d\n在上方选择装备后，使用“装备选中”确认。" % [str(selected.get("name", "未选择")), int(inventory.get(str(selected.get("equipment_id", "")), 0))]
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.add_theme_font_size_override("font_size", 14)
+		hint.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM)
+		details.add_child(hint)
 
 
 
