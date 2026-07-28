@@ -105,7 +105,7 @@ static func apply_option(option: OptionButton) -> void:
 	option.add_theme_stylebox_override("focus", hover_style)
 
 
-static func apply_section_panel(panel: Panel, accent: Color) -> void:
+static func apply_section_panel(panel: Control, accent: Color) -> void:
 	var style := _box(Color("#09172acc"), accent, 1, 5)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.22)
 	style.shadow_size = 5

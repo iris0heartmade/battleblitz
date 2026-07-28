@@ -11,6 +11,7 @@ extends Control
 ## 节点路径相对 MainlineView: $MLFrame/<X>(原 main.gd 用 $MainlineView/MLFrame/<X>)
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const MainlineTheme = preload("res://scripts/ui/mainline_theme.gd")
 const StatusBadge = preload("res://scripts/ui/_components/status_badge.gd")
 const SectionHeader = preload("res://scripts/ui/_components/section_header.gd")
 
@@ -20,6 +21,8 @@ const _MANUAL_SLOT_COUNT := 3
 var _main: Node = null
 
 @onready var ml_title: Label = $MLFrame/MLTitle
+@onready var ml_frame: Panel = $MLFrame
+@onready var ml_border: ReferenceRect = $MLFrame/MLBorder
 @onready var ml_list_container: VBoxContainer = $MLFrame/MLListContainer
 @onready var ml_commander_status: Label = $MLFrame/CommanderStatus
 @onready var ml_commander_option: OptionButton = $MLFrame/CommanderOption
@@ -129,6 +132,37 @@ func _ready() -> void:
 		MenuTheme.apply_primary_button_theme(ml_apply_commander_btn, MenuTheme.FS_BODY_SM)
 	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
 		MenuTheme.apply_secondary_button_theme(ml_abandon_btn, MenuTheme.FS_BODY_SM)
+	_apply_mainline_visual_theme()
+
+
+# Keep the campaign presentation in this controller.  The mainline module was
+# split from main.gd, so styling it there silently stopped affecting this view.
+func _apply_mainline_visual_theme() -> void:
+	MainlineTheme.apply_frame(ml_frame, ml_border, ml_title, ml_prep_summary, ml_prep_content)
+	MainlineTheme.apply_section_panel(ml_right_placeholder, MainlineTheme.C_GOLD)
+	for tab in [
+		ml_prep_heroes_tab_btn, ml_prep_roster_tab_btn, ml_prep_equipment_tab_btn,
+		ml_prep_mercenary_tab_btn, ml_prep_shop_tab_btn, ml_prep_saves_tab_btn,
+	]:
+		if tab != null and is_instance_valid(tab):
+			MainlineTheme.apply_tab(tab)
+	for option in [
+		ml_prep_hero_select, ml_prep_equipment_select, ml_prep_merc_unit_select,
+		ml_prep_merc_stat_select, ml_prep_shop_select, ml_commander_option,
+	]:
+		if option != null and is_instance_valid(option):
+			MainlineTheme.apply_option(option)
+	for btn in [ml_back_btn, ml_prep_refresh_btn, ml_prep_action_btn, ml_prep_alt_action_btn]:
+		if btn != null and is_instance_valid(btn):
+			MainlineTheme.apply_secondary(btn)
+	MainlineTheme.apply_primary(ml_prep_start_btn)
+	MainlineTheme.apply_primary(ml_prep_complete_btn)
+	MainlineTheme.apply_primary(ml_apply_commander_btn)
+	MainlineTheme.apply_danger(ml_abandon_btn)
+	if ml_commander_status != null and is_instance_valid(ml_commander_status):
+		ml_commander_status.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM)
+	if ml_rp_hint != null and is_instance_valid(ml_rp_hint):
+		ml_rp_hint.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM)
 
 
 func open() -> void:
@@ -222,6 +256,7 @@ func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
 	var row := PanelContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.custom_minimum_size = Vector2(0, 96)
+	MainlineTheme.apply_section_panel(row, MainlineTheme.C_GOLD)
 	var box := HBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", MenuTheme.GAP_M)
@@ -233,6 +268,7 @@ func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_theme_font_size_override("font_size", MenuTheme.FS_TITLE)
 	badge.text = "槽 %d" % (slot_index + 1)
+	MainlineTheme.apply_slot_label(badge, not rec.is_empty())
 	box.add_child(badge)
 
 	var info := RichTextLabel.new()
@@ -262,7 +298,7 @@ func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
 	else:
 		action.text = "继续"
 		action.pressed.connect(_on_slot_continue_pressed.bind(slot_index))
-	MenuTheme.apply_primary_button_theme(action, MenuTheme.FS_BTN)
+	MainlineTheme.apply_primary(action)
 	box.add_child(action)
 	return row
 
@@ -431,6 +467,7 @@ func _render_mainline_list() -> void:
 		btn.text = ("✓  %s · %d 场战斗  [已通关]" % [title, battles]) if cleared else ("%s · %d 场战斗" % [title, battles])
 		btn.tooltip_text = desc
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		MainlineTheme.apply_chapter_button(btn)
 		btn.pressed.connect(_on_ml_card_pressed.bind(id))
 		ml_list_container.add_child(btn)
 
@@ -1703,5 +1740,4 @@ func _sync_prepare_mercenary_selects() -> void:
 			ml_prep_merc_stat_select.select(selected_stat_index)
 			_main._selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(selected_stat_index))
 		ml_prep_merc_stat_select.disabled = ml_prep_merc_stat_select.item_count <= 0
-
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/ui/saves_controller.gd" id="4_saves"]
 [ext_resource type="Script" path="res://scripts/mainline/mainline_controller.gd" id="5_mainline"]
 [ext_resource type="Script" path="res://scripts/ui/in_progress_controller.gd" id="6_in_progress"]
+[ext_resource type="Texture2D" path="res://assets/ui/chapter_banner_v1.png" id="7_chapter_banner"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1184,7 +1185,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("5_mainline")
 
-[node name="MLFrame" type="ColorRect" parent="MainlineView"]
+[node name="MLFrame" type="Panel" parent="MainlineView"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -1193,7 +1194,18 @@ offset_left = -570.0
 offset_top = -495.0
 offset_right = 750.0
 offset_bottom = 495.0
-color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="ChapterBanner" type="TextureRect" parent="MainlineView/MLFrame"]
+anchor_right = 1.0
+offset_left = 14.0
+offset_top = 14.0
+offset_right = -14.0
+offset_bottom = 98.0
+texture = ExtResource("7_chapter_banner")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 1, 1, 0.28)
+mouse_filter = 2
 
 [node name="MLBorder" type="ReferenceRect" parent="MainlineView/MLFrame"]
 editor_only = false
