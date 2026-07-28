@@ -2134,11 +2134,11 @@ html, body {
 }
 .portrait-panel-inner {
   width: 180px;
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  box-shadow: none;
+  background: transparent;
+  border: 0;
 }
 .portrait-image {
   display: block;
@@ -2147,7 +2147,7 @@ html, body {
   max-height: 50vh;
   object-fit: contain;
   object-position: top center;
-  background: var(--bg);
+  background: transparent;
 }
 .portrait-name-tag {
   text-align: center;
@@ -2155,7 +2155,7 @@ html, body {
   font-weight: 700;
   padding: 8px 10px;
   color: var(--accent);
-  background: rgba(0,0,0,0.3);
+  background: transparent;
   letter-spacing: 1px;
 }
 

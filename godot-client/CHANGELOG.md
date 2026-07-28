@@ -2,6 +2,8 @@
 
 ## 2026-07-28
 
+- Added a transparent, borderless selected-unit portrait slot that resolves hero portraits first and generic unit portraits from `assets/unit_portraits/`.
+- Added generated generic unit portraits for all 15 registered unit types, with T2 portraits rendered more richly than T1 while keeping NPC eyes hidden.
 - Fixed large-map camera refresh: state polling no longer reloads the same board every tick, so manual zoom and pan stay in place.
 - Added middle-mouse panning support on the Godot board while keeping wheel zoom.
 - Fixed rules-AI HQ targeting in team games: AI now excludes teammate HQs from enemy castle pull targets, so allied AI advances toward enemy HQs instead of the player's HQ.

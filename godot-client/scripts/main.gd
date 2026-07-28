@@ -3202,17 +3202,18 @@ func _apply_hud_theme() -> void:
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
 	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
-		MenuTheme.apply_panel_theme(hero_portrait_panel, MenuTheme.C_BG_PANEL)
-		var sb_portrait: StyleBoxFlat = hero_portrait_panel.get_theme_stylebox("panel").duplicate()
-		sb_portrait.border_width_left = 2
-		sb_portrait.border_width_right = 2
-		sb_portrait.border_width_top = 2
-		sb_portrait.border_width_bottom = 2
-		sb_portrait.set_corner_radius_all(3)
-		sb_portrait.content_margin_left = 2
-		sb_portrait.content_margin_right = 2
-		sb_portrait.content_margin_top = 2
-		sb_portrait.content_margin_bottom = 2
+		hero_portrait_panel.self_modulate = Color(1, 1, 1, 0)
+		var sb_portrait := StyleBoxFlat.new()
+		sb_portrait.bg_color = Color(0, 0, 0, 0)
+		sb_portrait.border_color = Color(0, 0, 0, 0)
+		sb_portrait.border_width_left = 0
+		sb_portrait.border_width_right = 0
+		sb_portrait.border_width_top = 0
+		sb_portrait.border_width_bottom = 0
+		sb_portrait.content_margin_left = 0
+		sb_portrait.content_margin_right = 0
+		sb_portrait.content_margin_top = 0
+		sb_portrait.content_margin_bottom = 0
 		hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.add_theme_font_size_override("normal_font_size", 13)
@@ -6124,7 +6125,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	# 显式判断 Variant 类型后再 stringify。
 	var hero_id_v: Variant = ud.get("hero_id", null)
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
-	_set_unit_info_portrait(hero_id)
+	_set_unit_info_portrait(ud)
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
 	var skill_names: Array[String] = []
@@ -6196,7 +6197,19 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	unit_info.text = "\n".join(lines)
 
 
-func _set_unit_info_portrait(hero_id: String) -> void:
+func _unit_portrait_path_for(unit: Dictionary) -> String:
+	var hero_id_v: Variant = unit.get("hero_id", null)
+	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
+	if hero_id != "":
+		return "res://assets/heroes/portrait_%s.png" % hero_id
+	var unit_type_v: Variant = unit.get("unit_type", unit.get("type", null))
+	var unit_type: String = "" if unit_type_v == null else str(unit_type_v)
+	if unit_type == "":
+		return ""
+	return "res://assets/unit_portraits/portrait_%s.png" % unit_type
+
+
+func _set_unit_info_portrait(unit: Dictionary) -> void:
 	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
 	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
 	# 还原默认 -12.0。
@@ -6208,11 +6221,11 @@ func _set_unit_info_portrait(hero_id: String) -> void:
 		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero_portrait_panel.add_child(_unit_info_portrait_tex)
-	if hero_id == "":
+	var portrait_path := _unit_portrait_path_for(unit)
+	if portrait_path == "":
 		_unit_info_portrait_tex.visible = false
 		hero_portrait_panel.visible = false
 		return
-	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
 	if not FileAccess.file_exists(portrait_path):
 		_unit_info_portrait_tex.visible = false
 		hero_portrait_panel.visible = false
