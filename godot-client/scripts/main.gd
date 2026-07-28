@@ -1,6 +1,7 @@
 extends Node
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
+const BattleTheme = preload("res://scripts/ui/battle_theme.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -3363,6 +3364,9 @@ func _apply_hud_theme() -> void:
 	for secondary_btn in [lobby_back_btn, lobby_to_spec_btn, lobby_remove_ai_btn]:
 		if secondary_btn != null and is_instance_valid(secondary_btn):
 			MenuTheme.apply_secondary_button_theme(secondary_btn)
+	# Battle art is applied to the existing side panel rather than imposing a
+	# full-screen frame, which preserves the board camera and HUD interaction.
+	BattleTheme.apply_floating_panel(info_panel)
 
 
 # ============================================================
