@@ -1,0 +1,25 @@
+tile_cutter — Godot 桌面瓦片集编辑器(PyQt5)
+
+实际代码位置(父目录,独立子项目):
+    D:\Python\BattleBlitz\tile_cutter\
+
+上游仓库:
+    https://github.com/iris0heartmade/tile_cutter
+    分支: master    HEAD: 420350bb8d605763db70a00c682b010a3dc658e3
+    同步方式: cd 上述目录 && git pull
+
+启动:
+    cd D:\Python\BattleBlitz\tile_cutter
+    python main.py
+    或双击 "启动 TileCutter.bat"
+
+测试:
+    cd D:\Python\BattleBlitz\tile_cutter
+    pytest tests/ -v
+
+依赖:
+    PyQt5>=5.15.0、pytest>=6.0.0(见 requirements.txt)
+
+功能概要:
+    导入 PNG 源瓦片集 → 网格化选择/复制粘贴 → 像素编辑(画笔/橡皮/吸管/矩形选区/魔棒/颜色转透明)
+    → 撤销重做 → 导出 PNG + Godot 4 TileSet .tres

@@ -24,7 +24,7 @@ import random
 from collections import deque
 from typing import List, Optional, Set, Tuple
 
-from app.config import TERRAIN_RIVER
+from app.config import TERRAIN_CASTLE, TERRAIN_RIVER
 from app.models import Tile
 from app.utils import manhattan as _manhattan
 
@@ -97,6 +97,69 @@ def _river_step(
     return best, branched
 
 
+def _generate_lake(
+    rng: random.Random,
+    grid: List[List[Tile]],
+    size: int,
+    castles: List[Coord],
+    safe_radius: int,
+    target_size: int = 30,
+) -> int:
+    """P0-3 — generate a single big water body (a "lake" or "sea
+    inlet") by stamping a roughly-circular blob of river tiles around
+    a random interior point.  Replaces whatever was there (other
+    than castles and safe zones).
+
+    Returns the number of cells placed.  The shape is irregular
+    (random walks from a seed) so it doesn't look like a perfect
+    circle; this matches the "sea" tiles in real AW maps.
+    """
+    safe_zones: Set[Coord] = set()
+    for cx, cy in castles:
+        for dx in range(-safe_radius, safe_radius + 1):
+            for dy in range(-safe_radius, safe_radius + 1):
+                x, y = cx + dx, cy + dy
+                if _in_bounds(x, y, size):
+                    safe_zones.add((x, y))
+
+    def _is_protected(coord: Coord) -> bool:
+        x, y = coord
+        # 学长 2026-07-22:lake 邻居可能越界(老代码直接 grid[y][x] 炸)
+        if not (0 <= x < size and 0 <= y < size):
+            return True
+        if (x, y) in safe_zones:
+            return True
+        t = grid[y][x].terrain
+        return t in (TERRAIN_CASTLE,) or getattr(grid[y][x], "subtype", None) == "castle_wall"
+
+    # Pick an interior seed (off the edge so the lake has room to
+    # grow into the map interior).
+    seed = (rng.randint(size // 4, 3 * size // 4),
+            rng.randint(size // 4, 3 * size // 4))
+    if _is_protected(seed):
+        return 0
+
+    # Random-walk blob: each step, pick a random 4-neighbor and stamp
+    # river.  Grow until target_size reached or no more candidates.
+    placed: Set[Coord] = {seed}
+    grid[seed[1]][seed[0]] = Tile(x=seed[0], y=seed[1], terrain=TERRAIN_RIVER)
+    frontier: List[Coord] = list(_neighbors4(*seed))
+    rng.shuffle(frontier)
+    while len(placed) < target_size and frontier:
+        idx = rng.randrange(len(frontier))
+        x, y = frontier[idx]
+        frontier[idx] = frontier[-1]
+        frontier.pop()
+        if (x, y) in placed or _is_protected((x, y)):
+            continue
+        placed.add((x, y))
+        grid[y][x] = Tile(x=x, y=y, terrain=TERRAIN_RIVER)
+        for n in _neighbors4(x, y):
+            if n not in placed and not _is_protected(n):
+                frontier.append(n)
+    return len(placed)
+
+
 def generate_river_network(
     rng: random.Random,
     grid: List[List[Tile]],
@@ -106,14 +169,30 @@ def generate_river_network(
     seed_count: int = 2,
     branch_probability: float = 0.3,
     max_steps: int = 200,
+    water_template: str = "river",
+    lake_size: int = 30,
 ) -> int:
-    """Carve rivers into ``grid``.  Returns the number of river tiles placed.
+    """Carve rivers / lakes into ``grid``.  Returns total water cells placed.
 
     The grid is mutated in place.  Castle tiles, safe-zone cells, and
-    road tiles are protected (rivers won't overwrite them).
+    road tiles are protected (water won't overwrite them).
+
+    P0-3 — ``water_template`` selects the layout:
+      - "river" (default): 1-2 thin rivers walking toward the centre
+        (classic AW river / road corridor pattern)
+      - "lake": one big central water body (a "sea inlet" style for
+        island or harbor maps) of approximately ``lake_size`` cells
+      - "mixed": river + a small lake near the centre
     """
     if size < 5:
-        return 0  # too small for meaningful rivers
+        return 0
+
+    if water_template == "lake":
+        # Skip river phase entirely; just stamp the big lake.
+        return _generate_lake(
+            rng, grid, size, castles,
+            safe_radius=safe_radius, target_size=lake_size,
+        )
 
     safe_zones: Set[Coord] = set()
     for cx, cy in castles:

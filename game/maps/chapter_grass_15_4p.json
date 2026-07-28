@@ -1,0 +1,41 @@
+{
+  "id": "chapter_grass_15_4p",
+  "name": "主线·山野 · 15×15 · 4人",
+  "description": "P2.4 自动生成：主线·山野 风格，4 人对战，15×15 棋盘 (种子 #1283)",
+  "biome": "grass",
+  "size": 15,
+  "style": "chapter_grass",
+  "mode": "single_hq",
+  "recommended_players": 4,
+  "seed": 1283,
+  "layout": [
+    "vvFFFRFbFFFMPbM",
+    "vPPPFFMFFMvPPPM",
+    "vPCPvFMMbMbPCPM",
+    "FPPPMMvbFRvPPPb",
+    "FFFMMMMMMMPMPMv",
+    "MFFRMMRMMRMMMMF",
+    "FFvMMMRRRRMMMMF",
+    "FPFFMRRMMMMMMPb",
+    "RRFRRRRRRMFMvMM",
+    "RRRRMRMRRRFMRMR",
+    "PPPMvRRRRFMPMvv",
+    "bPPPMMFFMFFPPPP",
+    "vPCPPRMMMFFPCPM",
+    "vPPPMMMMMRMPPPb",
+    "MvMvMMMvbMMFFFM"
+  ],
+  "objective": "seize",
+  "category": "mainline",
+  "target_share": {
+    "plain": 0.05,
+    "forest": 0.2,
+    "mountain": 0.45,
+    "river": 0.1,
+    "village": 0.08,
+    "barracks": 0.03,
+    "road": 0.0
+  },
+  "road_density": 0.0,
+  "water_template": "river"
+}

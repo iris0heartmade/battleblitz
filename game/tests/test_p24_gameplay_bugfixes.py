@@ -191,33 +191,30 @@ def test_archer_range_bumped_to_4():
     assert prof.ignores_line_of_sight is True
 
 
-def test_can_attack_from_position_blocks_mountain_los():
-    """For d > 1, a mountain between attacker and target blocks
-    ranged attackers that DO NOT ignore line of sight.
-
-    Note: archer now has ignores_line_of_sight=True (sniper class)
-    and swordsman/knight are melee (range=1), so we test with a
-    Warlock — a ranged magic unit that respects LoS (range 1-2).
-
-    Archer's range is min=2 + base max=4 + snipe (+1) = max 5,
-    so the attacker fires at d=3 (which is in (2, 5]).
-    """
-    blockers = {(6, 7)}  # mountain between attacker (5,7) and target (8,7)
+def test_can_attack_from_position_ignores_all_blockers():
+    """Only Manhattan min/max range controls whether an attack can target."""
+    blockers = {(6, 7)}
     u = _stub_unit("warlock", x=5, y=7)
-    # Path (5,7) -> (7,7) is d=2 ≤ warlock range. Without blockers: can attack.
+
     assert can_attack_from_position(u, 5, 7, 7, 7, blockers=set()) is True
-    # With blocker at (6,7) on the line: blocked.
-    assert can_attack_from_position(u, 5, 7, 7, 7, blockers=blockers) is False
-    # d == 1 melee ignores LoS even with a blocker (warlock min=0).
+    assert can_attack_from_position(u, 5, 7, 7, 7, blockers=blockers) is True
     assert can_attack_from_position(u, 5, 7, 6, 7, blockers=blockers) is True
-    # Sniper (archer with ignores_line_of_sight=True) attacks through
-    # mountains at d=3: should succeed even with a blocker.
+
     archer = _stub_unit("archer", x=5, y=7, skills=["snipe"])
     assert can_attack_from_position(archer, 5, 7, 8, 7, blockers=blockers) is True
-    # But sniper cannot melee (min_attack_range = 2) — d=1 not allowed.
     assert can_attack_from_position(archer, 5, 7, 6, 7, blockers=set()) is False
-    # And d=2 is also not allowed: min=2 so the range (2, 5] starts at 3.
     assert can_attack_from_position(archer, 5, 7, 7, 7, blockers=set()) is False
+
+
+def test_ranged_magic_can_attack_diagonal_target_within_range():
+    """A ranged unit's diamond-shaped attack range includes diagonal cells.
+
+    Line-of-sight remains an axis-aligned ray helper; non-axis targets should
+    not be rejected just because the LoS helper is intentionally ray-only.
+    """
+    u = _stub_unit("warlock", x=5, y=7)
+
+    assert can_attack_from_position(u, 5, 7, 6, 8, blockers=set()) is True
 
 
 def test_can_attack_melee_no_los_check():

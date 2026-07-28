@@ -40,6 +40,8 @@ signal state_snapshot_received(game: Dictionary)
 signal event_delta_received(event: Dictionary)
 signal server_pong_received(echo_at_ms: int)
 signal protocol_error_received(code: String, message: String)
+# P2:commentary WS 接通 — AI 评论文本/音频帧(text 接,音频仅 marker)
+signal commentary_received(text: String)
 
 const _REQ_TIMEOUT_SEC := 10.0
 const _HEARTBEAT_INTERVAL_SEC := 25.0
@@ -89,11 +91,14 @@ func _wire_to_game_state() -> void:
 	state_snapshot_received.connect(gs._on_state_snapshot)
 	event_delta_received.connect(gs._on_event_delta)
 	server_hello_received.connect(gs._on_server_hello)
+	# P2:commentary WS 接通 — 转成 log_received 复用现有战报 UI
+	if gs.has_method("_on_commentary_received"):
+		commentary_received.connect(gs._on_commentary_received)
 	# Use set() so the compiler resolves `is_connected` as GameState's
 	# property, not Object's built-in is_connected() method (gs is typed
 	# Node here, so a direct `gs.is_connected = ...` is a parse error).
-	ws_connected.connect(func(): gs.set("is_connected", true))
-	ws_disconnected.connect(func(_r): gs.set("is_connected", false))
+	ws_connected.connect(func(): gs.set("ws_connected", true))
+	ws_disconnected.connect(func(_r): gs.set("ws_connected", false))
 
 
 # ============================================================
@@ -324,11 +329,16 @@ func _dispatch_ws_message(msg: Dictionary) -> void:
 			var code: String = String(payload.get("code", "UNKNOWN"))
 			var message: String = String(payload.get("message", ""))
 			protocol_error_received.emit(code, message)
-		"commentary.text", "commentary.audio":
-			# Reserved for future AI commentary. No-op for now.
-			pass
+		"commentary.text":
+			# P2:commentary WS 接通 — 把 AI 旁白文本暴露给 GameState → 写入战报。
+			# 服务端尚未默认发送,但协议层已就绪(等 mainline LLM agent 上线即生效)。
+			var ctext: String = String(payload.get("text", ""))
+			commentary_received.emit(ctext)
+		"commentary.audio":
+			# P2:audio 帧暂不播放(Godot 客户端不做音频 narration),仅 log + UI 提示文本。
+			commentary_received.emit("[音频评论]")
 		_:
-			# Unknown type — already emitted via ws_message_received.
+			# Reserved for future AI commentary / unknown type.
 			pass
 
 
@@ -465,12 +475,13 @@ func delete_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}), {}, callback)
 
 
-func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable(), seat_commanders: Dictionary = {}) -> void:
+func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable(), seat_commanders: Dictionary = {}, mode: String = "free") -> void:
 	var body := {
 		"name": room_name,
 		"map_preset": map_preset,
 		"map_biome": map_biome,
 		"win_condition": win_condition,
+		"mode": mode,
 	}
 	var battle_config := {}
 	if commander_id != "":
@@ -513,12 +524,15 @@ func forecast_attack(game_id: int, player_id: int, attacker_id: int, target_id: 
 	request("GET", path, {}, callback)
 
 
-func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable()) -> void:
-	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", {
+func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable(), seat: int = -1) -> void:
+	var body := {
 		"difficulty": difficulty,
 		"agent_kind": agent_kind,
 		"personality": personality,
-	}, callback)
+	}
+	if seat >= 0:
+		body["seat"] = seat
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", body, callback)
 
 
 func remove_player(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
@@ -537,6 +551,17 @@ func update_player_seat(game_id: int, player_id: int, caller_player_id: int, sea
 		"caller_player_id": caller_player_id,
 		"seat": seat,
 	}, callback)
+
+
+# P1:大厅座位卡左右切指挥官按钮接通
+func update_player_commander(game_id: int, player_id: int, caller_player_id: int, commander_id: String, callback: Callable = Callable(), seat: int = -1) -> void:
+	var body: Dictionary = {
+		"caller_player_id": caller_player_id,
+		"commander_id": commander_id,
+	}
+	if seat >= 0:
+		body["seat"] = seat
+	request("PATCH", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/players/%d/commander" % player_id, body, callback)
 
 
 func get_lobby(game_id: int, callback: Callable = Callable()) -> void:
@@ -703,6 +728,13 @@ func capture_suspend(game_id: int, user_name: String, callback: Callable = Calla
 	request("POST", "/games/%d/suspend" % game_id, {
 		"user_name": user_name,
 	}, callback)
+
+
+func discard_suspend(user_name: String, callback: Callable = Callable()) -> void:
+	# Wire format mirrors GET /saves?user_name=... — query-style, no body.
+	# Returns {"ok": True, "cleared": bool}; "cleared" is False when no
+	# suspend existed (the call is idempotent — see DiscardSuspendOut).
+	request("DELETE", "/saves/suspend?user_name=%s" % user_name.uri_encode(), {}, callback)
 
 
 # T:94 — 拉战斗 BGM 列表

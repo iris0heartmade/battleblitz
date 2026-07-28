@@ -29,6 +29,7 @@ const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const MAP_THEME_SCRIPT := preload("res://scripts/core/map_theme.gd")
 const TILE_SIZE := MAP_METRICS_SCRIPT.TILE_SIZE
 const TILES_DIR := "res://assets/tiles"
+const TILESETS_DIR := "res://assets/tilesets"
 const _TERRAIN_ASSET_FALLBACKS := {
 	"bridge": ["road", "river"],
 	"snow_peak": ["mountain"],
@@ -41,6 +42,8 @@ const _TERRAIN_ASSET_FALLBACKS := {
 # Populated by `build()`. Keyed by "{terrain}|{biome}" → source_id.
 static var SOURCE_IDS: Dictionary = {}
 static var _using_fe8_atlas := false
+static var ATLAS_COORDS: Dictionary = {}
+static var ATLAS_COORD_LISTS: Dictionary = {}
 
 # Cache the built TileSet across calls so we don't rebuild every frame.
 static var _cached: TileSet = null
@@ -55,6 +58,8 @@ static func build() -> TileSet:
 	if _cached != null:
 		return _cached
 	SOURCE_IDS.clear()
+	ATLAS_COORDS.clear()
+	ATLAS_COORD_LISTS.clear()
 	_using_fe8_atlas = false
 
 	var ts := TileSet.new()
@@ -78,6 +83,9 @@ static func build() -> TileSet:
 			for biome in MAP_THEME_SCRIPT.source_registration_biomes(String(terrain)):
 				SOURCE_IDS["%s|%s" % [terrain, biome]] = fe8_source_id
 
+	if Config.USE_TILESET_ATLASES:
+		_register_configured_atlases(ts)
+
 	# 2. Legacy per-terrain atlases for non-FE8 terrains. Registered in
 	#    Config.TERRAIN_VARIANT_COUNTS order so the source IDs are
 	#    deterministic.
@@ -85,6 +93,10 @@ static func build() -> TileSet:
 		if _using_fe8_atlas and terrain in Config.FE8_TILE_COORDS:
 			continue  # already handled by the FE8 atlas
 		for biome in _legacy_registration_biomes(String(terrain)):
+			if SOURCE_IDS.has("%s|%s" % [terrain, biome]):
+				continue
+			if SOURCE_IDS.has("%s|" % terrain):
+				continue
 			var source := _build_legacy_source_for(terrain, String(biome))
 			if source == null:
 				continue
@@ -103,10 +115,49 @@ static func source_id_for(terrain: String, biome: String) -> int:
 static func uses_fe8_atlas() -> bool:
 	return _using_fe8_atlas
 
+static func atlas_coord_for(terrain: String, biome: String, x: int = 0, y: int = 0) -> Vector2i:
+	var key := _atlas_lookup_key(terrain, biome)
+	if key == "":
+		return Vector2i(-1, -1)
+	var coords: Array = ATLAS_COORD_LISTS.get(key, [])
+	if coords.is_empty():
+		return ATLAS_COORDS.get(key, Vector2i(-1, -1))
+	var idx := _pick_atlas_variant(terrain, biome, x, y, coords.size())
+	return Vector2i(coords[idx])
+
+static func atlas_coords_for(terrain: String, biome: String) -> Array:
+	var key := _atlas_lookup_key(terrain, biome)
+	if key == "":
+		return []
+	return (ATLAS_COORD_LISTS.get(key, []) as Array).duplicate()
+
 static func _legacy_registration_biomes(terrain: String) -> Array:
 	if terrain in Config.BIOME_AWARE_TERRAINS:
 		return Config.BIOMES.duplicate()
 	return [""]
+
+static func _atlas_lookup_key(terrain: String, biome: String) -> String:
+	var exact_key := "%s|%s" % [terrain, biome]
+	if ATLAS_COORDS.has(exact_key):
+		return exact_key
+	if biome == "":
+		var default_key := "%s|%s" % [terrain, Config.DEFAULT_BIOME]
+		if ATLAS_COORDS.has(default_key):
+			return default_key
+	var generic_key := "%s|" % terrain
+	if ATLAS_COORDS.has(generic_key):
+		return generic_key
+	return ""
+
+static func _pick_atlas_variant(terrain: String, biome: String, x: int, y: int, count: int) -> int:
+	if count <= 1:
+		return 0
+	var h: int = 0
+	var seed := "%s|%s" % [terrain, biome]
+	for c in seed:
+		h = (h * 31 + c.unicode_at(0)) & 0x7FFFFFFF
+	h = (h ^ (x * 73856093) ^ (y * 19349663)) & 0x7FFFFFFF
+	return h % count
 
 ## Returns the atlas coord for a terrain when the FE8 atlas is the
 ## source. Pulls the (col, row) lookup from `Config.FE8_TILE_COORDS`.
@@ -208,6 +259,193 @@ static func _build_fe8_atlas_source(ts: TileSet) -> TileSetAtlasSource:
 					if ((bits >> dir) & 1) == 1:
 						tile_data.set_terrain_peering_bit(corner, dir)
 	return source
+
+## Register labeled 48px-grid atlas sheets before falling back to
+## legacy per-terrain PNGs.
+static func _register_configured_atlases(ts: TileSet) -> void:
+	var source_id_by_path: Dictionary = {}
+	_register_labeled_atlases(ts, source_id_by_path)
+	for key in Config.TILESET_ATLAS_COORDS.keys():
+		if SOURCE_IDS.has(key):
+			continue
+		var entry: Dictionary = Config.TILESET_ATLAS_COORDS[key]
+		var path := String(entry.get("path", ""))
+		if path == "":
+			continue
+		var source_id: int = -1
+		if source_id_by_path.has(path):
+			source_id = int(source_id_by_path[path])
+		else:
+			var source := _build_grid_atlas_source(path)
+			if source == null:
+				continue
+			source_id = ts.add_source(source)
+			source_id_by_path[path] = source_id
+		var coord: Vector2i = entry.get("coord", Vector2i(-1, -1))
+		var source_for_check: TileSetAtlasSource = ts.get_source(source_id) as TileSetAtlasSource
+		if source_for_check == null or not source_for_check.has_tile(coord):
+			push_warning("TileSetBuilder: atlas %s has no tile at %s for %s" % [path, str(coord), key])
+			continue
+		_register_atlas_key(key, source_id, coord)
+
+
+static func _register_labeled_atlases(ts: TileSet, source_id_by_path: Dictionary) -> void:
+	var dir := DirAccess.open(TILESETS_DIR)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var name := dir.get_next()
+		if name == "":
+			break
+		if dir.current_is_dir() or not name.ends_with(".txt"):
+			continue
+		var stem := name.substr(0, name.length() - 4)
+		var image_path := "%s/%s.png" % [TILESETS_DIR, stem]
+		var text_path := "%s/%s" % [TILESETS_DIR, name]
+		if not FileAccess.file_exists(image_path):
+			continue
+		var source_id: int = -1
+		if source_id_by_path.has(image_path):
+			source_id = int(source_id_by_path[image_path])
+		else:
+			var source := _build_grid_atlas_source(image_path)
+			if source == null:
+				continue
+			source_id = ts.add_source(source)
+			source_id_by_path[image_path] = source_id
+		_register_labels_from_file(text_path, source_id)
+	dir.list_dir_end()
+
+
+static func _register_labels_from_file(text_path: String, source_id: int) -> void:
+	var file := FileAccess.open(text_path, FileAccess.READ)
+	if file == null:
+		return
+	var rows := file.get_as_text().strip_edges().split("\n", false)
+	file.close()
+	for y in range(rows.size()):
+		var labels := _labels_from_row(String(rows[y]))
+		for x in range(labels.size()):
+			var coord := Vector2i(x, y)
+			for key in _atlas_keys_for_label(String(labels[x]), y):
+				_register_atlas_key(key, source_id, coord)
+
+
+static func _labels_from_row(row: String) -> Array[String]:
+	var out: Array[String] = []
+	var pieces := row.split("【", false)
+	for piece in pieces:
+		var end_idx := String(piece).find("】")
+		if end_idx < 0:
+			continue
+		var label := String(piece).substr(0, end_idx).strip_edges()
+		if label != "":
+			out.append(label)
+	return out
+
+
+static func _atlas_keys_for_label(label: String, row: int) -> Array[String]:
+	var keys: Array[String] = []
+	if label.contains("道路"):
+		if row == 1:
+			keys.append("road|grass")
+		elif row == 3:
+			keys.append("road|desert")
+		elif row == 5:
+			keys.append("road|snow")
+		return keys
+	if label.begins_with("草原") and not label.contains("森林"):
+		keys.append("plain|grass")
+		return keys
+	if label.contains("草原森林"):
+		keys.append("forest|grass")
+		return keys
+	if label.contains("雪地森林"):
+		keys.append("forest|snow")
+		return keys
+	if label.contains("沙漠树"):
+		keys.append("forest|desert")
+		return keys
+	if label.begins_with("沙漠"):
+		keys.append("desert|desert")
+		return keys
+	if label.begins_with("雪地") and not label.contains("森林"):
+		keys.append("snow|snow")
+		return keys
+	if label.begins_with("村庄"):
+		keys.append("village|")
+		return keys
+	if label.begins_with("佣兵站"):
+		keys.append(_biome_key_for_row("barracks", row))
+		return keys
+	if label.begins_with("城堡"):
+		keys.append(_biome_key_for_row("castle", row))
+		return keys
+	if label.begins_with("守卫塔"):
+		keys.append(_biome_key_for_row("gate", row))
+		return keys
+	if label.begins_with("金库") or label.begins_with("被打开的金库"):
+		keys.append("castle_vault|")
+		return keys
+	if label.begins_with("王座"):
+		keys.append("castle_throne|")
+		return keys
+	if label.begins_with("雪山"):
+		keys.append("mountain|snow")
+		keys.append("snow_peak|snow")
+		return keys
+	if label.begins_with("沙山"):
+		keys.append("mountain|desert")
+		return keys
+	if label.begins_with("山"):
+		keys.append("mountain|grass")
+	return keys
+
+
+static func _biome_key_for_row(terrain: String, row: int) -> String:
+	if row == 2:
+		return "%s|desert" % terrain
+	if row == 3:
+		return "%s|snow" % terrain
+	return "%s|grass" % terrain
+
+
+static func _register_atlas_key(key: String, source_id: int, coord: Vector2i) -> void:
+	SOURCE_IDS[key] = source_id
+	ATLAS_COORDS[key] = coord
+	var coords: Array = ATLAS_COORD_LISTS.get(key, [])
+	if not coords.has(coord):
+		coords.append(coord)
+	ATLAS_COORD_LISTS[key] = coords
+	var parts := String(key).split("|", false)
+	if parts.size() >= 2 and String(parts[1]) == Config.DEFAULT_BIOME:
+		var generic_key := "%s|" % String(parts[0])
+		if not SOURCE_IDS.has(generic_key):
+			SOURCE_IDS[generic_key] = source_id
+			ATLAS_COORDS[generic_key] = coord
+			ATLAS_COORD_LISTS[generic_key] = coords.duplicate()
+
+
+static func _build_grid_atlas_source(path: String) -> TileSetAtlasSource:
+	var img := _try_load_image(path)
+	if img == null:
+		push_warning("TileSetBuilder: atlas sheet missing at %s" % path)
+		return null
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	var tex := ImageTexture.create_from_image(img)
+	var source := TileSetAtlasSource.new()
+	source.resource_name = path
+	source.texture = tex
+	source.texture_region_size = TILE_SIZE
+	var cols: int = img.get_width() / TILE_SIZE.x
+	var rows: int = img.get_height() / TILE_SIZE.y
+	for row in rows:
+		for col in cols:
+			source.create_tile(Vector2i(col, row))
+	return source
+
 
 ## Build a legacy per-terrain atlas (vertical strip of 48×N×48) for
 ## non-FE8 terrains.

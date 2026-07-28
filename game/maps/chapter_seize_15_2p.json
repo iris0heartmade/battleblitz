@@ -1,0 +1,41 @@
+{
+  "id": "chapter_seize_15_2p",
+  "name": "主线·夺王座 · 15×15 · 2人",
+  "description": "P2.4 自动生成：主线·夺王座 风格，2 人对战，15×15 棋盘 (种子 #1269)",
+  "biome": "grass",
+  "size": 15,
+  "style": "chapter_seize",
+  "mode": "single_hq",
+  "recommended_players": 2,
+  "seed": 1269,
+  "layout": [
+    "PvPPPRFMMMMMMMb",
+    "vPPPMMFRFMMMMMM",
+    "FPCPFMRMMMMMMMR",
+    "vPPPRRRMMPMPMbF",
+    "bFRRRMFMMvMvPbv",
+    "FRMMMMFMMMMMMRP",
+    "FMMMMMFMPFFvFMM",
+    "MFMMMMFMvRRRMMM",
+    "MFFMMMFRMMPFFMM",
+    "FFFFRMPRMRMRFFF",
+    "FbvRFFFMMMvPMMF",
+    "MRMPPbFbRFPPPPP",
+    "MMMRMMRbFFFPCPP",
+    "MMMMbFFPvbPPPPF",
+    "MvMMRPvRPRMPMMF"
+  ],
+  "objective": "seize",
+  "category": "mainline",
+  "target_share": {
+    "plain": 0.15,
+    "forest": 0.18,
+    "mountain": 0.3,
+    "river": 0.1,
+    "village": 0.1,
+    "barracks": 0.04,
+    "road": 0.0
+  },
+  "road_density": 0.0,
+  "water_template": "river"
+}

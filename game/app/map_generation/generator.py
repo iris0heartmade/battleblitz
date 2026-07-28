@@ -52,17 +52,25 @@ from .castle_layout import (
     build_hq_structure,
     build_single_tile_castle,
 )
+from .quality import score_map
 from .river_network import generate_river_network
 from .road_network import generate_road_network, place_buildings
 from .symmetry import (
     calculate_castle_positions,
     calculate_safe_zones,
+    hq_layouts_for,
     hq_placement_for_biome,
+    solo_faction_index,
 )
 from .terrain_clusters import (
     generate_forest_clusters,
     generate_mountain_clusters,
     verify_connectivity,
+)
+from .terrain_movement import (
+    UNIT_TERRAIN_PREFERENCES,
+    local_openness_score,
+    reshape_local_terrain,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,6 +108,12 @@ class MapGenerator:
         # maps keep the symmetric layout.
         realistic_hq: bool = False,
         max_retries: int = 3,
+        # terrain_movement — optional per-faction unit hints.  When
+        # provided, ``generate()`` runs ``reshape_local_terrain`` for
+        # each HQ so the local terrain favors that unit's strengths
+        # (e.g. archer gets forest, knight gets road, flier is
+        # unconstrained).  ``None`` = no shaping (legacy behaviour).
+        unit_hints: Optional[List[str]] = None,
     ) -> None:
         if size < 5:
             raise ValueError(f"size must be >= 5 (got {size})")
@@ -109,29 +123,59 @@ class MapGenerator:
         self.seed = seed if seed is not None else random.randint(0, 2**31 - 1)
         self.use_clusters = use_clusters
         self.use_rivers = use_rivers
-        self.use_roads = use_roads
+        # P0-1 — chapter_* styles (road_density < 0.05) skip the
+        # road network entirely so the map matches FE's "no
+        # explicit roads" aesthetic.  Pass use_roads=True to force.
+        style_road_density = MAP_STYLES[self.style].get("road_density", 0.5)
+        self.use_roads = use_roads and style_road_density >= 0.05
         self.use_buildings = use_buildings
         self.use_hq_structure = use_hq_structure
         self.realistic_hq = realistic_hq
         self.max_retries = max_retries
+        # Pad / truncate unit_hints to player_count; unknown unit
+        # types fall back to ``_balanced`` at reshape time.
+        if unit_hints is None:
+            self.unit_hints: List[str] = ["_balanced"] * self.player_count
+        else:
+            self.unit_hints = list(unit_hints)[: self.player_count]
+            while len(self.unit_hints) < self.player_count:
+                self.unit_hints.append("_balanced")
 
         self.style_cfg: Dict = MAP_STYLES[self.style]
         self.mode: str = self.style_cfg.get("mode", "single_hq")
+        # P0-1 — the style's target terrain share (used by quality.score_map
+        # to compute S7 "does this map match its style's personality?").
+        # Stored on the instance so callers can read it after generate().
+        self.target_share: Optional[Dict[str, float]] = self.style_cfg.get("target_share")
+        # 学长 2026-07-22:差异化 HQ 摆位
+        self.hq_layout: str = self.style_cfg.get("hq_layout", "auto")
+        # 学长 2026-07-22:经济点分布参数
+        self.economy_per_faction: int = int(
+            self.style_cfg.get("economy_per_faction", 0)
+        )
+        self.neutral_economy: int = int(
+            self.style_cfg.get("neutral_economy", 0)
+        )
+        self.asymmetry: Optional[Dict] = self.style_cfg.get("asymmetry")
         # P2.7+ — when realistic_hq is True, defer the placement to
         # ``generate()`` so we can score against the post-fill
         # terrain.  The list is empty until then; ``generate()``
         # overwrites it.  Otherwise use the legacy symmetric layout.
         self.castle_positions: List[Coord] = []
         if not realistic_hq:
-            self.castle_positions = calculate_castle_positions(
-                size, self.player_count,
-            )
+            # 学长新需求:用 hq_layouts_for() 派发到差异化摆位
+            # 需要 RNG,所以延迟到 generate() 内,这里只记占位
+            self.castle_positions = []
         self.safe_zone_radius: int = int(
             self.style_cfg.get("safe_zone_radius", 2)
         )
         self.safe_zones = calculate_safe_zones(
             self.castle_positions, size, self.safe_zone_radius,
         )
+        # terrain_movement bookkeeping: per-HQ openness score is
+        # recorded by ``generate()`` so callers (and the front-end)
+        # can show "this faction's local terrain favours their army".
+        self.local_terrain_scores: Dict[int, float] = {}
 
     # ------------------------------------------------------------------
     # Public API.
@@ -150,6 +194,123 @@ class MapGenerator:
         if self.mode == "castle_internal":
             return self._generate_castle_internal(rng)
         return self._generate_outer(rng)
+
+    # ------------------------------------------------------------------
+    # Connectivity rescue (P0-5)
+    # ------------------------------------------------------------------
+
+    def _carve_connectivity(self, grid: List[List[Tile]]) -> None:
+        """For every castle that is unreachable from castles[0] via
+        passable terrain, BFS from that castle and replace the first
+        impassable (mountain) cell along each BFS step with forest
+        (still passable, just slower).  Repeat until either all castles
+        are reachable or no more mountain-to-forest conversions help.
+        """
+        from collections import deque
+        from .quality import _IMPASSABLE
+        size = self.size
+        castles = self.castle_positions
+        if len(castles) < 2:
+            return
+
+        def _bfs(start, blocked):
+            seen = {start}
+            q = deque([start])
+            while q:
+                x, y = q.popleft()
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = x + dx, y + dy
+                    if not (0 <= nx < size and 0 <= ny < size):
+                        continue
+                    if (nx, ny) in seen or (nx, ny) in blocked:
+                        continue
+                    seen.add((nx, ny))
+                    q.append((nx, ny))
+            return seen
+
+        for _ in range(20):  # cap iterations
+            mountain_cells = {
+                (x, y) for y in range(size) for x in range(size)
+                if grid[y][x].terrain in _IMPASSABLE
+            }
+            start = castles[0]
+            seen = _bfs(start, mountain_cells)
+            unreachable = [c for c in castles if c not in seen]
+            if not unreachable:
+                return  # all connected
+            carved = 0
+            for castle in unreachable:
+                # BFS from this castle through everything (no blocked)
+                # until we hit a reachable cell.
+                frontier = deque([castle])
+                came_from = {castle: None}
+                target = None
+                while frontier and target is None:
+                    cx, cy = frontier.popleft()
+                    if (cx, cy) in seen:
+                        target = (cx, cy)
+                        break
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx, ny = cx + dx, cy + dy
+                        if not (0 <= nx < size and 0 <= ny < size):
+                            continue
+                        if (nx, ny) in came_from:
+                            continue
+                        came_from[(nx, ny)] = (cx, cy)
+                        frontier.append((nx, ny))
+                if target is None:
+                    continue  # completely boxed in (shouldn't happen)
+                # Walk back from target to castle, carving mountains
+                # into forest.
+                cur = target
+                while came_from[cur] is not None:
+                    prev = came_from[cur]
+                    if grid[prev[1]][prev[0]].terrain in _IMPASSABLE:
+                        grid[prev[1]][prev[0]] = Tile(
+                            x=prev[0], y=prev[1], terrain=TERRAIN_FOREST,
+                        )
+                        carved += 1
+                    cur = prev
+                if carved:
+                    return  # re-BFS on next iteration
+            if carved == 0:
+                return  # nothing more to do
+
+    # P0-5 — dense styles (chapter_*) need more retries to satisfy
+    # the H3 connectivity constraint.  Default is 3, bump to 10 for
+    # any style with target_share mountain > 0.4.
+    @property
+    def _effective_max_retries(self) -> int:
+        target = self.target_share or {}
+        try:
+            mountain_target = float(target.get(TERRAIN_MOUNTAIN, 0))
+        except (TypeError, ValueError):
+            mountain_target = 0.0
+        if mountain_target > 0.4:
+            return 10
+        return self.max_retries
+
+    # ------------------------------------------------------------------
+    # Public API.
+    # ------------------------------------------------------------------
+    def score(self, grid: List[List[Tile]]) -> "QualityReport":
+        """Run ``quality.score_map`` on ``grid`` using the generator's
+        configured castles, size and target_share.  Convenience for
+        callers that want a one-liner report after ``generate()``.
+
+        Returns a ``QualityReport`` with soft scores (S1..S8) and any
+        hard violations (H1..H5).  学长 2026-07-22 新加 H4/H5 + S8。
+        """
+        from .quality import score_map  # local import to avoid cycle
+        return score_map(
+            grid,
+            self.castle_positions,
+            self.size,
+            target_share=self.target_share,
+            per_faction_min=self.economy_per_faction,
+            neutral_min=self.neutral_economy,
+            asymmetry=self.asymmetry,
+        )
 
     # ------------------------------------------------------------------
     # castle_internal — every tile is a castle_* sub-feature.
@@ -288,8 +449,25 @@ class MapGenerator:
         """Outer-style pipeline with retry-on-disconnect."""
         weights = self.style_cfg["weights"]
 
+        # 学长 2026-07-22:在 _generate_outer 开头放 HQ(需要 RNG)
+        # hq_layouts_for() 根据 style_cfg["hq_layout"] 派发到差异化摆位
+        if not self.castle_positions:
+            if self.realistic_hq:
+                # realistic 模式延迟到地形填完再放,这里占位
+                self.castle_positions = []
+            else:
+                self.castle_positions = hq_layouts_for(
+                    self.size, self.player_count,
+                    self.hq_layout, rng,
+                )
+                # 重新计算 safe zones
+                self.safe_zones = calculate_safe_zones(
+                    self.castle_positions, self.size,
+                    self.safe_zone_radius,
+                )
+
         last_grid: Optional[List[List[Tile]]] = None
-        for attempt in range(self.max_retries):
+        for attempt in range(self._effective_max_retries):
             attempt_rng = random.Random(rng.random() + attempt * 9973)
             grid = self._fill_base_terrain(attempt_rng, weights)
 
@@ -315,22 +493,45 @@ class MapGenerator:
                     )
 
             # River network — overwrites anything except protected tiles.
+            # P0-3 — water_template comes from the style config so
+            # "river" / "lake" / "mixed" can be selected per-style.
             if self.use_rivers:
+                water_template = self.style_cfg.get("water_template", "river")
+                # P0-3 — lake_size scales with map size; aim for ~10% of
+                # cells if the style wants a big water body.
+                lake_size = max(20, (self.size * self.size) // 10)
                 generate_river_network(
                     attempt_rng, grid, self.size,
                     self.castle_positions, self.safe_zone_radius,
                     seed_count=2, branch_probability=0.3,
+                    water_template=water_template,
+                    lake_size=lake_size,
                 )
 
             # Buildings (villages / barracks) before roads so the
             # network can connect them in one pass.
+            # 学长 2026-07-22:per-faction + neutral 分配
             villages: List[Coord] = []
             barracks: List[Coord] = []
             if self.use_buildings:
+                per_faction = self.economy_per_faction or None
+                neutral = self.neutral_economy or None
+                solo_idx = solo_faction_index(self.style_cfg, self.player_count) \
+                    if self.asymmetry else None
+                neutral_bias = (
+                    (self.asymmetry or {}).get("neutral_bias")
+                    if self.asymmetry else None
+                )
                 villages, barracks = place_buildings(
                     attempt_rng, grid, self.size, self.castle_positions,
+                    # 老参数仍传,作为回退
                     village_count=max(2, self.player_count),
                     barracks_count=max(1, self.player_count // 2),
+                    # 学长新规则
+                    per_faction_count=per_faction,
+                    neutral_count=neutral,
+                    neutral_bias=neutral_bias,
+                    solo_faction_idx=solo_idx,
                 )
 
             # Road network.  For realistic_hq we don't yet know the
@@ -377,12 +578,48 @@ class MapGenerator:
                     safe_zones=self.safe_zones,
                 )
 
+            # terrain_movement — bias the 5x5 around each HQ toward
+            # the unit that faction was hinted to play.  Runs AFTER
+            # buildings and AFTER HQ stamping (so we don't disturb
+            # economy tiles or the HQ cell itself) but BEFORE
+            # connectivity check (so the road network can re-draw
+            # naturally toward the new layout on the next attempt).
+            for i, centre in enumerate(self.castle_positions):
+                unit = self.unit_hints[i] if i < len(self.unit_hints) else "_balanced"
+                swaps = reshape_local_terrain(
+                    grid, centre, unit,
+                    radius=2, safe_zones=self.safe_zones, max_swaps=4,
+                )
+                if swaps:
+                    logger.debug(
+                        f"MapGenerator: HQ {i} ({unit}) — {swaps} local terrain swap(s)"
+                    )
+
             # Connectivity check (best-effort, no rollback).
             if verify_connectivity(grid, self.castle_positions):
                 last_grid = grid
                 break
-            logger.debug(f"MapGenerator: attempt {attempt + 1}/{self.max_retries} connectivity FAILED (player_count={self.player_count})")
+            # P0-5 — last-resort: carve a 1-cell-wide "guaranteed pass"
+            # from each disconnected HQ to the nearest reachable cell.
+            # This is a heavy hammer (we replace mountain with forest)
+            # but it guarantees the map is playable even when the
+            # terrain is dense.
+            self._carve_connectivity(grid)
+            if verify_connectivity(grid, self.castle_positions):
+                last_grid = grid
+                break
+            logger.debug(f"MapGenerator: attempt {attempt + 1}/{self._effective_max_retries} connectivity FAILED (player_count={self.player_count})")
             last_grid = grid
+
+        # Record per-HQ local openness scores (used by quality.py and
+        # surfaced via the front-end "this faction's army fits this
+        # terrain" tooltip).  Only meaningful when we have a grid.
+        if last_grid is not None:
+            for i, centre in enumerate(self.castle_positions):
+                unit = self.unit_hints[i] if i < len(self.unit_hints) else "_balanced"
+                self.local_terrain_scores[i] = local_openness_score(
+                    last_grid, centre, unit, radius=2,
+                )
 
         # If retries failed, just return the last attempt (the
         # generator always produces a grid; connectivity is a

@@ -1,0 +1,6232 @@
+{
+  "version": 1,
+  "image_count": 23,
+  "images": [
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_183324_love_has_a_cost.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          80,
+          88
+        ],
+        "terrain_share": {
+          "water": 0.004545454545454545,
+          "plain": 0.4440340909090909,
+          "forest": 0.0,
+          "mountain": 0.21534090909090908,
+          "road": 0.14545454545454545,
+          "castle": 0.15383522727272728
+        },
+        "castle_clusters": [
+          {
+            "pixels": 96,
+            "bbox_px": [
+              0,
+              12,
+              11,
+              23
+            ],
+            "centroid_px": [
+              5.5,
+              18.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              20,
+              24,
+              23,
+              31
+            ],
+            "centroid_px": [
+              21.5,
+              27.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              36,
+              36,
+              51,
+              43
+            ],
+            "centroid_px": [
+              43.5,
+              39.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              28,
+              44,
+              43,
+              51
+            ],
+            "centroid_px": [
+              35.5,
+              47.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              56,
+              56,
+              59,
+              63
+            ],
+            "centroid_px": [
+              57.5,
+              59.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              68,
+              64,
+              79,
+              75
+            ],
+            "centroid_px": [
+              73.5,
+              68.8
+            ]
+          }
+        ],
+        "castle_count": 6,
+        "water_clusters": [
+          {
+            "pixels": 16,
+            "bbox_px": [
+              36,
+              40,
+              39,
+              43
+            ],
+            "centroid_px": [
+              37.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              40,
+              44,
+              43,
+              47
+            ],
+            "centroid_px": [
+              41.5,
+              45.5
+            ]
+          }
+        ],
+        "water_cluster_count": 2,
+        "largest_water_share": 0.0022727272727272726,
+        "road_clusters": 24,
+        "largest_road_share": 0.013636363636363636,
+        "forest_clusters": 0,
+        "mountain_clusters": 7,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          20.0,
+          22.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_186915_disastrous_amelioration.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          76,
+          76
+        ],
+        "terrain_share": {
+          "water": 0.012119113573407203,
+          "plain": 0.45914127423822715,
+          "forest": 0.0,
+          "mountain": 0.027008310249307478,
+          "road": 0.22160664819944598,
+          "castle": 0.21052631578947367
+        },
+        "castle_clusters": [
+          {
+            "pixels": 112,
+            "bbox_px": [
+              44,
+              0,
+              63,
+              11
+            ],
+            "centroid_px": [
+              53.5,
+              4.9
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              0,
+              4,
+              7,
+              11
+            ],
+            "centroid_px": [
+              3.5,
+              7.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              16,
+              12,
+              23,
+              15
+            ],
+            "centroid_px": [
+              19.5,
+              13.5
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              12,
+              16,
+              23,
+              31
+            ],
+            "centroid_px": [
+              17.1,
+              24.7
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              52,
+              44,
+              63,
+              59
+            ],
+            "centroid_px": [
+              57.9,
+              50.3
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              52,
+              60,
+              59,
+              63
+            ],
+            "centroid_px": [
+              55.5,
+              61.5
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              12,
+              64,
+              31,
+              75
+            ],
+            "centroid_px": [
+              21.5,
+              70.1
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              68,
+              64,
+              75,
+              71
+            ],
+            "centroid_px": [
+              70.8,
+              66.8
+            ]
+          }
+        ],
+        "castle_count": 8,
+        "water_clusters": [],
+        "water_cluster_count": 0,
+        "largest_water_share": 0.0,
+        "road_clusters": 30,
+        "largest_road_share": 0.01662049861495845,
+        "forest_clusters": 0,
+        "mountain_clusters": 2,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          19.0,
+          19.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187003_sicily.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          120,
+          80
+        ],
+        "terrain_share": {
+          "water": 0.5595833333333333,
+          "plain": 0.13989583333333333,
+          "forest": 0.0,
+          "mountain": 0.019166666666666665,
+          "road": 0.14333333333333334,
+          "castle": 0.1071875
+        },
+        "castle_clusters": [
+          {
+            "pixels": 80,
+            "bbox_px": [
+              36,
+              20,
+              47,
+              27
+            ],
+            "centroid_px": [
+              42.3,
+              23.1
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              28,
+              28,
+              35,
+              31
+            ],
+            "centroid_px": [
+              31.5,
+              29.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              12,
+              32,
+              15,
+              51
+            ],
+            "centroid_px": [
+              13.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              64,
+              32,
+              71,
+              35
+            ],
+            "centroid_px": [
+              67.5,
+              33.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              24,
+              36,
+              27,
+              43
+            ],
+            "centroid_px": [
+              25.5,
+              39.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              80,
+              40,
+              87,
+              43
+            ],
+            "centroid_px": [
+              83.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              48,
+              44,
+              51,
+              55
+            ],
+            "centroid_px": [
+              49.5,
+              49.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              24,
+              48,
+              35,
+              55
+            ],
+            "centroid_px": [
+              29.5,
+              52.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              60,
+              60,
+              71,
+              63
+            ],
+            "centroid_px": [
+              65.5,
+              61.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              76,
+              60,
+              79,
+              67
+            ],
+            "centroid_px": [
+              77.5,
+              63.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              48,
+              64,
+              55,
+              67
+            ],
+            "centroid_px": [
+              51.5,
+              65.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              84,
+              68,
+              95,
+              71
+            ],
+            "centroid_px": [
+              89.5,
+              69.5
+            ]
+          }
+        ],
+        "castle_count": 12,
+        "water_clusters": [
+          {
+            "pixels": 5372,
+            "bbox_px": [
+              0,
+              0,
+              119,
+              79
+            ],
+            "centroid_px": [
+              53.2,
+              38.0
+            ]
+          }
+        ],
+        "water_cluster_count": 1,
+        "largest_water_share": 0.5595833333333333,
+        "road_clusters": 2,
+        "largest_road_share": 0.14166666666666666,
+        "forest_clusters": 0,
+        "mountain_clusters": 3,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          30.0,
+          20.0
+        ],
+        "is_island": true,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187029_little_saint_james.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          176,
+          184
+        ],
+        "terrain_share": {
+          "water": 0.5810894268774703,
+          "plain": 0.12719244071146246,
+          "forest": 0.0,
+          "mountain": 0.0335350790513834,
+          "road": 0.043478260869565216,
+          "castle": 0.09498517786561265
+        },
+        "castle_clusters": [
+          {
+            "pixels": 32,
+            "bbox_px": [
+              68,
+              16,
+              71,
+              23
+            ],
+            "centroid_px": [
+              69.5,
+              19.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              136,
+              16,
+              143,
+              19
+            ],
+            "centroid_px": [
+              139.5,
+              17.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              16,
+              20,
+              19,
+              27
+            ],
+            "centroid_px": [
+              17.5,
+              23.5
+            ]
+          },
+          {
+            "pixels": 50,
+            "bbox_px": [
+              52,
+              27,
+              63,
+              31
+            ],
+            "centroid_px": [
+              57.4,
+              29.4
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              68,
+              28,
+              71,
+              35
+            ],
+            "centroid_px": [
+              69.5,
+              31.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              72,
+              44,
+              83,
+              51
+            ],
+            "centroid_px": [
+              77.5,
+              47.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              56,
+              48,
+              59,
+              55
+            ],
+            "centroid_px": [
+              57.5,
+              51.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              52,
+              56,
+              59,
+              63
+            ],
+            "centroid_px": [
+              54.8,
+              60.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              84,
+              56,
+              91,
+              59
+            ],
+            "centroid_px": [
+              87.5,
+              57.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              96,
+              60,
+              103,
+              71
+            ],
+            "centroid_px": [
+              99.5,
+              65.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              48,
+              72,
+              55,
+              75
+            ],
+            "centroid_px": [
+              51.5,
+              73.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              96,
+              76,
+              99,
+              87
+            ],
+            "centroid_px": [
+              97.5,
+              81.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              48,
+              80,
+              51,
+              87
+            ],
+            "centroid_px": [
+              49.5,
+              83.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              64,
+              84,
+              71,
+              87
+            ],
+            "centroid_px": [
+              67.5,
+              85.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              16,
+              88,
+              23,
+              95
+            ],
+            "centroid_px": [
+              18.8,
+              92.2
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              80,
+              96,
+              95,
+              107
+            ],
+            "centroid_px": [
+              87.2,
+              102.6
+            ]
+          },
+          {
+            "pixels": 65,
+            "bbox_px": [
+              15,
+              100,
+              27,
+              107
+            ],
+            "centroid_px": [
+              21.4,
+              103.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              120,
+              100,
+              127,
+              107
+            ],
+            "centroid_px": [
+              123.5,
+              103.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              24,
+              112,
+              31,
+              115
+            ],
+            "centroid_px": [
+              27.5,
+              113.5
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              32,
+              116,
+              47,
+              127
+            ],
+            "centroid_px": [
+              38.6,
+              122.6
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              136,
+              124,
+              139,
+              131
+            ],
+            "centroid_px": [
+              137.5,
+              127.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              56,
+              128,
+              63,
+              131
+            ],
+            "centroid_px": [
+              59.5,
+              129.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              84,
+              128,
+              91,
+              135
+            ],
+            "centroid_px": [
+              88.2,
+              132.2
+            ]
+          },
+          {
+            "pixels": 33,
+            "bbox_px": [
+              140,
+              132,
+              148,
+              135
+            ],
+            "centroid_px": [
+              143.6,
+              133.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              148,
+              140,
+              155,
+              151
+            ],
+            "centroid_px": [
+              152.5,
+              145.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              124,
+              144,
+              135,
+              151
+            ],
+            "centroid_px": [
+              129.5,
+              147.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              144,
+              148,
+              151,
+              155
+            ],
+            "centroid_px": [
+              146.8,
+              152.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              88,
+              152,
+              95,
+              155
+            ],
+            "centroid_px": [
+              91.5,
+              153.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              108,
+              152,
+              115,
+              155
+            ],
+            "centroid_px": [
+              111.5,
+              153.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              96,
+              156,
+              107,
+              159
+            ],
+            "centroid_px": [
+              101.5,
+              157.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              160,
+              160,
+              163,
+              167
+            ],
+            "centroid_px": [
+              161.5,
+              163.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              112,
+              164,
+              119,
+              167
+            ],
+            "centroid_px": [
+              115.5,
+              165.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              120,
+              168,
+              131,
+              171
+            ],
+            "centroid_px": [
+              125.5,
+              169.5
+            ]
+          }
+        ],
+        "castle_count": 33,
+        "water_clusters": [
+          {
+            "pixels": 22,
+            "bbox_px": [
+              4,
+              4,
+              9,
+              9
+            ],
+            "centroid_px": [
+              5.9,
+              6.1
+            ]
+          },
+          {
+            "pixels": 13413,
+            "bbox_px": [
+              4,
+              4,
+              171,
+              179
+            ],
+            "centroid_px": [
+              105.3,
+              63.1
+            ]
+          },
+          {
+            "pixels": 60,
+            "bbox_px": [
+              4,
+              87,
+              11,
+              97
+            ],
+            "centroid_px": [
+              8.1,
+              91.0
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              56,
+              92,
+              67,
+              99
+            ],
+            "centroid_px": [
+              60.5,
+              94.5
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              4,
+              95,
+              11,
+              101
+            ],
+            "centroid_px": [
+              6.4,
+              98.2
+            ]
+          },
+          {
+            "pixels": 5135,
+            "bbox_px": [
+              4,
+              103,
+              125,
+              179
+            ],
+            "centroid_px": [
+              48.3,
+              151.0
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              124,
+              148,
+              127,
+              151
+            ],
+            "centroid_px": [
+              125.5,
+              149.5
+            ]
+          }
+        ],
+        "water_cluster_count": 7,
+        "largest_water_share": 0.4141860177865613,
+        "road_clusters": 21,
+        "largest_road_share": 0.008893280632411068,
+        "forest_clusters": 0,
+        "mountain_clusters": 3,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          44.0,
+          46.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187032_the_name_comes_last.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          68,
+          84
+        ],
+        "terrain_share": {
+          "water": 0.07230392156862746,
+          "plain": 0.4222689075630252,
+          "forest": 0.0,
+          "mountain": 0.06862745098039216,
+          "road": 0.12324929971988796,
+          "castle": 0.26698179271708683
+        },
+        "castle_clusters": [
+          {
+            "pixels": 32,
+            "bbox_px": [
+              0,
+              0,
+              3,
+              7
+            ],
+            "centroid_px": [
+              1.5,
+              3.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              36,
+              0,
+              43,
+              3
+            ],
+            "centroid_px": [
+              39.5,
+              1.5
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              0,
+              8,
+              19,
+              23
+            ],
+            "centroid_px": [
+              9.9,
+              14.7
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              60,
+              8,
+              63,
+              15
+            ],
+            "centroid_px": [
+              61.5,
+              11.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              24,
+              12,
+              35,
+              23
+            ],
+            "centroid_px": [
+              31.1,
+              17.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              48,
+              20,
+              59,
+              31
+            ],
+            "centroid_px": [
+              54.2,
+              25.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              0,
+              28,
+              3,
+              39
+            ],
+            "centroid_px": [
+              1.5,
+              33.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              16,
+              28,
+              19,
+              35
+            ],
+            "centroid_px": [
+              17.5,
+              31.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              60,
+              28,
+              67,
+              31
+            ],
+            "centroid_px": [
+              63.5,
+              29.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              64,
+              44,
+              67,
+              55
+            ],
+            "centroid_px": [
+              65.5,
+              49.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              48,
+              48,
+              51,
+              55
+            ],
+            "centroid_px": [
+              49.5,
+              51.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              0,
+              52,
+              7,
+              55
+            ],
+            "centroid_px": [
+              3.5,
+              53.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              8,
+              52,
+              19,
+              63
+            ],
+            "centroid_px": [
+              12.8,
+              57.5
+            ]
+          },
+          {
+            "pixels": 152,
+            "bbox_px": [
+              48,
+              59,
+              67,
+              75
+            ],
+            "centroid_px": [
+              56.6,
+              68.4
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              32,
+              60,
+              43,
+              71
+            ],
+            "centroid_px": [
+              35.9,
+              65.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              4,
+              68,
+              7,
+              75
+            ],
+            "centroid_px": [
+              5.5,
+              71.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              64,
+              76,
+              67,
+              83
+            ],
+            "centroid_px": [
+              65.5,
+              79.5
+            ]
+          }
+        ],
+        "castle_count": 17,
+        "water_clusters": [
+          {
+            "pixels": 19,
+            "bbox_px": [
+              8,
+              11,
+              11,
+              15
+            ],
+            "centroid_px": [
+              9.6,
+              13.1
+            ]
+          },
+          {
+            "pixels": 45,
+            "bbox_px": [
+              21,
+              20,
+              31,
+              27
+            ],
+            "centroid_px": [
+              27.1,
+              23.1
+            ]
+          },
+          {
+            "pixels": 88,
+            "bbox_px": [
+              13,
+              24,
+              25,
+              39
+            ],
+            "centroid_px": [
+              19.8,
+              32.2
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              12,
+              27,
+              15,
+              31
+            ],
+            "centroid_px": [
+              13.4,
+              29.2
+            ]
+          },
+          {
+            "pixels": 89,
+            "bbox_px": [
+              41,
+              44,
+              53,
+              59
+            ],
+            "centroid_px": [
+              47.0,
+              50.8
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              52,
+              52,
+              55,
+              57
+            ],
+            "centroid_px": [
+              53.6,
+              54.0
+            ]
+          },
+          {
+            "pixels": 42,
+            "bbox_px": [
+              36,
+              55,
+              45,
+              63
+            ],
+            "centroid_px": [
+              39.6,
+              59.6
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              56,
+              68,
+              59,
+              71
+            ],
+            "centroid_px": [
+              57.5,
+              69.5
+            ]
+          }
+        ],
+        "water_cluster_count": 8,
+        "largest_water_share": 0.015581232492997199,
+        "road_clusters": 18,
+        "largest_road_share": 0.014005602240896359,
+        "forest_clusters": 0,
+        "mountain_clusters": 8,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          17.0,
+          21.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187035_19u23hdc.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          96,
+          76
+        ],
+        "terrain_share": {
+          "water": 0.07154605263157894,
+          "plain": 0.46573464912280704,
+          "forest": 0.0,
+          "mountain": 0.05797697368421053,
+          "road": 0.14035087719298245,
+          "castle": 0.21559758771929824
+        },
+        "castle_clusters": [
+          {
+            "pixels": 80,
+            "bbox_px": [
+              0,
+              0,
+              7,
+              15
+            ],
+            "centroid_px": [
+              2.3,
+              6.3
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              36,
+              0,
+              51,
+              7
+            ],
+            "centroid_px": [
+              43.9,
+              2.3
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              20,
+              12,
+              27,
+              15
+            ],
+            "centroid_px": [
+              23.5,
+              13.5
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              64,
+              12,
+              68,
+              23
+            ],
+            "centroid_px": [
+              65.6,
+              17.6
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              76,
+              12,
+              83,
+              15
+            ],
+            "centroid_px": [
+              79.5,
+              13.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              12,
+              16,
+              19,
+              23
+            ],
+            "centroid_px": [
+              16.2,
+              18.8
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              28,
+              32,
+              35,
+              43
+            ],
+            "centroid_px": [
+              31.9,
+              38.3
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              44,
+              32,
+              51,
+              35
+            ],
+            "centroid_px": [
+              47.5,
+              33.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              60,
+              32,
+              67,
+              43
+            ],
+            "centroid_px": [
+              63.1,
+              36.7
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              80,
+              32,
+              83,
+              39
+            ],
+            "centroid_px": [
+              81.5,
+              35.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              12,
+              36,
+              15,
+              43
+            ],
+            "centroid_px": [
+              13.5,
+              39.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              44,
+              40,
+              51,
+              43
+            ],
+            "centroid_px": [
+              47.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              27,
+              52,
+              31,
+              63
+            ],
+            "centroid_px": [
+              29.4,
+              57.4
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              76,
+              52,
+              83,
+              59
+            ],
+            "centroid_px": [
+              78.8,
+              56.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              12,
+              60,
+              19,
+              63
+            ],
+            "centroid_px": [
+              15.5,
+              61.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              68,
+              60,
+              75,
+              63
+            ],
+            "centroid_px": [
+              71.5,
+              61.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              88,
+              60,
+              95,
+              75
+            ],
+            "centroid_px": [
+              92.7,
+              68.7
+            ]
+          },
+          {
+            "pixels": 87,
+            "bbox_px": [
+              44,
+              68,
+              63,
+              75
+            ],
+            "centroid_px": [
+              52.0,
+              72.8
+            ]
+          }
+        ],
+        "castle_count": 18,
+        "water_clusters": [
+          {
+            "pixels": 16,
+            "bbox_px": [
+              8,
+              0,
+              11,
+              3
+            ],
+            "centroid_px": [
+              9.5,
+              1.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              4,
+              4,
+              7,
+              7
+            ],
+            "centroid_px": [
+              5.5,
+              5.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              36,
+              4,
+              43,
+              7
+            ],
+            "centroid_px": [
+              39.5,
+              5.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              24,
+              8,
+              27,
+              11
+            ],
+            "centroid_px": [
+              25.5,
+              9.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              16,
+              12,
+              19,
+              15
+            ],
+            "centroid_px": [
+              17.5,
+              13.5
+            ]
+          },
+          {
+            "pixels": 90,
+            "bbox_px": [
+              68,
+              12,
+              79,
+              23
+            ],
+            "centroid_px": [
+              72.7,
+              16.9
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              20,
+              16,
+              23,
+              19
+            ],
+            "centroid_px": [
+              21.5,
+              17.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              12,
+              20,
+              15,
+              23
+            ],
+            "centroid_px": [
+              13.5,
+              21.5
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              68,
+              23,
+              71,
+              27
+            ],
+            "centroid_px": [
+              69.4,
+              25.2
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              24,
+              48,
+              27,
+              53
+            ],
+            "centroid_px": [
+              25.6,
+              50.0
+            ]
+          },
+          {
+            "pixels": 88,
+            "bbox_px": [
+              16,
+              52,
+              27,
+              63
+            ],
+            "centroid_px": [
+              22.3,
+              58.1
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              80,
+              52,
+              83,
+              55
+            ],
+            "centroid_px": [
+              81.5,
+              53.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              72,
+              56,
+              75,
+              59
+            ],
+            "centroid_px": [
+              73.5,
+              57.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              76,
+              60,
+              79,
+              63
+            ],
+            "centroid_px": [
+              77.5,
+              61.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              68,
+              64,
+              71,
+              67
+            ],
+            "centroid_px": [
+              69.5,
+              65.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              52,
+              68,
+              59,
+              71
+            ],
+            "centroid_px": [
+              55.5,
+              69.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              88,
+              68,
+              91,
+              71
+            ],
+            "centroid_px": [
+              89.5,
+              69.5
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              84,
+              72,
+              87,
+              75
+            ],
+            "centroid_px": [
+              85.5,
+              73.5
+            ]
+          }
+        ],
+        "water_cluster_count": 18,
+        "largest_water_share": 0.012335526315789474,
+        "road_clusters": 20,
+        "largest_road_share": 0.015350877192982455,
+        "forest_clusters": 0,
+        "mountain_clusters": 12,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          24.0,
+          19.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187039_protected_harbor.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          80,
+          80
+        ],
+        "terrain_share": {
+          "water": 0.68953125,
+          "plain": 0.0740625,
+          "forest": 0.0,
+          "mountain": 0.008125,
+          "road": 0.055,
+          "castle": 0.16296875
+        },
+        "castle_clusters": [
+          {
+            "pixels": 96,
+            "bbox_px": [
+              0,
+              0,
+              11,
+              11
+            ],
+            "centroid_px": [
+              4.2,
+              4.2
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              64,
+              0,
+              71,
+              7
+            ],
+            "centroid_px": [
+              66.8,
+              4.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              72,
+              0,
+              79,
+              3
+            ],
+            "centroid_px": [
+              75.5,
+              1.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              72,
+              8,
+              79,
+              11
+            ],
+            "centroid_px": [
+              75.5,
+              9.5
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              16,
+              12,
+              31,
+              27
+            ],
+            "centroid_px": [
+              22.6,
+              17.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              28,
+              16,
+              35,
+              27
+            ],
+            "centroid_px": [
+              31.9,
+              22.3
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              8,
+              28,
+              15,
+              35
+            ],
+            "centroid_px": [
+              10.8,
+              32.2
+            ]
+          },
+          {
+            "pixels": 39,
+            "bbox_px": [
+              64,
+              44,
+              71,
+              51
+            ],
+            "centroid_px": [
+              68.0,
+              46.3
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              44,
+              52,
+              51,
+              63
+            ],
+            "centroid_px": [
+              47.1,
+              56.7
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              48,
+              52,
+              63,
+              67
+            ],
+            "centroid_px": [
+              56.4,
+              61.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              0,
+              68,
+              7,
+              71
+            ],
+            "centroid_px": [
+              3.5,
+              69.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              68,
+              68,
+              79,
+              79
+            ],
+            "centroid_px": [
+              74.8,
+              74.8
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              8,
+              72,
+              15,
+              79
+            ],
+            "centroid_px": [
+              12.2,
+              74.8
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              0,
+              76,
+              7,
+              79
+            ],
+            "centroid_px": [
+              3.5,
+              77.5
+            ]
+          }
+        ],
+        "castle_count": 14,
+        "water_clusters": [
+          {
+            "pixels": 4395,
+            "bbox_px": [
+              0,
+              0,
+              79,
+              79
+            ],
+            "centroid_px": [
+              39.7,
+              39.6
+            ]
+          }
+        ],
+        "water_cluster_count": 1,
+        "largest_water_share": 0.68671875,
+        "road_clusters": 8,
+        "largest_road_share": 0.0125,
+        "forest_clusters": 0,
+        "mountain_clusters": 0,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          20.0,
+          20.0
+        ],
+        "is_island": true,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187040_bridge_too_far.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          180,
+          84
+        ],
+        "terrain_share": {
+          "water": 0.45515873015873015,
+          "plain": 0.13518518518518519,
+          "forest": 0.0,
+          "mountain": 0.08465608465608465,
+          "road": 0.14603174603174604,
+          "castle": 0.15357142857142858
+        },
+        "castle_clusters": [
+          {
+            "pixels": 96,
+            "bbox_px": [
+              12,
+              0,
+              27,
+              7
+            ],
+            "centroid_px": [
+              20.8,
+              2.8
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              40,
+              0,
+              55,
+              7
+            ],
+            "centroid_px": [
+              46.2,
+              2.8
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              104,
+              0,
+              119,
+              7
+            ],
+            "centroid_px": [
+              111.5,
+              3.5
+            ]
+          },
+          {
+            "pixels": 83,
+            "bbox_px": [
+              152,
+              0,
+              167,
+              11
+            ],
+            "centroid_px": [
+              157.6,
+              5.1
+            ]
+          },
+          {
+            "pixels": 128,
+            "bbox_px": [
+              68,
+              4,
+              83,
+              15
+            ],
+            "centroid_px": [
+              75.0,
+              10.0
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              16,
+              8,
+              19,
+              31
+            ],
+            "centroid_px": [
+              17.5,
+              19.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              88,
+              16,
+              95,
+              19
+            ],
+            "centroid_px": [
+              91.5,
+              17.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              160,
+              16,
+              163,
+              23
+            ],
+            "centroid_px": [
+              161.5,
+              19.5
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              100,
+              20,
+              115,
+              27
+            ],
+            "centroid_px": [
+              107.8,
+              23.2
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              36,
+              24,
+              39,
+              31
+            ],
+            "centroid_px": [
+              37.5,
+              27.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              56,
+              24,
+              63,
+              27
+            ],
+            "centroid_px": [
+              59.5,
+              25.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              88,
+              24,
+              95,
+              27
+            ],
+            "centroid_px": [
+              91.5,
+              25.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              60,
+              32,
+              63,
+              39
+            ],
+            "centroid_px": [
+              61.5,
+              35.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              116,
+              44,
+              119,
+              51
+            ],
+            "centroid_px": [
+              117.5,
+              47.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              140,
+              52,
+              143,
+              59
+            ],
+            "centroid_px": [
+              141.5,
+              55.5
+            ]
+          },
+          {
+            "pixels": 87,
+            "bbox_px": [
+              160,
+              52,
+              163,
+              75
+            ],
+            "centroid_px": [
+              161.6,
+              62.5
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              64,
+              56,
+              79,
+              63
+            ],
+            "centroid_px": [
+              71.2,
+              59.8
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              84,
+              56,
+              91,
+              59
+            ],
+            "centroid_px": [
+              87.5,
+              57.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              116,
+              56,
+              123,
+              59
+            ],
+            "centroid_px": [
+              119.5,
+              57.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              16,
+              60,
+              19,
+              67
+            ],
+            "centroid_px": [
+              17.5,
+              63.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              84,
+              64,
+              91,
+              67
+            ],
+            "centroid_px": [
+              87.5,
+              65.5
+            ]
+          },
+          {
+            "pixels": 128,
+            "bbox_px": [
+              96,
+              68,
+              111,
+              79
+            ],
+            "centroid_px": [
+              104.0,
+              73.0
+            ]
+          },
+          {
+            "pixels": 83,
+            "bbox_px": [
+              12,
+              72,
+              27,
+              83
+            ],
+            "centroid_px": [
+              22.0,
+              78.4
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              60,
+              76,
+              75,
+              83
+            ],
+            "centroid_px": [
+              67.5,
+              79.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              124,
+              76,
+              139,
+              83
+            ],
+            "centroid_px": [
+              132.8,
+              80.2
+            ]
+          },
+          {
+            "pixels": 60,
+            "bbox_px": [
+              152,
+              76,
+              167,
+              83
+            ],
+            "centroid_px": [
+              157.1,
+              80.3
+            ]
+          }
+        ],
+        "castle_count": 26,
+        "water_clusters": [
+          {
+            "pixels": 3204,
+            "bbox_px": [
+              20,
+              0,
+              163,
+              39
+            ],
+            "centroid_px": [
+              94.8,
+              15.7
+            ]
+          },
+          {
+            "pixels": 192,
+            "bbox_px": [
+              64,
+              36,
+              83,
+              47
+            ],
+            "centroid_px": [
+              72.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 192,
+            "bbox_px": [
+              96,
+              36,
+              115,
+              47
+            ],
+            "centroid_px": [
+              106.5,
+              41.5
+            ]
+          },
+          {
+            "pixels": 3222,
+            "bbox_px": [
+              16,
+              44,
+              162,
+              83
+            ],
+            "centroid_px": [
+              84.6,
+              67.4
+            ]
+          }
+        ],
+        "water_cluster_count": 4,
+        "largest_water_share": 0.2130952380952381,
+        "road_clusters": 18,
+        "largest_road_share": 0.0380952380952381,
+        "forest_clusters": 0,
+        "mountain_clusters": 8,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          45.0,
+          21.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 2
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187041_meet_me_in_the_middle.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          72,
+          80
+        ],
+        "terrain_share": {
+          "water": 0.10104166666666667,
+          "plain": 0.3951388888888889,
+          "forest": 0.0,
+          "mountain": 0.11805555555555555,
+          "road": 0.18333333333333332,
+          "castle": 0.14930555555555555
+        },
+        "castle_clusters": [
+          {
+            "pixels": 82,
+            "bbox_px": [
+              7,
+              0,
+              19,
+              11
+            ],
+            "centroid_px": [
+              13.4,
+              5.5
+            ]
+          },
+          {
+            "pixels": 33,
+            "bbox_px": [
+              63,
+              0,
+              71,
+              3
+            ],
+            "centroid_px": [
+              67.4,
+              1.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              52,
+              20,
+              59,
+              31
+            ],
+            "centroid_px": [
+              55.5,
+              25.5
+            ]
+          },
+          {
+            "pixels": 64,
+            "bbox_px": [
+              12,
+              48,
+              19,
+              59
+            ],
+            "centroid_px": [
+              15.5,
+              53.5
+            ]
+          },
+          {
+            "pixels": 81,
+            "bbox_px": [
+              52,
+              68,
+              64,
+              79
+            ],
+            "centroid_px": [
+              57.6,
+              73.5
+            ]
+          }
+        ],
+        "castle_count": 5,
+        "water_clusters": [
+          {
+            "pixels": 88,
+            "bbox_px": [
+              0,
+              0,
+              9,
+              11
+            ],
+            "centroid_px": [
+              3.4,
+              5.4
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              9,
+              0,
+              15,
+              3
+            ],
+            "centroid_px": [
+              12.8,
+              1.2
+            ]
+          },
+          {
+            "pixels": 86,
+            "bbox_px": [
+              56,
+              3,
+              67,
+              15
+            ],
+            "centroid_px": [
+              61.3,
+              8.7
+            ]
+          },
+          {
+            "pixels": 50,
+            "bbox_px": [
+              52,
+              12,
+              59,
+              19
+            ],
+            "centroid_px": [
+              54.9,
+              16.1
+            ]
+          },
+          {
+            "pixels": 52,
+            "bbox_px": [
+              12,
+              60,
+              19,
+              67
+            ],
+            "centroid_px": [
+              16.0,
+              62.9
+            ]
+          },
+          {
+            "pixels": 86,
+            "bbox_px": [
+              4,
+              64,
+              15,
+              77
+            ],
+            "centroid_px": [
+              9.6,
+              70.5
+            ]
+          },
+          {
+            "pixels": 90,
+            "bbox_px": [
+              61,
+              68,
+              71,
+              79
+            ],
+            "centroid_px": [
+              67.5,
+              73.6
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              56,
+              76,
+              61,
+              79
+            ],
+            "centroid_px": [
+              57.8,
+              77.7
+            ]
+          }
+        ],
+        "water_cluster_count": 8,
+        "largest_water_share": 0.015625,
+        "road_clusters": 30,
+        "largest_road_share": 0.013888888888888888,
+        "forest_clusters": 0,
+        "mountain_clusters": 20,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          18.0,
+          20.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187055_stop_searching.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          72,
+          60
+        ],
+        "terrain_share": {
+          "water": 0.06666666666666667,
+          "plain": 0.3175925925925926,
+          "forest": 0.0,
+          "mountain": 0.175,
+          "road": 0.15555555555555556,
+          "castle": 0.26180555555555557
+        },
+        "castle_clusters": [
+          {
+            "pixels": 32,
+            "bbox_px": [
+              40,
+              0,
+              43,
+              7
+            ],
+            "centroid_px": [
+              41.5,
+              3.5
+            ]
+          },
+          {
+            "pixels": 144,
+            "bbox_px": [
+              64,
+              0,
+              71,
+              23
+            ],
+            "centroid_px": [
+              67.7,
+              11.3
+            ]
+          },
+          {
+            "pixels": 176,
+            "bbox_px": [
+              16,
+              20,
+              35,
+              43
+            ],
+            "centroid_px": [
+              25.1,
+              30.6
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              36,
+              20,
+              55,
+              39
+            ],
+            "centroid_px": [
+              45.5,
+              29.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              0,
+              28,
+              3,
+              35
+            ],
+            "centroid_px": [
+              1.5,
+              31.5
+            ]
+          },
+          {
+            "pixels": 144,
+            "bbox_px": [
+              0,
+              36,
+              7,
+              59
+            ],
+            "centroid_px": [
+              3.3,
+              47.7
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              28,
+              52,
+              31,
+              59
+            ],
+            "centroid_px": [
+              29.5,
+              55.5
+            ]
+          }
+        ],
+        "castle_count": 7,
+        "water_clusters": [
+          {
+            "pixels": 96,
+            "bbox_px": [
+              52,
+              16,
+              63,
+              27
+            ],
+            "centroid_px": [
+              57.5,
+              22.2
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              28,
+              24,
+              43,
+              35
+            ],
+            "centroid_px": [
+              35.5,
+              29.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              8,
+              32,
+              19,
+              43
+            ],
+            "centroid_px": [
+              13.5,
+              36.8
+            ]
+          }
+        ],
+        "water_cluster_count": 3,
+        "largest_water_share": 0.022222222222222223,
+        "road_clusters": 14,
+        "largest_road_share": 0.018518518518518517,
+        "forest_clusters": 0,
+        "mountain_clusters": 9,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          18.0,
+          15.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars-awbw/awbw_187060_finnegans_wake.png",
+      "features": {
+        "kind": "advance_wars_awbw",
+        "grid_px": [
+          84,
+          84
+        ],
+        "terrain_share": {
+          "water": 0.09977324263038549,
+          "plain": 0.49943310657596374,
+          "forest": 0.0,
+          "mountain": 0.05895691609977324,
+          "road": 0.18594104308390022,
+          "castle": 0.09226190476190477
+        },
+        "castle_clusters": [
+          {
+            "pixels": 32,
+            "bbox_px": [
+              44,
+              12,
+              47,
+              19
+            ],
+            "centroid_px": [
+              45.5,
+              15.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              36,
+              24,
+              51,
+              35
+            ],
+            "centroid_px": [
+              42.2,
+              29.5
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              32,
+              48,
+              47,
+              59
+            ],
+            "centroid_px": [
+              40.8,
+              53.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              36,
+              64,
+              39,
+              71
+            ],
+            "centroid_px": [
+              37.5,
+              67.5
+            ]
+          }
+        ],
+        "castle_count": 4,
+        "water_clusters": [
+          {
+            "pixels": 192,
+            "bbox_px": [
+              76,
+              20,
+              83,
+              47
+            ],
+            "centroid_px": [
+              79.8,
+              35.2
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              52,
+              28,
+              59,
+              35
+            ],
+            "centroid_px": [
+              54.8,
+              32.2
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              24,
+              32,
+              35,
+              43
+            ],
+            "centroid_px": [
+              30.1,
+              38.6
+            ]
+          },
+          {
+            "pixels": 192,
+            "bbox_px": [
+              0,
+              36,
+              7,
+              63
+            ],
+            "centroid_px": [
+              3.2,
+              47.8
+            ]
+          },
+          {
+            "pixels": 112,
+            "bbox_px": [
+              48,
+              40,
+              59,
+              51
+            ],
+            "centroid_px": [
+              52.9,
+              44.4
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              24,
+              48,
+              31,
+              55
+            ],
+            "centroid_px": [
+              28.2,
+              50.8
+            ]
+          }
+        ],
+        "water_cluster_count": 6,
+        "largest_water_share": 0.027210884353741496,
+        "road_clusters": 8,
+        "largest_road_share": 0.04081632653061224,
+        "forest_clusters": 0,
+        "mountain_clusters": 6,
+        "tile_px_guess": 4,
+        "grid_tiles_guess": [
+          21.0,
+          21.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": true,
+        "chokepoint_candidate_count": 2
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/aw2_c23_sea_of_hope.webp",
+      "features": {
+        "kind": "advance_wars_2",
+        "grid_px": [
+          240,
+          448
+        ],
+        "terrain_share": {
+          "water": 0.5571521577380952,
+          "plain": 0.1578125,
+          "forest": 0.0,
+          "mountain": 0.01802455357142857,
+          "road": 0.023335193452380953,
+          "castle": 0.05611979166666667
+        },
+        "castle_clusters": [
+          {
+            "pixels": 39,
+            "bbox_px": [
+              77,
+              31,
+              79,
+              52
+            ],
+            "centroid_px": [
+              77.6,
+              40.6
+            ]
+          },
+          {
+            "pixels": 93,
+            "bbox_px": [
+              113,
+              32,
+              126,
+              47
+            ],
+            "centroid_px": [
+              120.6,
+              39.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              208,
+              32,
+              215,
+              59
+            ],
+            "centroid_px": [
+              213.3,
+              48.4
+            ]
+          },
+          {
+            "pixels": 41,
+            "bbox_px": [
+              77,
+              56,
+              89,
+              60
+            ],
+            "centroid_px": [
+              83.1,
+              57.7
+            ]
+          },
+          {
+            "pixels": 278,
+            "bbox_px": [
+              93,
+              58,
+              191,
+              75
+            ],
+            "centroid_px": [
+              145.6,
+              72.4
+            ]
+          },
+          {
+            "pixels": 95,
+            "bbox_px": [
+              45,
+              127,
+              47,
+              180
+            ],
+            "centroid_px": [
+              45.6,
+              152.5
+            ]
+          },
+          {
+            "pixels": 82,
+            "bbox_px": [
+              81,
+              128,
+              95,
+              142
+            ],
+            "centroid_px": [
+              85.9,
+              136.6
+            ]
+          },
+          {
+            "pixels": 128,
+            "bbox_px": [
+              129,
+              160,
+              134,
+              190
+            ],
+            "centroid_px": [
+              131.8,
+              174.9
+            ]
+          },
+          {
+            "pixels": 169,
+            "bbox_px": [
+              173,
+              168,
+              239,
+              171
+            ],
+            "centroid_px": [
+              205.5,
+              170.1
+            ]
+          },
+          {
+            "pixels": 92,
+            "bbox_px": [
+              48,
+              177,
+              62,
+              196
+            ],
+            "centroid_px": [
+              56.6,
+              183.6
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              128,
+              192,
+              135,
+              203
+            ],
+            "centroid_px": [
+              132.5,
+              199.2
+            ]
+          },
+          {
+            "pixels": 100,
+            "bbox_px": [
+              80,
+              193,
+              94,
+              214
+            ],
+            "centroid_px": [
+              89.0,
+              200.6
+            ]
+          },
+          {
+            "pixels": 72,
+            "bbox_px": [
+              114,
+              194,
+              127,
+              207
+            ],
+            "centroid_px": [
+              119.1,
+              198.6
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              61,
+              200,
+              79,
+              203
+            ],
+            "centroid_px": [
+              69.6,
+              202.0
+            ]
+          },
+          {
+            "pixels": 51,
+            "bbox_px": [
+              112,
+              208,
+              119,
+              219
+            ],
+            "centroid_px": [
+              116.6,
+              214.6
+            ]
+          },
+          {
+            "pixels": 137,
+            "bbox_px": [
+              90,
+              222,
+              95,
+              252
+            ],
+            "centroid_px": [
+              91.9,
+              237.6
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              133,
+              224,
+              135,
+              239
+            ],
+            "centroid_px": [
+              134.3,
+              231.9
+            ]
+          },
+          {
+            "pixels": 116,
+            "bbox_px": [
+              224,
+              240,
+              231,
+              283
+            ],
+            "centroid_px": [
+              229.7,
+              264.8
+            ]
+          },
+          {
+            "pixels": 129,
+            "bbox_px": [
+              109,
+              256,
+              135,
+              283
+            ],
+            "centroid_px": [
+              127.4,
+              276.0
+            ]
+          },
+          {
+            "pixels": 92,
+            "bbox_px": [
+              96,
+              257,
+              110,
+              276
+            ],
+            "centroid_px": [
+              104.6,
+              263.6
+            ]
+          },
+          {
+            "pixels": 41,
+            "bbox_px": [
+              173,
+              264,
+              185,
+              268
+            ],
+            "centroid_px": [
+              179.1,
+              265.7
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              189,
+              280,
+              207,
+              283
+            ],
+            "centroid_px": [
+              197.6,
+              282.0
+            ]
+          },
+          {
+            "pixels": 67,
+            "bbox_px": [
+              125,
+              303,
+              127,
+              340
+            ],
+            "centroid_px": [
+              125.6,
+              320.6
+            ]
+          },
+          {
+            "pixels": 116,
+            "bbox_px": [
+              160,
+              304,
+              167,
+              347
+            ],
+            "centroid_px": [
+              165.7,
+              328.8
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              125,
+              344,
+              143,
+              347
+            ],
+            "centroid_px": [
+              133.6,
+              346.0
+            ]
+          },
+          {
+            "pixels": 33,
+            "bbox_px": [
+              192,
+              379,
+              203,
+              382
+            ],
+            "centroid_px": [
+              197.6,
+              380.3
+            ]
+          },
+          {
+            "pixels": 165,
+            "bbox_px": [
+              160,
+              383,
+              191,
+              398
+            ],
+            "centroid_px": [
+              178.6,
+              393.8
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              208,
+              385,
+              222,
+              397
+            ],
+            "centroid_px": [
+              214.9,
+              391.8
+            ]
+          },
+          {
+            "pixels": 495,
+            "bbox_px": [
+              32,
+              394,
+              139,
+              398
+            ],
+            "centroid_px": [
+              86.2,
+              395.9
+            ]
+          },
+          {
+            "pixels": 181,
+            "bbox_px": [
+              0,
+              399,
+              31,
+              414
+            ],
+            "centroid_px": [
+              17.2,
+              409.9
+            ]
+          },
+          {
+            "pixels": 107,
+            "bbox_px": [
+              193,
+              400,
+              205,
+              412
+            ],
+            "centroid_px": [
+              198.9,
+              406.2
+            ]
+          },
+          {
+            "pixels": 55,
+            "bbox_px": [
+              25,
+              416,
+              31,
+              428
+            ],
+            "centroid_px": [
+              28.1,
+              421.4
+            ]
+          },
+          {
+            "pixels": 107,
+            "bbox_px": [
+              65,
+              416,
+              77,
+              428
+            ],
+            "centroid_px": [
+              70.9,
+              422.2
+            ]
+          },
+          {
+            "pixels": 55,
+            "bbox_px": [
+              137,
+              416,
+              143,
+              428
+            ],
+            "centroid_px": [
+              140.1,
+              421.4
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              96,
+              417,
+              110,
+              429
+            ],
+            "centroid_px": [
+              102.9,
+              423.8
+            ]
+          },
+          {
+            "pixels": 173,
+            "bbox_px": [
+              48,
+              432,
+              62,
+              447
+            ],
+            "centroid_px": [
+              55.3,
+              439.5
+            ]
+          },
+          {
+            "pixels": 107,
+            "bbox_px": [
+              145,
+              432,
+              157,
+              444
+            ],
+            "centroid_px": [
+              150.9,
+              438.2
+            ]
+          },
+          {
+            "pixels": 107,
+            "bbox_px": [
+              177,
+              432,
+              189,
+              444
+            ],
+            "centroid_px": [
+              182.9,
+              438.2
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              80,
+              433,
+              94,
+              445
+            ],
+            "centroid_px": [
+              86.9,
+              439.8
+            ]
+          }
+        ],
+        "castle_count": 39,
+        "water_clusters": [
+          {
+            "pixels": 38,
+            "bbox_px": [
+              7,
+              0,
+              18,
+              6
+            ],
+            "centroid_px": [
+              12.7,
+              1.8
+            ]
+          },
+          {
+            "pixels": 48994,
+            "bbox_px": [
+              0,
+              0,
+              239,
+              403
+            ],
+            "centroid_px": [
+              95.7,
+              201.7
+            ]
+          },
+          {
+            "pixels": 41,
+            "bbox_px": [
+              179,
+              56,
+              191,
+              71
+            ],
+            "centroid_px": [
+              182.2,
+              62.4
+            ]
+          },
+          {
+            "pixels": 59,
+            "bbox_px": [
+              231,
+              91,
+              239,
+              102
+            ],
+            "centroid_px": [
+              236.3,
+              96.1
+            ]
+          },
+          {
+            "pixels": 8719,
+            "bbox_px": [
+              112,
+              160,
+              239,
+              342
+            ],
+            "centroid_px": [
+              190.7,
+              217.2
+            ]
+          },
+          {
+            "pixels": 23,
+            "bbox_px": [
+              112,
+              208,
+              116,
+              216
+            ],
+            "centroid_px": [
+              114.7,
+              212.6
+            ]
+          },
+          {
+            "pixels": 50,
+            "bbox_px": [
+              131,
+              256,
+              133,
+              279
+            ],
+            "centroid_px": [
+              132.2,
+              267.2
+            ]
+          },
+          {
+            "pixels": 497,
+            "bbox_px": [
+              224,
+              347,
+              239,
+              380
+            ],
+            "centroid_px": [
+              231.7,
+              364.9
+            ]
+          }
+        ],
+        "water_cluster_count": 8,
+        "largest_water_share": 0.4556733630952381,
+        "road_clusters": 42,
+        "largest_road_share": 0.0010416666666666667,
+        "forest_clusters": 0,
+        "mountain_clusters": 6,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          30.0,
+          56.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 1
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/awds_mission_1_map.webp",
+      "features": {
+        "kind": "advance_wars_ds",
+        "grid_px": [
+          254,
+          190
+        ],
+        "terrain_share": {
+          "water": 0.0,
+          "plain": 0.5804185661002901,
+          "forest": 0.0,
+          "mountain": 0.010091172813924574,
+          "road": 0.030252797347699957,
+          "castle": 0.010754247824285123
+        },
+        "castle_clusters": [
+          {
+            "pixels": 118,
+            "bbox_px": [
+              54,
+              73,
+              66,
+              89
+            ],
+            "centroid_px": [
+              60.2,
+              81.6
+            ]
+          },
+          {
+            "pixels": 43,
+            "bbox_px": [
+              208,
+              118,
+              213,
+              132
+            ],
+            "centroid_px": [
+              210.8,
+              125.5
+            ]
+          },
+          {
+            "pixels": 83,
+            "bbox_px": [
+              229,
+              146,
+              242,
+              156
+            ],
+            "centroid_px": [
+              235.8,
+              151.1
+            ]
+          },
+          {
+            "pixels": 35,
+            "bbox_px": [
+              210,
+              150,
+              213,
+              163
+            ],
+            "centroid_px": [
+              212.1,
+              156.4
+            ]
+          }
+        ],
+        "castle_count": 4,
+        "water_clusters": [],
+        "water_cluster_count": 0,
+        "largest_water_share": 0.0,
+        "road_clusters": 43,
+        "largest_road_share": 0.003501864898466639,
+        "forest_clusters": 0,
+        "mountain_clusters": 6,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          31.8,
+          23.8
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": true,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/moji_island_aw.webp",
+      "features": {
+        "kind": "advance_wars_ds",
+        "grid_px": [
+          416,
+          352
+        ],
+        "terrain_share": {
+          "water": 0.39399857954545453,
+          "plain": 0.2758276879370629,
+          "forest": 0.0012428977272727273,
+          "mountain": 0.011008522727272728,
+          "road": 0.060137128496503496,
+          "castle": 0.03788789335664336
+        },
+        "castle_clusters": [
+          {
+            "pixels": 50,
+            "bbox_px": [
+              324,
+              16,
+              330,
+              28
+            ],
+            "centroid_px": [
+              326.2,
+              21.8
+            ]
+          },
+          {
+            "pixels": 50,
+            "bbox_px": [
+              356,
+              32,
+              362,
+              44
+            ],
+            "centroid_px": [
+              358.2,
+              37.8
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              339,
+              44,
+              344,
+              52
+            ],
+            "centroid_px": [
+              341.4,
+              47.7
+            ]
+          },
+          {
+            "pixels": 47,
+            "bbox_px": [
+              77,
+              47,
+              79,
+              73
+            ],
+            "centroid_px": [
+              77.6,
+              59.5
+            ]
+          },
+          {
+            "pixels": 114,
+            "bbox_px": [
+              372,
+              48,
+              378,
+              76
+            ],
+            "centroid_px": [
+              373.8,
+              61.8
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              339,
+              60,
+              344,
+              68
+            ],
+            "centroid_px": [
+              341.4,
+              63.7
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              355,
+              60,
+              360,
+              68
+            ],
+            "centroid_px": [
+              357.4,
+              63.7
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              355,
+              76,
+              360,
+              84
+            ],
+            "centroid_px": [
+              357.4,
+              79.7
+            ]
+          },
+          {
+            "pixels": 47,
+            "bbox_px": [
+              61,
+              79,
+              63,
+              105
+            ],
+            "centroid_px": [
+              61.6,
+              91.5
+            ]
+          },
+          {
+            "pixels": 1732,
+            "bbox_px": [
+              157,
+              80,
+              391,
+              331
+            ],
+            "centroid_px": [
+              325.6,
+              250.6
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              291,
+              92,
+              296,
+              100
+            ],
+            "centroid_px": [
+              293.4,
+              95.7
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              307,
+              92,
+              312,
+              100
+            ],
+            "centroid_px": [
+              309.4,
+              95.7
+            ]
+          },
+          {
+            "pixels": 698,
+            "bbox_px": [
+              132,
+              103,
+              233,
+              204
+            ],
+            "centroid_px": [
+              166.0,
+              138.9
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              291,
+              108,
+              296,
+              116
+            ],
+            "centroid_px": [
+              293.4,
+              111.7
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              307,
+              108,
+              312,
+              116
+            ],
+            "centroid_px": [
+              309.4,
+              111.7
+            ]
+          },
+          {
+            "pixels": 290,
+            "bbox_px": [
+              45,
+              111,
+              47,
+              276
+            ],
+            "centroid_px": [
+              45.6,
+              192.8
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              237,
+              119,
+              281,
+              124
+            ],
+            "centroid_px": [
+              258.7,
+              121.4
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              307,
+              124,
+              312,
+              132
+            ],
+            "centroid_px": [
+              309.4,
+              127.7
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              285,
+              136,
+              297,
+              140
+            ],
+            "centroid_px": [
+              291.1,
+              137.5
+            ]
+          },
+          {
+            "pixels": 50,
+            "bbox_px": [
+              260,
+              144,
+              266,
+              156
+            ],
+            "centroid_px": [
+              262.2,
+              149.8
+            ]
+          },
+          {
+            "pixels": 94,
+            "bbox_px": [
+              173,
+              159,
+              175,
+              212
+            ],
+            "centroid_px": [
+              173.6,
+              184.8
+            ]
+          },
+          {
+            "pixels": 357,
+            "bbox_px": [
+              132,
+              208,
+              151,
+              287
+            ],
+            "centroid_px": [
+              144.9,
+              249.4
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              173,
+              216,
+              185,
+              220
+            ],
+            "centroid_px": [
+              179.1,
+              217.5
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              189,
+              217,
+              190,
+              244
+            ],
+            "centroid_px": [
+              189.6,
+              230.1
+            ]
+          },
+          {
+            "pixels": 160,
+            "bbox_px": [
+              189,
+              247,
+              233,
+              252
+            ],
+            "centroid_px": [
+              210.7,
+              249.4
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              45,
+              280,
+              57,
+              284
+            ],
+            "centroid_px": [
+              51.1,
+              281.5
+            ]
+          },
+          {
+            "pixels": 76,
+            "bbox_px": [
+              61,
+              281,
+              62,
+              324
+            ],
+            "centroid_px": [
+              61.6,
+              302.0
+            ]
+          },
+          {
+            "pixels": 346,
+            "bbox_px": [
+              77,
+              304,
+              135,
+              347
+            ],
+            "centroid_px": [
+              114.7,
+              333.7
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              157,
+              304,
+              158,
+              324
+            ],
+            "centroid_px": [
+              157.6,
+              313.4
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              61,
+              328,
+              73,
+              332
+            ],
+            "centroid_px": [
+              67.1,
+              329.5
+            ]
+          }
+        ],
+        "castle_count": 30,
+        "water_clusters": [
+          {
+            "pixels": 47146,
+            "bbox_px": [
+              0,
+              0,
+              415,
+              351
+            ],
+            "centroid_px": [
+              194.3,
+              180.8
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              179,
+              103,
+              183,
+              117
+            ],
+            "centroid_px": [
+              180.0,
+              110.0
+            ]
+          },
+          {
+            "pixels": 9520,
+            "bbox_px": [
+              130,
+              106,
+              299,
+              287
+            ],
+            "centroid_px": [
+              192.6,
+              184.0
+            ]
+          },
+          {
+            "pixels": 68,
+            "bbox_px": [
+              146,
+              119,
+              151,
+              165
+            ],
+            "centroid_px": [
+              147.2,
+              141.8
+            ]
+          },
+          {
+            "pixels": 29,
+            "bbox_px": [
+              195,
+              184,
+              205,
+              189
+            ],
+            "centroid_px": [
+              200.0,
+              186.4
+            ]
+          },
+          {
+            "pixels": 29,
+            "bbox_px": [
+              227,
+              184,
+              237,
+              189
+            ],
+            "centroid_px": [
+              232.0,
+              186.4
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              212,
+              186,
+              222,
+              190
+            ],
+            "centroid_px": [
+              218.3,
+              188.6
+            ]
+          },
+          {
+            "pixels": 29,
+            "bbox_px": [
+              211,
+              200,
+              221,
+              205
+            ],
+            "centroid_px": [
+              216.0,
+              202.4
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              280,
+              212,
+              285,
+              220
+            ],
+            "centroid_px": [
+              282.1,
+              215.0
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              273,
+              215,
+              278,
+              221
+            ],
+            "centroid_px": [
+              276.1,
+              217.8
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              248,
+              228,
+              253,
+              236
+            ],
+            "centroid_px": [
+              250.1,
+              231.0
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              241,
+              231,
+              246,
+              237
+            ],
+            "centroid_px": [
+              244.1,
+              233.8
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              371,
+              247,
+              375,
+              261
+            ],
+            "centroid_px": [
+              372.0,
+              254.0
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              130,
+              263,
+              135,
+              287
+            ],
+            "centroid_px": [
+              131.4,
+              274.1
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              355,
+              263,
+              359,
+              277
+            ],
+            "centroid_px": [
+              356.0,
+              270.0
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              339,
+              279,
+              343,
+              293
+            ],
+            "centroid_px": [
+              340.0,
+              286.0
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              307,
+              295,
+              311,
+              309
+            ],
+            "centroid_px": [
+              308.0,
+              302.0
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              130,
+              304,
+              132,
+              325
+            ],
+            "centroid_px": [
+              131.0,
+              315.1
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              275,
+              311,
+              279,
+              325
+            ],
+            "centroid_px": [
+              276.0,
+              318.0
+            ]
+          },
+          {
+            "pixels": 26,
+            "bbox_px": [
+              115,
+              327,
+              119,
+              341
+            ],
+            "centroid_px": [
+              116.0,
+              334.0
+            ]
+          }
+        ],
+        "water_cluster_count": 20,
+        "largest_water_share": 0.3219651442307692,
+        "road_clusters": 43,
+        "largest_road_share": 0.025008194930069932,
+        "forest_clusters": 0,
+        "mountain_clusters": 0,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          52.0,
+          44.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 10
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/sea_fortress.webp",
+      "features": {
+        "kind": "advance_wars_2",
+        "grid_px": [
+          256,
+          528
+        ],
+        "terrain_share": {
+          "water": 0.7587224786931818,
+          "plain": 0.04210316051136364,
+          "forest": 0.0,
+          "mountain": 0.023600260416666668,
+          "road": 0.003602923768939394,
+          "castle": 0.013575698390151516
+        },
+        "castle_clusters": [
+          {
+            "pixels": 174,
+            "bbox_px": [
+              208,
+              64,
+              215,
+              107
+            ],
+            "centroid_px": [
+              213.3,
+              87.1
+            ]
+          },
+          {
+            "pixels": 115,
+            "bbox_px": [
+              176,
+              112,
+              199,
+              123
+            ],
+            "centroid_px": [
+              189.7,
+              120.3
+            ]
+          },
+          {
+            "pixels": 68,
+            "bbox_px": [
+              61,
+              119,
+              79,
+              123
+            ],
+            "centroid_px": [
+              70.0,
+              121.5
+            ]
+          },
+          {
+            "pixels": 80,
+            "bbox_px": [
+              32,
+              128,
+              39,
+              155
+            ],
+            "centroid_px": [
+              37.4,
+              144.4
+            ]
+          },
+          {
+            "pixels": 56,
+            "bbox_px": [
+              160,
+              128,
+              167,
+              139
+            ],
+            "centroid_px": [
+              164.5,
+              134.9
+            ]
+          },
+          {
+            "pixels": 115,
+            "bbox_px": [
+              192,
+              144,
+              199,
+              171
+            ],
+            "centroid_px": [
+              197.1,
+              159.0
+            ]
+          },
+          {
+            "pixels": 124,
+            "bbox_px": [
+              221,
+              144,
+              247,
+              155
+            ],
+            "centroid_px": [
+              236.6,
+              152.3
+            ]
+          },
+          {
+            "pixels": 115,
+            "bbox_px": [
+              0,
+              160,
+              23,
+              171
+            ],
+            "centroid_px": [
+              13.7,
+              168.3
+            ]
+          },
+          {
+            "pixels": 187,
+            "bbox_px": [
+              139,
+              176,
+              183,
+              187
+            ],
+            "centroid_px": [
+              164.4,
+              184.8
+            ]
+          },
+          {
+            "pixels": 148,
+            "bbox_px": [
+              77,
+              183,
+              117,
+              187
+            ],
+            "centroid_px": [
+              96.8,
+              185.6
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              123,
+              183,
+              133,
+              187
+            ],
+            "centroid_px": [
+              128.4,
+              185.6
+            ]
+          }
+        ],
+        "castle_count": 11,
+        "water_clusters": [
+          {
+            "pixels": 101697,
+            "bbox_px": [
+              0,
+              0,
+              255,
+              527
+            ],
+            "centroid_px": [
+              127.3,
+              292.0
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              183,
+              112,
+              196,
+              120
+            ],
+            "centroid_px": [
+              192.3,
+              117.3
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              160,
+              128,
+              164,
+              135
+            ],
+            "centroid_px": [
+              162.9,
+              132.1
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              231,
+              144,
+              244,
+              152
+            ],
+            "centroid_px": [
+              240.3,
+              149.3
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              7,
+              160,
+              20,
+              168
+            ],
+            "centroid_px": [
+              16.3,
+              165.3
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              167,
+              176,
+              180,
+              184
+            ],
+            "centroid_px": [
+              176.3,
+              181.3
+            ]
+          }
+        ],
+        "water_cluster_count": 6,
+        "largest_water_share": 0.7523748224431818,
+        "road_clusters": 12,
+        "largest_road_share": 0.0009247750946969697,
+        "forest_clusters": 0,
+        "mountain_clusters": 38,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          32.0,
+          66.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/spann_island_aw2.webp",
+      "features": {
+        "kind": "advance_wars_2",
+        "grid_px": [
+          240,
+          160
+        ],
+        "terrain_share": {
+          "water": 0.2775,
+          "plain": 0.224140625,
+          "forest": 0.000625,
+          "mountain": 0.007135416666666667,
+          "road": 0.16619791666666667,
+          "castle": 0.07216145833333333
+        },
+        "castle_clusters": [
+          {
+            "pixels": 410,
+            "bbox_px": [
+              208,
+              16,
+              231,
+              107
+            ],
+            "centroid_px": [
+              227.4,
+              69.2
+            ]
+          },
+          {
+            "pixels": 262,
+            "bbox_px": [
+              84,
+              32,
+              103,
+              92
+            ],
+            "centroid_px": [
+              93.2,
+              61.1
+            ]
+          },
+          {
+            "pixels": 43,
+            "bbox_px": [
+              109,
+              56,
+              122,
+              60
+            ],
+            "centroid_px": [
+              115.3,
+              57.8
+            ]
+          },
+          {
+            "pixels": 38,
+            "bbox_px": [
+              25,
+              81,
+              30,
+              94
+            ],
+            "centroid_px": [
+              27.7,
+              87.3
+            ]
+          },
+          {
+            "pixels": 338,
+            "bbox_px": [
+              32,
+              81,
+              46,
+              126
+            ],
+            "centroid_px": [
+              39.4,
+              104.6
+            ]
+          },
+          {
+            "pixels": 103,
+            "bbox_px": [
+              16,
+              96,
+              30,
+              110
+            ],
+            "centroid_px": [
+              23.0,
+              103.2
+            ]
+          },
+          {
+            "pixels": 161,
+            "bbox_px": [
+              164,
+              103,
+              191,
+              127
+            ],
+            "centroid_px": [
+              173.1,
+              111.0
+            ]
+          },
+          {
+            "pixels": 103,
+            "bbox_px": [
+              48,
+              112,
+              62,
+              126
+            ],
+            "centroid_px": [
+              55.0,
+              119.2
+            ]
+          },
+          {
+            "pixels": 360,
+            "bbox_px": [
+              173,
+              112,
+              231,
+              155
+            ],
+            "centroid_px": [
+              213.1,
+              144.6
+            ]
+          },
+          {
+            "pixels": 43,
+            "bbox_px": [
+              13,
+              120,
+              26,
+              124
+            ],
+            "centroid_px": [
+              19.3,
+              121.8
+            ]
+          },
+          {
+            "pixels": 102,
+            "bbox_px": [
+              29,
+              135,
+              58,
+              140
+            ],
+            "centroid_px": [
+              42.9,
+              137.7
+            ]
+          },
+          {
+            "pixels": 419,
+            "bbox_px": [
+              61,
+              144,
+              167,
+              155
+            ],
+            "centroid_px": [
+              117.3,
+              153.2
+            ]
+          }
+        ],
+        "castle_count": 12,
+        "water_clusters": [
+          {
+            "pixels": 8791,
+            "bbox_px": [
+              0,
+              0,
+              239,
+              159
+            ],
+            "centroid_px": [
+              102.9,
+              69.0
+            ]
+          },
+          {
+            "pixels": 46,
+            "bbox_px": [
+              96,
+              32,
+              100,
+              55
+            ],
+            "centroid_px": [
+              99.0,
+              44.7
+            ]
+          },
+          {
+            "pixels": 1144,
+            "bbox_px": [
+              82,
+              32,
+              123,
+              93
+            ],
+            "centroid_px": [
+              101.8,
+              71.0
+            ]
+          },
+          {
+            "pixels": 48,
+            "bbox_px": [
+              162,
+              103,
+              169,
+              127
+            ],
+            "centroid_px": [
+              164.0,
+              113.4
+            ]
+          },
+          {
+            "pixels": 375,
+            "bbox_px": [
+              168,
+              108,
+              191,
+              127
+            ],
+            "centroid_px": [
+              177.4,
+              116.5
+            ]
+          },
+          {
+            "pixels": 24,
+            "bbox_px": [
+              39,
+              134,
+              56,
+              136
+            ],
+            "centroid_px": [
+              47.8,
+              135.5
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              151,
+              144,
+              164,
+              152
+            ],
+            "centroid_px": [
+              160.3,
+              149.3
+            ]
+          }
+        ],
+        "water_cluster_count": 7,
+        "largest_water_share": 0.22893229166666668,
+        "road_clusters": 17,
+        "largest_road_share": 0.07190104166666667,
+        "forest_clusters": 0,
+        "mountain_clusters": 4,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          30.0,
+          20.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 3
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/advance-wars/spann_island_awds.webp",
+      "features": {
+        "kind": "advance_wars_2",
+        "grid_px": [
+          240,
+          160
+        ],
+        "terrain_share": {
+          "water": 0.062890625,
+          "plain": 0.20138020833333334,
+          "forest": 0.0,
+          "mountain": 0.053984375,
+          "road": 0.12625,
+          "castle": 0.00828125
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [
+          {
+            "pixels": 429,
+            "bbox_px": [
+              208,
+              13,
+              231,
+              107
+            ],
+            "centroid_px": [
+              227.4,
+              65.4
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              176,
+              16,
+              190,
+              28
+            ],
+            "centroid_px": [
+              182.9,
+              22.8
+            ]
+          },
+          {
+            "pixels": 29,
+            "bbox_px": [
+              208,
+              16,
+              212,
+              27
+            ],
+            "centroid_px": [
+              209.8,
+              21.0
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              217,
+              17,
+              222,
+              28
+            ],
+            "centroid_px": [
+              219.8,
+              23.0
+            ]
+          },
+          {
+            "pixels": 189,
+            "bbox_px": [
+              192,
+              24,
+              206,
+              47
+            ],
+            "centroid_px": [
+              198.6,
+              37.0
+            ]
+          },
+          {
+            "pixels": 261,
+            "bbox_px": [
+              84,
+              32,
+              103,
+              92
+            ],
+            "centroid_px": [
+              92.5,
+              61.4
+            ]
+          },
+          {
+            "pixels": 29,
+            "bbox_px": [
+              208,
+              32,
+              212,
+              43
+            ],
+            "centroid_px": [
+              209.8,
+              37.0
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              217,
+              33,
+              222,
+              44
+            ],
+            "centroid_px": [
+              219.8,
+              39.0
+            ]
+          },
+          {
+            "pixels": 96,
+            "bbox_px": [
+              208,
+              48,
+              222,
+              60
+            ],
+            "centroid_px": [
+              214.9,
+              54.8
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              107,
+              55,
+              121,
+              60
+            ],
+            "centroid_px": [
+              114.8,
+              57.5
+            ]
+          },
+          {
+            "pixels": 165,
+            "bbox_px": [
+              164,
+              103,
+              191,
+              127
+            ],
+            "centroid_px": [
+              172.7,
+              111.2
+            ]
+          },
+          {
+            "pixels": 364,
+            "bbox_px": [
+              171,
+              109,
+              231,
+              155
+            ],
+            "centroid_px": [
+              213.0,
+              142.4
+            ]
+          },
+          {
+            "pixels": 44,
+            "bbox_px": [
+              11,
+              119,
+              25,
+              124
+            ],
+            "centroid_px": [
+              18.8,
+              121.5
+            ]
+          },
+          {
+            "pixels": 102,
+            "bbox_px": [
+              27,
+              135,
+              57,
+              140
+            ],
+            "centroid_px": [
+              42.4,
+              137.4
+            ]
+          },
+          {
+            "pixels": 399,
+            "bbox_px": [
+              59,
+              144,
+              167,
+              155
+            ],
+            "centroid_px": [
+              115.0,
+              152.8
+            ]
+          }
+        ],
+        "water_cluster_count": 15,
+        "largest_water_share": 0.011171875,
+        "road_clusters": 30,
+        "largest_road_share": 0.025598958333333335,
+        "forest_clusters": 0,
+        "mountain_clusters": 16,
+        "tile_px_guess": 8,
+        "grid_tiles_guess": [
+          30.0,
+          20.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 4
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_adlas_plains.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          464,
+          320
+        ],
+        "terrain_share": {
+          "water": 0.0,
+          "sand": 0.0,
+          "mountain": 0.775848599137931,
+          "forest": 0.09620150862068966,
+          "plain": 0.025242456896551725,
+          "road": 0.0,
+          "castle": 0.0
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [],
+        "water_cluster_count": 0,
+        "largest_water_share": 0.0,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 161,
+        "mountain_clusters": 47,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          29.0,
+          20.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_bethroen.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          368,
+          320
+        ],
+        "terrain_share": {
+          "water": 0.2972486413043478,
+          "sand": 0.006394361413043478,
+          "mountain": 0.5557914402173914,
+          "forest": 0.010869565217391304,
+          "plain": 0.0012652853260869566,
+          "road": 0.0,
+          "castle": 0.0
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [
+          {
+            "pixels": 32124,
+            "bbox_px": [
+              0,
+              0,
+              367,
+              319
+            ],
+            "centroid_px": [
+              166.2,
+              201.4
+            ]
+          },
+          {
+            "pixels": 1982,
+            "bbox_px": [
+              192,
+              87,
+              279,
+              175
+            ],
+            "centroid_px": [
+              238.9,
+              126.3
+            ]
+          },
+          {
+            "pixels": 54,
+            "bbox_px": [
+              274,
+              93,
+              287,
+              99
+            ],
+            "centroid_px": [
+              280.6,
+              95.5
+            ]
+          },
+          {
+            "pixels": 54,
+            "bbox_px": [
+              178,
+              125,
+              191,
+              131
+            ],
+            "centroid_px": [
+              184.6,
+              127.5
+            ]
+          },
+          {
+            "pixels": 253,
+            "bbox_px": [
+              160,
+              127,
+              183,
+              143
+            ],
+            "centroid_px": [
+              169.3,
+              135.8
+            ]
+          },
+          {
+            "pixels": 65,
+            "bbox_px": [
+              184,
+              132,
+              199,
+              142
+            ],
+            "centroid_px": [
+              190.6,
+              137.3
+            ]
+          },
+          {
+            "pixels": 41,
+            "bbox_px": [
+              253,
+              132,
+              263,
+              140
+            ],
+            "centroid_px": [
+              257.4,
+              136.1
+            ]
+          },
+          {
+            "pixels": 117,
+            "bbox_px": [
+              200,
+              192,
+              223,
+              205
+            ],
+            "centroid_px": [
+              211.2,
+              197.4
+            ]
+          },
+          {
+            "pixels": 182,
+            "bbox_px": [
+              184,
+              224,
+              205,
+              243
+            ],
+            "centroid_px": [
+              195.0,
+              232.6
+            ]
+          },
+          {
+            "pixels": 36,
+            "bbox_px": [
+              359,
+              311,
+              367,
+              319
+            ],
+            "centroid_px": [
+              364.5,
+              316.4
+            ]
+          },
+          {
+            "pixels": 28,
+            "bbox_px": [
+              339,
+              317,
+              351,
+              319
+            ],
+            "centroid_px": [
+              344.9,
+              318.2
+            ]
+          }
+        ],
+        "water_cluster_count": 11,
+        "largest_water_share": 0.2727921195652174,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 9,
+        "mountain_clusters": 5,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          23.0,
+          20.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 1
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_darkling_woods.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          480,
+          336
+        ],
+        "terrain_share": {
+          "water": 0.010317460317460317,
+          "sand": 0.0,
+          "mountain": 0.6847098214285714,
+          "forest": 0.27232762896825397,
+          "plain": 0.0020461309523809525,
+          "road": 0.0,
+          "castle": 0.007111855158730159
+        },
+        "castle_clusters": [
+          {
+            "pixels": 37,
+            "bbox_px": [
+              215,
+              162,
+              226,
+              171
+            ],
+            "centroid_px": [
+              220.9,
+              167.4
+            ]
+          },
+          {
+            "pixels": 47,
+            "bbox_px": [
+              253,
+              189,
+              263,
+              203
+            ],
+            "centroid_px": [
+              257.5,
+              195.9
+            ]
+          },
+          {
+            "pixels": 58,
+            "bbox_px": [
+              253,
+              203,
+              262,
+              219
+            ],
+            "centroid_px": [
+              257.1,
+              210.3
+            ]
+          },
+          {
+            "pixels": 39,
+            "bbox_px": [
+              253,
+              219,
+              262,
+              227
+            ],
+            "centroid_px": [
+              256.8,
+              222.5
+            ]
+          },
+          {
+            "pixels": 32,
+            "bbox_px": [
+              151,
+              267,
+              157,
+              279
+            ],
+            "centroid_px": [
+              154.4,
+              273.3
+            ]
+          }
+        ],
+        "castle_count": 5,
+        "water_clusters": [
+          {
+            "pixels": 19,
+            "bbox_px": [
+              216,
+              159,
+              221,
+              165
+            ],
+            "centroid_px": [
+              218.2,
+              161.7
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              219,
+              172,
+              231,
+              181
+            ],
+            "centroid_px": [
+              224.8,
+              176.4
+            ]
+          },
+          {
+            "pixels": 82,
+            "bbox_px": [
+              241,
+              174,
+              257,
+              190
+            ],
+            "centroid_px": [
+              248.8,
+              181.6
+            ]
+          },
+          {
+            "pixels": 31,
+            "bbox_px": [
+              249,
+              175,
+              255,
+              182
+            ],
+            "centroid_px": [
+              252.6,
+              178.0
+            ]
+          },
+          {
+            "pixels": 77,
+            "bbox_px": [
+              240,
+              181,
+              255,
+              197
+            ],
+            "centroid_px": [
+              246.9,
+              188.0
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              240,
+              189,
+              247,
+              193
+            ],
+            "centroid_px": [
+              242.8,
+              190.7
+            ]
+          },
+          {
+            "pixels": 17,
+            "bbox_px": [
+              261,
+              192,
+              268,
+              198
+            ],
+            "centroid_px": [
+              265.2,
+              195.1
+            ]
+          },
+          {
+            "pixels": 74,
+            "bbox_px": [
+              244,
+              194,
+              252,
+              219
+            ],
+            "centroid_px": [
+              247.7,
+              207.0
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              259,
+              201,
+              265,
+              207
+            ],
+            "centroid_px": [
+              263.0,
+              204.6
+            ]
+          },
+          {
+            "pixels": 20,
+            "bbox_px": [
+              249,
+              207,
+              255,
+              213
+            ],
+            "centroid_px": [
+              252.1,
+              209.6
+            ]
+          },
+          {
+            "pixels": 34,
+            "bbox_px": [
+              259,
+              208,
+              267,
+              220
+            ],
+            "centroid_px": [
+              264.1,
+              214.2
+            ]
+          },
+          {
+            "pixels": 19,
+            "bbox_px": [
+              241,
+              220,
+              249,
+              223
+            ],
+            "centroid_px": [
+              245.1,
+              221.4
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              265,
+              221,
+              271,
+              227
+            ],
+            "centroid_px": [
+              267.8,
+              224.2
+            ]
+          },
+          {
+            "pixels": 46,
+            "bbox_px": [
+              249,
+              223,
+              260,
+              237
+            ],
+            "centroid_px": [
+              255.0,
+              229.8
+            ]
+          },
+          {
+            "pixels": 57,
+            "bbox_px": [
+              190,
+              253,
+              212,
+              259
+            ],
+            "centroid_px": [
+              202.4,
+              256.6
+            ]
+          },
+          {
+            "pixels": 23,
+            "bbox_px": [
+              174,
+              254,
+              181,
+              259
+            ],
+            "centroid_px": [
+              177.3,
+              257.4
+            ]
+          },
+          {
+            "pixels": 21,
+            "bbox_px": [
+              166,
+              256,
+              173,
+              259
+            ],
+            "centroid_px": [
+              169.6,
+              257.7
+            ]
+          },
+          {
+            "pixels": 21,
+            "bbox_px": [
+              182,
+              256,
+              189,
+              259
+            ],
+            "centroid_px": [
+              185.6,
+              257.7
+            ]
+          },
+          {
+            "pixels": 16,
+            "bbox_px": [
+              160,
+              257,
+              165,
+              259
+            ],
+            "centroid_px": [
+              162.5,
+              257.9
+            ]
+          },
+          {
+            "pixels": 256,
+            "bbox_px": [
+              158,
+              259,
+              209,
+              267
+            ],
+            "centroid_px": [
+              185.9,
+              263.3
+            ]
+          },
+          {
+            "pixels": 17,
+            "bbox_px": [
+              159,
+              265,
+              165,
+              267
+            ],
+            "centroid_px": [
+              162.3,
+              265.9
+            ]
+          },
+          {
+            "pixels": 217,
+            "bbox_px": [
+              155,
+              267,
+              209,
+              277
+            ],
+            "centroid_px": [
+              183.0,
+              270.8
+            ]
+          },
+          {
+            "pixels": 18,
+            "bbox_px": [
+              184,
+              279,
+              193,
+              281
+            ],
+            "centroid_px": [
+              188.1,
+              279.7
+            ]
+          }
+        ],
+        "water_cluster_count": 23,
+        "largest_water_share": 0.0015873015873015873,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 214,
+        "mountain_clusters": 159,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          30.0,
+          21.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 5
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_hamill_canyon.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          400,
+          256
+        ],
+        "terrain_share": {
+          "water": 0.0,
+          "sand": 0.078115234375,
+          "mountain": 0.6394921875,
+          "forest": 0.2435546875,
+          "plain": 0.0,
+          "road": 0.0,
+          "castle": 0.0
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [],
+        "water_cluster_count": 0,
+        "largest_water_share": 0.0,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 78,
+        "mountain_clusters": 25,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          25.0,
+          16.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_melkaen_coast.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          320,
+          480
+        ],
+        "terrain_share": {
+          "water": 0.2225,
+          "sand": 0.0,
+          "mountain": 0.5235546875,
+          "forest": 0.0709765625,
+          "plain": 0.00857421875,
+          "road": 0.0,
+          "castle": 0.0
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [
+          {
+            "pixels": 34176,
+            "bbox_px": [
+              0,
+              0,
+              271,
+              479
+            ],
+            "centroid_px": [
+              66.1,
+              165.6
+            ]
+          }
+        ],
+        "water_cluster_count": 1,
+        "largest_water_share": 0.2225,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 60,
+        "mountain_clusters": 103,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          20.0,
+          30.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    },
+    {
+      "path": "docs/路线/参考调研/battle-map-references/images/fire-emblem/fe08_zaalbul_marsh.png",
+      "features": {
+        "kind": "fire_emblem",
+        "grid_px": [
+          352,
+          352
+        ],
+        "terrain_share": {
+          "water": 0.1481146694214876,
+          "sand": 0.0,
+          "mountain": 0.727369576446281,
+          "forest": 0.060409672004132234,
+          "plain": 0.01941018853305785,
+          "road": 0.0,
+          "castle": 0.0
+        },
+        "castle_clusters": [],
+        "castle_count": 0,
+        "water_clusters": [
+          {
+            "pixels": 418,
+            "bbox_px": [
+              304,
+              20,
+              351,
+              62
+            ],
+            "centroid_px": [
+              327.4,
+              41.1
+            ]
+          },
+          {
+            "pixels": 2554,
+            "bbox_px": [
+              188,
+              48,
+              318,
+              201
+            ],
+            "centroid_px": [
+              272.5,
+              104.6
+            ]
+          },
+          {
+            "pixels": 1773,
+            "bbox_px": [
+              18,
+              49,
+              186,
+              143
+            ],
+            "centroid_px": [
+              86.6,
+              86.3
+            ]
+          },
+          {
+            "pixels": 1106,
+            "bbox_px": [
+              81,
+              115,
+              126,
+              174
+            ],
+            "centroid_px": [
+              99.5,
+              134.8
+            ]
+          },
+          {
+            "pixels": 2900,
+            "bbox_px": [
+              130,
+              115,
+              254,
+              236
+            ],
+            "centroid_px": [
+              200.7,
+              164.2
+            ]
+          },
+          {
+            "pixels": 1008,
+            "bbox_px": [
+              2,
+              160,
+              47,
+              265
+            ],
+            "centroid_px": [
+              21.2,
+              209.1
+            ]
+          },
+          {
+            "pixels": 2916,
+            "bbox_px": [
+              48,
+              174,
+              238,
+              303
+            ],
+            "centroid_px": [
+              131.3,
+              249.8
+            ]
+          },
+          {
+            "pixels": 454,
+            "bbox_px": [
+              130,
+              192,
+              159,
+              235
+            ],
+            "centroid_px": [
+              143.4,
+              214.2
+            ]
+          },
+          {
+            "pixels": 131,
+            "bbox_px": [
+              306,
+              207,
+              316,
+              223
+            ],
+            "centroid_px": [
+              311.2,
+              215.2
+            ]
+          },
+          {
+            "pixels": 49,
+            "bbox_px": [
+              226,
+              208,
+              236,
+              217
+            ],
+            "centroid_px": [
+              231.1,
+              211.8
+            ]
+          },
+          {
+            "pixels": 1728,
+            "bbox_px": [
+              194,
+              240,
+              318,
+              351
+            ],
+            "centroid_px": [
+              254.1,
+              299.6
+            ]
+          },
+          {
+            "pixels": 3203,
+            "bbox_px": [
+              0,
+              270,
+              63,
+              351
+            ],
+            "centroid_px": [
+              23.4,
+              320.7
+            ]
+          }
+        ],
+        "water_cluster_count": 12,
+        "largest_water_share": 0.025850658574380167,
+        "road_clusters": 0,
+        "largest_road_share": 0.0,
+        "forest_clusters": 60,
+        "mountain_clusters": 17,
+        "tile_px_guess": 16,
+        "grid_tiles_guess": [
+          22.0,
+          22.0
+        ],
+        "is_island": false,
+        "is_marsh_or_fen": false,
+        "looks_symmetric": false,
+        "chokepoint_candidate_count": 0
+      }
+    }
+  ]
+}

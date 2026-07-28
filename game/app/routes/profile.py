@@ -9,12 +9,26 @@ the new routes here are the ones the front-end calls.
 Endpoints
 ---------
   GET  /profile/{user_name}                       Fetch a profile
-  POST /profile/{user_name}/mainline/start        Begin a campaign
-  POST /profile/{user_name}/mainline/advance      Move the campaign cursor
-  POST /profile/{user_name}/mainline/abandon      Drop the active campaign
+  POST /profile/{user_name}/mainline/start        [DEPRECATED] Begin a campaign
+  POST /profile/{user_name}/mainline/advance      [DEPRECATED] Move the cursor
+  POST /profile/{user_name}/mainline/abandon      [DEPRECATED] Drop the campaign
 
 Mounted under no extra prefix in `app/main.py` (so the final URLs are
 `/profile/...`, not `/progression/profile/...`).
+
+P3 (plan §P3.2) deprecation note:
+  These three /profile/{user}/mainline/{start|advance|abandon} routes
+  directly mutate the profile-global cursor (active_mainline +
+  mainline_progress), bypassing the save slot SoT (SaveService). Since
+  FE8 alignment(P1+P2 in plan) makes the **currently loaded save slot**
+  the authoritative state source, these endpoints are deprecated as a
+  public mutation surface. The Godot client uses the mainline engine
+  endpoints under /mainlines/... (routes/mainline/battle_lifecycle.py)
+  which write both the profile cursor AND the snapshot auto-save in a
+  single transaction. New callers should prefer those.
+  Existing behaviour is preserved for backward compatibility with
+  tests + tooling that target this surface directly; the deprecation
+  here is advisory, not enforced.
 """
 from __future__ import annotations
 

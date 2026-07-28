@@ -50,11 +50,21 @@ const _ACTION_CONTEXT_POST_MOVE := "post_move"
 const _ACTION_CONTEXT_POST_ACTION := "post_action"
 # M4.5 招募状态机(unit_type → name 也在用)
 const _RECRUIT_OPTIONS := [
-	{"type": "swordsman", "name": "剑士",   "cost": 200},
-	{"type": "archer",    "name": "弓箭手", "cost": 250},
-	{"type": "warlock",   "name": "术士",   "cost": 300},
-	{"type": "healer",    "name": "治疗师", "cost": 350},
-	{"type": "knight",    "name": "骑士",   "cost": 400},
+	{"type": "swordsman", "cost": 200},
+	{"type": "archer", "cost": 250},
+	{"type": "warrior", "cost": 260},
+	{"type": "lancer", "cost": 280},
+	{"type": "warlock", "cost": 300},
+	{"type": "healer", "cost": 350},
+	{"type": "knight", "cost": 400},
+	{"type": "falcon_knight", "cost": 450},
+	{"type": "dragon_rider", "cost": 500},
+	{"type": "berserker", "cost": 500},
+	{"type": "blade_master", "cost": 650},
+	{"type": "sniper", "cost": 650},
+	{"type": "saint", "cost": 650},
+	{"type": "paladin", "cost": 700},
+	{"type": "sage", "cost": 700},
 ]
 var _recruit_mode_unit_id: int = -1
 @onready var end_turn_button: Button = $GameView/HUD/TopRight/EndTurnButton
@@ -72,6 +82,8 @@ var _recruit_mode_unit_id: int = -1
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
 @onready var action_log: RichTextLabel = $GameView/HUD/WarReportPanel/ActionLog
+@onready var auto_save_toast: Panel = $GameView/HUD/AutoSaveToast
+@onready var auto_save_toast_label: Label = $GameView/HUD/AutoSaveToast/ToastLabel
 # CreateFormPanel(自由模式专用)— 房间设置表单
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
@@ -83,10 +95,14 @@ var _recruit_mode_unit_id: int = -1
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
+# T:#18 — 英雄立绘槽,挂载到 HUD 左下角(GoldPanel 上方),不再塞在 InfoPanel 里
+# 遮挡 "Lv.1" / 攻击射程等文字。TextureRect 由 _set_unit_info_portrait 程序化写入。
+@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel
 @onready var turn_banner: ColorRect = $GameView/TurnBannerFrame
 @onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
 var _turn_banner_tween: Tween = null
 var _ai_pulse_tween: Tween = null
+var _auto_save_toast_tween: Tween = null
 
 # V2 第 6 轮:设置 + 暂停面板
 @onready var settings_panel: Panel = $GameView/HUD/SettingsPanel
@@ -103,11 +119,13 @@ var _ai_pulse_tween: Tween = null
 @onready var settings_green_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/GreenBtn
 @onready var settings_yellow_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/ColorRow/YellowBtn
 @onready var settings_theme_dropdown: OptionButton = $GameView/HUD/SettingsPanel/SettingsList/ThemeRow/ThemeDropdown
+@onready var settings_mute_btn: Button = $GameView/HUD/SettingsPanel/SettingsList/AudioRow/MuteBtn
 @onready var pause_overlay: ColorRect = $GameView/HUD/PauseOverlay
 @onready var pause_panel: Panel = $GameView/HUD/PausePanel
 @onready var pause_resume_btn: Button = $GameView/HUD/PausePanel/PauseList/ResumeBtn
 @onready var pause_settings_btn: Button = $GameView/HUD/PausePanel/PauseList/SettingsBtn
 @onready var pause_main_menu_btn: Button = $GameView/HUD/PausePanel/PauseList/MainMenuBtn
+@onready var pause_suspend_btn: Button = $GameView/HUD/PausePanel/PauseList/PauseSuspendBtn
 @onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
 
 # V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
@@ -128,11 +146,22 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
 @onready var battle_result_panel: Panel = $GameView/HUD/BattleResultPanel
-@onready var battle_result_winner: Label = $GameView/HUD/BattleResultPanel/WinnerBanner
+@onready var battle_result_winner: RichTextLabel = $GameView/HUD/BattleResultPanel/WinnerBanner
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
 @onready var battle_mainline_next_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn
+@onready var battle_back_lobby_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackLobbyBtn
 @onready var battle_back_menu_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/BackMenuBtn
+
+# 通用 Yes/No 确认弹窗 — 主菜单 / 大厅 / 游戏通用(置于 root,所以能浮在任意 view 上)
+@onready var confirm_dialog: Panel = $ConfirmDialog
+@onready var confirm_title_label: Label = $ConfirmDialog/ConfirmTitle
+@onready var confirm_body_label: Label = $ConfirmDialog/ConfirmBody
+@onready var confirm_yes_btn: Button = $ConfirmDialog/ButtonRow/ConfirmYesBtn
+@onready var confirm_no_btn: Button = $ConfirmDialog/ButtonRow/ConfirmNoBtn
+# 一次性 Callable — 触发后立刻清空,避免 modal 重复触发 / 旧 callback 残留。
+var _confirm_yes_callback: Callable = Callable()
+var _confirm_no_callback: Callable = Callable()
 
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
@@ -161,26 +190,18 @@ var _board_refresh_pending: bool = false
 # 这些必须靠 REST GET /state 轮询追踪。每 1 秒拉一次(game view 时)。
 const _STATE_POLL_INTERVAL_SEC: float = 1.0
 var _state_poll_timer: Timer = null
-var _mainline_auto_retry_pending: bool = false
 
 # Main menu widgets (GBA 风 V2)
 @onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
 @onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
 
-# T:96 MainlineView
-@onready var mainline_view: Control = $MainlineView
-@onready var ml_title: Label = $MainlineView/MLFrame/MLTitle
-@onready var ml_list_container: VBoxContainer = $MainlineView/MLFrame/MLListContainer
-@onready var ml_commander_status: Label = $MainlineView/MLFrame/CommanderStatus
-@onready var ml_commander_option: OptionButton = $MainlineView/MLFrame/CommanderOption
-@onready var ml_apply_commander_btn: Button = $MainlineView/MLFrame/ApplyCommanderBtn
-@onready var ml_back_btn: Button = $MainlineView/MLFrame/MLBackBtn
-@onready var ml_abandon_btn: Button = $MainlineView/MLFrame/MLAbandonBtn
-@onready var ml_slots_container: VBoxContainer = $MainlineView/MLFrame/MLSlotsContainer
+# T:96 MainlineView — Batch A:节点搬入 mainline_controller.gd(组件),main.gd 保留指向同一节点的引用供 batch B 使用
+@onready var mainline_view = $MainlineView
 @onready var ml_prep_summary: RichTextLabel = $MainlineView/MLFrame/MLPrepSummary
 @onready var ml_prep_tabs: HBoxContainer = $MainlineView/MLFrame/MLPrepTabs
 @onready var ml_prep_content: RichTextLabel = $MainlineView/MLFrame/MLPrepContent
 @onready var ml_prep_start_btn: Button = $MainlineView/MLFrame/MLPrepStartBtn
+@onready var ml_prep_complete_btn: Button = $MainlineView/MLFrame/MLPrepCompleteBtn
 @onready var ml_prep_refresh_btn: Button = $MainlineView/MLFrame/MLPrepRefreshBtn
 @onready var ml_prep_action_btn: Button = $MainlineView/MLFrame/MLPrepActionBtn
 @onready var ml_prep_alt_action_btn: Button = $MainlineView/MLFrame/MLPrepAltActionBtn
@@ -195,67 +216,30 @@ var _mainline_auto_retry_pending: bool = false
 @onready var ml_prep_mercenary_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/MercenaryTabBtn
 @onready var ml_prep_shop_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/ShopTabBtn
 @onready var ml_prep_saves_tab_btn: Button = $MainlineView/MLFrame/MLPrepTabs/SavesTabBtn
-var _ml_slot_records: Array = []
 @onready var lobby_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/LobbyButton
+@onready var join_by_code_input: LineEdit = $Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow/JoinByCodeInput
+@onready var join_by_code_button: Button = $Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow/JoinByCodeButton
 @onready var saves_button: Button = $Menu/CenterContainer/FooterRow/SavesButton
 @onready var settings_button: Button = $Menu/CenterContainer/FooterRow/SettingsButton
+@onready var help_button: Button = $Menu/CenterContainer/FooterRow/HelpButton
 @onready var exit_button: Button = $Menu/CenterContainer/FooterRow/ExitButton
 
 # T:5 单槽存档
 @onready var resume_button: Button = $Menu/CenterContainer/FooterRow/ResumeButton
 var _resume_game_id: int = 0
 var _resume_player_id: int = 0
+# P0:resume 流程分流("game" = 直接 rejoin,"suspend" = load_suspend 后再 rejoin)
+var _resume_kind: String = ""
 
-@onready var saves_view: Control = $SavesView
-@onready var save_status: Label = $SavesView/SaveFrame/SaveStatus
-@onready var save_open_list: RichTextLabel = $SavesView/SaveFrame/SaveOpenList
-@onready var save_mainline_list: RichTextLabel = $SavesView/SaveFrame/SaveMainlineList
-@onready var save_select_option: OptionButton = $SavesView/SaveFrame/SaveSelectOption
-@onready var save_resume_btn: Button = $SavesView/SaveFrame/SaveResumeBtn
-@onready var save_delete_btn: Button = $SavesView/SaveFrame/SaveDeleteBtn
-@onready var save_refresh_btn: Button = $SavesView/SaveFrame/SaveRefreshBtn
-@onready var save_back_btn: Button = $SavesView/SaveFrame/SaveBackBtn
-var _save_records: Array = []
-var _selected_save_id: int = 0
+# P2:saves 视图独立为 saves_controller.gd,仅保留节点引用(无类型避开 class_name 缓存)
+@onready var saves_view = $SavesView
+
+# T:#16 in_progress 视图独立为 in_progress_controller.gd
+@onready var in_progress_view = $InProgressView
+@onready var in_progress_button: Button = $Menu/CenterContainer/FooterRow/InProgressButton
 
 # T:3 基础大厅视图
-@onready var editor_view: Control = $EditorView
-@onready var editor_board: Board = $EditorView/EditorBoard
-@onready var editor_map_name_input: LineEdit = $EditorView/EditorPanel/EditorMapNameInput
-@onready var editor_biome_option: OptionButton = $EditorView/EditorPanel/EditorBiomeOption
-@onready var editor_apply_biome_btn: Button = $EditorView/EditorPanel/EditorApplyBiomeBtn
-@onready var editor_terrain_option: OptionButton = $EditorView/EditorPanel/EditorTerrainOption
-@onready var editor_surface_option: OptionButton = $EditorView/EditorPanel/EditorSurfaceOption
-@onready var editor_map_select_option: OptionButton = $EditorView/EditorPanel/EditorMapSelectOption
-@onready var editor_load_btn: Button = $EditorView/EditorPanel/EditorLoadBtn
-@onready var editor_mode_option: OptionButton = $EditorView/EditorPanel/EditorModeOption
-@onready var editor_unit_tool_option: OptionButton = $EditorView/EditorPanel/EditorUnitToolOption
-@onready var editor_unit_option: OptionButton = $EditorView/EditorPanel/EditorUnitOption
-@onready var editor_unit_color_option: OptionButton = $EditorView/EditorPanel/EditorUnitColorOption
-@onready var editor_surface_owner_option: OptionButton = $EditorView/EditorPanel/EditorSurfaceOwnerOption
-@onready var editor_unit_level_option: OptionButton = $EditorView/EditorPanel/EditorUnitLevelOption
-@onready var editor_width_option: OptionButton = $EditorView/EditorPanel/EditorWidthOption
-@onready var editor_height_option: OptionButton = $EditorView/EditorPanel/EditorHeightOption
-@onready var editor_resize_btn: Button = $EditorView/EditorPanel/EditorResizeBtn
-@onready var editor_undo_btn: Button = $EditorView/EditorPanel/EditorUndoBtn
-@onready var editor_redo_btn: Button = $EditorView/EditorPanel/EditorRedoBtn
-@onready var editor_status: Label = $EditorView/EditorPanel/EditorStatus
-@onready var editor_new_btn: Button = $EditorView/EditorPanel/EditorNewBtn
-@onready var editor_save_btn: Button = $EditorView/EditorPanel/EditorSaveBtn
-@onready var editor_delete_btn: Button = $EditorView/EditorPanel/EditorDeleteBtn
-@onready var editor_back_btn: Button = $EditorView/EditorPanel/EditorBackBtn
-var _editor_map: Dictionary = {}
-var _editor_map_ids: Array[String] = []
-var _selected_editor_map_id: String = ""
-var _editor_terrain_chars: Array[String] = ["P", "F", "M", "R", "r", "S"]
-var _editor_surface_chars: Array[String] = ["C", "v", "b", "g"]
-var _editor_unit_types: Array[String] = ["swordsman", "archer", "knight", "healer", "warlock"]
-var _editor_unit_colors: Array[String] = ["red", "blue", "green", "yellow"]
-var _editor_owner_colors: Array[String] = ["", "red", "blue", "green", "yellow"]
-var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
-var _editor_undo_stack: Array[Dictionary] = []
-var _editor_redo_stack: Array[Dictionary] = []
-const _EDITOR_HISTORY_LIMIT := 50
+@onready var editor_view = $EditorView  # -> editor_controller.gd (P2)
 
 @onready var lobby_view: Control = $Lobby
 @onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus
@@ -321,10 +305,14 @@ var _lobby_host_team_ids: Array[String] = [""]
 var _lobby_last_players: Array = []
 var _lobby_host_player_sig: String = ""
 var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d"]
-var _lobby_seat_ai_replacements: Array[bool] = [false, true, true, true]
+var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
 var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
 var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
+# M4.16+:game-over 保险。_on_match_ended 触发后置 true,屏蔽后续 state
+# poll / AI 操作。重置场景时(_on_lobby_pressed / 新 game 创建)→ false。
+var _game_over: bool = false
 var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
+var _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
 var _selected_lobby_seat_index: int = 0
 var _pending_lobby_start_after_create: bool = false
 var _pending_lobby_ai_seats: Array[int] = []
@@ -349,11 +337,24 @@ var _tutorial_shown: bool = false
 var _game_id: int = 0
 var _player_id: int = 0
 var _user_name: String = "Player"
+var _loaded_board_signature: String = ""
 var _active_mainline_id: String = ""
 var _mainline_battle_game_id: int = 0
 var _selected_mainline_id: String = "chapter_01_steel_rebellion"
+# Phase 2: mainline session — backup source of truth for state scattered
+# across handlers that re-implement mainline flow.  The new modules
+# (``scripts/mainline/mainline_session.gd`` +
+# ``scripts/mainline/mainline_responses.gd``) read/write via this
+# instance; main.gd's own fields above stay read/write-compat for now
+# and get synced through helper methods in the response handlers.
+# Preloaded directly instead of relying on `class_name` global registration
+# so the project's global_script_class_cache (populated by the editor) is
+# not required for headless `--quit` invocations of the smoke test.
+const MainlineSession = preload("res://scripts/mainline/mainline_session.gd")
+var _mainline_session: MainlineSession = null
+# Batch A:成员留在 main.gd(函数搬走,mainline 域成员仍在 main)— 后续 batch B 接管组件时统一搬
 var _mainline_page: String = "chapter_list"
-var _mainline_commander_ids: Array[String] = [""]
+var _mainline_commander_ids: Array = [""]
 var _mainline_prepare_payload: Dictionary = {}
 var _mainline_prepare_tab: String = "heroes"
 var _selected_prepare_hero_id: String = ""
@@ -363,6 +364,7 @@ var _selected_prepare_merc_unit_type: String = ""
 var _selected_prepare_merc_stat: String = ""
 var _mainline_shop_payload: Dictionary = {}
 var _mainline_mercenary_payload: Dictionary = {}
+var _mainline_auto_retry_pending: bool = false
 
 
 func _ready() -> void:
@@ -374,58 +376,37 @@ func _ready() -> void:
 		_user_name = "学妹喵" if _random_suffix() > 0.5 else "学长"
 		UserSettings.set_value("settings.v1.player_name", _user_name)
 
+	# === Phase 2: instantiate mainline session (currently a pass-through
+	# to the legacy _active_mainline_id / _mainline_battle_game_id fields;
+	# a later phase will move those fields into the session object proper).
+	_mainline_session = MainlineSession.new()
+	_mainline_session.restore_from_settings()
+
 	# === GBA 火纹风主题注入(V2 第 1+2 轮:主菜单 + HUD 4 角) ===
 	_apply_gba_theme()
 
 	_show_view("menu")
 	mainline_button.pressed.connect(_on_mainline_pressed)
 	lobby_button.pressed.connect(_on_lobby_pressed)
+	# P1:主菜单"按号加入"按钮接 — 接受数字房间号 → join_game
+	if join_by_code_button != null and is_instance_valid(join_by_code_button):
+		join_by_code_button.pressed.connect(_on_join_by_code_pressed)
+	# Enter 键在输入框中直接触发
+	if join_by_code_input != null and is_instance_valid(join_by_code_input):
+		join_by_code_input.text_submitted.connect(_on_join_by_code_submitted)
 	if editor_button != null and is_instance_valid(editor_button):
 		editor_button.pressed.connect(_on_editor_pressed)
 	if saves_button != null and is_instance_valid(saves_button):
 		saves_button.pressed.connect(_on_saves_pressed)
 	# CreateFormPanel(自由模式)按钮
-	# T:96 Mainline
-	if ml_back_btn != null and is_instance_valid(ml_back_btn):
-		ml_back_btn.pressed.connect(_on_ml_back_pressed)
-	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
-		ml_abandon_btn.pressed.connect(_on_ml_abandon_pressed)
-	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
-		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
-	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
-		ml_prep_start_btn.pressed.connect(_on_prepare_start_pressed)
-	if ml_prep_refresh_btn != null and is_instance_valid(ml_prep_refresh_btn):
-		ml_prep_refresh_btn.pressed.connect(_on_prepare_refresh_pressed)
-	if ml_prep_action_btn != null and is_instance_valid(ml_prep_action_btn):
-		ml_prep_action_btn.pressed.connect(_on_prepare_primary_action_pressed)
-	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-		ml_prep_alt_action_btn.pressed.connect(_on_prepare_secondary_action_pressed)
-	if ml_prep_heroes_tab_btn != null and is_instance_valid(ml_prep_heroes_tab_btn):
-		ml_prep_heroes_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("heroes"))
-	if ml_prep_roster_tab_btn != null and is_instance_valid(ml_prep_roster_tab_btn):
-		ml_prep_roster_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("roster"))
-	if ml_prep_equipment_tab_btn != null and is_instance_valid(ml_prep_equipment_tab_btn):
-		ml_prep_equipment_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("equipment"))
-	if ml_prep_mercenary_tab_btn != null and is_instance_valid(ml_prep_mercenary_tab_btn):
-		ml_prep_mercenary_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("mercenary"))
-	if ml_prep_shop_tab_btn != null and is_instance_valid(ml_prep_shop_tab_btn):
-		ml_prep_shop_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("shop"))
-	if ml_prep_saves_tab_btn != null and is_instance_valid(ml_prep_saves_tab_btn):
-		ml_prep_saves_tab_btn.pressed.connect(_on_prepare_tab_pressed.bind("saves"))
-	if ml_prep_hero_select != null and is_instance_valid(ml_prep_hero_select):
-		ml_prep_hero_select.item_selected.connect(_on_prepare_hero_selected)
-	if ml_prep_equipment_select != null and is_instance_valid(ml_prep_equipment_select):
-		ml_prep_equipment_select.item_selected.connect(_on_prepare_equipment_selected)
-	if ml_prep_merc_unit_select != null and is_instance_valid(ml_prep_merc_unit_select):
-		ml_prep_merc_unit_select.item_selected.connect(_on_prepare_merc_unit_selected)
-	if ml_prep_merc_stat_select != null and is_instance_valid(ml_prep_merc_stat_select):
-		ml_prep_merc_stat_select.item_selected.connect(_on_prepare_merc_stat_selected)
-	if ml_prep_shop_select != null and is_instance_valid(ml_prep_shop_select):
-		ml_prep_shop_select.item_selected.connect(_on_prepare_shop_item_selected)
+	# T:96 Mainline — ml_* connects 全部搬到 mainline_controller._ready(节点在组件里)
 	if ai_player_option != null and is_instance_valid(ai_player_option):
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
 		lobby_remove_ai_btn.pressed.connect(_on_lobby_remove_ai_pressed)
+	# P1:audit 发现 LobbyAddAiBtn 在 tscn 存在但 var 未接 .pressed.connect
+	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
+		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
 	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
 		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
 	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
@@ -460,45 +441,29 @@ func _ready() -> void:
 		lobby_host_apply_btn.pressed.connect(_on_lobby_host_apply_pressed)
 	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
 		lobby_to_spec_btn.pressed.connect(_on_lobby_to_spec_pressed)
-	settings_button.pressed.connect(_on_settings_pressed)
+	settings_button.pressed.connect(_on_settings_open_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
+	# T:#16 — InProgressButton 接线(主菜单"▶ 进行中"按钮)
+	if in_progress_button != null and is_instance_valid(in_progress_button):
+		in_progress_button.pressed.connect(_on_in_progress_pressed)
 	if resume_button != null and is_instance_valid(resume_button):
 		resume_button.pressed.connect(_on_resume_pressed)
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.item_selected.connect(_on_save_selected)
-	if save_resume_btn != null and is_instance_valid(save_resume_btn):
-		save_resume_btn.pressed.connect(_on_save_resume_pressed)
-	if save_delete_btn != null and is_instance_valid(save_delete_btn):
-		save_delete_btn.pressed.connect(_on_save_delete_pressed)
-	if save_refresh_btn != null and is_instance_valid(save_refresh_btn):
-		save_refresh_btn.pressed.connect(_refresh_saves)
-	if save_back_btn != null and is_instance_valid(save_back_btn):
-		save_back_btn.pressed.connect(_on_save_back_pressed)
-	if editor_new_btn != null and is_instance_valid(editor_new_btn):
-		editor_new_btn.pressed.connect(_on_editor_new_pressed)
-	if editor_save_btn != null and is_instance_valid(editor_save_btn):
-		editor_save_btn.pressed.connect(_on_editor_save_pressed)
-	if editor_load_btn != null and is_instance_valid(editor_load_btn):
-		editor_load_btn.pressed.connect(_on_editor_load_pressed)
-	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-		editor_delete_btn.pressed.connect(_on_editor_delete_pressed)
-	if editor_apply_biome_btn != null and is_instance_valid(editor_apply_biome_btn):
-		editor_apply_biome_btn.pressed.connect(_on_editor_apply_biome_pressed)
-	if editor_resize_btn != null and is_instance_valid(editor_resize_btn):
-		editor_resize_btn.pressed.connect(_on_editor_resize_pressed)
-	if editor_undo_btn != null and is_instance_valid(editor_undo_btn):
-		editor_undo_btn.pressed.connect(_on_editor_undo_pressed)
-	if editor_redo_btn != null and is_instance_valid(editor_redo_btn):
-		editor_redo_btn.pressed.connect(_on_editor_redo_pressed)
-	if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
-		editor_map_select_option.item_selected.connect(_on_editor_map_selected)
-	if editor_mode_option != null and is_instance_valid(editor_mode_option):
-		editor_mode_option.item_selected.connect(_on_editor_mode_selected)
-	if editor_back_btn != null and is_instance_valid(editor_back_btn):
-		editor_back_btn.pressed.connect(_on_editor_back_pressed)
-	if editor_board != null and is_instance_valid(editor_board):
-		if not editor_board.tile_clicked.is_connected(_on_editor_tile_clicked):
-			editor_board.tile_clicked.connect(_on_editor_tile_clicked)
+	# P2: saves_controller.gd 组件接线(跨域引用 + 回调绑定)
+	if saves_view != null and is_instance_valid(saves_view):
+		saves_view._main = self
+	# T:#16 in_progress_controller.gd 组件接线
+	if in_progress_view != null and is_instance_valid(in_progress_view):
+		in_progress_view._main = self
+	# P2: mainline_controller.gd 组件接线
+	if mainline_view != null and is_instance_valid(mainline_view):
+		mainline_view._main = self
+	# P2: editor_controller.gd 组件接线(注入共享 helper + 跨域信号)
+	if editor_view != null and is_instance_valid(editor_view):
+		editor_view.unit_label_fn = Callable(self, "_unit_type_cn")
+		if not editor_view.back_requested.is_connected(_on_editor_back_requested):
+			editor_view.back_requested.connect(_on_editor_back_requested)
+		if not editor_view.map_saved.is_connected(_upsert_editor_map_as_lobby_preset):
+			editor_view.map_saved.connect(_upsert_editor_map_as_lobby_preset)
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
 	# T:8 启动时应用上次的字号偏好
@@ -529,6 +494,12 @@ func _ready() -> void:
 		attack_confirm_btn.pressed.connect(_on_attack_confirm_pressed)
 	if attack_cancel_btn != null and is_instance_valid(attack_cancel_btn):
 		attack_cancel_btn.pressed.connect(_on_attack_cancel_pressed)
+	# 通用 ConfirmDialog 信号接线 — 必须 null/instance_valid 守护,$ConfirmDialog
+	# 是顶层节点,但若 godot 编辑器临时缺失也能跑通。
+	if confirm_yes_btn != null and is_instance_valid(confirm_yes_btn):
+		confirm_yes_btn.pressed.connect(_on_confirm_yes_pressed)
+	if confirm_no_btn != null and is_instance_valid(confirm_no_btn):
+		confirm_no_btn.pressed.connect(_on_confirm_no_pressed)
 	# V2 第 6 轮:设置 + 暂停面板
 	settings_close_btn.pressed.connect(_on_settings_close_pressed)
 	settings_apply_btn.pressed.connect(_on_settings_apply_pressed)
@@ -554,16 +525,27 @@ func _ready() -> void:
 		settings_theme_dropdown.add_item("金属银", 1)
 		settings_theme_dropdown.add_item("极简明亮", 2)
 		settings_theme_dropdown.item_selected.connect(_on_theme_dropdown_item_selected)
+	# P1:静音 toggle 按钮接通 — 用 toggled 信号单向同步到 AudioManager
+	if settings_mute_btn != null and is_instance_valid(settings_mute_btn):
+		settings_mute_btn.toggled.connect(_on_mute_toggled)
+		# 启动时按 UserSettings 里的 muted 状态同步按钮视觉
+		var init_mute: bool = bool(UserSettings.get_value("settings.v1.muted", false))
+		settings_mute_btn.button_pressed = init_mute
 	pause_resume_btn.pressed.connect(_on_pause_resume_pressed)
 	pause_settings_btn.pressed.connect(_on_pause_settings_pressed)
 	pause_main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
+	# P0:暂停面板"中断退出"按钮 — capture_suspend(主动存中断)
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.pressed.connect(_on_pause_suspend_pressed)
 	pause_quit_btn.pressed.connect(_on_pause_quit_pressed)
 	# V2 第 7 轮:对话 + 教程 + 战斗结算
 	dialog_continue_btn.pressed.connect(_on_dialog_continue_pressed)
 	tutorial_got_it_btn.pressed.connect(_on_tutorial_got_it_pressed)
 	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-		battle_mainline_next_btn.pressed.connect(_on_mainline_next_battle_pressed)
+		battle_mainline_next_btn.pressed.connect(Callable(mainline_view, "_on_mainline_next_battle_pressed"))
+	if battle_back_lobby_btn != null and is_instance_valid(battle_back_lobby_btn):
+		battle_back_lobby_btn.pressed.connect(_on_battle_back_lobby_pressed)
 	battle_back_menu_btn.pressed.connect(_on_battle_back_menu_pressed)
 	# T:4 招募 modal — CloseBtn
 	if recruit_close_btn != null and is_instance_valid(recruit_close_btn):
@@ -631,6 +613,13 @@ func _ready() -> void:
 			_on_state_poll_response(body)
 	)
 
+	# P1:Reparent SettingsPanel to root so 主菜单 SettingsButton 可直接打开它
+	# (SettingsPanel 默认挂在 GameView/HUD 下,主菜单时 GameView 不可见)。
+	# reparent() 保留节点对象,@onready 引用继续有效。
+	if settings_panel != null and is_instance_valid(settings_panel) \
+			and settings_panel.get_parent() != self:
+		settings_panel.reparent(self)
+		settings_panel.visible = false
 
 	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play opens the lobby
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
@@ -659,9 +648,16 @@ func _ready() -> void:
 		settings_button.disabled = false
 		# settings_button.pressed 已经连接到 _on_settings_pressed (M3 stub)
 		# 替换:让它在游戏视图下打开 SettingsPanel,菜单视图下保留原提示
-		if settings_button.pressed.is_connected(_on_settings_pressed):
-			settings_button.pressed.disconnect(_on_settings_pressed)
-		settings_button.pressed.connect(_on_settings_open_pressed)
+	if settings_button.pressed.is_connected(_on_settings_pressed):
+		settings_button.pressed.disconnect(_on_settings_pressed)
+	if settings_button.pressed.is_connected(_on_settings_open_pressed):
+		settings_button.pressed.disconnect(_on_settings_open_pressed)
+	settings_button.pressed.connect(_on_settings_open_pressed)
+	# P1:主菜单 HelpButton → 玩法说明浮层
+	if help_button != null and is_instance_valid(help_button):
+		if help_button.pressed.is_connected(_on_help_pressed):
+			help_button.pressed.disconnect(_on_help_pressed)
+		help_button.pressed.connect(_on_help_pressed)
 	# TSCN-FIX:强制覆盖,确保 GameView 不吞棋盘点击(以防 tscn mouse_filter=2 没生效)
 	if game_view != null and is_instance_valid(game_view):
 		game_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -723,6 +719,7 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	in_progress_view.visible = (name == "in_progress")
 	# HUD 是 CanvasLayer,不受 GameView.visible 控制 — 手动同步显隐
 	if name == "game":
 		_show_hud()
@@ -738,8 +735,36 @@ func _show_view(name: String) -> void:
 	# game view 时启动状态轮询(每 1s GET /state 追 AI 行动)
 	if name == "game":
 		_start_state_polling()
+		# 棋盘右边有空档(Backdrop 绿色露出来) — 切暗色调融合棋盘边界
+		if backdrop != null and is_instance_valid(backdrop):
+			backdrop.color = Color.TRANSPARENT
 	else:
 		_stop_state_polling()
+		# 恢复主题背景色
+		if backdrop != null and is_instance_valid(backdrop):
+			backdrop.color = MenuTheme.C_BG_DEEP
+	# P2 修复:BoardCamera 在 apply_metrics() 时 enabled=true,会接管整个 viewport 的
+	# canvas_transform(zoom + 平移),连带 Menu 等 Control 一起缩放平移。切到不显示棋盘的
+	# view 必须禁用它并归位 canvas,否则从 game / 地图编辑器返回主菜单后整屏右偏放大。
+	if name != "game" and name != "editor":
+		_reset_board_cameras()
+
+
+func _reset_board_cameras() -> void:
+	_disable_board_camera(board)
+	if editor_view != null and is_instance_valid(editor_view):
+		_disable_board_camera(editor_view.get_node_or_null("EditorBoard"))
+	var vp := get_viewport()
+	if vp != null:
+		vp.canvas_transform = Transform2D.IDENTITY
+
+
+func _disable_board_camera(b: Node) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	var cam := b.get_node_or_null("BoardCamera")
+	if cam != null and is_instance_valid(cam):
+		cam.enabled = false
 
 
 # HUD (CanvasLayer) 显隐控制 — CanvasLayer 不受父 Control.visible 影响
@@ -770,6 +795,8 @@ func _stop_state_polling() -> void:
 
 
 func _poll_state_now() -> void:
+	if _game_over:
+		return
 	if _game_id <= 0:
 		return
 	if game_view == null or not is_instance_valid(game_view) or not game_view.visible:
@@ -935,14 +962,38 @@ func _on_exit_pressed() -> void:
 
 
 # T:5 单槽存档 / Resume — 主菜单可见按钮 + 一键 rejoin
+# P0 强化:优先检查中断存档(WebUI 行为对齐),再 fallback 到 playing/waiting game。
 func _check_resume_session() -> void:
 	if _user_name == "" or _user_name == "Player":
 		return
+	# 先并行拉两路:list_saves(看是否有 suspend)+ list_games(找 in-flight game)
+	NetworkClient.list_saves(_user_name, Callable(self, "_on_list_saves_for_resume"))
 	NetworkClient.list_games(Callable(self, "_on_list_games_for_resume"), _user_name)
+
+
+# 优先选 suspend 中断存档;有则按钮"▶ 继续中断战斗" → 走 load_suspend 分支
+func _on_list_saves_for_resume(body: Variant, _code: int = 0) -> void:
+	if not (body is Dictionary):
+		return
+	var suspend: Variant = body.get("suspend", null)
+	if not (suspend is Dictionary):
+		return
+	var game_id := int(suspend.get("game_id", 0))
+	if game_id <= 0:
+		return
+	_resume_game_id = game_id
+	_resume_player_id = 0  # suspend 走 rejoin_by_name,不需 pid
+	_resume_kind = "suspend"
+	if resume_button != null and is_instance_valid(resume_button):
+		resume_button.text = "▶ 继续中断战斗"
+		resume_button.visible = true
 
 
 func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 	# /games?user_name= 返回该用户可继续的 GameSummaryOut 列表,不带 players。
+	# 若 _resume_game_id 已被 suspend 分支设置,则不覆盖。
+	if _resume_game_id > 0:
+		return
 	var games: Array = (body as Array) if body is Array else []
 	var last_game_id: int = int(UserSettings.get_value("session.v1.last_game_id", 0))
 	var last_player_id: int = int(UserSettings.get_value("session.v1.last_player_id", 0))
@@ -956,20 +1007,40 @@ func _on_list_games_for_resume(body: Variant, _code: int = 0) -> void:
 		if resume_button != null and is_instance_valid(resume_button):
 			resume_button.text = "继续对局 #%d" % _resume_game_id
 			resume_button.visible = _resume_game_id > 0
+		_resume_kind = "game"
 		return
 
 
+# P0:resume 按钮按下 → 根据 kind 分流到 game(直接 rejoin)或 suspend(load_suspend 后再 rejoin)
 func _on_resume_pressed() -> void:
 	if _resume_game_id <= 0:
 		return
 	_show_view("connecting")
 	connecting_label.text = "正在重连对局 #%d..." % _resume_game_id
+	if _resume_kind == "suspend":
+		# suspend 流程:先调 load_suspend 告知服务端把中断游戏变成当前游戏 → 再 rejoin
+		NetworkClient.load_suspend(_user_name, Callable(self, "_on_resume_suspend_load_response"))
+		return
 	if _resume_player_id > 0:
 		NetworkClient.rejoin_game_by_player_id(_resume_game_id, _resume_player_id,
 			Callable(self, "_on_resume_rejoin_response"))
 	else:
 		NetworkClient.rejoin_game_by_name(_resume_game_id, _user_name,
 			Callable(self, "_on_resume_rejoin_response"))
+
+
+func _on_resume_suspend_load_response(body: Variant, code: int) -> void:
+	# load_suspend 成功后,body 含 game_id + mainline_id
+	if code < 200 or code >= 300 or not (body is Dictionary):
+		_update_status("恢复中断存档失败")
+		return
+	var game_id := int(body.get("game_id", 0))
+	if game_id <= 0:
+		_update_status("中断存档没有可恢复对局")
+		return
+	_resume_game_id = game_id  # 用服务端回的新 game_id 覆盖
+	NetworkClient.rejoin_game_by_name(game_id, _user_name,
+		Callable(self, "_on_resume_rejoin_response"))
 
 
 func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
@@ -995,255 +1066,111 @@ func _on_resume_rejoin_response(body: Variant, _code: int = 0) -> void:
 
 func _on_saves_pressed() -> void:
 	_show_view("saves")
-	_refresh_saves()
+	if saves_view != null and is_instance_valid(saves_view):
+		saves_view.open()
 
 
-func _refresh_saves() -> void:
-	_selected_save_id = 0
-	_save_records.clear()
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "加载存档..."
-	if save_open_list != null and is_instance_valid(save_open_list):
-		save_open_list.text = "[color=#a69a73]加载中...[/color]"
-	if save_mainline_list != null and is_instance_valid(save_mainline_list):
-		save_mainline_list.text = "[color=#a69a73]加载中...[/color]"
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.clear()
-	NetworkClient.list_saves(_user_name, Callable(self, "_on_saves_response"))
+# T:#16 — in_progress 视图入口(主菜单"▶ 进行中"按钮)
+func _on_in_progress_pressed() -> void:
+	_show_view("in_progress")
+	if in_progress_view != null and is_instance_valid(in_progress_view):
+		in_progress_view.open()
 
 
-func _on_saves_response(body: Variant, _code: int = 0) -> void:
-	var games: Array = _save_records_from_response(body)
-	_save_records = []
-	var open_lines: Array[String] = []
-	var mainline_lines: Array[String] = []
-	if save_select_option != null and is_instance_valid(save_select_option):
-		save_select_option.clear()
-	for record_index in range(games.size()):
-		var g: Variant = games[record_index]
-		if not (g is Dictionary):
-			continue
-		_save_records.append(g)
-		var line := _format_save_line(g)
-		var name := str(g.get("name", ""))
-		var mainline_id := str(g.get("mainline_id", ""))
-		var kind := str(g.get("kind", "manual"))
-		if mainline_id != "" or kind == "suspend" or name.begins_with("mainline:"):
-			mainline_lines.append(line)
-		else:
-			open_lines.append(line)
-		if save_select_option != null and is_instance_valid(save_select_option):
-			save_select_option.add_item(_save_option_label(g), record_index + 1)
-	if open_lines.is_empty():
-		open_lines.append("[color=#a69a73]暂无开房模式存档[/color]")
-	if mainline_lines.is_empty():
-		mainline_lines.append("[color=#a69a73]暂无主线模式存档[/color]")
-	if save_open_list != null and is_instance_valid(save_open_list):
-		save_open_list.text = "\n".join(open_lines)
-	if save_mainline_list != null and is_instance_valid(save_mainline_list):
-		save_mainline_list.text = "\n".join(mainline_lines)
-	if save_select_option != null and is_instance_valid(save_select_option) and save_select_option.item_count > 0:
-		save_select_option.select(0)
-		_on_save_selected(0)
+# P1:主菜单"按号加入"按钮接 — 解析输入房间号 → 入大厅选队入场
+func _on_join_by_code_submitted(_text: String) -> void:
+	_on_join_by_code_pressed()
+
+
+func _on_join_by_code_pressed() -> void:
+	if join_by_code_input == null or not is_instance_valid(join_by_code_input):
+		return
+	var raw: String = join_by_code_input.text.strip_edges()
+	if raw == "":
+		_update_status("请输入房间号")
+		return
+	# 接受纯数字 game_id
+	var gid: int = -1
+	if raw.is_valid_int():
+		gid = raw.to_int()
 	else:
-		_selected_save_id = 0
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "共 %d 个存档" % _save_records.size()
-
-
-func _format_save_line(g: Dictionary) -> String:
-	var save_id: int = int(g.get("id", 0))
-	var kind := str(g.get("kind", "manual"))
-	if kind == "suspend":
-		var game_id := int(g.get("game_id", 0))
-		return "[b]中断存档[/b] [color=#a69a73]game #%d[/color]\n[color=#d8c48a]%s · %s[/color]" % [
-			game_id, str(g.get("mainline_id", "自由战斗")), str(g.get("suspend_point", "manual"))
-		]
-	var label := _format_save_name(str(g.get("label", g.get("name", ""))))
-	var mainline_id := str(g.get("mainline_id", ""))
-	var chapter_index := int(g.get("chapter_index", 0)) + 1
-	var detail := "%s · 第 %d 章 · %s" % [mainline_id, chapter_index, kind] if mainline_id != "" else "%s · 回合 %d · 种子 %s" % [
-		_format_save_status(str(g.get("status", kind))),
-		int(g.get("turn_number", 0)),
-		str(g.get("map_seed", g.get("seed", "?"))),
-	]
-	return "[b]%s[/b] [color=#a69a73]#%d[/color]\n[color=#d8c48a]%s[/color]" % [label, save_id, detail]
-
-
-func _format_save_name(raw_name: String) -> String:
-	if raw_name.begins_with("mainline:"):
-		var parts := raw_name.split(":")
-		if parts.size() >= 3:
-			return "%s · %s" % [parts[1], parts[2]]
-		if parts.size() >= 2:
-			return parts[1]
-	return raw_name if raw_name != "" else "未命名存档"
-
-
-func _format_save_status(status: String) -> String:
-	match status:
-		"waiting":
-			return "等待中"
-		"playing":
-			return "进行中"
-		"finished":
-			return "已结束"
-		_:
-			return status
-
-
-func _on_save_selected(index: int) -> void:
-	if save_select_option == null or not is_instance_valid(save_select_option):
+		_update_status("房间号必须是数字")
 		return
-	if index < 0 or index >= save_select_option.item_count:
-		_selected_save_id = 0
+	if gid <= 0 or gid > 99999:
+		_update_status("房间号超出范围")
 		return
-	_selected_save_id = save_select_option.get_item_id(index)
-	if save_status != null and is_instance_valid(save_status):
-		var record := _selected_save_record()
-		save_status.text = "已选择 %s" % (_save_option_label(record) if not record.is_empty() else "存档")
-
-
-func _on_save_resume_pressed() -> void:
-	var record := _selected_save_record()
-	if record.is_empty():
-		return
-	var kind := str(record.get("kind", "manual"))
-	if kind == "suspend":
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "正在恢复中断存档..."
-		NetworkClient.load_suspend(_user_name, Callable(self, "_on_save_suspend_load_response"))
-		return
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "正在载入 %s..." % _save_option_label(record)
-	NetworkClient.load_save(
+	# 切到 connecting 视图,展示等待 toast,然后 join_game
+	_show_view("connecting")
+	_update_status("按号加入: #%d" % gid)
+	# 默认以玩家身份入席(role=player);玩家偏好色由 join_game 内部派生。
+	NetworkClient.join_game(
+		gid,
 		_user_name,
-		kind,
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_save_load_response").bind(record)
+		"",  # color — server 派生
+		"",  # team — player 自选 team 在 game view 内调整
+		"player",
+		Callable(self, "_on_join_game_response")
 	)
-
-
-func _on_save_load_response(body: Variant, code: int, record: Dictionary) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "载入失败"
-		return
-	_active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
-	_selected_mainline_id = _active_mainline_id if _active_mainline_id != "" else _selected_mainline_id
-	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "已载入 %s" % _save_option_label(record)
-	_show_view("mainline")
-	_on_mainline_pressed()
-
-
-func _on_save_suspend_load_response(body: Variant, code: int) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "恢复中断存档失败"
-		return
-	var game_id := int(body.get("game_id", 0))
-	if game_id <= 0:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "中断存档没有可恢复对局"
-		return
-	_resume_game_id = game_id
-	_active_mainline_id = str(body.get("mainline_id", ""))
-	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
-	NetworkClient.rejoin_game_by_name(game_id, _user_name, Callable(self, "_on_ml_slot_resume_response").bind(game_id))
-
-
-func _on_save_delete_pressed() -> void:
-	var record := _selected_save_record()
-	if record.is_empty():
-		return
-	if str(record.get("kind", "")) == "suspend":
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "中断存档暂不支持手动删除"
-		return
-	if save_status != null and is_instance_valid(save_status):
-		save_status.text = "删除 %s..." % _save_option_label(record)
-	NetworkClient.erase_save(
-		_user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_save_delete_response").bind(record)
-	)
-
-
-func _on_save_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
-	if code >= 200 and code < 300:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "已删除 %s" % _save_option_label(record)
-		_refresh_saves()
-	else:
-		if save_status != null and is_instance_valid(save_status):
-			save_status.text = "删除失败"
-
-
-func _on_save_back_pressed() -> void:
-	_show_view("menu")
-
-
-func _save_records_from_response(body: Variant) -> Array:
-	var out: Array = []
-	if body is Array:
-		return (body as Array).duplicate(true)
-	if not (body is Dictionary):
-		return out
-	var manual_slots: Array = body.get("manual_slots", []) if body.get("manual_slots", []) is Array else []
-	for i in range(manual_slots.size()):
-		var slot: Variant = manual_slots[i]
-		if slot is Dictionary:
-			var record: Dictionary = (slot as Dictionary).duplicate(true)
-			record["kind"] = str(record.get("kind", "manual"))
-			record["slot_index"] = int(record.get("slot_index", i))
-			out.append(record)
-	var auto_slot: Variant = body.get("auto_slot", null)
-	if auto_slot is Dictionary:
-		var auto_record: Dictionary = (auto_slot as Dictionary).duplicate(true)
-		auto_record["kind"] = "auto"
-		auto_record["slot_index"] = int(auto_record.get("slot_index", 0))
-		out.append(auto_record)
-	var suspend: Variant = body.get("suspend", null)
-	if suspend is Dictionary:
-		var suspend_record: Dictionary = (suspend as Dictionary).duplicate(true)
-		suspend_record["kind"] = "suspend"
-		suspend_record["slot_index"] = -1
-		out.append(suspend_record)
-	return out
-
-
-func _selected_save_record() -> Dictionary:
-	var idx := _selected_save_id - 1
-	if idx < 0 or idx >= _save_records.size():
-		return {}
-	var record: Variant = _save_records[idx]
-	return record if record is Dictionary else {}
-
-
-func _save_option_label(record: Dictionary) -> String:
-	if record.is_empty():
-		return "存档"
-	var kind := str(record.get("kind", "manual"))
-	if kind == "suspend":
-		return "中断存档 game #%d" % int(record.get("game_id", 0))
-	var label := _format_save_name(str(record.get("label", "")))
-	if label == "":
-		label = "%s slot %d" % [kind, int(record.get("slot_index", 0)) + 1]
-	return "%s · %s" % [label, kind]
 
 
 # ============================================================
 # Game state → HUD
 # ============================================================
 
+# P2:THREAT 攻击威胁区 — 算所有敌方单位攻击范围,标记 (橙) 在 board 高亮层
+# 客户端 UI 镜像,服务端仍权威;玩家据此判断"我脚下"有没有敌人能打到我。
+func _compute_threat_tiles() -> Array:
+	var threat: Array = []
+	if GameState == null or board == null or board.map_size.x <= 0:
+		return threat
+	var size: int = board.map_size.x
+	var players: Array = GameState.players if GameState else []
+	for p in players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)):
+			continue
+		var pid: int = int(p.get("id", -1))
+		if pid == _player_id:
+			continue  # skip self
+		var units: Array = (p.get("units", []) as Array)
+		for u in units:
+			if not u is Dictionary:
+				continue
+			var ux: int = int(u.get("x", 0))
+			var uy: int = int(u.get("y", 0))
+			var rng: int = int(u.get("attack_range", 1))
+			var min_r: int = int(u.get("min_attack_range", 0))
+			threat.append_array(MapLogic.attack_range_tiles(Vector2i(ux, uy), rng, min_r, size))
+	return threat
+
+
+func _show_threat_tiles() -> void:
+	if board == null:
+		return
+	var tiles: Array = _compute_threat_tiles()
+	# 去重 + 转 Vector2i
+	var seen: Dictionary = {}
+	var uniq: Array = []
+	for t in tiles:
+		var v := Vector2i(int(t.x), int(t.y))
+		if seen.has(v):
+			continue
+		seen[v] = true
+		uniq.append(v)
+	# 用 red attack marks(视觉上标"敌可打我")复用 — 简化,后续可做独立橙色 Mode.THREAT
+	board.show_attack_marks(uniq)
+
+
 func _on_state_updated(_snapshot: Dictionary) -> void:
+	var _sum: Dictionary = GameState.game_summary if GameState != null else {}
+	if String(_sum.get("status", "")) == "finished":
+		_handle_finished_snapshot(_sum)
+		return
 	# Render a fresh frame from GameState.
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
-	
+
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)
 	if battle_config != null and battle_config.has("audio"):
@@ -1278,7 +1205,22 @@ func _repaint_board_from_state() -> void:
 	# (state.snapshot updates on every WS event; the layout rarely does).
 	if int(pseudo.get("__id", 0)) != _game_id:
 		return
-	board.load_map(pseudo)
+	var board_signature := "%s:%sx%s:%s" % [
+		str(pseudo.get("__id", 0)),
+		str(pseudo.get("width", 0)),
+		str(pseudo.get("height", 0)),
+		str(pseudo.get("layout", [])),
+	]
+	if board_signature != _loaded_board_signature:
+		board.load_map(pseudo)
+		_loaded_board_signature = board_signature
+	else:
+		board.initial_units = pseudo.get("initial_units", [])
+		board._on_units_changed(board.initial_units)
+	# M4.16+:重建建筑阵营旗(从最新 GameState.tiles + owner_id)。
+	# 必须放在 load_map 之后 — board.tile_lookup 已建好,flag 需要 metrics。
+	if not GameState.tiles.is_empty():
+		board.rebuild_flags(GameState.tiles)
 
 
 func _snapshot_to_pseudo_map() -> Dictionary:
@@ -1334,13 +1276,13 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 		for u in p.get("units", []):
 			if not u is Dictionary:
 				continue
-			initial_units.append({
-				"x": int(u.get("x", 0)),
-				"y": int(u.get("y", 0)),
-				"type": str(u.get("unit_type", "swordsman")),
-				"color": color,
-				"level": int(u.get("level", 1)),
-			})
+			var unit_copy: Dictionary = u.duplicate()
+			unit_copy["x"] = int(unit_copy.get("x", 0))
+			unit_copy["y"] = int(unit_copy.get("y", 0))
+			unit_copy["type"] = str(unit_copy.get("unit_type", unit_copy.get("type", "swordsman")))
+			unit_copy["color"] = color
+			unit_copy["level"] = int(unit_copy.get("level", 1))
+			initial_units.append(unit_copy)
 	return {
 		"__id": _game_id,
 		"size": {"width": w, "height": h},
@@ -1375,7 +1317,8 @@ func _refresh_hud_from_state() -> void:
 	# End-turn button:玩家阶段(自己回合)或观战者阶段(自己观战回合)时启用。
 	# 观战者无单位、不能操作,但必须手动"确认(继续)"推进自己的观战回合,
 	# 否则对局卡在观战者回合(后端 end_turn 接受 is_spectator,turns.py:167)。
-	var my_turn: bool = int(cur_pid) == _player_id
+	# cur_pid 在 _reset_game_state_for_main_menu 后是 null,需守护。
+	var my_turn: bool = cur_pid != null and int(cur_pid) == _player_id
 	if my_turn and phase_text == "spectator":
 		end_turn_button.disabled = false
 		end_turn_button.text = "✅ 确认(继续)"
@@ -1573,7 +1516,7 @@ func _refresh_commander_section() -> void:
 	var meter: int = 0
 	var threshold: int = 100
 	for c in GameState.co_states:
-		if c is Dictionary and int(c.get("player_id", -1)) == int(cur_pid):
+		if c is Dictionary and int(c.get("player_id", -1)) == (int(cur_pid) if cur_pid != null else -1):
 			meter = int(c.get("meter", 0))
 			threshold = max(1, int(c.get("threshold", 100)))
 			break
@@ -1586,6 +1529,13 @@ func _refresh_commander_section() -> void:
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
 # T:95 — 鼠标 hover 时用 MapLogic.pathfind 算路径并渲染
 var _path_hover_last: Vector2i = Vector2i(-1, -1)
+var _move_preview_path: Array = []
+var _move_preview_target: Vector2i = Vector2i(-1, -1)
+
+
+func _clear_move_preview_path() -> void:
+	_move_preview_path = []
+	_move_preview_target = Vector2i(-1, -1)
 
 
 func _update_path_dots_on_hover(global_pos: Vector2) -> void:
@@ -1600,6 +1550,7 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 		return
 	_path_hover_last = target_cell
 	if not _move_reachable_set.has(target_cell):
+		_clear_move_preview_path()
 		# hover 离开 reachable → 保留 outline(没 path)
 		if board != null:
 			board.clear_selection_marks()
@@ -1614,13 +1565,9 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for p in GameState.players:
-		if not p is Dictionary: continue
-		for u in p.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(src_unit)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	var owners: Dictionary = {}
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -1634,8 +1581,10 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 			terrain[k] = str(t.get("terrain", "plain"))
 	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
 	var path: Array = MapLogic.pathfind(
-		src_cell, target_cell, terrain, owners, mov * 2, _player_id, blocked, size_v
+		src_cell, target_cell, terrain, owners, mov, _player_id, blocked, no_end, size_v
 	)
+	_move_preview_path = path.duplicate()
+	_move_preview_target = target_cell
 	var path_dots: Array = []
 	for p in path:
 		if Vector2i(p) != src_cell:
@@ -1669,6 +1618,7 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	_update_status("单位 #%d 已移动到 (%d,%d)" % [unit_id, to_x, to_y])
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	if board != null:
 		board.clear_selection_marks()
 	# M4.13:post-move bubble — 移动后若 can_move_after_action,
@@ -1679,7 +1629,7 @@ func _on_unit_moved(unit_id: int, from_x: int, from_y: int, to_x: int, to_y: int
 	_schedule_board_refresh()
 
 
-func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool) -> void:
+func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: bool, is_kill: bool, counter_damage: int) -> void:
 	action_log.append_text("[color=#f0c75e]⚔ #%d → #%d: %d 伤害%s%s[/color]\n" % [
 		attacker_id, target_id, damage,
 		" (暴击!)" if is_crit else "",
@@ -1695,6 +1645,15 @@ func _on_unit_attacked(attacker_id: int, target_id: int, damage: int, is_crit: b
 				text = "💀%d" % damage
 				color_hex = "#c63a3a"
 			board.spawn_floating_text_at_cell(cell, text, color_hex, "damage")
+	# M4.14+:反击伤害飘字 — 显示在攻击者位置,触发条件与服务端 actions.py:537 的 not is_kill 对齐
+	if counter_damage > 0 and board != null:
+		var atk: Dictionary = GameState.get_unit(attacker_id) if GameState != null else {}
+		if not atk.is_empty():
+			var acell := Vector2i(int(atk.get("x", 0)), int(atk.get("y", 0)))
+			var is_counter_kill: bool = int(atk.get("hp", 1)) <= 0
+			var atext: String = ("💀%d" % counter_damage) if is_counter_kill else ("↩%d" % counter_damage)
+			var acolor: String = "#c63a3a" if is_counter_kill else "#e85a6a"
+			board.spawn_floating_text_at_cell(acell, atext, acolor, "counter_damage")
 	# M4.14:post-attack bubble — 若目标未死 + can_move_after_action 还能再行动
 	if not is_kill:
 		_show_post_action_bubble(attacker_id, "攻击")
@@ -1715,6 +1674,8 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 # 避免 AI 回合里 N 个 event.delta 各拉一次。事件→响应回来→ingest→
 # units_changed → board._on_units_changed 自动 FLIP 单位位置。
 func _schedule_board_refresh() -> void:
+	if _game_over:
+		return
 	if _board_refresh_pending:
 		return
 	_board_refresh_pending = true
@@ -1723,6 +1684,8 @@ func _schedule_board_refresh() -> void:
 
 func _do_board_refresh() -> void:
 	_board_refresh_pending = false
+	if _game_over:
+		return
 	if _game_id <= 0:
 		return
 	NetworkClient.get_game_state(_game_id)
@@ -1801,8 +1764,18 @@ func _on_toggle_mute_pressed() -> void:
 	_update_status("静音: %s" % ("开" if muted else "关"))
 
 
+# P1:SettingsPanel 里的 MuteBtn 用了 toggle_mode,toggled(toggled_on) signal
+# 直连到 set_muted(单向),无需 toggle。
+func _on_mute_toggled(toggled_on: bool) -> void:
+	if AudioManager == null: return
+	AudioManager.set_muted(toggled_on)
+	UserSettings.set_value("settings.v1.muted", toggled_on)
+	_update_status("静音: %s" % ("开" if toggled_on else "关"))
+
+
 # M6.5 主题切换 — 三套主题:deep_gba / metal_silver / minimal_light
-# 通过 set_root_theme 设置全局 default_* 颜色与字号。
+# P2 完整版:每套主题覆盖 backdrop / 面板色调 / 按钮色 / 文本色;
+# 在 _apply_theme 里集中灌,运行期热切换无需重新打开视图。
 const _THEMES := ["deep_gba", "metal_silver", "minimal_light"]
 
 
@@ -1812,15 +1785,67 @@ func _on_theme_change(theme_name: String) -> void:
 
 
 func _apply_theme(theme_name: String) -> void:
-	# 主题实际生效 — V2 简化版:仅换背景色 + 部分面板色调。
-	# 完整主题需 .tres 文件(M5.5 TODO)
-	var bg_color: Color = Color(0.06, 0.13, 0.10)  # GBA default
+	var bg_color: Color = Color(0.06, 0.13, 0.10)  # deep_gba 兜底
+	var panel_color: Color = Color(0.06, 0.13, 0.10)
+	var border_color: Color = Color(0.79, 0.63, 0.29)  # 金 C_GOLD
+	var text_color: Color = Color(0.96, 0.91, 0.76)   # 暖白 C_TEXT_WARM
+	var btn_bg: Color = Color(0.16, 0.25, 0.36)       # 蓝底 C_BTN_BLUE
 	if theme_name == "metal_silver":
 		bg_color = Color(0.10, 0.10, 0.13)
+		panel_color = Color(0.16, 0.16, 0.18)
+		border_color = Color(0.70, 0.73, 0.78)  # 银
+		text_color = Color(0.92, 0.94, 0.96)
+		btn_bg = Color(0.30, 0.34, 0.40)
 	elif theme_name == "minimal_light":
 		bg_color = Color(0.92, 0.92, 0.88)
+		panel_color = Color(0.96, 0.96, 0.94)
+		border_color = Color(0.30, 0.30, 0.30)  # 深灰边
+		text_color = Color(0.12, 0.12, 0.12)   # 深色字
+		btn_bg = Color(0.78, 0.80, 0.84)       # 浅灰按钮
 	if backdrop != null and is_instance_valid(backdrop):
 		backdrop.color = bg_color
+	# 重灌核心面板的 StyleBoxFlat 让边界和底色跟主题
+	var theme_panels: Array = [settings_panel, pause_panel, dialog_panel, battle_result_panel, war_report_panel]
+	for p in theme_panels:
+		if p == null or not is_instance_valid(p):
+			continue
+		var sb: StyleBoxFlat = StyleBoxFlat.new()
+		sb.bg_color = panel_color
+		sb.border_color = border_color
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(2)
+		p.add_theme_stylebox_override("panel", sb)
+	# 重灌按钮 StyleBoxFlat 影响主菜单 + 子菜单底部按钮
+	# (P2:save_*_btn 由 saves_controller.gd 自管主题,不再列在这里)
+	var theme_btns: Array = [settings_button, settings_apply_btn, settings_cancel_btn,
+		settings_close_btn, settings_font_small_btn, settings_font_med_btn, settings_font_big_btn,
+		settings_red_btn, settings_blue_btn, settings_green_btn, settings_yellow_btn,
+		settings_mute_btn, pause_resume_btn, pause_suspend_btn, pause_main_menu_btn,
+		pause_quit_btn, pause_settings_btn, dialog_continue_btn, tutorial_got_it_btn,
+		battle_detail_btn, end_turn_button, help_button,
+		exit_button, resume_button, lobby_button, lobby_add_ai_btn, lobby_remove_ai_btn,
+		lobby_start_btn, lobby_back_btn, lobby_apply_team_btn, lobby_host_apply_btn,
+		join_by_code_button]
+	for b in theme_btns:
+		if b == null or not is_instance_valid(b):
+			continue
+		var sb2: StyleBoxFlat = StyleBoxFlat.new()
+		sb2.bg_color = btn_bg
+		sb2.border_color = border_color
+		sb2.set_border_width_all(2)
+		sb2.set_corner_radius_all(4)
+		b.add_theme_stylebox_override("normal", sb2)
+		var sbh: StyleBoxFlat = sb2.duplicate()
+		sbh.bg_color = btn_bg.lightened(0.15)
+		b.add_theme_stylebox_override("hover", sbh)
+		var sbp: StyleBoxFlat = sb2.duplicate()
+		sbp.bg_color = btn_bg.darkened(0.15)
+		b.add_theme_stylebox_override("pressed", sbp)
+	# 文本色整体调节主菜单 / SettingPanel 内的关键 label
+	var theme_text_labels: Array = [settings_panel.find_child("Header", true, false)] if settings_panel != null else []
+	for lbl in theme_text_labels:
+		if lbl != null and is_instance_valid(lbl):
+			lbl.add_theme_color_override("font_color", text_color)
 	_update_status("主题: %s" % theme_name)
 
 
@@ -1892,6 +1917,11 @@ func hide_help() -> void:
 		_help_panel.visible = false
 
 
+# P1:主菜单 HelpButton → 触发玩法说明浮层
+func _on_help_pressed() -> void:
+	show_help()
+
+
 func _on_turn_ended(next_player_id, turn_number: int) -> void:
 	# M4.17:turn banner slide-down + 玩家色 + emoji
 	var pid_str := str(next_player_id)
@@ -1908,7 +1938,48 @@ func _on_turn_ended(next_player_id, turn_number: int) -> void:
 	_schedule_board_refresh()
 
 
+func _winner_player_id_from_finished_snapshot() -> int:
+	if GameState == null:
+		return -1
+	var alive_team_to_pid: Dictionary = {}
+	for p in GameState.players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)) or not bool(p.get("is_alive", true)):
+			continue
+		if (p.get("units", []) as Array).is_empty():
+			continue
+		var pid: int = int(p.get("id", -1))
+		var key: String = _player_team_key(pid)
+		if not alive_team_to_pid.has(key):
+			alive_team_to_pid[key] = pid
+	# 唯一活着的队伍 = 真正的胜者;0 队伍(全员阵亡的 draw)或 ≥2 队伍
+	# 都返回 -1,让 show_battle_result 把 winner 留空、不冒认"学长 获胜!"。
+	if alive_team_to_pid.size() == 1:
+		return int(alive_team_to_pid.values()[0])
+	return -1
+
+
+func _handle_finished_snapshot(summary: Dictionary) -> void:
+	if _game_over:
+		return
+	var reason: String = str(summary.get("win_reason", "rout"))
+	var winner_pid: int = _winner_player_id_from_finished_snapshot()
+	_on_match_ended(winner_pid, reason)
+
+
 func _on_match_ended(winner_player_id, win_reason: String) -> void:
+	# M4.16+ game-over 保险:置 flag 后,后续的 _on_state_updated /
+	# ai_thinking 都会被屏蔽,避免循环刷新或 AI 推事件导致卡死。
+	_game_over = true
+	_board_refresh_pending = false
+	if _state_poll_timer != null and is_instance_valid(_state_poll_timer):
+		_state_poll_timer.stop()
+	# 关闭可能还在显示的 AI thinking / end-turn 提示
+	if ai_thinking_label != null and is_instance_valid(ai_thinking_label):
+		ai_thinking_label.visible = false
+	# Hide any in-flight action bubble so the result panel sits on a clean canvas
+	_hide_action_bubble()
 	_show_turn_banner("🏆 [color=#f0c75e]玩家 #%s[/color] 获胜! 原因: %s" % [
 		str(winner_player_id), win_reason
 	], 8.0)
@@ -2041,11 +2112,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if editor_view != null and is_instance_valid(editor_view) and editor_view.visible and event.ctrl_pressed:
 			if event.keycode == KEY_Z:
-				_on_editor_undo_pressed()
+				editor_view.request_undo()
 				get_viewport().set_input_as_handled()
 				return
 			if event.keycode == KEY_Y:
-				_on_editor_redo_pressed()
+				editor_view.request_redo()
 				get_viewport().set_input_as_handled()
 				return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
@@ -2065,18 +2136,47 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_path_dots_on_hover(event.global_position)
 		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
-	# M5.x:鼠标右键 = 取消当前模式(行动气泡 / 移动 / 攻击 / 技能)
+	# 右键:有面板→关面板;行动模式→取消;点单位→显示射程;空地→清除
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		if game_view == null or not game_view.visible:
 			return
 		if board == null:
 			return
-		if (settings_panel != null and settings_panel.visible) \
-				or (pause_panel != null and pause_panel.visible) \
-				or (war_report_panel != null and war_report_panel.visible):
+		# ① 面板 → 关闭
+		if settings_panel != null and settings_panel.visible:
+			_hide_settings_panel()
+			get_viewport().set_input_as_handled()
 			return
+		if pause_panel != null and pause_panel.visible:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
+			return
+		if war_report_panel != null and war_report_panel.visible:
+			war_report_panel.visible = false
+			get_viewport().set_input_as_handled()
+			return
+		# ② 行动模式 → 取消
+		if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
+			_cancel_action_mode()
+			_hide_action_bubble()
+			get_viewport().set_input_as_handled()
+			return
+		# ③ 右键点单位 → 显示该单位所有可能射程
+		var rtu_id: int = board.pick_unit_at_screen(event.global_position)
+		if rtu_id > 0:
+			var rtu: Dictionary = GameState.get_unit(rtu_id) if GameState != null else {}
+			if not rtu.is_empty():
+				var rtiles: Array = _get_attack_range_tiles(rtu)
+				if rtiles.size() > 0 and board != null:
+					board.show_attack_marks(rtiles)
+				_update_status("查看射程: %s (%d格)" % [rtu.get("name", rtu.get("unit_type", "?")), rtiles.size()])
+			get_viewport().set_input_as_handled()
+			return
+		# ④ 空地右键 → 清除选中
 		_cancel_action_mode()
 		_hide_action_bubble()
+		if board != null and board.has_method("clear_selection_marks"):
+			board.clear_selection_marks()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -2106,54 +2206,56 @@ func _unhandled_input(event: InputEvent) -> void:
 				# 治疗模式:空地点击 → 取消
 				_cancel_action_mode()
 			else:
-				# 走 web 的"空佣兵站(我方 owner)+ 没单位驻守"→ 招募入口
-				# (game/app/web/app.js:3015-3024)。
-				var batt: Dictionary = _pick_empty_my_barracks(event.global_position)
-				if not batt.is_empty():
-					_show_recruit_at(batt)
-				else:
-					board.clear_selection_marks()
-					_hide_action_bubble()
+				board.emit_tile_clicked(event.global_position)
 		get_viewport().set_input_as_handled()
 
 
 # 把屏幕坐标转 tile,看是不是"我方 owner + 空 barracks + 是我的回合"。
 # 是 → {x, y, gold};否 → {}。
 func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
-	if board == null or GameState == null:
-		return {}
-	if not GameState.is_local_turn:
+	if board == null:
 		return {}
 	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
 	if layer == null:
 		return {}
 	var local: Vector2 = layer.to_local(global_pos)
-	var cell: Vector2i = layer.local_to_map(local)
-	var terrain: Dictionary = board.tile_lookup if board.tile_lookup != null else {}
-	for k in terrain.keys():
-		var t: Dictionary = terrain[k]
-		if Vector2i(int(t.get("x", k.x)), int(t.get("y", k.y))) != cell:
-			continue
-		if str(t.get("terrain", "")) != "barracks":
-			return {}
-		if int(t.get("owner_id", -1)) != _player_id:
-			return {}
-		# 该 tile 上是否有单位(occupied → 不能招募)
-		for uu in _all_units_including_self():
-			if int(uu.get("x", -1)) == cell.x and int(uu.get("y", -1)) == cell.y:
-				return {}
-		var me: Dictionary = GameState.get_player(_player_id)
-		return {
-			"x": cell.x,
-			"y": cell.y,
-			"gold": int(me.get("gold", 0)),
-		}
-	return {}
+	return _pick_empty_my_barracks_at_cell(layer.local_to_map(local))
 
 
-# S:4 — T:4 RecruitPanel 真 modal(替换 status 凑合)。
-# 仿照 web 的 showRecruitModal(3276-3325):5 类单位列表 + 金币门槛 disable
-# + 类型 buttons — server 是 source of truth。
+func _pick_empty_my_barracks_at_cell(cell: Vector2i) -> Dictionary:
+	if board == null or GameState == null:
+		return {}
+	if not GameState.is_local_turn:
+		_update_status("Not your turn...")
+		return {}
+	var tile := GameState.get_tile(cell.x, cell.y)
+	if tile.is_empty() and board.tile_lookup != null:
+		tile = board.tile_lookup.get(cell, {})
+	if tile.is_empty():
+		_update_status("Map data not loaded")
+		return {}
+	if str(tile.get("terrain", "")) != "barracks":
+		return {}
+	var owner_id := int(tile.get("owner_id", -1))
+	if owner_id != _player_id:
+		_update_status("This barracks is not yours (owner=%d)" % owner_id)
+		return {}
+	var occ_v: Variant = tile.get("occupied_unit_id", null)
+	if occ_v != null and int(occ_v) > 0:
+		_update_status("Barracks occupied; move the unit away first")
+		return {}
+	var me: Dictionary = GameState.get_player(_player_id)
+	return {"x": cell.x, "y": cell.y, "gold": int(me.get("gold", 0))}
+
+
+func _try_open_recruit_at_tile(tile: Vector2i) -> bool:
+	var batt: Dictionary = _pick_empty_my_barracks_at_cell(tile)
+	if batt.is_empty():
+		return false
+	_show_recruit_at(batt)
+	return true
+
+
 func _show_recruit_at(info: Dictionary) -> void:
 	if recruit_panel == null or not is_instance_valid(recruit_panel):
 		return
@@ -2168,7 +2270,7 @@ func _show_recruit_at(info: Dictionary) -> void:
 	for opt in _RECRUIT_OPTIONS:
 		var btn := Button.new()
 		var unit_type: String = str(opt.get("type", "?"))
-		var name: String = str(opt.get("name", "?"))
+		var name: String = _unit_type_cn(unit_type)
 		var cost: int = int(opt.get("cost", 0))
 		btn.text = "%s  💰 %d" % [name, cost]
 		btn.disabled = gold_i < cost
@@ -2223,8 +2325,12 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 
 # M4.1:点击地图格子(空白区 / 落点)→ 处理
 func _on_board_tile_clicked(tile: Vector2i) -> void:
-	# 不在移动模式 → 忽略
 	if _move_mode_unit_id <= 0:
+		if tile.x >= 0 and tile.y >= 0 and _try_open_recruit_at_tile(tile):
+			return
+		if board != null:
+			board.clear_selection_marks()
+		_hide_action_bubble()
 		return
 	if tile.x < 0 or tile.y < 0:
 		_cancel_move_mode()
@@ -2242,23 +2348,42 @@ func _on_board_tile_clicked(tile: Vector2i) -> void:
 func _cancel_move_mode() -> void:
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	if board != null:
 		board.clear_selection_marks()
 	_update_status("已取消移动")
 
 
 # M4.1:发 POST /games/{id}/move
+func _apply_immediate_move_feedback(unit_id: int, to_cell: Vector2i, path_cells: Array = []) -> void:
+	var spent_mp: int = -1
+	if _move_reachable_set.has(to_cell):
+		spent_mp = int(_move_reachable_set.get(to_cell, 0)) / 2
+	if GameState != null and GameState.has_method("apply_local_move_preview"):
+		GameState.apply_local_move_preview(unit_id, to_cell, spent_mp)
+	_move_mode_unit_id = -1
+	_move_reachable_set = {}
+	_clear_move_preview_path()
+	if board != null:
+		if path_cells.size() >= 2 and board.has_method("preview_unit_path"):
+			board.preview_unit_path(unit_id, path_cells, 0.45)
+		elif board.has_method("preview_unit_move"):
+			board.preview_unit_move(unit_id, to_cell, 0.28)
+		board.clear_selection_marks()
+	_hide_action_bubble()
+	_show_post_action_bubble(unit_id, "移动")
+	_update_status("移动指令已下达: #%d -> (%d, %d)" % [unit_id, to_cell.x, to_cell.y])
+
+
 func _move_unit_to(unit_id: int, to_x: int, to_y: int) -> void:
 	if _game_id <= 0 or _player_id <= 0:
 		return
-	_update_status("正在移动单位 #%d → (%d, %d)..." % [unit_id, to_x, to_y])
+	var to_cell := Vector2i(to_x, to_y)
+	var path_cells: Array = []
+	if _move_preview_target == to_cell and _move_preview_path.size() >= 2:
+		path_cells = _move_preview_path.duplicate()
+	_apply_immediate_move_feedback(unit_id, to_cell, path_cells)
 	NetworkClient.action_move(_game_id, _player_id, unit_id, to_x, to_y)
-	# 清掉移动模式 + highlights
-	_move_mode_unit_id = -1
-	_move_reachable_set = {}
-	if board != null:
-		board.clear_selection_marks()
-	_hide_action_bubble()
 
 
 func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
@@ -2278,6 +2403,7 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		# 不进入移动/攻击模式
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
 		_hide_attack_confirm()
@@ -2297,11 +2423,13 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
 		_move_reachable_set = reach_dict
+		_clear_move_preview_path()
 		if tiles.size() > 0 and board != null:
 			board.show_path_marks([], tiles)
 	elif board != null:
 		board.clear_selection_marks()
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
@@ -2311,13 +2439,9 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(unit_data)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	var owners: Dictionary = {}
 	if board.tile_lookup != null:
 		for k in board.tile_lookup.keys():
@@ -2331,7 +2455,7 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 			terrain[k] = str(t.get("terrain", "plain"))
 	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
 	)
 	print("DEBUG reachable: result_size=%s" % result.size())
 	return result
@@ -2343,13 +2467,9 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
+	var occupancy := _movement_occupancy_for_unit(unit_data)
+	var blocked: Dictionary = occupancy.get("blocked", {})
+	var no_end: Dictionary = occupancy.get("no_end", {})
 	# terrain: tile (Vector2i) → terrain_name(String);owner 编码另外从
 	# tile_lookup_inverse 或 Players 推,这里先用 0 当占位
 	var terrain: Dictionary = {}
@@ -2361,13 +2481,42 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 			var owner_v = t.get("owner_id", null)
 			owners[k] = int(owner_v) if owner_v != null else 0
 	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
-	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, size)
+	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, no_end, size)
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
 	)
 	# 移除起点(不要把自身高亮成可达)
 	result.erase(unit_pos)
 	return result.keys()
+
+
+func _movement_occupancy_for_unit(unit_data: Dictionary) -> Dictionary:
+	var blocked: Dictionary = {}
+	var no_end: Dictionary = {}
+	if GameState == null:
+		return {"blocked": blocked, "no_end": no_end}
+	var mover_pid: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
+	var mover_team: String = _player_team_key(mover_pid)
+	var mover_id: int = int(unit_data.get("id", -1))
+	for player in GameState.players:
+		if not player is Dictionary:
+			continue
+		var other_pid: int = int(player.get("id", -1))
+		var same_team: bool = other_pid > 0 and _player_team_key(other_pid) == mover_team
+		for unit in player.get("units", []):
+			if not unit is Dictionary:
+				continue
+			var unit_id: int = int(unit.get("id", -1))
+			if unit_id == mover_id:
+				continue
+			if int(unit.get("hp", 1)) == 0:
+				continue
+			var cell := Vector2i(int(unit.get("x", 0)), int(unit.get("y", 0)))
+			if same_team:
+				no_end[cell] = true
+			else:
+				blocked[cell] = true
+	return {"blocked": blocked, "no_end": no_end}
 
 
 func _toggle_pause() -> void:
@@ -2414,6 +2563,25 @@ func _on_settings_open_pressed() -> void:
 
 func _on_settings_close_pressed() -> void:
 	_hide_settings_panel()
+
+
+# P0:自动存档 toast — 服务端 /advance 与 /mainlines/{id}/prepare/complete 写 auto-save
+# response.body.auto_save = AutoSaveCheckpointOut {label, auto_kind, saved_at}
+func _show_auto_save_toast(label: String, ms: float = 1800.0) -> void:
+	if auto_save_toast == null or not is_instance_valid(auto_save_toast):
+		return
+	if auto_save_toast_label != null and is_instance_valid(auto_save_toast_label):
+		auto_save_toast_label.text = label
+	auto_save_toast.visible = true
+	# kill 旧 tween 以支持叠加调用
+	if _auto_save_toast_tween != null and _auto_save_toast_tween.is_valid():
+		_auto_save_toast_tween.kill()
+	_auto_save_toast_tween = create_tween()
+	_auto_save_toast_tween.tween_interval(ms / 1000.0)
+	_auto_save_toast_tween.tween_callback(func():
+		if auto_save_toast != null and is_instance_valid(auto_save_toast):
+			auto_save_toast.visible = false
+	)
 
 
 func _on_settings_apply_pressed() -> void:
@@ -2475,10 +2643,26 @@ func _apply_font_size(size: int) -> void:
 	_update_status("字号已设为 %d" % size)
 
 
-# T:8 阵营颜色生效 — 仅记 pref,新房间用
+# T:8 阵营颜色生效 + P2 hot-effect:4 色按钮立即视觉反馈
 func _apply_preferred_color(color_name: String) -> void:
 	UserSettings.set_value("settings.v1.color", color_name)
-	_update_status("下一局将使用 %s 方 (当前房间不变)" % color_name)
+	# P2 hot-effect:立刻更新 PlayersList / 自己标记色(若在局内)。
+	# 已开战对局的 player.color 是服务端权威,只能等下一局换色;
+	# 但大厅视图/无对局时的 status/player 头像色块可以立刻反映偏好。
+	_apply_local_color_hint(color_name)
+	_update_status("✓ 偏好色已记下: %s (新对局才生效)" % color_name)
+
+
+func _apply_local_color_hint(color_name: String) -> void:
+	# 在没有对局时,改 status label 颜色块作为可见反馈;
+	# 在大厅 / 战斗中时,改 lobby_self_color 风格 chip 由所属渲染逻辑读取 pref_color。
+	var hint_color: Color = Config.player_color(color_name) if Config != null else Color.WHITE
+	hint_color.a = 0.85
+	var status_label: Label = get_node_or_null("Menu/.../StatusLabel")
+	if status_label == null:
+		status_label = get_node_or_null("/root/Main/Menu/ConnectingPanel/StatusLabel")
+	# 此处不强求 status label hot-update(各视图 position 不同),
+	# 主要是给玩家一个"按了就有反应"的反馈信号 — 已在 _update_status 文案体现 ✓ mark。
 
 
 func _on_settings_cancel_pressed() -> void:
@@ -2511,6 +2695,7 @@ func _reset_game_state_for_main_menu() -> void:
 	# 2) 重置所有行动模式
 	_move_mode_unit_id = -1
 	_move_reachable_set = {}
+	_clear_move_preview_path()
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
 	_skill_mode_unit_id = -1
@@ -2550,10 +2735,49 @@ func _reset_game_state_for_main_menu() -> void:
 	# resume 会再拉一次。
 	# 8) 注意:不调 UserSettings.set_value 清 last_game_id — 玩家
 	# 还可以用 Resume 按钮回到刚才那局。
+	# 9) 清旧 player_id + lobby 快照 — 不清的话,新房间的 lobby 渲染 / cycle
+	# 会带着上一局的 _player_id,触发 400(后端找不到旧 id / status 已翻 playing)。
+	# Resume 走 _resume_game_id/_resume_player_id,跟 _player_id 解耦,所以这里
+	# 清掉不影响 Resume 流程。
+	_player_id = 0
+	_game_id = 0
+	_lobby_seat_commander_indices = [0, 0, 0, 0]
+	_lobby_commander_ids = [""]
+	_selected_ai_player_id = 0
+	_lobby_is_host = false
 
 
 func _on_pause_quit_pressed() -> void:
 	get_tree().quit()
+
+
+# P0:暂停面板"中断退出"按钮 — 玩家主动 capture_suspend 然后回到主菜单
+# 与 MainMenuBtn 不同:MainMenuBtn 不写中断、可能丢进度;此处显式存为中断存档
+func _on_pause_suspend_pressed() -> void:
+	if _game_id <= 0 or _user_name == "":
+		_update_status("无法中断:无对局")
+		return
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.disabled = true
+	_update_status("正在保存中断状态...")
+	NetworkClient.capture_suspend(_game_id, _user_name,
+		Callable(self, "_on_capture_suspend_response"))
+
+
+func _on_capture_suspend_response(body: Variant, code: int) -> void:
+	if pause_suspend_btn != null and is_instance_valid(pause_suspend_btn):
+		pause_suspend_btn.disabled = false
+	if code < 200 or code >= 300:
+		var msg: String = "中断保存失败"
+		if body is Dictionary and body.has("detail"):
+			msg = "中断保存失败: %s" % str(body.get("detail"))
+		_update_status(msg)
+		return
+	# Bug fix: 中断存档成功后必须主动切回主菜单 + toast 提示。否则玩家
+	# 停在 pause 面板,不知道刚才那一按到底有没有生效。
+	_update_status("💾 中断已保存,返回主菜单(可继续中断战斗)")
+	_show_view("menu")
+	_reset_game_state_for_main_menu()
 
 
 # ============================================================
@@ -2692,8 +2916,19 @@ func _set_dialog_portrait(speaker: String) -> void:
 
 
 func _load_portrait(res_path: String) -> Texture2D:
+	# T:#18 — ResourceLoader 优先(res:// 路径 Godot 4 推荐走 ResourceLoader),
+	# 退回 Image.load + globalize_path。早期直接 img.load(res://...) 在
+	# 4.7 上偶发返回 null,导致 _set_unit_info_portrait 走"文件不存在"分支
+	# 把整个 panel.visible = false,玩家看到的就是"一块不透明面版没图"。
+	if ResourceLoader.exists(res_path):
+		var res := ResourceLoader.load(res_path)
+		if res is Texture2D:
+			return res
 	var img := Image.new()
-	if img.load(res_path) != OK:
+	var abs_path: String = res_path
+	if res_path.begins_with("res://"):
+		abs_path = ProjectSettings.globalize_path(res_path)
+	if img.load(abs_path) != OK:
 		return null
 	return ImageTexture.create_from_image(img)
 
@@ -2856,6 +3091,18 @@ func _on_battle_back_menu_pressed() -> void:
 	_show_view("menu")
 
 
+# M4.16+:战斗结束 → 返回联机大厅。复用 _on_lobby_pressed,但先清 game 状态
+# 否则 _lobby_commanders_fetched / _game_id 可能残留导致 lobby 加载错位。
+func _on_battle_back_lobby_pressed() -> void:
+	hide_battle_result()
+	_game_id = 0
+	_player_id = 0
+	_selected_mainline_id = ""
+	_mainline_battle_game_id = 0
+	# 复用主菜单"在线大厅"按钮处理流程(刷新 commander 列表 + 房间列表)
+	_on_lobby_pressed()
+
+
 # ============================================================
 # GBA 火纹风主题注入(UI V2 第 1 轮)
 # ============================================================
@@ -2868,11 +3115,10 @@ func _apply_gba_theme() -> void:
 	# 3) Connecting 框(深绿底)
 	connecting_frame.color = MenuTheme.C_BG_PANEL
 	# 4) 主菜单 + 游戏内按钮统一灌主题
+	# (P2:save_*_btn 由 saves_controller.gd 自管主题,不再列在这里)
+	# (Batch A:ml_*_btn 由 mainline_controller.gd 自管主题,这里只保留 mainline_button)
 	for btn in [lobby_button, saves_button, mainline_button, editor_button, settings_button, exit_button,
-				ml_back_btn, ml_abandon_btn, ml_apply_commander_btn,
 				reconnect_button, end_turn_button, war_report_button,
-				save_resume_btn, save_delete_btn, save_refresh_btn, save_back_btn,
-				editor_new_btn, editor_save_btn, editor_load_btn, editor_delete_btn, editor_resize_btn, editor_back_btn,
 				attack_confirm_btn, attack_cancel_btn]:
 		if btn != null and is_instance_valid(btn):
 			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
@@ -2954,6 +3200,20 @@ func _apply_hud_theme() -> void:
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
+	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
+		MenuTheme.apply_panel_theme(hero_portrait_panel, MenuTheme.C_BG_PANEL)
+		var sb_portrait: StyleBoxFlat = hero_portrait_panel.get_theme_stylebox("panel").duplicate()
+		sb_portrait.border_width_left = 2
+		sb_portrait.border_width_right = 2
+		sb_portrait.border_width_top = 2
+		sb_portrait.border_width_bottom = 2
+		sb_portrait.set_corner_radius_all(3)
+		sb_portrait.content_margin_left = 2
+		sb_portrait.content_margin_right = 2
+		sb_portrait.content_margin_top = 2
+		sb_portrait.content_margin_bottom = 2
+		hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.add_theme_font_size_override("normal_font_size", 13)
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -3091,7 +3351,7 @@ func _apply_hud_theme() -> void:
 		res_header.add_theme_font_size_override("font_size", 22)
 		res_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 	if battle_result_winner != null and is_instance_valid(battle_result_winner):
-		battle_result_winner.add_theme_font_size_override("font_size", 18)
+		battle_result_winner.add_theme_font_size_override("normal_font_size", 18)
 	if battle_result_stats != null and is_instance_valid(battle_result_stats):
 		battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
 		battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -3112,115 +3372,11 @@ func _apply_hud_theme() -> void:
 func _on_editor_pressed() -> void:
 	_entry_flow = "editor"
 	_show_view("editor")
-	_setup_editor_options()
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-		_reset_editor_history()
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "地图编辑器已就绪。"
-	NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
+	editor_view.open()
 
 
-func _setup_editor_options() -> void:
-	if editor_biome_option != null and is_instance_valid(editor_biome_option):
-		editor_biome_option.clear()
-		for biome in ["grass", "snow", "desert"]:
-			editor_biome_option.add_item(_editor_biome_label(biome))
-		editor_biome_option.select(0)
-	if editor_terrain_option != null and is_instance_valid(editor_terrain_option):
-		editor_terrain_option.clear()
-		for terrain_char in _editor_terrain_chars:
-			editor_terrain_option.add_item(_editor_terrain_label(terrain_char))
-		editor_terrain_option.select(0)
-	if editor_surface_option != null and is_instance_valid(editor_surface_option):
-		editor_surface_option.clear()
-		for surface_char in _editor_surface_chars:
-			editor_surface_option.add_item(_editor_terrain_label(surface_char))
-		editor_surface_option.select(0)
-	if editor_mode_option != null and is_instance_valid(editor_mode_option):
-		editor_mode_option.clear()
-		editor_mode_option.add_item("地形部署")
-		editor_mode_option.add_item("地表部署")
-		editor_mode_option.add_item("单位部署")
-		editor_mode_option.select(0)
-	if editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option):
-		editor_unit_tool_option.clear()
-		editor_unit_tool_option.add_item("放置")
-		editor_unit_tool_option.add_item("擦除")
-		editor_unit_tool_option.select(0)
-	if editor_unit_option != null and is_instance_valid(editor_unit_option):
-		editor_unit_option.clear()
-		for unit_type in _editor_unit_types:
-			editor_unit_option.add_item(_unit_type_cn(unit_type))
-		editor_unit_option.select(0)
-	if editor_unit_color_option != null and is_instance_valid(editor_unit_color_option):
-		editor_unit_color_option.clear()
-		for color in _editor_unit_colors:
-			editor_unit_color_option.add_item(_team_color_label(color))
-		editor_unit_color_option.select(0)
-	if editor_surface_owner_option != null and is_instance_valid(editor_surface_owner_option):
-		editor_surface_owner_option.clear()
-		for color in _editor_owner_colors:
-			editor_surface_owner_option.add_item(_owner_color_label(color))
-		editor_surface_owner_option.select(0)
-	if editor_unit_level_option != null and is_instance_valid(editor_unit_level_option):
-		editor_unit_level_option.clear()
-		for level in range(1, 11):
-			editor_unit_level_option.add_item("等级 %d" % level)
-		editor_unit_level_option.select(0)
-	if editor_width_option != null and is_instance_valid(editor_width_option):
-		editor_width_option.clear()
-		for size in _editor_size_choices:
-			editor_width_option.add_item("宽 %d" % size)
-		editor_width_option.select(0)
-	if editor_height_option != null and is_instance_valid(editor_height_option):
-		editor_height_option.clear()
-		for size in _editor_size_choices:
-			editor_height_option.add_item("高 %d" % size)
-		editor_height_option.select(0)
-	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-		if editor_map_name_input.text.strip_edges() == "":
-			editor_map_name_input.text = "自定义地图"
-	_update_editor_mode_controls()
-
-
-func _editor_terrain_label(terrain_char: String) -> String:
-	match terrain_char:
-		"P":
-			return "平原"
-		"F":
-			return "森林"
-		"M":
-			return "山地"
-		"R":
-			return "河流"
-		"C":
-			return "城堡"
-		"v":
-			return "村庄"
-		"b":
-			return "兵营"
-		"r":
-			return "道路"
-		"g":
-			return "城门"
-		"S":
-			return "雪峰"
-		_:
-			return terrain_char
-
-
-func _editor_biome_label(biome: String) -> String:
-	match biome:
-		"grass":
-			return "草原"
-		"snow":
-			return "雪地"
-		"desert":
-			return "沙漠"
-		_:
-			return biome
+func _on_editor_back_requested() -> void:
+	_show_view("menu")
 
 
 func _unit_type_cn(unit_type: String) -> String:
@@ -3235,6 +3391,26 @@ func _unit_type_cn(unit_type: String) -> String:
 			return "术士"
 		"healer":
 			return "治疗师"
+		"lancer":
+			return "枪骑兵"
+		"warrior":
+			return "战士"
+		"berserker":
+			return "狂战士"
+		"dragon_rider":
+			return "龙骑士"
+		"falcon_knight":
+			return "隼骑士"
+		"blade_master":
+			return "剑圣"
+		"paladin":
+			return "圣骑士"
+		"sniper":
+			return "狙击手"
+		"sage":
+			return "贤者"
+		"saint":
+			return "圣者"
 		_:
 			return unit_type
 
@@ -3253,6 +3429,43 @@ func _skill_cn(skill_id: String) -> String:
 			return skill_id
 
 
+# P2.6+: 地形名中文化(用于 InfoPanel 加成区段)
+func _terrain_cn(terrain_name: String, subtype: String = "") -> String:
+	# subtype 优先 — castle_floor / castle_wall / etc.
+	if subtype != "":
+		match subtype:
+			"castle_floor": return "城堡内部"
+			"castle_wall": return "城墙"
+			"castle_door": return "城门"
+			"castle_throne": return "王座厅"
+			"castle_stairs": return "城梯"
+			"castle_vault": return "金库"
+	match terrain_name:
+		"plain": return "平原"
+		"forest": return "森林"
+		"mountain": return "山地"
+		"snow_peak": return "雪峰"
+		"river": return "河流"
+		"road": return "道路"
+		"bridge": return "桥梁"
+		"castle": return "城堡"
+		"village": return "村庄"
+		"barracks": return "兵营"
+		"gate": return "城门"
+		_:
+			return terrain_name
+
+
+# P2.6+: 指挥官名中文化(用于 InfoPanel 战斗加成区段)
+func _commander_cn(co_id: String) -> String:
+	match co_id:
+		"anna": return "安娜"
+		"yun": return "云"
+		"boss": return "Boss"
+		_:
+			return co_id
+
+
 func _color_name_cn(color_name: String) -> String:
 	match color_name:
 		"red":
@@ -3265,575 +3478,6 @@ func _color_name_cn(color_name: String) -> String:
 			return "黄色"
 		_:
 			return color_name
-
-
-func _team_color_label(color_name: String) -> String:
-	match color_name:
-		"red":
-			return "红方"
-		"blue":
-			return "蓝方"
-		"green":
-			return "绿方"
-		"yellow":
-			return "黄方"
-		_:
-			return color_name
-
-
-func _owner_color_label(color_name: String) -> String:
-	if color_name == "":
-		return "无主"
-	return _team_color_label(color_name)
-
-
-func _selected_editor_biome() -> String:
-	if editor_biome_option == null or not is_instance_valid(editor_biome_option):
-		return "grass"
-	match editor_biome_option.selected:
-		1:
-			return "snow"
-		2:
-			return "desert"
-		_:
-			return "grass"
-
-
-func _selected_editor_terrain_char() -> String:
-	if editor_terrain_option == null or not is_instance_valid(editor_terrain_option):
-		return "P"
-	var index := editor_terrain_option.selected
-	if index < 0 or index >= _editor_terrain_chars.size():
-		return "P"
-	return _editor_terrain_chars[index]
-
-
-func _selected_editor_surface_char() -> String:
-	if editor_surface_option == null or not is_instance_valid(editor_surface_option):
-		return "C"
-	var index := editor_surface_option.selected
-	if index < 0 or index >= _editor_surface_chars.size():
-		return "C"
-	return _editor_surface_chars[index]
-
-
-func _selected_editor_surface_owner_color() -> String:
-	if editor_surface_owner_option == null or not is_instance_valid(editor_surface_owner_option):
-		return ""
-	var index := editor_surface_owner_option.selected
-	if index < 0 or index >= _editor_owner_colors.size():
-		return ""
-	return _editor_owner_colors[index]
-
-
-func _selected_editor_mode() -> String:
-	if editor_mode_option == null or not is_instance_valid(editor_mode_option):
-		return "terrain"
-	match editor_mode_option.selected:
-		1:
-			return "surface"
-		2:
-			return "unit"
-		_:
-			return "terrain"
-
-
-func _on_editor_mode_selected(_index: int) -> void:
-	_update_editor_mode_controls()
-
-
-func _update_editor_mode_controls() -> void:
-	var mode := _selected_editor_mode()
-	if editor_terrain_option != null and is_instance_valid(editor_terrain_option):
-		editor_terrain_option.visible = mode == "terrain"
-	if editor_surface_option != null and is_instance_valid(editor_surface_option):
-		editor_surface_option.visible = mode == "surface"
-	if editor_surface_owner_option != null and is_instance_valid(editor_surface_owner_option):
-		editor_surface_owner_option.visible = mode == "surface"
-	if editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option):
-		editor_unit_tool_option.visible = mode == "unit"
-	if editor_unit_option != null and is_instance_valid(editor_unit_option):
-		editor_unit_option.visible = mode == "unit"
-	if editor_unit_color_option != null and is_instance_valid(editor_unit_color_option):
-		editor_unit_color_option.visible = mode == "unit"
-	if editor_unit_level_option != null and is_instance_valid(editor_unit_level_option):
-		editor_unit_level_option.visible = mode == "unit"
-
-
-func _is_editor_unit_mode() -> bool:
-	return _selected_editor_mode() == "unit"
-
-
-func _is_editor_surface_mode() -> bool:
-	return _selected_editor_mode() == "surface"
-
-
-func _selected_editor_unit_type() -> String:
-	if editor_unit_option == null or not is_instance_valid(editor_unit_option):
-		return "swordsman"
-	var index := editor_unit_option.selected
-	if index < 0 or index >= _editor_unit_types.size():
-		return "swordsman"
-	return _editor_unit_types[index]
-
-
-func _selected_editor_unit_color() -> String:
-	if editor_unit_color_option == null or not is_instance_valid(editor_unit_color_option):
-		return "red"
-	var index := editor_unit_color_option.selected
-	if index < 0 or index >= _editor_unit_colors.size():
-		return "red"
-	return _editor_unit_colors[index]
-
-
-func _selected_editor_unit_level() -> int:
-	if editor_unit_level_option == null or not is_instance_valid(editor_unit_level_option):
-		return 1
-	return clampi(editor_unit_level_option.selected + 1, 1, 10)
-
-
-func _selected_editor_size(option: OptionButton) -> int:
-	if option == null or not is_instance_valid(option):
-		return 15
-	var index := option.selected
-	if index < 0 or index >= _editor_size_choices.size():
-		return 15
-	return _editor_size_choices[index]
-
-
-func _select_editor_size_option(option: OptionButton, size: int) -> void:
-	if option == null or not is_instance_valid(option):
-		return
-	var index := _editor_size_choices.find(size)
-	if index < 0:
-		index = 0
-	option.select(index)
-
-
-func _is_editor_unit_erase_mode() -> bool:
-	return editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option) and editor_unit_tool_option.selected == 1
-
-
-func _build_blank_editor_map() -> Dictionary:
-	var rows: Array[String] = []
-	for _y in range(15):
-		rows.append("P".repeat(15))
-	var name := "自定义地图"
-	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-		var typed := editor_map_name_input.text.strip_edges()
-		if typed != "":
-			name = typed
-	return {
-		"name": name,
-		"size": {"width": 15, "height": 15},
-		"biome": _selected_editor_biome(),
-		"layout": rows,
-		"initial_units": [],
-		"tile_owners": [],
-	}
-
-
-func _render_editor_map() -> void:
-	if editor_board == null or not is_instance_valid(editor_board):
-		return
-	if _editor_map.is_empty():
-		return
-	editor_board.load_map(_editor_map)
-	_update_editor_history_buttons()
-
-
-func _snapshot_editor_map() -> Dictionary:
-	if _editor_map.is_empty():
-		return {}
-	return (_editor_map.duplicate(true) as Dictionary)
-
-
-func _push_editor_history() -> void:
-	var snapshot := _snapshot_editor_map()
-	if snapshot.is_empty():
-		return
-	_editor_undo_stack.append(snapshot)
-	if _editor_undo_stack.size() > _EDITOR_HISTORY_LIMIT:
-		_editor_undo_stack.pop_front()
-	_editor_redo_stack.clear()
-	_update_editor_history_buttons()
-
-
-func _reset_editor_history() -> void:
-	_editor_undo_stack.clear()
-	_editor_redo_stack.clear()
-	_update_editor_history_buttons()
-
-
-func _update_editor_history_buttons() -> void:
-	if editor_undo_btn != null and is_instance_valid(editor_undo_btn):
-		editor_undo_btn.disabled = _editor_undo_stack.is_empty()
-	if editor_redo_btn != null and is_instance_valid(editor_redo_btn):
-		editor_redo_btn.disabled = _editor_redo_stack.is_empty()
-
-
-func _restore_editor_snapshot(snapshot: Dictionary) -> void:
-	_editor_map = snapshot.duplicate(true)
-	var size: Dictionary = _editor_map.get("size", {})
-	_select_editor_size_option(editor_width_option, int(size.get("width", 15)))
-	_select_editor_size_option(editor_height_option, int(size.get("height", 15)))
-	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-		editor_map_name_input.text = str(_editor_map.get("name", "自定义地图"))
-	if editor_biome_option != null and is_instance_valid(editor_biome_option):
-		match str(_editor_map.get("biome", "grass")):
-			"snow":
-				editor_biome_option.select(1)
-			"desert":
-				editor_biome_option.select(2)
-			_:
-				editor_biome_option.select(0)
-	_render_editor_map()
-
-
-func _on_editor_undo_pressed() -> void:
-	if _editor_undo_stack.is_empty():
-		return
-	var current := _snapshot_editor_map()
-	if not current.is_empty():
-		_editor_redo_stack.append(current)
-	var previous: Dictionary = _editor_undo_stack.pop_back()
-	_restore_editor_snapshot(previous)
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已撤销上一步编辑。"
-	_update_editor_history_buttons()
-
-
-func _on_editor_redo_pressed() -> void:
-	if _editor_redo_stack.is_empty():
-		return
-	var current := _snapshot_editor_map()
-	if not current.is_empty():
-		_editor_undo_stack.append(current)
-	var next: Dictionary = _editor_redo_stack.pop_back()
-	_restore_editor_snapshot(next)
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已重做上一步编辑。"
-	_update_editor_history_buttons()
-
-
-func _paint_editor_tile(tile: Vector2i) -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var size: Dictionary = _editor_map.get("size", {})
-	var width := int(size.get("width", 0))
-	var height := int(size.get("height", 0))
-	if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
-		return
-	var layout: Array = _editor_map.get("layout", [])
-	if tile.y >= layout.size():
-		return
-	var row := str(layout[tile.y])
-	if tile.x >= row.length():
-		return
-	var terrain_char := _selected_editor_terrain_char()
-	if row.substr(tile.x, 1) == terrain_char:
-		return
-	_push_editor_history()
-	layout[tile.y] = row.substr(0, tile.x) + terrain_char + row.substr(tile.x + 1)
-	_editor_map["layout"] = layout
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已在 %d,%d 绘制 %s" % [tile.x, tile.y, _editor_terrain_label(terrain_char)]
-
-
-func _set_editor_tile_owner(tile: Vector2i, color: String) -> void:
-	var owners: Array = _editor_map.get("tile_owners", [])
-	var next_owners: Array = []
-	for owner in owners:
-		if not owner is Dictionary:
-			continue
-		if int(owner.get("x", -1)) == tile.x and int(owner.get("y", -1)) == tile.y:
-			continue
-		next_owners.append(owner)
-	if color != "":
-		next_owners.append({"x": tile.x, "y": tile.y, "color": color})
-	_editor_map["tile_owners"] = next_owners
-
-
-func _paint_editor_surface(tile: Vector2i) -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var size: Dictionary = _editor_map.get("size", {})
-	var width := int(size.get("width", 0))
-	var height := int(size.get("height", 0))
-	if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
-		return
-	var layout: Array = _editor_map.get("layout", [])
-	if tile.y >= layout.size():
-		return
-	var row := str(layout[tile.y])
-	if tile.x >= row.length():
-		return
-	var surface_char := _selected_editor_surface_char()
-	var owner_color := _selected_editor_surface_owner_color()
-	var old_owner := ""
-	for owner in _editor_map.get("tile_owners", []):
-		if owner is Dictionary and int(owner.get("x", -1)) == tile.x and int(owner.get("y", -1)) == tile.y:
-			old_owner = str(owner.get("color", ""))
-			break
-	if row.substr(tile.x, 1) == surface_char and old_owner == owner_color:
-		return
-	_push_editor_history()
-	layout[tile.y] = row.substr(0, tile.x) + surface_char + row.substr(tile.x + 1)
-	_editor_map["layout"] = layout
-	_set_editor_tile_owner(tile, owner_color)
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已在 %d,%d 部署%s（%s）" % [
-			tile.x, tile.y, _editor_terrain_label(surface_char), _owner_color_label(owner_color)
-		]
-
-
-func _on_editor_tile_clicked(tile: Vector2i) -> void:
-	if _is_editor_unit_mode():
-		if _is_editor_unit_erase_mode():
-			_erase_editor_unit(tile)
-			return
-		_place_editor_unit(tile)
-		return
-	if _is_editor_surface_mode():
-		_paint_editor_surface(tile)
-		return
-	_paint_editor_tile(tile)
-
-
-func _erase_editor_unit(tile: Vector2i) -> void:
-	if _editor_map.is_empty():
-		return
-	var units: Array = _editor_map.get("initial_units", [])
-	var next_units: Array = []
-	var removed := false
-	for unit in units:
-		if not unit is Dictionary:
-			continue
-		if int(unit.get("x", -1)) == tile.x and int(unit.get("y", -1)) == tile.y:
-			removed = true
-			continue
-		next_units.append(unit)
-	if removed:
-		_push_editor_history()
-		_editor_map["initial_units"] = next_units
-		_render_editor_map()
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "已移除 %d,%d 的单位" % [tile.x, tile.y]
-
-
-func _place_editor_unit(tile: Vector2i) -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var size: Dictionary = _editor_map.get("size", {})
-	var width := int(size.get("width", 0))
-	var height := int(size.get("height", 0))
-	if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
-		return
-	var units: Array = _editor_map.get("initial_units", [])
-	var next_units: Array = []
-	for unit in units:
-		if not unit is Dictionary:
-			continue
-		if int(unit.get("x", -1)) == tile.x and int(unit.get("y", -1)) == tile.y:
-			continue
-		next_units.append(unit)
-	next_units.append({
-		"x": tile.x,
-		"y": tile.y,
-		"type": _selected_editor_unit_type(),
-		"color": _selected_editor_unit_color(),
-		"level": _selected_editor_unit_level(),
-	})
-	_push_editor_history()
-	_editor_map["initial_units"] = next_units
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已在 %d,%d 放置%s" % [
-			tile.x, tile.y, _unit_type_cn(_selected_editor_unit_type())
-		]
-
-
-func _on_editor_new_pressed() -> void:
-	if not _editor_map.is_empty():
-		_push_editor_history()
-	_editor_map = _build_blank_editor_map()
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已新建 15×15 地图。"
-
-
-func _on_editor_apply_biome_pressed() -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var biome := _selected_editor_biome()
-	if str(_editor_map.get("biome", "grass")) == biome:
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "生态分支未变化。"
-		return
-	_push_editor_history()
-	_editor_map["biome"] = biome
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已切换为%s生态。" % _editor_biome_label(biome)
-
-
-func _on_editor_resize_pressed() -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var new_width := _selected_editor_size(editor_width_option)
-	var new_height := _selected_editor_size(editor_height_option)
-	var current_size: Dictionary = _editor_map.get("size", {})
-	if int(current_size.get("width", 0)) == new_width and int(current_size.get("height", 0)) == new_height:
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "尺寸未变化。"
-		return
-	var layout: Array = _editor_map.get("layout", [])
-	var new_layout: Array[String] = []
-	for y in range(new_height):
-		var row := ""
-		if y < layout.size():
-			row = str(layout[y])
-		if row.length() > new_width:
-			row = row.substr(0, new_width)
-		elif row.length() < new_width:
-			row += "P".repeat(new_width - row.length())
-		new_layout.append(row)
-	var units: Array = _editor_map.get("initial_units", [])
-	var kept_units: Array = []
-	for unit in units:
-		if unit is Dictionary and int(unit.get("x", -1)) < new_width and int(unit.get("y", -1)) < new_height:
-			kept_units.append(unit)
-	var tile_owners: Array = _editor_map.get("tile_owners", [])
-	var kept_tile_owners: Array = []
-	for owner in tile_owners:
-		if owner is Dictionary and int(owner.get("x", -1)) < new_width and int(owner.get("y", -1)) < new_height:
-			kept_tile_owners.append(owner)
-	_push_editor_history()
-	_editor_map["size"] = {"width": new_width, "height": new_height}
-	_editor_map["layout"] = new_layout
-	_editor_map["initial_units"] = kept_units
-	_editor_map["tile_owners"] = kept_tile_owners
-	_render_editor_map()
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "已调整为 %d×%d" % [new_width, new_height]
-
-
-func _on_editor_load_pressed() -> void:
-	if _selected_editor_map_id == "":
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "请先选择已保存地图。"
-		return
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "正在加载 %s..." % _selected_editor_map_id
-	NetworkClient.load_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_load_response"))
-
-
-func _on_editor_delete_pressed() -> void:
-	if _selected_editor_map_id == "":
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "请先选择已保存地图。"
-		return
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "正在删除 %s..." % _selected_editor_map_id
-	NetworkClient.delete_editor_map(_selected_editor_map_id, Callable(self, "_on_editor_delete_response"))
-
-
-func _on_editor_save_pressed() -> void:
-	if _editor_map.is_empty():
-		_editor_map = _build_blank_editor_map()
-	var name := str(_editor_map.get("name", "Godot custom map"))
-	if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-		var typed := editor_map_name_input.text.strip_edges()
-		if typed != "":
-			name = typed
-	_editor_map["name"] = name
-	_editor_map["biome"] = _selected_editor_biome()
-	if not _editor_map.has("tile_owners"):
-		_editor_map["tile_owners"] = []
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "正在保存地图..."
-	NetworkClient.save_editor_map(_editor_map, Callable(self, "_on_editor_save_response"))
-
-
-func _on_editor_back_pressed() -> void:
-	_show_view("menu")
-
-
-func _on_editor_maps_response(body: Variant, code: int = 0) -> void:
-	if editor_map_select_option == null or not is_instance_valid(editor_map_select_option):
-		return
-	editor_map_select_option.clear()
-	_editor_map_ids = []
-	_selected_editor_map_id = ""
-	if code < 200 or code >= 300 or not (body is Array):
-		editor_map_select_option.add_item("暂无已保存地图")
-		if editor_load_btn != null and is_instance_valid(editor_load_btn):
-			editor_load_btn.disabled = true
-		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-			editor_delete_btn.disabled = true
-		return
-	var maps: Array = body
-	if maps.is_empty():
-		editor_map_select_option.add_item("暂无已保存地图")
-		if editor_load_btn != null and is_instance_valid(editor_load_btn):
-			editor_load_btn.disabled = true
-		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-			editor_delete_btn.disabled = true
-		return
-	for item in maps:
-		if not item is Dictionary:
-			continue
-		var map_id := str(item.get("id", ""))
-		var name := str(item.get("name", map_id))
-		if map_id != "":
-			_editor_map_ids.append(map_id)
-			editor_map_select_option.add_item("%s (%s)" % [name, map_id])
-	if not _editor_map_ids.is_empty():
-		_selected_editor_map_id = _editor_map_ids[0]
-		editor_map_select_option.select(0)
-	if editor_load_btn != null and is_instance_valid(editor_load_btn):
-		editor_load_btn.disabled = _selected_editor_map_id == ""
-	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-		editor_delete_btn.disabled = _selected_editor_map_id == ""
-
-
-func _on_editor_map_selected(index: int) -> void:
-	if index < 0 or index >= _editor_map_ids.size():
-		_selected_editor_map_id = ""
-	else:
-		_selected_editor_map_id = _editor_map_ids[index]
-	if editor_load_btn != null and is_instance_valid(editor_load_btn):
-		editor_load_btn.disabled = _selected_editor_map_id == ""
-	if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-		editor_delete_btn.disabled = _selected_editor_map_id == ""
-
-
-func _on_editor_load_response(body: Variant, code: int = 0) -> void:
-	if code >= 200 and code < 300 and body is Dictionary:
-		_editor_map = body
-		_reset_editor_history()
-		if editor_map_name_input != null and is_instance_valid(editor_map_name_input):
-			editor_map_name_input.text = str(body.get("name", "自定义地图"))
-		var biome := str(body.get("biome", "grass"))
-		if editor_biome_option != null and is_instance_valid(editor_biome_option):
-			match biome:
-				"snow":
-					editor_biome_option.select(1)
-				"desert":
-					editor_biome_option.select(2)
-				_:
-					editor_biome_option.select(0)
-		var size: Dictionary = body.get("size", {})
-		_select_editor_size_option(editor_width_option, int(size.get("width", 15)))
-		_select_editor_size_option(editor_height_option, int(size.get("height", 15)))
-		_render_editor_map()
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "已加载: %s" % str(body.get("id", "自定义地图"))
-		return
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "加载失败"
 
 
 func _upsert_editor_map_as_lobby_preset(map_data: Dictionary) -> void:
@@ -3857,40 +3501,70 @@ func _upsert_editor_map_as_lobby_preset(map_data: Dictionary) -> void:
 		map_preset_option.add_item(label)
 
 
-func _on_editor_delete_response(_body: Variant, code: int = 0) -> void:
-	if code >= 200 and code < 300:
-		_selected_editor_map_id = ""
-		_editor_map_ids = []
-		if editor_map_select_option != null and is_instance_valid(editor_map_select_option):
-			editor_map_select_option.clear()
-			editor_map_select_option.add_item("暂无已保存地图")
-		if editor_load_btn != null and is_instance_valid(editor_load_btn):
-			editor_load_btn.disabled = true
-		if editor_delete_btn != null and is_instance_valid(editor_delete_btn):
-			editor_delete_btn.disabled = true
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "已删除地图。"
-		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
-		return
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "删除失败"
-
-
-func _on_editor_save_response(body: Variant, code: int = 0) -> void:
-	if code >= 200 and code < 300 and body is Dictionary:
-		_editor_map = body
-		_reset_editor_history()
-		_render_editor_map()
-		_upsert_editor_map_as_lobby_preset(body)
-		if editor_status != null and is_instance_valid(editor_status):
-			editor_status.text = "已保存: %s" % str(body.get("id", "自定义地图"))
-		NetworkClient.list_editor_maps(Callable(self, "_on_editor_maps_response"))
-		return
-	if editor_status != null and is_instance_valid(editor_status):
-		editor_status.text = "保存失败"
-
-
 func _on_lobby_pressed() -> void:
+	# P0 UX gate:进联机大厅前先看主菜单里有没有中断存档。
+	# 有的话弹「已经有中断存档,将放弃该中断,是否继续?」
+	# - 是 → 调 discard_suspend,然后 _enter_lobby_view()
+	# - 否 → 留在主菜单,不进 lobby(避免 stale suspend 污染新房间)
+	# 没有就跳过 gate,直接进 lobby。
+	if _user_name == "" or _user_name == "Player":
+		# 没 user_name 的早期流程不挡人 — 跟原行为一致。
+		_enter_lobby_view()
+		return
+	NetworkClient.list_saves(
+		_user_name, Callable(self, "_on_lobby_list_saves_for_suspend_check")
+	)
+
+
+func _on_lobby_list_saves_for_suspend_check(body: Variant, _code: int = 0) -> void:
+	if not (body is Dictionary):
+		# 拉失败兜底:不进 lobby,避免在用户不知情的情况下与 suspend 冲突。
+		_update_status("无法检查中断存档,请稍后重试")
+		return
+	var suspend: Variant = body.get("suspend", null)
+	if not (suspend is Dictionary):
+		_enter_lobby_view()
+		return
+	var suspend_game_id: int = int(suspend.get("game_id", 0))
+	if suspend_game_id <= 0:
+		_enter_lobby_view()
+		return
+	_show_confirm(
+		"放弃中断存档",
+		"已经有中断存档,将放弃该中断,是否继续?",
+		Callable(self, "_on_lobby_discard_suspend_yes"),
+		Callable(self, "_on_lobby_discard_suspend_no"),
+	)
+
+
+func _on_lobby_discard_suspend_yes() -> void:
+	# 用户点「继续」→ 先调 discard_suspend,等服务端 ack 后再进 lobby。
+	# 注意:_hide_confirm() 已在 _on_confirm_yes_pressed 里调用过了。
+	if _user_name == "" or _user_name == "Player":
+		_enter_lobby_view()
+		return
+	_update_status("正在放弃中断存档...")
+	NetworkClient.discard_suspend(
+		_user_name, Callable(self, "_on_lobby_discard_suspend_response")
+	)
+
+
+func _on_lobby_discard_suspend_no() -> void:
+	# 用户点「取消」→ 留在主菜单。什么都不做。
+	_update_status("已取消,可继续点 ▶ 继续中断战斗")
+
+
+func _on_lobby_discard_suspend_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		_update_status("放弃中断失败,请重试")
+		return
+	var cleared: bool = bool((body as Dictionary).get("cleared", false)) if body is Dictionary else false
+	if not cleared:
+		_update_status("没有可放弃的中断存档")
+	_enter_lobby_view()
+
+
+func _enter_lobby_view() -> void:
 	_entry_flow = "lobby"
 	_show_view("lobby")
 	_apply_lobby_theme()
@@ -3899,7 +3573,11 @@ func _on_lobby_pressed() -> void:
 	if lobby_name_input != null and is_instance_valid(lobby_name_input):
 		lobby_name_input.text = "%s 的房间" % _user_name
 	_setup_lobby_join_options()
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
+	# T:#16 — commander 拉取统一收口在 mainline_controller._on_commanders_response,
+	# 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
+	# 之前挂 Callable(self, ...) 是死链:main.gd 没有这个方法,导致不先点过主线的话
+	# lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander。
+	NetworkClient.get_unlocked_commanders(_user_name, Callable(mainline_view, "_on_commanders_response"))
 	_load_lobby_presets()
 	_load_lobby_audio_tracks()
 	_setup_lobby_win_condition_options()
@@ -3935,6 +3613,7 @@ func _show_lobby_create_view() -> void:
 		create_room_btn.text = "开启游戏"
 	_restore_lobby_default_layout()
 	_layout_lobby_entry_form()
+	_refresh_lobby_create_start_gate()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
 
@@ -4078,8 +3757,8 @@ func _restore_lobby_default_layout() -> void:
 		# 还原 tscn 默认 anchor(右下角)
 		bb.anchor_left = 1.0
 		bb.anchor_right = 1.0
-		bb.anchor_top = 0.0
-		bb.anchor_bottom = 0.0
+		bb.anchor_top = 1.0
+		bb.anchor_bottom = 1.0
 		bb.offset_left = -340.0
 		bb.offset_top = -56.0
 		bb.offset_right = -16.0
@@ -4202,11 +3881,12 @@ func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
 		UserSettings.set_value("session.v1.last_player_id", _player_id)
 	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
 		lobby_game_id_label.text = "对局 #%d" % _game_id
+	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
+		_continue_lobby_create_pipeline()
+		return
 	_show_lobby_in_room()
 	# 拉 lobby 启动轮询
 	_start_lobby_polling()
-	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
-		_continue_lobby_create_pipeline()
 
 
 func _auto_add_ai_after_lobby_create() -> void:
@@ -4270,7 +3950,8 @@ func _continue_lobby_ai_creation() -> void:
 		_selected_ai_difficulty(),
 		_selected_ai_kind(),
 		_lobby_ai_personality_for_seat(seat_index),
-		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index)
+		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index),
+		seat_index
 	)
 
 
@@ -4281,14 +3962,10 @@ func _on_lobby_configured_ai_added(body: Variant, code: int = 0, seat_index: int
 		if pid <= 0 and player is Dictionary:
 			pid = int(player.get("id", 0))
 		if pid > 0:
-			NetworkClient.update_player_seat(
-				_game_id,
-				pid,
-				_player_id,
-				seat_index,
-				Callable(self, "_on_lobby_configured_ai_seated").bind(pid, seat_index)
-			)
-			return
+			_pending_lobby_team_updates.append({
+				"player_id": pid,
+				"team": _selected_lobby_seat_team(seat_index),
+			})
 	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "AI 座位配置失败，继续尝试开启游戏..."
 	_continue_lobby_ai_creation()
@@ -4324,8 +4001,10 @@ func _on_lobby_configured_team_updated(_body: Variant, _code: int = 0) -> void:
 func _start_configured_lobby_game() -> void:
 	if not _pending_lobby_start_after_create:
 		return
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "配置完成，正在开启游戏..."
+	# T:#17 — 不在大厅里插一句"配置完成，正在开启游戏...":这条文案
+	# 会在 _on_lobby_start_response 跳到 game view 之前短暂闪在大厅,
+	# 让玩家误以为有中间过渡页面要再点一次。直接发 start_game,等
+	# 响应里 _show_view("game") 切走即可,大厅文本不更新。
 	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
 
 
@@ -4339,11 +4018,14 @@ func _setup_lobby_join_options() -> void:
 		join_mode_option.select(0)
 	if team_option != null and is_instance_valid(team_option):
 		team_option.clear()
+		# M4.16+ fix:统一 team 命名为 team_a/b/c/d(与 _lobby_seat_team_ids + server
+		# JoinGameRequest.team 对齐)。原来用 color(red/blue/green/yellow)作 team_id
+		# 跟 _lobby_seat_team_ids(team_a/b/c/d)不一致,创房和手动 join 走两套字段。
 		team_option.add_item("自动分队")
-		team_option.add_item("红队")
-		team_option.add_item("蓝队")
-		team_option.add_item("绿队")
-		team_option.add_item("黄队")
+		team_option.add_item("队伍 A")
+		team_option.add_item("队伍 B")
+		team_option.add_item("队伍 C")
+		team_option.add_item("队伍 D")
 		team_option.select(0)
 	_on_join_mode_changed(0)
 
@@ -4360,19 +4042,23 @@ func _on_join_mode_changed(_index: int) -> void:
 
 
 func _selected_join_team() -> String:
+	# M4.16+ fix:返回 team_a/b/c/d(不再是 red/blue/green/yellow),
+	# 跟 _lobby_seat_team_ids + server JoinGameRequest.team 命名一致。
+	# 1V1 free-for-all: server 端 team=None → fallback 到 _team_of(player_id) → 各自独立。
+	# 2V2: 双方玩家传相同的 team_a 或 team_b → server AI 会把同 team 当 ally(不打)。
 	if team_option == null or not is_instance_valid(team_option):
 		return ""
 	if _selected_join_role() == "spectator":
 		return ""
 	match team_option.selected:
 		1:
-			return "red"
+			return "team_a"
 		2:
-			return "blue"
+			return "team_b"
 		3:
-			return "green"
+			return "team_c"
 		4:
-			return "yellow"
+			return "team_d"
 		_:
 			return ""
 
@@ -4400,7 +4086,9 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 	if ai_commander_option != null and is_instance_valid(ai_commander_option):
 		ai_commander_option.clear()
 		ai_commander_option.add_item("电脑自动选择指挥官")
-	for item in unlocked:
+	# 如果 API 返回空(新玩家无解锁),fallback 到硬编码默认指挥官(等同 webui 行为)
+	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna"]
+	for item in pool:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
 			continue
@@ -4448,7 +4136,14 @@ func _selected_lobby_ai_commanders() -> Dictionary:
 	var commander_id := _selected_lobby_ai_commander()
 	if commander_id == "":
 		return {}
-	return {2: commander_id}
+	var result: Dictionary = {}
+	var host_seat := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
+	for seat_index in range(_selected_lobby_player_count()):
+		if seat_index == host_seat:
+			continue
+		if _lobby_ai_replacement_for_seat(seat_index):
+			result[seat_index] = commander_id
+	return result
 
 
 # 胜利条件下拉:P2.4 polish 后只剩 rout+seize 二合一,默认 "rout"
@@ -4615,10 +4310,12 @@ func _on_lobby_map_player_count_selected(index: int) -> void:
 	_lobby_preset_filter_players = index + 1 if index > 0 else 0
 	_render_lobby_map_picker_options()
 	_render_lobby_map_preview()
+	_refresh_lobby_create_start_gate()
 
 
 func _on_lobby_map_preset_selected(_index: int) -> void:
 	_render_lobby_map_preview()
+	_refresh_lobby_create_start_gate()
 
 
 func _render_lobby_map_picker_options() -> void:
@@ -4656,6 +4353,7 @@ func _render_lobby_map_preview() -> void:
 		if map_preview_texture != null and is_instance_valid(map_preview_texture):
 			map_preview_texture.texture = null
 		_render_lobby_seat_columns({})
+		_refresh_lobby_create_start_gate()
 		return
 	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
 	var title := str(summary.get("name", summary.get("id", "Map")))
@@ -4665,6 +4363,7 @@ func _render_lobby_map_preview() -> void:
 	if map_preview_texture != null and is_instance_valid(map_preview_texture):
 		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
 	_render_lobby_seat_columns(summary)
+	_refresh_lobby_create_start_gate()
 
 
 func _selected_lobby_map_data() -> Dictionary:
@@ -4680,6 +4379,33 @@ func _selected_lobby_map_data() -> Dictionary:
 		for key in disk_map.keys():
 			map_data[key] = disk_map[key]
 	return map_data
+
+
+func _configured_lobby_create_participant_count() -> int:
+	var required := _selected_lobby_player_count()
+	var host_seat := clampi(_selected_lobby_seat_index, 0, required - 1)
+	var configured: Dictionary = {host_seat: true}
+	for seat_index in range(required):
+		if _lobby_ai_replacement_for_seat(seat_index):
+			configured[seat_index] = true
+		if _lobby_seat_occupant_name(seat_index) != "":
+			configured[seat_index] = true
+	return configured.size()
+
+
+func _refresh_lobby_create_start_gate() -> void:
+	if create_room_btn == null or not is_instance_valid(create_room_btn):
+		return
+	if _lobby_mode != "create":
+		create_room_btn.disabled = false
+		return
+	var required := _selected_lobby_player_count()
+	var configured := _configured_lobby_create_participant_count()
+	create_room_btn.disabled = configured < required
+	if configured < required:
+		create_room_btn.text = "开启游戏 (%d/%d)" % [configured, required]
+	else:
+		create_room_btn.text = "开启游戏"
 
 
 func _selected_lobby_preset_record() -> Dictionary:
@@ -4710,9 +4436,17 @@ func _load_lobby_map_from_disk(map_id: String) -> Dictionary:
 func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
 	if lobby_seat_grid == null or not is_instance_valid(lobby_seat_grid):
 		return
-	for child in lobby_seat_grid.get_children():
+	# P2 修复:每张座位卡里有 prev_btn / next_btn / action_btn 等,它们的
+	# pressed signal 可能在 emit 过程中又来调用本函数导致 child.free() 时
+	# "Object freed or unreferenced" 报错。我们改用 queue_free() 来避开这
+	# 个问题 — Godot 会等当前帧 idle 处理时才真正释放,且对 PackedScene 的
+	# 常驻节点也能友好处理。
+	var children := lobby_seat_grid.get_children()
+	for child in children:
+		if not is_instance_valid(child):
+			continue
 		lobby_seat_grid.remove_child(child)
-		child.free()
+		child.queue_free()
 	if summary.is_empty():
 		var map_data := _selected_lobby_map_data()
 		if not map_data.is_empty():
@@ -4728,7 +4462,7 @@ func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
 func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	var card := Panel.new()
 	card.name = "Seat%d" % (index + 1)
-	card.custom_minimum_size = Vector2(0, 160)
+	card.custom_minimum_size = Vector2(0, 190)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	MenuTheme.apply_panel_theme(card, Color(0.08, 0.13, 0.1, 0.96))
 	var box := VBoxContainer.new()
@@ -4761,8 +4495,7 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	status_box.add_child(seat_name)
 	var occupant := Label.new()
 	occupant.name = "SeatOccupant"
-	var occupant_name := _lobby_seat_occupant_name(index)
-	occupant.text = "等待玩家入座" if occupant_name == "" else "%s 已入座" % occupant_name
+	occupant.text = _lobby_seat_status_text(index)
 	occupant.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
 	status_box.add_child(occupant)
 	var control_row := HBoxContainer.new()
@@ -4774,7 +4507,10 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	action_btn.text = "入座"
 	action_btn.custom_minimum_size = Vector2(50, 26)
 	MenuTheme.apply_button_theme(action_btn, 12)
-	action_btn.pressed.connect(_on_lobby_seat_action_pressed.bind(index))
+	action_btn.pressed.connect(
+		_on_lobby_seat_action_pressed.bind(index),
+		Object.CONNECT_DEFERRED
+	)
 	control_row.add_child(action_btn)
 	var side_option := OptionButton.new()
 	side_option.name = "TeamSideOption"
@@ -4789,7 +4525,10 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	ai_toggle.text = "AI替补"
 	ai_toggle.custom_minimum_size = Vector2(80, 26)
 	ai_toggle.button_pressed = _lobby_ai_replacement_for_seat(index)
-	ai_toggle.toggled.connect(_on_lobby_seat_ai_toggled.bind(index))
+	ai_toggle.toggled.connect(
+		_on_lobby_seat_ai_toggled.bind(index),
+		Object.CONNECT_DEFERRED
+	)
 	ai_toggle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	control_row.add_child(ai_toggle)
 	var ai_style_row := HBoxContainer.new()
@@ -4816,30 +4555,50 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	commander_row.name = "CommanderRow"
 	commander_row.add_theme_constant_override("separation", 4)
 	box.add_child(commander_row)
+	var commanders_loaded: bool = _lobby_commander_ids.size() > 1
 	var prev_btn := Button.new()
 	prev_btn.name = "PrevCommanderBtn"
 	prev_btn.text = "<"
 	prev_btn.custom_minimum_size = Vector2(28, 22)
+	prev_btn.disabled = not commanders_loaded
 	MenuTheme.apply_button_theme(prev_btn, 12)
-	prev_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, -1))
+	# CONNECT_DEFERRED:让回调在 idle 阶段执行,避免 pressed emit 中途自
+	# 由其持有的 prev/next 按钮树时撞上 "Object freed while signal is
+	# being emitted" 报错。
+	prev_btn.pressed.connect(
+		_on_lobby_seat_commander_step.bind(index, -1),
+		Object.CONNECT_DEFERRED
+	)
 	commander_row.add_child(prev_btn)
 	var commander_label := Label.new()
 	commander_label.name = "CommanderName"
-	commander_label.text = _lobby_seat_commander_label(index)
+	if commanders_loaded:
+		commander_label.text = _lobby_seat_commander_label(index)
+		commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
+	else:
+		# T:V3 — 加载中用 LOADING 色,跟 EMPTY 的 PLACEHOLDER 色区分开
+		commander_label.text = "⏳ 加载中…"
+		commander_label.add_theme_color_override("font_color", MenuTheme.C_LOADING)
 	commander_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	commander_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	commander_row.add_child(commander_label)
 	var next_btn := Button.new()
 	next_btn.name = "NextCommanderBtn"
 	next_btn.text = ">"
 	next_btn.custom_minimum_size = Vector2(28, 22)
+	next_btn.disabled = not commanders_loaded
 	MenuTheme.apply_button_theme(next_btn, 12)
-	next_btn.pressed.connect(_on_lobby_seat_commander_step.bind(index, 1))
+	next_btn.pressed.connect(
+		_on_lobby_seat_commander_step.bind(index, 1),
+		Object.CONNECT_DEFERRED
+	)
 	commander_row.add_child(next_btn)
 	var ability := Label.new()
 	ability.name = "CommanderAbility"
 	ability.text = _lobby_seat_commander_ability_text(index)
+	ability.custom_minimum_size = Vector2(0, 34)
+	ability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ability.clip_text = true
 	ability.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	box.add_child(ability)
 	return card
@@ -4903,6 +4662,15 @@ func _lobby_seat_occupant_name(seat_index: int) -> String:
 	return ""
 
 
+func _lobby_seat_status_text(seat_index: int) -> String:
+	var occupant_name := _lobby_seat_occupant_name(seat_index)
+	if occupant_name != "":
+		return "%s 已入座" % occupant_name
+	if _lobby_ai_replacement_for_seat(seat_index):
+		return "电脑-%d（入座中…）" % (seat_index + 1)
+	return "等待玩家入座"
+
+
 func _lobby_seat_commander_id(seat_index: int) -> String:
 	if _lobby_commander_ids.is_empty():
 		return ""
@@ -4911,6 +4679,32 @@ func _lobby_seat_commander_id(seat_index: int) -> String:
 		idx = int(_lobby_seat_commander_indices[seat_index])
 	idx = clampi(idx, 0, _lobby_commander_ids.size() - 1)
 	return _lobby_commander_ids[idx]
+
+
+# 服务器真值同步:把 game.battle_config.seat_commanders 写入本地镜像,使
+# 大厅其他玩家调左右的指挥官时,本端 2s 轮询后立刻看到。server-authoritative:
+# 永远以服务端返回为准(乐观更新被 server 接受后会写回 seat_commanders)。
+func _sync_lobby_seat_commanders(game: Dictionary) -> void:
+	if _lobby_commander_ids.is_empty():
+		return
+	var battle_config_v = game.get("battle_config", null)
+	if battle_config_v == null or not (battle_config_v is Dictionary):
+		return
+	var raw_seat_commanders = battle_config_v.get("seat_commanders", null)
+	if raw_seat_commanders == null or not (raw_seat_commanders is Dictionary):
+		return
+	var seat_commanders: Dictionary = raw_seat_commanders
+	while _lobby_seat_commander_indices.size() < MapPreviewSummary.SEAT_COLORS.size():
+		_lobby_seat_commander_indices.append(0)
+	for seat_v in seat_commanders.keys():
+		var seat_index := int(seat_v)
+		if seat_index < 0 or seat_index >= _lobby_seat_commander_indices.size():
+			continue
+		var commander_id := str(seat_commanders[seat_v])
+		var idx: int = _lobby_commander_ids.find(commander_id)
+		if idx < 0:
+			continue
+		_lobby_seat_commander_indices[seat_index] = idx
 
 
 func _lobby_seat_commander_label(seat_index: int) -> String:
@@ -4936,10 +4730,80 @@ func _on_lobby_seat_team_selected(option_index: int, seat_index: int) -> void:
 func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
 	while _lobby_seat_ai_replacements.size() <= seat_index:
 		_lobby_seat_ai_replacements.append(false)
-	_lobby_seat_ai_replacements[seat_index] = pressed
 	while _lobby_seat_ai_personalities.size() <= seat_index:
 		_lobby_seat_ai_personalities.append("balanced")
+	while _lobby_seat_occupants.size() <= seat_index:
+		_lobby_seat_occupants.append("")
+	_lobby_seat_ai_replacements[seat_index] = pressed
+	# T:#19 — 不变式:同一真人玩家至多占 1 槽。AI 替补是逐座位状态,
+	# 多个空座可以同时由不同 AI 补位。
+	if pressed:
+		_clear_player_from_other_seats(_user_name, seat_index)
+	if _game_id <= 0 or seat_index < 0:
+		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
+		return
+	# 只房主能换人。/start 后 game.status != "waiting",后端会拒绝。
+	if not _lobby_is_host:
+		_update_status("只有房主可以替换该席位为 AI。")
+		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
+		return
+	var existing_pid: int = 0
+	var existing_is_ai: bool = false
+	for p in _lobby_last_players:
+		if not p is Dictionary:
+			continue
+		if int(p.get("seat", -1)) == seat_index and not bool(p.get("is_spectator", false)):
+			existing_pid = int(p.get("id", 0))
+			existing_is_ai = bool(p.get("is_ai", false))
+			break
+	if not pressed:
+		# 取消 AI 替补 → 把这个 seat 上的 AI 删掉(若是 AI)。人类不动。
+		if existing_pid > 0 and existing_is_ai:
+			_lobby_seat_occupants[seat_index] = ""
+			NetworkClient.remove_player(_game_id, existing_pid,
+				Callable(self, "_on_lobby_seat_ai_remove_response").bind(seat_index))
+		_render_lobby_seat_columns()
+		_refresh_lobby_create_start_gate()
+		return
+	# 按下 AI → 乐观显示"入座中"→ 先删旧的(人类或 AI),再加 AI。
+	var ai_placeholder := "电脑-%d (入座中…)" % (seat_index + 1)
+	_lobby_seat_occupants[seat_index] = ai_placeholder
+	if existing_pid > 0:
+		NetworkClient.remove_player(_game_id, existing_pid,
+			Callable(self, "_on_lobby_seat_ai_add_after_remove").bind(seat_index))
+	else:
+		_request_add_ai_for_seat(seat_index)
 	_render_lobby_seat_columns()
+	_refresh_lobby_create_start_gate()
+
+
+func _request_add_ai_for_seat(seat_index: int) -> void:
+	if _game_id <= 0:
+		return
+	var personality := _lobby_ai_personality_for_seat(seat_index)
+	NetworkClient.add_ai_player(_game_id, "normal", "rules", personality,
+		Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index),
+		seat_index)
+
+
+func _on_lobby_seat_ai_remove_response(body: Variant, _code: int, seat_index: int) -> void:
+	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
+		_update_status("移除失败:%s" % str(body.get("detail", body)))
+		return
+	_refresh_lobby_view()
+
+
+func _on_lobby_seat_ai_add_after_remove(_body: Variant, _code: int, seat_index: int) -> void:
+	_request_add_ai_for_seat(seat_index)
+
+
+func _on_lobby_seat_ai_add_response(body: Variant, code: int, seat_index: int) -> void:
+	if code < 200 or code >= 300:
+		_update_status("AI 入座失败:HTTP %d" % code)
+		return
+	_refresh_lobby_view()
 
 
 func _on_lobby_seat_ai_personality_selected(option_index: int, seat_index: int) -> void:
@@ -4955,19 +4819,75 @@ func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
 		_lobby_seat_commander_indices.append(0)
 	_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) + delta, _lobby_commander_ids.size())
 	_render_lobby_seat_columns()
+	# P1:同步服务端 — 房主改任意 seat / 玩家改自己 seat
+	var new_idx: int = int(_lobby_seat_commander_indices[seat_index])
+	new_idx = clampi(new_idx, 0, _lobby_commander_ids.size() - 1)
+	var commander_id: String = str(_lobby_commander_ids[new_idx])
+	if commander_id == "":
+		# "" = "未选择",服务端应保持现有值 / 或保留空。直接发空字符串让服务端 reset
+		pass
+	# 找 seat 上 player_id
+	var target_pid: int = 0
+	for p in _lobby_last_players:
+		if not p is Dictionary:
+			continue
+		if bool(p.get("is_spectator", false)):
+			continue
+		if int(p.get("seat", -1)) == seat_index:
+			target_pid = int(p.get("id", 0))
+			break
+	if _player_id <= 0 or _game_id <= 0:
+		return
+	# 空座位:用 player_id=0 + seat=seat_index 让后端只写
+	# battle_config.seat_commanders[seat],不需要 player 记录。
+	if target_pid <= 0:
+		NetworkClient.update_player_commander(
+			_game_id, 0, _player_id, commander_id,
+			Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta),
+			seat_index
+		)
+		return
+	# 发送后端;成功才确认;失败回退 1 step 并 toast
+	NetworkClient.update_player_commander(
+		_game_id,
+		target_pid,
+		_player_id,
+		commander_id,
+		Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta)
+	)
+
+
+func _on_lobby_seat_commander_response(body: Variant, _code: int, seat_index: int, delta: int) -> void:
+	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
+		# 回退:把 index 倒回(因为我们乐观更新了)
+		if _lobby_commander_ids.is_empty():
+			return
+		while _lobby_seat_commander_indices.size() <= seat_index:
+			_lobby_seat_commander_indices.append(0)
+		var n: int = _lobby_commander_ids.size()
+		_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) - delta, n)
+		_render_lobby_seat_columns()
+		var detail: String = "切换指挥官失败"
+		if body is Dictionary and body.has("detail"):
+			detail = "切换指挥官失败: %s" % str(body.get("detail"))
+		_update_status(detail)
 
 
 func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 	_selected_lobby_seat_index = clampi(seat_index, 0, MapPreviewSummary.SEAT_COLORS.size() - 1)
+	# T:#19 — 不变式:同一玩家至多占 1 个座位(同样 AI 至多占 1 槽)。
+	# 在写入目标座位前,先把其它座位里出现的 _user_name / ai placeholder 全部清掉。
+	_clear_player_from_other_seats(_user_name, seat_index)
 	while _lobby_seat_occupants.size() <= seat_index:
 		_lobby_seat_occupants.append("")
-	_lobby_seat_occupants[seat_index] = _user_name
 	while _lobby_seat_ai_replacements.size() <= seat_index:
 		_lobby_seat_ai_replacements.append(false)
+	_lobby_seat_occupants[seat_index] = _user_name
 	_lobby_seat_ai_replacements[seat_index] = false
 	if lobby_status_label != null and is_instance_valid(lobby_status_label):
 		lobby_status_label.text = "%s 已入座 %d席。" % [_user_name, seat_index + 1]
 	_render_lobby_seat_columns()
+	_refresh_lobby_create_start_gate()
 	if _game_id > 0 and _player_id > 0:
 		NetworkClient.update_player_seat(
 			_game_id,
@@ -4976,6 +4896,16 @@ func _on_lobby_seat_action_pressed(seat_index: int) -> void:
 			_selected_lobby_seat_index,
 			Callable(self, "_on_lobby_seat_update_response")
 		)
+
+
+# T:#19 — 清掉所有其它座位里出现的 player_name / ai 占位(确保"一个玩家最多一槽")。
+# exclude_seat = -1 表示所有座位都清。
+func _clear_player_from_other_seats(player_name: String, exclude_seat: int = -1) -> void:
+	for i in range(_lobby_seat_occupants.size()):
+		if i == exclude_seat:
+			continue
+		if _lobby_seat_occupants[i] == player_name:
+			_lobby_seat_occupants[i] = ""
 
 
 func _on_lobby_seat_update_response(_body: Variant, code: int = 0) -> void:
@@ -5083,6 +5013,11 @@ func _render_room_list() -> void:
 
 
 func _on_create_room_pressed() -> void:
+	if _configured_lobby_create_participant_count() < _selected_lobby_player_count():
+		_refresh_lobby_create_start_gate()
+		if lobby_status_label != null and is_instance_valid(lobby_status_label):
+			lobby_status_label.text = "请先补齐地图要求的玩家或 AI 座位。"
+		return
 	_entry_flow = "lobby_create"
 	var room_name := "%s room" % _user_name
 	if lobby_name_input != null and is_instance_valid(lobby_name_input):
@@ -5110,7 +5045,8 @@ func _on_create_room_pressed() -> void:
 		_selected_lobby_bgm_track(),
 		_selected_lobby_ai_commanders(),
 		Callable(self, "_on_lobby_create_response"),
-		_selected_lobby_seat_commanders()
+		_selected_lobby_seat_commanders(),
+		"free"
 	)
 
 
@@ -5181,11 +5117,16 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 		_selected_lobby_seat_index = self_seat
 	_lobby_is_host = (_player_id > 0 and _player_id == host_player_id)
 	_lobby_self_is_spectator = self_is_spec
+	# 同步 seat_commanders(大厅里其他玩家改的指挥官要实时反映给当前客户端)。
+	# server-authoritative:服务端 game.battle_config.seat_commanders 是真值,
+	# 本地 _lobby_seat_commander_indices 是 UI 镜像 — 始终以服务端为准。
+	_sync_lobby_seat_commanders(game)
 	_render_lobby_seat_columns()
 	# 渲染逐玩家列表(含 seat / 队伍 / 观战标记)
 	var lines: Array = []
 	var spec_count: int = 0
 	var real_count: int = 0
+	var fighter_count: int = 0
 	for p in players:
 		if not p is Dictionary: continue
 		var pname_v = p.get("user_name")
@@ -5204,8 +5145,10 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 		var seat: int = int(seat_v) if seat_v is int else -1
 		if is_spec:
 			spec_count += 1
-		elif not is_ai:
-			real_count += 1
+		else:
+			fighter_count += 1
+			if not is_ai:
+				real_count += 1
 		var emoji: String = "👀" if is_spec else _color_emoji(color)
 		var tag: String = ""
 		if is_self: tag = " (你)"
@@ -5220,10 +5163,11 @@ func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
 	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d · 观战 %d/%d)" % [
 		total_count, real_count, spec_count, max_spec
 	]
-	# Start 按钮:只要有 1 名真人(非 AI/非观战)即可,后端会校验 MIN_PLAYERS
-	lobby_start_btn.disabled = real_count < 1
+	var required_count: int = int(game.get("capacity", _selected_lobby_player_count()))
+	# Start 按钮:参战玩家 + AI 必须补齐地图要求席位。
+	lobby_start_btn.disabled = fighter_count < required_count
 	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.disabled = real_count < 1
+		start_game_inline_btn.disabled = fighter_count < required_count
 
 
 func _render_lobby_ai_options(players: Array) -> void:
@@ -5489,26 +5433,13 @@ func _apply_lobby_theme() -> void:
 		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 
 
-func _setup_mainline_commander_options(unlocked: Array = [], current: String = "") -> void:
-	_mainline_commander_ids = [""]
-	if ml_commander_option != null and is_instance_valid(ml_commander_option):
-		ml_commander_option.clear()
-		ml_commander_option.add_item("不选择指挥官")
-	for item in unlocked:
-		var commander_id := str(item)
-		if commander_id == "" or _mainline_commander_ids.has(commander_id):
-			continue
-		_mainline_commander_ids.append(commander_id)
-		if ml_commander_option != null and is_instance_valid(ml_commander_option):
-			ml_commander_option.add_item(_commander_label(commander_id))
-	var selected_index := _mainline_commander_ids.find(current)
-	if selected_index < 0:
-		selected_index = 0
-	if ml_commander_option != null and is_instance_valid(ml_commander_option):
-		ml_commander_option.select(selected_index)
-		ml_commander_option.disabled = _mainline_commander_ids.size() <= 1
+# T:96 — MainlineView 入口 thin wrapper(完整逻辑搬到 mainline_controller.open())
+func _on_mainline_pressed() -> void:
+	if mainline_view != null and is_instance_valid(mainline_view):
+		mainline_view.open()
 
 
+# Batch A:helper 留 main.gd(batch B 函数还在 main.gd 用)
 func _commander_label(commander_id: String) -> String:
 	match commander_id:
 		"yun":
@@ -5519,91 +5450,6 @@ func _commander_label(commander_id: String) -> String:
 			return commander_id
 
 
-func _selected_mainline_commander() -> String:
-	if ml_commander_option == null or not is_instance_valid(ml_commander_option):
-		return ""
-	var index := ml_commander_option.selected
-	if index < 0 or index >= _mainline_commander_ids.size():
-		return ""
-	return _mainline_commander_ids[index]
-
-
-func _on_commanders_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if ml_commander_status != null and is_instance_valid(ml_commander_status):
-			ml_commander_status.text = "指挥官: 暂不可用"
-		_setup_mainline_commander_options()
-		_setup_lobby_commander_options()
-		return
-	var unlocked: Array = body.get("unlocked_commanders", []) if body.get("unlocked_commanders", []) is Array else []
-	var mainline_choices: Dictionary = body.get("mainline_commanders", {}) if body.get("mainline_commanders", {}) is Dictionary else {}
-	var current := str(mainline_choices.get(_selected_mainline_id, ""))
-	_setup_mainline_commander_options(unlocked, current)
-	_setup_lobby_commander_options(unlocked)
-	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "指挥官: %s" % (_commander_label(current) if current != "" else "未选择")
-
-
-func _on_apply_mainline_commander_pressed() -> void:
-	if _selected_mainline_id == "":
-		if ml_commander_status != null and is_instance_valid(ml_commander_status):
-			ml_commander_status.text = "指挥官: 请先选择章节"
-		return
-	var commander_id := _selected_mainline_commander()
-	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "指挥官: 正在应用..."
-	NetworkClient.select_mainline_commander(_selected_mainline_id, _user_name, commander_id, Callable(self, "_on_select_mainline_commander_response"))
-
-
-func _on_select_mainline_commander_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		var msg := "Commander: apply failed"
-		if body is Dictionary:
-			msg = "Commander: %s" % str(body.get("detail", body.get("message", "apply failed")))
-		if ml_commander_status != null and is_instance_valid(ml_commander_status):
-			ml_commander_status.text = msg
-		return
-	var commander_id := str(body.get("commander_id", ""))
-	_setup_mainline_commander_options(_mainline_commander_ids.slice(1), commander_id)
-	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "指挥官: %s" % (_commander_label(commander_id) if commander_id != "" else "未选择")
-
-
-# T:96 — MainlineView 章节列表 + 入口
-func _on_mainline_pressed() -> void:
-	_show_view("mainline")
-	_set_mainline_page("chapter_list")
-	ml_title.text = "主线章节 · 加载中..."
-	_mainline_prepare_payload = {}
-	_mainline_shop_payload = {}
-	_mainline_mercenary_payload = {}
-	_mainline_prepare_tab = "heroes"
-	_selected_prepare_hero_id = ""
-	_selected_prepare_equipment_id = ""
-	_selected_prepare_shop_item_id = ""
-	_selected_prepare_merc_unit_type = ""
-	_selected_prepare_merc_stat = ""
-	_render_mainline_prepare()
-	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
-	for child in ml_list_container.get_children():
-		child.queue_free()
-	_setup_mainline_commander_options()
-	if ml_commander_status != null and is_instance_valid(ml_commander_status):
-		ml_commander_status.text = "指挥官: 正在加载..."
-	if _hero_speaker_map.is_empty():
-		NetworkClient.list_heroes(Callable(self, "_on_heroes_response"))
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(self, "_on_commanders_response"))
-	NetworkClient.list_mainlines(Callable(self, "_on_ml_list_response"), _user_name)
-	if ml_slots_container != null and is_instance_valid(ml_slots_container):
-		for child in ml_slots_container.get_children():
-			child.queue_free()
-		var loading_lbl := Label.new()
-		loading_lbl.text = "存档格: 加载中..."
-		loading_lbl.modulate = Color(0.65, 0.6, 0.45)
-		ml_slots_container.add_child(loading_lbl)
-	NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
-
-
 func _set_node_visible(node: Node, value: bool) -> void:
 	if node != null and is_instance_valid(node) and node is CanvasItem:
 		(node as CanvasItem).visible = value
@@ -5612,11 +5458,6 @@ func _set_node_visible(node: Node, value: bool) -> void:
 func _set_mainline_page(page: String) -> void:
 	_mainline_page = page
 	var showing_prepare := page == "prepare"
-	_set_node_visible(ml_slots_container, not showing_prepare)
-	_set_node_visible(ml_list_container, not showing_prepare)
-	_set_node_visible(ml_commander_status, not showing_prepare)
-	_set_node_visible(ml_commander_option, not showing_prepare)
-	_set_node_visible(ml_apply_commander_btn, not showing_prepare)
 	_set_node_visible(ml_prep_summary, showing_prepare)
 	_set_node_visible(ml_prep_tabs, showing_prepare)
 	_set_node_visible(ml_prep_content, showing_prepare)
@@ -5628,921 +5469,12 @@ func _set_mainline_page(page: String) -> void:
 		_set_node_visible(ml_prep_hero_select.get_parent(), showing_prepare)
 
 
-func _on_ml_slots_response(body: Variant, _code: int = 0) -> void:
-	# 主线存档格:取该用户 mainline save slot,最多 3 格(web MAINLINE_SLOT_COUNT=3)。
-	var games: Array = _save_records_from_response(body)
-	_ml_slot_records = []
-	for g in games:
-		if not (g is Dictionary): continue
-		if str(g.get("kind", "")) == "suspend": continue
-		if str(g.get("mainline_id", "")) == "": continue
-		_ml_slot_records.append(g)
-		if _ml_slot_records.size() >= 3: break
-	_render_mainline_slots()
-
-
-func _render_mainline_slots() -> void:
-	if ml_slots_container == null or not is_instance_valid(ml_slots_container):
-		return
-	for child in ml_slots_container.get_children():
-		child.queue_free()
-	var shown: int = _ml_slot_records.size()
-	for i in range(3):
-		if i < shown:
-			var g: Dictionary = _ml_slot_records[i]
-			var save_id: int = int(g.get("id", 0))
-			var disp: String = _format_save_name(str(g.get("label", "")))
-			var chapter_index: int = int(g.get("chapter_index", 0)) + 1
-			var row := HBoxContainer.new()
-			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var lbl := Label.new()
-			lbl.text = "💾 %s · 第 %d 章 · #%d" % [disp, chapter_index, save_id]
-			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(lbl)
-			var resume_btn := Button.new()
-			resume_btn.text = "▶ 继续"
-			resume_btn.pressed.connect(_on_ml_slot_resume.bind(g))
-			row.add_child(resume_btn)
-			var del_btn := Button.new()
-			del_btn.text = "🗑"
-			del_btn.pressed.connect(_on_ml_slot_delete.bind(g))
-			row.add_child(del_btn)
-			ml_slots_container.add_child(row)
-		else:
-			var empty := Label.new()
-			empty.text = "▢ 空存档 %d" % (i + 1)
-			empty.modulate = Color(0.5, 0.46, 0.35)
-			ml_slots_container.add_child(empty)
-
-
-func _on_ml_slot_resume(record: Dictionary) -> void:
-	if record.is_empty(): return
-	var label := _save_option_label(record)
-	_show_view("connecting")
-	connecting_label.text = "正在载入 %s..." % label
-	NetworkClient.load_save(
-		_user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_ml_slot_loaded_response").bind(record)
-	)
-
-
-func _on_ml_slot_loaded_response(body: Variant, code: int, record: Dictionary) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		_update_status("主线存档载入失败")
-		_show_view("mainline")
-		return
-	_active_mainline_id = str(body.get("mainline_id", record.get("mainline_id", "")))
-	_selected_mainline_id = _active_mainline_id if _active_mainline_id != "" else _selected_mainline_id
-	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
-	_update_status("已载入 %s" % _save_option_label(record))
-	_show_view("mainline")
-	_on_mainline_pressed()
-
-
-func _on_ml_slot_resume_response(body: Variant, _code: int, game_id: int) -> void:
-	if not (body is Dictionary):
-		_update_status("主线存档恢复失败: 响应异常")
-		_show_view("mainline")
-		return
-	var p_dict: Dictionary = body.get("player", body)
-	var resp_game_id: int = int(body.get("game_id", game_id))
-	var resp_player_id: int = int(p_dict.get("id", 0))
-	if resp_game_id > 0:
-		_game_id = resp_game_id
-	if resp_player_id > 0:
-		_player_id = resp_player_id
-		GameState.local_player_id = _player_id
-		UserSettings.set_value("session.v1.last_player_id", _player_id)
-	if _game_id > 0:
-		UserSettings.set_value("session.v1.last_game_id", _game_id)
-	_update_status("已恢复主线存档 #%d,进入棋盘..." % _game_id)
-	_show_view("game")
-	NetworkClient.connect_to_game(_game_id, _player_id)
-	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
-
-
-func _on_ml_slot_delete(record: Dictionary) -> void:
-	if record.is_empty(): return
-	_update_status("删除 %s..." % _save_option_label(record))
-	NetworkClient.erase_save(
-		_user_name,
-		str(record.get("kind", "manual")),
-		int(record.get("slot_index", 0)),
-		Callable(self, "_on_ml_slot_delete_response").bind(record)
-	)
-
-
-func _on_ml_slot_delete_response(_body: Variant, code: int, record: Dictionary) -> void:
-	if code >= 200 and code < 300:
-		_update_status("已删除 %s" % _save_option_label(record))
-		NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
-	else:
-		_update_status("删除主线存档失败")
-
-
-func _on_ml_list_response(body: Variant, _code: int = 0) -> void:
-	ml_title.text = "📖 主线章节"
-	for child in ml_list_container.get_children():
-		child.queue_free()
-	# /mainlines 返回 Array[MainlineSummaryOut]
-	var items: Array = body if body is Array else []
-	if items.is_empty():
-		var empty := Label.new()
-		empty.text = "(暂无可用章节)"
-		empty.add_theme_color_override("font_color", Color(0.65, 0.6, 0.45))
-		ml_list_container.add_child(empty)
-		return
-	for ml in items:
-		if not ml is Dictionary: continue
-		var id: String = str(ml.get("id", ""))
-		if id == "": continue
-		if _selected_mainline_id == "":
-			_selected_mainline_id = id
-		var title: String = str(ml.get("title", "?"))
-		var battles: int = int(ml.get("battle_count", ml.get("total_battles", 0)))
-		var desc: String = str(ml.get("synopsis", ml.get("description", "")))
-		var btn := Button.new()
-		btn.text = "%s · %d 场战斗" % [title, battles]
-		btn.tooltip_text = desc
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.pressed.connect(_on_ml_card_pressed.bind(id))
-		ml_list_container.add_child(btn)
-
-
-func _on_ml_card_pressed(mainline_id: String) -> void:
-	_selected_mainline_id = mainline_id
-	# 拉详情 → show_dialog（pre-battle dialogue）→ start
-	NetworkClient.get_mainline_detail(mainline_id, Callable(self, "_on_ml_detail_response").bind(mainline_id))
-
-
-func _on_ml_detail_response(body: Variant, _code: int = 0, mainline_id: String = "") -> void:
-	if not (body is Dictionary):
-		_update_status("加载章节详情失败")
-		return
-	_mainline_auto_retry_pending = false
-	var battles: Array = body.get("battles", []) if body.has("battles") else []
-	var dialogue: Variant = body.get("dialogue", null)
-	# 有 pre-battle 对话 → 播放
-	if dialogue != null:
-		_play_dialogue_scenes(dialogue)
-	_update_status("主线章节 %s: 加载战前准备..." % mainline_id)
-	NetworkClient.get_mainline_prepare(mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(mainline_id))
-
-
-func _on_mainline_prepare_response(body: Variant, code: int = 0, mainline_id: String = "") -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		var msg := "战前准备加载失败"
-		if body is Dictionary:
-			msg = "战前准备加载失败: %s" % str(body.get("detail", body.get("message", msg)))
-		_update_status(msg)
-		return
-	_mainline_prepare_payload = (body as Dictionary).duplicate(true)
-	var heroes: Array = body.get("heroes", []) if body.get("heroes", []) is Array else []
-	var roster_units: Array = body.get("roster_units", []) if body.get("roster_units", []) is Array else []
-	var inventory: Dictionary = body.get("inventory", {}) if body.get("inventory", {}) is Dictionary else {}
-	var battle_index: int = int(body.get("battle_index", 0)) + 1
-	var total_battles: int = int(body.get("total_battles", 1))
-	_update_status("战前准备: 第 %d/%d 战 · 英雄 %d · 可部署 %d · 金币 %d" % [
-		battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
-	])
-	if _selected_prepare_hero_id == "" and not heroes.is_empty() and heroes[0] is Dictionary:
-		_selected_prepare_hero_id = str((heroes[0] as Dictionary).get("hero_id", ""))
-	_mainline_prepare_tab = "heroes"
-	_set_mainline_page("prepare")
-	_render_mainline_prepare()
-
-
-func _on_prepare_tab_pressed(tab: String) -> void:
-	_mainline_prepare_tab = tab
-	if tab == "shop" and _selected_mainline_id != "" and _mainline_shop_payload.is_empty():
-		_set_prepare_content("[color=#a69a73]正在加载战后商店...[/color]")
-		NetworkClient.get_post_battle_shop(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_shop_response"))
-		return
-	if tab == "mercenary" and _selected_mainline_id != "" and _mainline_mercenary_payload.is_empty():
-		_set_prepare_content("[color=#a69a73]正在加载佣兵配置...[/color]")
-		NetworkClient.get_mercenary_config(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_mercenary_response"))
-		return
-	_render_mainline_prepare()
-
-
-func _on_prepare_start_pressed() -> void:
-	if _selected_mainline_id == "":
-		_update_status("请先选择主线章节")
-		return
-	if _mainline_prepare_payload.is_empty():
-		_update_status("请先载入战前整备")
-		NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
-		return
-	_update_status("主线: 创建战斗...")
-	NetworkClient.start_mainline(_selected_mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"))
-
-
-func _on_prepare_refresh_pressed() -> void:
-	if _selected_mainline_id == "":
-		_update_status("请先选择主线章节")
-		return
-	_mainline_shop_payload = {}
-	_mainline_mercenary_payload = {}
-	_update_status("正在刷新战前整备...")
-	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
-
-
-func _render_mainline_prepare() -> void:
-	if ml_prep_summary == null or not is_instance_valid(ml_prep_summary):
-		return
-	_update_prepare_tab_buttons()
-	_update_prepare_action_buttons()
-	if _mainline_prepare_payload.is_empty():
-		_sync_prepare_selectors()
-		ml_prep_summary.text = "[b]战前整备[/b]\n[color=#a69a73]选择章节后载入英雄、装备、佣兵和商店。[/color]"
-		_set_prepare_content("[color=#a69a73]尚未载入整备资料。[/color]")
-		if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
-			ml_prep_start_btn.disabled = true
-		_update_prepare_action_buttons()
-		return
-	if ml_prep_start_btn != null and is_instance_valid(ml_prep_start_btn):
-		ml_prep_start_btn.disabled = false
-	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
-	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
-	var roster_units: Array = _mainline_prepare_payload.get("roster_units", []) if _mainline_prepare_payload.get("roster_units", []) is Array else []
-	var battle_index: int = int(_mainline_prepare_payload.get("battle_index", 0)) + 1
-	var total_battles: int = int(_mainline_prepare_payload.get("total_battles", 1))
-	ml_prep_summary.text = "[b]%s[/b]\n第 %d/%d 战 · 英雄 %d · 部队 %d · 金币 %d" % [
-		_bb_escape(_selected_mainline_id), battle_index, total_battles, heroes.size(), roster_units.size(), int(inventory.get("gold", 0))
-	]
-	_sync_prepare_selectors()
-	match _mainline_prepare_tab:
-		"roster":
-			_set_prepare_content(_build_prepare_roster_text(_mainline_prepare_payload))
-		"equipment":
-			_set_prepare_content(_build_prepare_equipment_text(_mainline_prepare_payload))
-		"mercenary":
-			_set_prepare_content(_build_prepare_mercenary_text())
-		"shop":
-			_set_prepare_content(_build_prepare_shop_text())
-		"saves":
-			_set_prepare_content(_build_prepare_saves_text())
-		_:
-			_set_prepare_content(_build_prepare_heroes_text(_mainline_prepare_payload))
-
-
+# P2:主线"准备好了"按钮 — 触发 /prepare/complete 写自动存档,
+# response.body 应包含 AutoSaveCheckpointOut({label,auto_kind,saved_at});
+# 我们把 auto_save 走 toast 让玩家看到 "💾 准备完毕,自动存档完毕 ✓ {label}"。
 func _set_prepare_content(text: String) -> void:
 	if ml_prep_content != null and is_instance_valid(ml_prep_content):
 		ml_prep_content.text = text
-
-
-func _update_prepare_tab_buttons() -> void:
-	var map := {
-		"heroes": ml_prep_heroes_tab_btn,
-		"roster": ml_prep_roster_tab_btn,
-		"equipment": ml_prep_equipment_tab_btn,
-		"mercenary": ml_prep_mercenary_tab_btn,
-		"shop": ml_prep_shop_tab_btn,
-		"saves": ml_prep_saves_tab_btn,
-	}
-	for key in map.keys():
-		var btn: Button = map[key]
-		if btn == null or not is_instance_valid(btn):
-			continue
-		btn.disabled = key == _mainline_prepare_tab
-
-
-func _sync_prepare_selectors() -> void:
-	_sync_prepare_hero_select()
-	_sync_prepare_equipment_select()
-	_sync_prepare_shop_select()
-	_sync_prepare_mercenary_selects()
-
-
-func _sync_prepare_hero_select() -> void:
-	if ml_prep_hero_select == null or not is_instance_valid(ml_prep_hero_select):
-		return
-	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
-	ml_prep_hero_select.clear()
-	var selected_index := 0
-	for i in range(heroes.size()):
-		if not (heroes[i] is Dictionary): continue
-		var hero: Dictionary = heroes[i]
-		var hero_id := str(hero.get("hero_id", ""))
-		if hero_id == "":
-			continue
-		ml_prep_hero_select.add_item("%s · %s" % [str(hero.get("name", hero_id)), str(hero.get("class_id", "?"))])
-		var idx := ml_prep_hero_select.item_count - 1
-		ml_prep_hero_select.set_item_metadata(idx, hero_id)
-		if hero_id == _selected_prepare_hero_id:
-			selected_index = idx
-	if ml_prep_hero_select.item_count > 0:
-		ml_prep_hero_select.select(selected_index)
-		_selected_prepare_hero_id = str(ml_prep_hero_select.get_item_metadata(selected_index))
-	ml_prep_hero_select.disabled = ml_prep_hero_select.item_count <= 0
-
-
-func _sync_prepare_equipment_select() -> void:
-	if ml_prep_equipment_select == null or not is_instance_valid(ml_prep_equipment_select):
-		return
-	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
-	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
-	ml_prep_equipment_select.clear()
-	var selected_index := 0
-	for item in catalog:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
-		if item_id == "":
-			continue
-		var count := int(inventory.get(item_id, 0))
-		ml_prep_equipment_select.add_item("%s · %s · x%d" % [str(it.get("name", item_id)), str(it.get("slot", "item")), count])
-		var idx := ml_prep_equipment_select.item_count - 1
-		ml_prep_equipment_select.set_item_metadata(idx, item_id)
-		if item_id == _selected_prepare_equipment_id:
-			selected_index = idx
-	if ml_prep_equipment_select.item_count > 0:
-		ml_prep_equipment_select.select(selected_index)
-		_selected_prepare_equipment_id = str(ml_prep_equipment_select.get_item_metadata(selected_index))
-	ml_prep_equipment_select.disabled = ml_prep_equipment_select.item_count <= 0
-
-
-func _sync_prepare_shop_select() -> void:
-	if ml_prep_shop_select == null or not is_instance_valid(ml_prep_shop_select):
-		return
-	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
-	ml_prep_shop_select.clear()
-	var selected_index := 0
-	for item in items:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("item_id", ""))
-		if item_id == "":
-			continue
-		ml_prep_shop_select.add_item("%s · %dG" % [str(it.get("name", item_id)), int(it.get("price", 0))])
-		var idx := ml_prep_shop_select.item_count - 1
-		ml_prep_shop_select.set_item_metadata(idx, item_id)
-		if item_id == _selected_prepare_shop_item_id:
-			selected_index = idx
-	if ml_prep_shop_select.item_count > 0:
-		ml_prep_shop_select.select(selected_index)
-		_selected_prepare_shop_item_id = str(ml_prep_shop_select.get_item_metadata(selected_index))
-	ml_prep_shop_select.disabled = ml_prep_shop_select.item_count <= 0
-
-
-func _sync_prepare_mercenary_selects() -> void:
-	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
-	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
-	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
-	if ml_prep_merc_unit_select != null and is_instance_valid(ml_prep_merc_unit_select):
-		ml_prep_merc_unit_select.clear()
-		var selected_unit_index := 0
-		for unit_type in allowed:
-			ml_prep_merc_unit_select.add_item(_unit_type_cn(str(unit_type)))
-			var idx := ml_prep_merc_unit_select.item_count - 1
-			ml_prep_merc_unit_select.set_item_metadata(idx, str(unit_type))
-			if str(unit_type) == _selected_prepare_merc_unit_type:
-				selected_unit_index = idx
-		if ml_prep_merc_unit_select.item_count > 0:
-			ml_prep_merc_unit_select.select(selected_unit_index)
-			_selected_prepare_merc_unit_type = str(ml_prep_merc_unit_select.get_item_metadata(selected_unit_index))
-		ml_prep_merc_unit_select.disabled = ml_prep_merc_unit_select.item_count <= 0
-	if ml_prep_merc_stat_select != null and is_instance_valid(ml_prep_merc_stat_select):
-		ml_prep_merc_stat_select.clear()
-		var selected_stat_index := 0
-		for stat in stat_rules.keys():
-			ml_prep_merc_stat_select.add_item(str(stat).to_upper())
-			var idx := ml_prep_merc_stat_select.item_count - 1
-			ml_prep_merc_stat_select.set_item_metadata(idx, str(stat))
-			if str(stat) == _selected_prepare_merc_stat:
-				selected_stat_index = idx
-		if ml_prep_merc_stat_select.item_count > 0:
-			ml_prep_merc_stat_select.select(selected_stat_index)
-			_selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(selected_stat_index))
-		ml_prep_merc_stat_select.disabled = ml_prep_merc_stat_select.item_count <= 0
-
-
-func _on_prepare_hero_selected(index: int) -> void:
-	if ml_prep_hero_select == null or not is_instance_valid(ml_prep_hero_select):
-		return
-	if index < 0 or index >= ml_prep_hero_select.item_count:
-		return
-	_selected_prepare_hero_id = str(ml_prep_hero_select.get_item_metadata(index))
-	_render_mainline_prepare()
-
-
-func _on_prepare_equipment_selected(index: int) -> void:
-	if ml_prep_equipment_select == null or not is_instance_valid(ml_prep_equipment_select):
-		return
-	if index < 0 or index >= ml_prep_equipment_select.item_count:
-		return
-	_selected_prepare_equipment_id = str(ml_prep_equipment_select.get_item_metadata(index))
-	_render_mainline_prepare()
-
-
-func _on_prepare_shop_item_selected(index: int) -> void:
-	if ml_prep_shop_select == null or not is_instance_valid(ml_prep_shop_select):
-		return
-	if index < 0 or index >= ml_prep_shop_select.item_count:
-		return
-	_selected_prepare_shop_item_id = str(ml_prep_shop_select.get_item_metadata(index))
-	_render_mainline_prepare()
-
-
-func _on_prepare_merc_unit_selected(index: int) -> void:
-	if ml_prep_merc_unit_select == null or not is_instance_valid(ml_prep_merc_unit_select):
-		return
-	if index < 0 or index >= ml_prep_merc_unit_select.item_count:
-		return
-	_selected_prepare_merc_unit_type = str(ml_prep_merc_unit_select.get_item_metadata(index))
-	_render_mainline_prepare()
-
-
-func _on_prepare_merc_stat_selected(index: int) -> void:
-	if ml_prep_merc_stat_select == null or not is_instance_valid(ml_prep_merc_stat_select):
-		return
-	if index < 0 or index >= ml_prep_merc_stat_select.item_count:
-		return
-	_selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(index))
-	_render_mainline_prepare()
-
-
-func _update_prepare_action_buttons() -> void:
-	if ml_prep_action_btn == null or not is_instance_valid(ml_prep_action_btn):
-		return
-	var has_prepare := not _mainline_prepare_payload.is_empty()
-	ml_prep_action_btn.visible = true
-	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-		ml_prep_alt_action_btn.visible = true
-	ml_prep_action_btn.disabled = not has_prepare
-	if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-		ml_prep_alt_action_btn.disabled = not has_prepare
-	match _mainline_prepare_tab:
-		"heroes":
-			ml_prep_action_btn.text = "转职"
-			ml_prep_action_btn.disabled = not _focused_prepare_hero_can_promote()
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "刷新英雄"
-				ml_prep_alt_action_btn.disabled = not has_prepare
-		"equipment":
-			ml_prep_action_btn.text = "装备首件"
-			ml_prep_action_btn.text = "装备选中"
-			ml_prep_action_btn.disabled = not _selected_equippable_item().has("slot")
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "卸下武器"
-				ml_prep_alt_action_btn.disabled = _focused_prepare_hero().is_empty()
-		"mercenary":
-			ml_prep_action_btn.text = "分配一点"
-			ml_prep_action_btn.disabled = not has_prepare
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "刷新佣兵"
-				ml_prep_alt_action_btn.disabled = not has_prepare
-		"shop":
-			ml_prep_action_btn.text = "购买选中"
-			ml_prep_action_btn.disabled = _mainline_shop_payload.is_empty()
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "刷新商店"
-				ml_prep_alt_action_btn.disabled = not has_prepare
-		"saves":
-			ml_prep_action_btn.text = "刷新存档"
-			ml_prep_action_btn.disabled = false
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "返回列表"
-				ml_prep_alt_action_btn.disabled = false
-		_:
-			ml_prep_action_btn.text = "查看部队"
-			ml_prep_action_btn.disabled = not has_prepare
-			if ml_prep_alt_action_btn != null and is_instance_valid(ml_prep_alt_action_btn):
-				ml_prep_alt_action_btn.text = "刷新整备"
-				ml_prep_alt_action_btn.disabled = not has_prepare
-
-
-func _on_prepare_primary_action_pressed() -> void:
-	match _mainline_prepare_tab:
-		"heroes":
-			_promote_focused_prepare_hero()
-		"equipment":
-			var item := _selected_equippable_item()
-			if item.has("slot"):
-				_equip_focused_prepare_hero(str(item.get("slot", "")), item.get("equipment_id", item.get("item_id", "")))
-		"mercenary":
-			_allocate_first_mercenary_point()
-		"shop":
-			_purchase_first_shop_item()
-		"saves":
-			NetworkClient.list_saves(_user_name, Callable(self, "_on_ml_slots_response"))
-			_update_status("正在刷新主线存档...")
-		_:
-			_mainline_prepare_tab = "roster"
-			_render_mainline_prepare()
-
-
-func _on_prepare_secondary_action_pressed() -> void:
-	match _mainline_prepare_tab:
-		"equipment":
-			_equip_focused_prepare_hero("weapon", null)
-		"mercenary":
-			_mainline_mercenary_payload = {}
-			_on_prepare_tab_pressed("mercenary")
-		"shop":
-			_mainline_shop_payload = {}
-			_on_prepare_tab_pressed("shop")
-		"saves":
-			_mainline_prepare_tab = "heroes"
-			_render_mainline_prepare()
-		_:
-			_on_prepare_refresh_pressed()
-
-
-func _build_prepare_heroes_text(payload: Dictionary) -> String:
-	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
-	if heroes.is_empty():
-		return "[b]英雄[/b]\n[color=#a69a73]本章暂无英雄资料。[/color]"
-	var focused := _focused_prepare_hero()
-	var lines: Array[String] = ["[b]英雄详情纸页[/b]  选择英雄后可转职或切到装备页整理仓库。"]
-	if not focused.is_empty():
-		var equipment: Dictionary = focused.get("equipment", {}) if focused.get("equipment", {}) is Dictionary else {}
-		var stats: Dictionary = focused.get("base_stats", {}) if focused.get("base_stats", {}) is Dictionary else {}
-		var skills: Array = focused.get("learned_skills", []) if focused.get("learned_skills", []) is Array else []
-		var options: Array = focused.get("promotion_options", []) if focused.get("promotion_options", []) is Array else []
-		lines.append("\n[color=#f0c75e][b]%s[/b][/color] · %s · Lv.%d · EXP %d" % [
-			_bb_escape(str(focused.get("name", focused.get("hero_id", "?")))),
-			_bb_escape(str(focused.get("class_id", "?"))),
-			int(focused.get("level", 1)),
-			int(focused.get("exp", 0)),
-		])
-		lines.append("HP %s / ATK %s / DEF %s / SPD %s / MATK %s / MDEF %s" % [
-			str(stats.get("hp", "-")), str(stats.get("atk", "-")), str(stats.get("def", "-")),
-			str(stats.get("spd", "-")), str(stats.get("matk", "-")), str(stats.get("mdef", "-"))
-		])
-		lines.append("技能: %s" % (_bb_escape(", ".join(skills)) if not skills.is_empty() else "—"))
-		lines.append("装备: 武器 %s / 防具 %s / 饰品 %s" % [
-			_bb_escape(str(equipment.get("weapon", "未装备"))),
-			_bb_escape(str(equipment.get("armor", "未装备"))),
-			_bb_escape(str(equipment.get("accessory", "未装备"))),
-		])
-		lines.append("转职: %s" % (_bb_escape(", ".join(options)) if bool(focused.get("can_promote", false)) and not options.is_empty() else ("已完成" if bool(focused.get("promoted", false)) else "暂不可用")))
-	lines.append("\n[b]队伍英雄[/b]")
-	for h in heroes:
-		if not (h is Dictionary): continue
-		var hero: Dictionary = h
-		var hero_id := str(hero.get("hero_id", ""))
-		var selected := "▶ " if hero_id == _selected_prepare_hero_id else "  "
-		var promo := "可转职" if bool(hero.get("can_promote", false)) else ("已转职" if bool(hero.get("promoted", false)) else "未满足转职")
-		lines.append("%s[b]%s[/b] · %s · Lv.%d · EXP %d · %s" % [
-			selected,
-			_bb_escape(str(hero.get("name", hero_id))),
-			_bb_escape(str(hero.get("class_id", "?"))),
-			int(hero.get("level", 1)),
-			int(hero.get("exp", 0)),
-			_bb_escape(promo),
-		])
-		var stats: Dictionary = hero.get("base_stats", {}) if hero.get("base_stats", {}) is Dictionary else {}
-		if not stats.is_empty():
-			lines.append("    HP %s / ATK %s / DEF %s / SPD %s" % [
-				str(stats.get("hp", "-")), str(stats.get("atk", "-")), str(stats.get("def", "-")), str(stats.get("spd", "-"))
-			])
-		var skills: Array = hero.get("learned_skills", []) if hero.get("learned_skills", []) is Array else []
-		if not skills.is_empty():
-			lines.append("    技能: %s" % _bb_escape(", ".join(skills)))
-	return "\n".join(lines)
-
-
-func _build_prepare_roster_text(payload: Dictionary) -> String:
-	var roster_units: Array = payload.get("roster_units", []) if payload.get("roster_units", []) is Array else []
-	if roster_units.is_empty():
-		return "[b]部队[/b]\n[color=#a69a73]暂无可部署单位。[/color]"
-	var lines: Array[String] = ["[b]部队[/b]  英雄固定出战，佣兵将在后续支持待命切换。"]
-	for i in range(roster_units.size()):
-		var u: Variant = roster_units[i]
-		if not (u is Dictionary): continue
-		var unit: Dictionary = u
-		var role := "英雄" if str(unit.get("hero_id", "")) != "" else "佣兵"
-		lines.append("%02d. [b]%s[/b] · %s · %s · Lv.%d" % [
-			i + 1,
-			_bb_escape(str(unit.get("name", unit.get("hero_id", unit.get("class_id", "?"))))),
-			_bb_escape(role),
-			_bb_escape(str(unit.get("class_id", "?"))),
-			int(unit.get("level", 1)),
-		])
-	return "\n".join(lines)
-
-
-func _build_prepare_equipment_text(payload: Dictionary) -> String:
-	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
-	var catalog: Array = payload.get("equipment_catalog", []) if payload.get("equipment_catalog", []) is Array else []
-	var inventory: Dictionary = payload.get("inventory", {}) if payload.get("inventory", {}) is Dictionary else {}
-	var focused: Dictionary = _focused_prepare_hero()
-	var lines: Array[String] = ["[b]装备[/b]  当前英雄: %s" % _bb_escape(str(focused.get("name", focused.get("hero_id", "未选择"))))]
-	if focused.is_empty():
-		lines.append("[color=#a69a73]没有可配置装备的英雄。[/color]")
-		return "\n".join(lines)
-	var equipment: Dictionary = focused.get("equipment", {}) if focused.get("equipment", {}) is Dictionary else {}
-	for slot in ["weapon", "armor", "accessory"]:
-		lines.append("%s: %s" % [slot, _bb_escape(str(equipment.get(slot, "未装备")))])
-	if catalog.is_empty():
-		lines.append("\n[color=#a69a73]暂无装备目录。[/color]")
-		return "\n".join(lines)
-	lines.append("\n[b]库存[/b]")
-	for item in catalog:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
-		var count := int(inventory.get(item_id, 0))
-		var bonuses: Dictionary = it.get("stat_bonuses", {}) if it.get("stat_bonuses", {}) is Dictionary else {}
-		var marker := "▶ " if item_id == _selected_prepare_equipment_id else "  "
-		lines.append("%s%s · %s · x%d · %s" % [
-			marker,
-			_bb_escape(str(it.get("name", item_id))),
-			_bb_escape(str(it.get("slot", "item"))),
-			count,
-			_bb_escape(str(bonuses)),
-		])
-	return "\n".join(lines)
-
-
-func _build_prepare_saves_text() -> String:
-	var lines: Array[String] = ["[b]存档[/b]  主线存档格"]
-	if _ml_slot_records.is_empty():
-		lines.append("[color=#a69a73]暂无主线存档。[/color]")
-		return "\n".join(lines)
-	for record in _ml_slot_records:
-		if record is Dictionary:
-			lines.append(_bb_escape(_save_option_label(record)))
-	return "\n".join(lines)
-
-
-func _build_prepare_shop_text() -> String:
-	if _mainline_shop_payload.is_empty():
-		return "[b]商店[/b]\n[color=#a69a73]切换到商店时会加载商品。[/color]"
-	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
-	var lines: Array[String] = ["[b]商店[/b]  金币 %d" % int(_mainline_shop_payload.get("gold", 0))]
-	if items.is_empty():
-		lines.append("[color=#a69a73]本次商店暂无商品。[/color]")
-		return "\n".join(lines)
-	for item in items:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("item_id", ""))
-		var marker := "▶ " if item_id == _selected_prepare_shop_item_id else "  "
-		lines.append("%s%s · %dG · %s" % [
-			marker,
-			_bb_escape(str(it.get("name", it.get("item_id", "?")))),
-			int(it.get("price", 0)),
-			_bb_escape(str(it.get("description", ""))),
-		])
-	return "\n".join(lines)
-
-
-func _build_prepare_mercenary_text() -> String:
-	if _mainline_mercenary_payload.is_empty():
-		return "[b]佣兵[/b]\n[color=#a69a73]切换到佣兵时会加载配置。[/color]"
-	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
-	var allocation: Dictionary = _mainline_mercenary_payload.get("allocation", {}) if _mainline_mercenary_payload.get("allocation", {}) is Dictionary else {}
-	var lines: Array[String] = ["[b]佣兵[/b]  可用点数 %d" % int(_mainline_mercenary_payload.get("mercenary_points", 0))]
-	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
-	var upgrades: Dictionary = allocation.get("unit_type_upgrades", {}) if allocation.get("unit_type_upgrades", {}) is Dictionary else {}
-	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
-	lines.append("可用兵种: %s" % _bb_escape(", ".join(allowed)))
-	for unit_type in allowed:
-		var per_unit: Dictionary = upgrades.get(str(unit_type), {}) if upgrades.get(str(unit_type), {}) is Dictionary else {}
-		var marker := "▶ " if str(unit_type) == _selected_prepare_merc_unit_type else "  "
-		lines.append("%s%s · %s" % [marker, _bb_escape(str(unit_type)), _bb_escape(str(per_unit))])
-	if not stat_rules.is_empty():
-		lines.append("选中属性: %s" % (_bb_escape(_selected_prepare_merc_stat.to_upper()) if _selected_prepare_merc_stat != "" else "—"))
-		lines.append("规则: %s" % _bb_escape(str(stat_rules)))
-	return "\n".join(lines)
-
-
-func _on_prepare_shop_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		_mainline_shop_payload = {}
-		_set_prepare_content("[b]商店[/b]\n[color=#d36b5f]商店加载失败。[/color]")
-		_update_prepare_action_buttons()
-		return
-	_mainline_shop_payload = (body as Dictionary).duplicate(true)
-	_render_mainline_prepare()
-
-
-func _on_prepare_mercenary_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		_mainline_mercenary_payload = {}
-		_set_prepare_content("[b]佣兵[/b]\n[color=#d36b5f]佣兵配置加载失败。[/color]")
-		_update_prepare_action_buttons()
-		return
-	_mainline_mercenary_payload = (body as Dictionary).duplicate(true)
-	_render_mainline_prepare()
-
-
-func _promote_focused_prepare_hero() -> void:
-	var hero := _focused_prepare_hero()
-	if hero.is_empty() or not _focused_prepare_hero_can_promote():
-		_update_status("当前英雄不可转职")
-		return
-	var options: Array = hero.get("promotion_options", []) if hero.get("promotion_options", []) is Array else []
-	if options.is_empty():
-		_update_status("当前英雄没有可用转职")
-		return
-	var hero_id := str(hero.get("hero_id", ""))
-	var target_class_id := str(options[0])
-	_update_status("正在将 %s 转职为 %s..." % [str(hero.get("name", hero_id)), target_class_id])
-	NetworkClient.promote_mainline_hero(_selected_mainline_id, _user_name, hero_id, target_class_id, Callable(self, "_on_prepare_mutation_response").bind("转职"))
-
-
-func _equip_focused_prepare_hero(slot: String, equipment_id: Variant) -> void:
-	var hero := _focused_prepare_hero()
-	if hero.is_empty():
-		_update_status("请先选择英雄")
-		return
-	var hero_id := str(hero.get("hero_id", ""))
-	_update_status("正在配置装备...")
-	NetworkClient.equip_mainline_hero(_selected_mainline_id, _user_name, hero_id, slot, equipment_id, Callable(self, "_on_prepare_mutation_response").bind("装备"))
-
-
-func _purchase_first_shop_item() -> void:
-	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
-	var item := _selected_shop_item()
-	if item.is_empty() and not items.is_empty() and items[0] is Dictionary:
-		item = items[0]
-	if item.is_empty():
-		_update_status("商店暂无可购买商品")
-		return
-	var item_id := str(item.get("item_id", ""))
-	if item_id == "":
-		_update_status("商品缺少 item_id")
-		return
-	_update_status("购买 %s..." % str(item.get("name", item_id)))
-	NetworkClient.purchase_post_battle_shop_item(_selected_mainline_id, _user_name, item_id, 1, Callable(self, "_on_prepare_shop_purchase_response"))
-
-
-func _allocate_first_mercenary_point() -> void:
-	if _mainline_mercenary_payload.is_empty():
-		_on_prepare_tab_pressed("mercenary")
-		return
-	var choice := _first_mercenary_allocation_choice()
-	if choice.is_empty():
-		_update_status("没有可分配的佣兵点")
-		return
-	_update_status("分配佣兵点: %s %s" % [choice.get("unit_type", ""), choice.get("stat", "")])
-	NetworkClient.allocate_mercenary_points(
-		_selected_mainline_id,
-		_user_name,
-		str(choice.get("unit_type", "")),
-		str(choice.get("stat", "")),
-		int(choice.get("value", 1)),
-		Callable(self, "_on_prepare_mercenary_allocate_response")
-	)
-
-
-func _on_prepare_mutation_response(body: Variant, code: int, label: String) -> void:
-	if code < 200 or code >= 300:
-		_update_status("%s失败" % label)
-		return
-	_update_status("%s完成，正在刷新整备..." % label)
-	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
-
-
-func _on_prepare_shop_purchase_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300:
-		_update_status("购买失败")
-		return
-	if body is Dictionary:
-		_update_status("购买完成，剩余金币 %d" % int((body as Dictionary).get("gold_remaining", 0)))
-	_mainline_shop_payload = {}
-	NetworkClient.get_mainline_prepare(_selected_mainline_id, _user_name, Callable(self, "_on_mainline_prepare_response").bind(_selected_mainline_id))
-	NetworkClient.get_post_battle_shop(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_shop_response"))
-
-
-func _on_prepare_mercenary_allocate_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300:
-		_update_status("佣兵点分配失败")
-		return
-	_update_status("佣兵点已分配")
-	_mainline_mercenary_payload = {}
-	NetworkClient.get_mercenary_config(_selected_mainline_id, _user_name, Callable(self, "_on_prepare_mercenary_response"))
-
-
-func _focused_prepare_hero_can_promote() -> bool:
-	var hero := _focused_prepare_hero()
-	if hero.is_empty():
-		return false
-	var options: Array = hero.get("promotion_options", []) if hero.get("promotion_options", []) is Array else []
-	return bool(hero.get("can_promote", false)) and not options.is_empty()
-
-
-func _find_first_equippable_item() -> Dictionary:
-	var focused := _focused_prepare_hero()
-	if focused.is_empty():
-		return {}
-	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
-	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
-	for item in catalog:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
-		if item_id == "" or int(inventory.get(item_id, 0)) <= 0:
-			continue
-		var out := it.duplicate(true)
-		out["equipment_id"] = item_id
-		return out
-	return {}
-
-
-func _first_mercenary_allocation_choice() -> Dictionary:
-	var points := int(_mainline_mercenary_payload.get("mercenary_points", 0))
-	if points <= 0:
-		return {}
-	var balance: Dictionary = _mainline_mercenary_payload.get("balance", {}) if _mainline_mercenary_payload.get("balance", {}) is Dictionary else {}
-	var allowed: Array = balance.get("allowed_unit_types", []) if balance.get("allowed_unit_types", []) is Array else []
-	var stat_rules: Dictionary = balance.get("stat_rules", {}) if balance.get("stat_rules", {}) is Dictionary else {}
-	if allowed.is_empty() or stat_rules.is_empty():
-		return {}
-	var unit_type := _selected_prepare_merc_unit_type if _selected_prepare_merc_unit_type != "" else str(allowed[0])
-	var stat := _selected_prepare_merc_stat if _selected_prepare_merc_stat != "" else str(stat_rules.keys()[0])
-	return {"unit_type": unit_type, "stat": stat, "value": 1}
-
-
-func _focused_prepare_hero() -> Dictionary:
-	var heroes: Array = _mainline_prepare_payload.get("heroes", []) if _mainline_prepare_payload.get("heroes", []) is Array else []
-	for h in heroes:
-		if h is Dictionary and str((h as Dictionary).get("hero_id", "")) == _selected_prepare_hero_id:
-			return h
-	if not heroes.is_empty() and heroes[0] is Dictionary:
-		return heroes[0]
-	return {}
-
-
-func _selected_equippable_item() -> Dictionary:
-	var catalog: Array = _mainline_prepare_payload.get("equipment_catalog", []) if _mainline_prepare_payload.get("equipment_catalog", []) is Array else []
-	var inventory: Dictionary = _mainline_prepare_payload.get("inventory", {}) if _mainline_prepare_payload.get("inventory", {}) is Dictionary else {}
-	for item in catalog:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		var item_id := str(it.get("equipment_id", it.get("item_id", "")))
-		if item_id == "" or item_id != _selected_prepare_equipment_id:
-			continue
-		if int(inventory.get(item_id, 0)) <= 0:
-			return {}
-		var out := it.duplicate(true)
-		out["equipment_id"] = item_id
-		return out
-	return _find_first_equippable_item()
-
-
-func _selected_shop_item() -> Dictionary:
-	var items: Array = _mainline_shop_payload.get("items", []) if _mainline_shop_payload.get("items", []) is Array else []
-	for item in items:
-		if not (item is Dictionary): continue
-		var it: Dictionary = item
-		if str(it.get("item_id", "")) == _selected_prepare_shop_item_id:
-			return it
-	return {}
-
-
-func _bb_escape(value: String) -> String:
-	return value.replace("[", "\\[").replace("]", "\\]")
-
-
-func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		if code == 409 and _is_mainline_already_active_response(body) and not _mainline_auto_retry_pending:
-			_mainline_auto_retry_pending = true
-			var retry_id := _selected_mainline_id
-			if retry_id == "":
-				retry_id = "chapter_01_steel_rebellion"
-			_update_status("已有主线进度,正在放弃旧进度并重试...")
-			NetworkClient.abandon_mainline(retry_id, _user_name, Callable(self, "_on_mainline_auto_abandon_response").bind(retry_id))
-			return
-		_mainline_auto_retry_pending = false
-		var msg := "主线启动失败"
-		if body is Dictionary:
-			msg = "主线启动失败: %s" % str(body.get("detail", body.get("message", msg)))
-		_update_status(msg)
-		_show_view("mainline")
-		return
-	_mainline_auto_retry_pending = false
-	_game_id = int(body.get("game_id", 0))
-	_player_id = int(body.get("player_id", 0))
-	if _game_id <= 0 or _player_id <= 0:
-		_update_status("主线启动失败: 响应缺少对局或玩家编号")
-		_show_view("mainline")
-		return
-	GameState.local_player_id = _player_id
-	UserSettings.set_value("session.v1.last_game_id", _game_id)
-	UserSettings.set_value("session.v1.last_player_id", _player_id)
-	_active_mainline_id = str(body.get("mainline_id", ""))
-	_mainline_battle_game_id = _game_id
-	UserSettings.set_value("session.v1.mainline_id", _active_mainline_id)
-	UserSettings.set_value("session.v1.mainline_game_id", _game_id)
-	UserSettings.set_value("session.v1.mainline_player_id", _player_id)
-	var battle_index: int = int(body.get("battle_index", 0)) + 1
-	var total_battles: int = int(body.get("total_battles", 1))
-	_update_status("主线战斗 %d/%d 已创建,进入棋盘..." % [battle_index, total_battles])
-	var dialogue_path := str(body.get("pre_battle_dialogue_url", ""))
-	if dialogue_path != "":
-		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
-	_show_view("game")
-	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-		battle_mainline_next_btn.visible = false
-	NetworkClient.connect_to_game(_game_id, _player_id)
-	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
 
 
 func _is_mainline_already_active_response(body: Variant) -> bool:
@@ -6552,106 +5484,6 @@ func _is_mainline_already_active_response(body: Variant) -> bool:
 	if detail is Dictionary:
 		return str(detail.get("error", "")) == "mainline_already_active"
 	return str(detail).contains("mainline_already_active")
-
-
-func _on_mainline_auto_abandon_response(body: Variant, code: int, mainline_id: String) -> void:
-	if code < 200 or code >= 300:
-		_mainline_auto_retry_pending = false
-		var msg := "放弃旧主线失败"
-		if body is Dictionary:
-			msg = "放弃旧主线失败: %s" % str(body.get("detail", body.get("message", msg)))
-		_update_status(msg)
-		_show_view("mainline")
-		return
-	_update_status("旧主线已放弃,重新创建战斗...")
-	NetworkClient.start_mainline(mainline_id, _user_name, false, [], Callable(self, "_on_mainline_start_response"), true)
-
-
-func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
-	_play_dialogue_scenes(body)
-
-
-func _on_mainline_advance_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		var msg := "主线推进失败"
-		if body is Dictionary:
-			msg = "主线推进失败: %s" % str(body.get("detail", body.get("message", msg)))
-		_update_status(msg)
-		return
-	var state := str(body.get("state", "battle"))
-	var battle_index: int = int(body.get("battle_index", 0)) + 1
-	var total_battles: int = int(body.get("total_battles", 1))
-	var dialogue_path := str(body.get("post_battle_dialogue_url", ""))
-	if dialogue_path != "":
-		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
-	if state == "victory":
-		var rewards: Dictionary = body.get("rewards", {}) if body.get("rewards", {}) is Dictionary else {}
-		var reward_bits: Array[String] = []
-		if int(rewards.get("gold", 0)) > 0:
-			reward_bits.append("+%d 金币" % int(rewards.get("gold", 0)))
-		if str(rewards.get("unlock_class", "")) != "":
-			reward_bits.append("解锁 %s" % str(rewards.get("unlock_class", "")))
-		_active_mainline_id = ""
-		_mainline_battle_game_id = 0
-		UserSettings.set_value("session.v1.mainline_id", "")
-		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-			battle_mainline_next_btn.visible = false
-		_update_status("主线通关%s" % (": " + ", ".join(reward_bits) if reward_bits.size() > 0 else ""))
-	else:
-		_update_status("主线推进到战斗 %d/%d" % [battle_index, total_battles])
-		if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-			battle_mainline_next_btn.visible = true
-
-
-func _on_mainline_next_battle_pressed() -> void:
-	if _active_mainline_id == "":
-		_update_status("没有可继续的主线")
-		return
-	_update_status("主线: 创建下一战...")
-	NetworkClient.next_battle_mainline(_active_mainline_id, _user_name, [], Callable(self, "_on_mainline_next_battle_response"))
-
-
-func _on_mainline_next_battle_response(body: Variant, code: int = 0) -> void:
-	_on_mainline_start_response(body, code)
-
-
-func _on_ml_back_pressed() -> void:
-	if _mainline_page == "prepare":
-		_mainline_prepare_payload = {}
-		_mainline_shop_payload = {}
-		_mainline_mercenary_payload = {}
-		_set_mainline_page("chapter_list")
-		return
-	_show_view("menu")
-
-
-func _on_ml_abandon_pressed() -> void:
-	var mainline_id := _active_mainline_id
-	if mainline_id == "":
-		mainline_id = str(UserSettings.get_value("session.v1.mainline_id", ""))
-	if mainline_id == "":
-		_update_status("没有活跃主线可放弃")
-		return
-	_update_status("正在放弃主线 %s..." % mainline_id)
-	NetworkClient.abandon_mainline(mainline_id, _user_name, Callable(self, "_on_mainline_abandon_response"))
-
-
-func _on_mainline_abandon_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		var msg := "放弃主线失败"
-		if body is Dictionary:
-			msg = "放弃主线失败: %s" % str(body.get("detail", body.get("message", msg)))
-		_update_status(msg)
-		return
-	_active_mainline_id = ""
-	_mainline_battle_game_id = 0
-	UserSettings.set_value("session.v1.mainline_id", "")
-	UserSettings.set_value("session.v1.mainline_game_id", 0)
-	UserSettings.set_value("session.v1.mainline_player_id", 0)
-	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
-		battle_mainline_next_btn.visible = false
-	_update_status("已放弃主线")
-	_show_view("mainline")
 
 
 func _on_settings_pressed() -> void:
@@ -6699,7 +5531,7 @@ func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 	var can_attack := has_unit and _compute_attack_targets(ud).size() > 0 and not bool(ud.get("has_acted", false))
 	var active_skill := _available_active_skill(ud) if has_unit and not bool(ud.get("has_acted", false)) else ""
 	var can_skill := active_skill != ""
-	var can_claim := has_unit and context != _ACTION_CONTEXT_POST_ACTION and _can_claim_here(ud)
+	var can_claim := has_unit and _can_claim_here(ud)
 	var can_move := false
 	if has_unit:
 		if context == _ACTION_CONTEXT_INITIAL:
@@ -6815,7 +5647,7 @@ func _on_attack_pressed() -> void:
 	if ud.is_empty():
 		_update_status("攻击: 找不到单位 #%d" % _selected_unit_id)
 		return
-	# 计算可攻击目标(只算范围内 + LoS 通的敌方单位)
+	# Compute attack targets by Manhattan range only; no terrain or unit blockers.
 	var targets: Dictionary = _compute_attack_targets(ud)
 	_attack_mode_unit_id = _selected_unit_id
 	_attack_targets = targets
@@ -6835,6 +5667,7 @@ func _cancel_action_mode() -> void:
 	if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
 		_move_mode_unit_id = -1
 		_move_reachable_set = {}
+		_clear_move_preview_path()
 		_attack_mode_unit_id = -1
 		_attack_targets = {}
 		_skill_mode_unit_id = -1
@@ -6851,51 +5684,38 @@ func _on_cancel_pressed() -> void:
 	_update_status("已取消(右键亦可)")
 
 
-# 计算攻击范围内所有可攻击的目标(敌方单位所在格 — 需在范围内 + LoS 通)
-#
-# 重要原则:client 端**不重复**伤害计算 — server (calculate_damage)
-# 是唯一公式来源。这里只算"哪几个敌方单位在范围内且被本单位的
-# attack_range + LoS 覆盖",对应 game/app/web/app.js:2183 canUnitAttack。
-# 真正的伤害值在 server 推 unit_attacked 事件时由服务端返回的
-# (damage, is_crit, is_kill) 决定。
+# Compute attackable enemy units by Manhattan range only.
+# Damage remains server-authoritative via calculate_damage / unit_attacked events.
+func _player_team_key(player_id: int) -> String:
+	var p: Dictionary = GameState.get_player(player_id) if GameState != null else {}
+	if p.is_empty():
+		return "player_%d" % player_id
+	var team_v: Variant = p.get("team", null)
+	if team_v != null and str(team_v) != "":
+		return str(team_v)
+	return "player_%d" % player_id
+
+
 func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
-	# 范围
 	var range_tiles: Array = _get_attack_range_tiles(attacker)
 	if range_tiles.is_empty():
 		return {}
-	var size_v: int = 15
-	if board != null and board.map_size.x > 0:
-		size_v = board.map_size.x
-	# blocked 字典(只看地形 passable,不拦人 — 自己可站)
-	var blocked: Dictionary = {}
-	for other in GameState.players:
-		if not other is Dictionary: continue
-		for u in other.get("units", []):
-			if u is Dictionary:
-				var k := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
-				blocked[k] = true
 	var me_pid: int = int(_player_id)
+	var my_team_key: String = _player_team_key(me_pid)
 	var out: Dictionary = {}
 	for rt in range_tiles:
 		var rt_v := Vector2i(int(rt.x), int(rt.y))
-		# 看这个格是否有敌方单位
-		for u in GameState.players:
-			if not u is Dictionary: continue
-			if int(u.get("id", -1)) == me_pid:
+		for p in GameState.players:
+			if not p is Dictionary:
 				continue
-			for uu in u.get("units", []):
-				if not uu is Dictionary: continue
+			var candidate_pid: int = int(p.get("id", -1))
+			if candidate_pid <= 0 or _player_team_key(candidate_pid) == my_team_key:
+				continue
+			for uu in p.get("units", []):
+				if not uu is Dictionary:
+					continue
 				if int(uu.get("x", -1)) != rt_v.x or int(uu.get("y", -1)) != rt_v.y:
 					continue
-				# LoS 校验(远距离攻击需要通视)
-				var attacker_pos := Vector2i(int(attacker.get("x", 0)), int(attacker.get("y", 0)))
-				var d: int = abs(attacker_pos.x - rt_v.x) + abs(attacker_pos.y - rt_v.y)
-				if d > 1:
-					var los_ok: bool = MapLogic.has_line_of_sight(
-						attacker_pos, rt_v, blocked, size_v
-					)
-					if not los_ok:
-						continue
 				out[int(uu.get("id", -1))] = {
 					"x": rt_v.x,
 					"y": rt_v.y,
@@ -6903,18 +5723,10 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 					"unit_type": str(uu.get("unit_type", "")),
 					"hp": int(uu.get("hp", 0)),
 					"max_hp": int(uu.get("max_hp", uu.get("hp", 0))),
-					# 不预测,只显示攻击者/目标基本信息。真实伤害由
-					# server 决定。
 				}
 	return out
 
 
-# (删)旧 _forecast_attack_simple 已移除 — 客户端不抄伤害公式,
-# server calculate_damage 单一来源。预测数字走
-# GET /games/{id}/forecast-attack，只展示后端结果。
-
-
-# 拿 attack_range(含 snipe 技能 +1),然后用 MapLogic.attack_range_tiles 求出范围
 func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	var max_range: int = int(attacker.get("attack_range", 1))
 	if (attacker.get("skills", []) as Array).has("snipe"):
@@ -6929,6 +5741,48 @@ func _get_attack_range_tiles(attacker: Dictionary) -> Array:
 	if board != null and board.map_size.x > 0:
 		size_v = board.map_size.x
 	return MapLogic.attack_range_tiles(pos, max_range, min_range, size_v)
+
+
+# ============================================================
+# ConfirmDialog — 通用 Yes/No 弹窗 helper
+# 用法: _show_confirm("标题", "正文", Callable(self, "_on_yes"), Callable(self, "_on_no"))
+# 设计要点:
+#   * 一次性 Callable — yes/no 触发后立刻清空,避免重复点 / 旧 callback 残留
+#   * on_no 可省略(取消按钮 = 关闭即可,不做事)
+#   * 顶层 Panel,与 view 切换解耦 — 不依赖 _show_view()
+# ============================================================
+
+func _show_confirm(title: String, body: String, on_yes: Callable, on_no: Callable = Callable()) -> void:
+	_confirm_yes_callback = on_yes
+	_confirm_no_callback = on_no
+	if confirm_title_label != null and is_instance_valid(confirm_title_label):
+		confirm_title_label.text = title
+	if confirm_body_label != null and is_instance_valid(confirm_body_label):
+		confirm_body_label.text = body
+	if confirm_dialog != null and is_instance_valid(confirm_dialog):
+		confirm_dialog.visible = true
+
+
+func _hide_confirm() -> void:
+	_confirm_yes_callback = Callable()
+	_confirm_no_callback = Callable()
+	if confirm_dialog != null and is_instance_valid(confirm_dialog):
+		confirm_dialog.visible = false
+
+
+func _on_confirm_yes_pressed() -> void:
+	# 在 hide 之前先 cache callback,hide() 会立刻清空
+	var cb: Callable = _confirm_yes_callback
+	_hide_confirm()
+	if cb.is_valid():
+		cb.call()
+
+
+func _on_confirm_no_pressed() -> void:
+	var cb: Callable = _confirm_no_callback
+	_hide_confirm()
+	if cb.is_valid():
+		cb.call()
 
 
 func _show_attack_confirm(attacker_id: int, target_id: int) -> void:
@@ -7066,21 +5920,25 @@ func _on_attack_cancel_pressed() -> void:
 
 
 # M4.2:发 POST /games/{id}/attack
-func _attack_unit_to(attacker_id: int, target_id: int) -> void:
-	if _game_id <= 0 or _player_id <= 0:
-		return
-	var info: Dictionary = _attack_targets.get(target_id, {})
-	var tgt_name: String = str(info.get("defender_name", "单位 #%d" % target_id))
-	_update_status("正在攻击 %s (单位 #%d → #%d)..." % [tgt_name, attacker_id, target_id])
-	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
-	# 客户端不预测伤害 - server 推 unit_attacked 事件后,从 signal args
-	# 拿到 (damage, is_crit, is_kill) 直接显示。
+func _apply_immediate_attack_feedback(attacker_id: int, target_id: int) -> void:
 	_attack_mode_unit_id = -1
 	_attack_targets = {}
 	_hide_attack_confirm()
 	if board != null:
+		var target: Dictionary = GameState.get_unit(target_id) if GameState != null else {}
+		if not target.is_empty():
+			var cell := Vector2i(int(target.get("x", 0)), int(target.get("y", 0)))
+			board.spawn_floating_text_at_cell(cell, "!", "#f0c75e", "attack_preview")
 		board.clear_selection_marks()
 	_hide_action_bubble()
+	_update_status("攻击指令已下达: #%d -> #%d" % [attacker_id, target_id])
+
+
+func _attack_unit_to(attacker_id: int, target_id: int) -> void:
+	if _game_id <= 0 or _player_id <= 0:
+		return
+	_apply_immediate_attack_feedback(attacker_id, target_id)
+	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
 
 
 func _active_skill_of(ud: Dictionary) -> String:
@@ -7261,7 +6119,11 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
 	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
-	var hero_id := str(ud.get("hero_id", ""))
+	# Bug fix: GDScript 的 str(null) 返回字面字符串 "<null>",跟空字符串
+	# 比较仍然不为空 → 之前会把没有 hero_id 的普通单位误判成英雄。
+	# 显式判断 Variant 类型后再 stringify。
+	var hero_id_v: Variant = ud.get("hero_id", null)
+	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	_set_unit_info_portrait(hero_id)
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
@@ -7269,13 +6131,63 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
 	var lines: Array = [
-		("[color=#f0c75e]✦ Hero ID[/color]  %s" % _bb_escape(hero_id)) if hero_id != "" else "",
+		("[color=#f0c75e]✦ Hero ID[/color]  %s" % mainline_view._bb_escape(hero_id)) if hero_id != "" else "",
 		"[color=#a89878]⛓ 位置[/color]  (%d, %d)   %s" % [pos.x, pos.y, owner_str],
 		("[color=#f4e8c1]❤ 生命[/color]  %d / %d   [color=#5fa8e8]⚡ 能量[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ 生命[/color]  %d / %d" % [hp, max_hp]),
 		"[color=#c9a14a]⚔ 攻击[/color] %d  [color=#c9a14a]🛡 防御[/color] %d  [color=#c9a14a]✨ 魔攻[/color] %d  [color=#c9a14a]🔮 魔防[/color] %d" % [atk, def, matk, mdef],
 		"[color=#a89878]👣 移动力[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
 		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skill_names) if skill_names.size() > 0 else "—"],
 	]
+
+	# ── 战斗加成 / Buffs 区段(P2.6+ 用户要的逐条列出) ──
+	# 每条描述一个 buff 来源:地形 / 士气 / 指挥官 / 装备 / 技能 /
+	# 主动技能附带效果等。空 buff 不显示该区段。
+	var buffs: Array[String] = []
+	# 1) 地形防御加成(单位所站格子的 TERRAIN_DEF_BONUS)
+	var tile_d: Dictionary = GameState.get_tile(int(pos.x), int(pos.y)) if GameState != null else {}
+	var terrain_v: Variant = tile_d.get("terrain", "")
+	var terrain_name: String = "" if terrain_v == null else str(terrain_v)
+	if terrain_name != "":
+		var def_bonus: int = int(Config.TERRAIN_DEF_BONUS.get(terrain_name, 0))
+		# castle_floor / castle_wall 等 subtype 也走同一张表
+		var subtype_v: Variant = tile_d.get("subtype", "")
+		var subtype: String = "" if subtype_v == null else str(subtype_v)
+		if subtype != "" and Config.TERRAIN_DEF_BONUS.has(subtype):
+			def_bonus = int(Config.TERRAIN_DEF_BONUS.get(subtype, 0))
+		var terrain_cn := _terrain_cn(terrain_name, subtype)
+		if def_bonus > 0:
+			buffs.append("[color=#7ec97e]🌲 %s[/color] +%d 防御" % [terrain_cn, def_bonus])
+		elif terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
+			buffs.append("[color=#a89878]🏰 %s (无地形加成,但可驻守/产兵)[/color]" % terrain_cn)
+	# 2) 士气加成(MORALE_ATK_PER_STAR / MORALE_DEF_PER_STAR)
+	if morale > 0:
+		var atk_pct: int = int(round(morale * Config.MORALE_ATK_PER_STAR * 100))
+		var def_pct: int = int(round(morale * Config.MORALE_DEF_PER_STAR * 100))
+		buffs.append("[color=#fad855]⭐ 士气 %d[/color] → +%d%% 攻击 +%d%% 防御" % [morale, atk_pct, def_pct])
+	# 3) 玩家指挥官统御 Power 是否启动(仅自己单位)
+	if is_mine:
+		var my_player: Dictionary = GameState.get_player(_player_id) if GameState != null else {}
+		var co_state_d: Dictionary = my_player.get("co_state", {}) if my_player is Dictionary else {}
+		if co_state_d is Dictionary and co_state_d.get("is_power_active", false):
+			var co_id: String = str(co_state_d.get("commander_id", ""))
+			var co_name_cn := _commander_cn(co_id) if co_id != "" else "指挥官"
+			buffs.append("[color=#f2666b]🔥 %s 统御 Power 启动中[/color] → 全军 buff" % co_name_cn)
+	# 4) 转职加成(高等级 → 转职后等级加成)
+	if lvl >= 10:
+		buffs.append("[color=#5fa8e8]📈 等级 %d 已解锁转职[/color]" % lvl)
+	# 5) 技能被动效果(只对未在 skill list 中显示的通用增益提示)
+	for sk_name in skills:
+		var sk_cn: String = _skill_cn(str(sk_name))
+		if sk_cn != "" and sk_cn != str(sk_name):
+			buffs.append("[color=#a69a73]💠 技能:[/color] %s" % sk_cn)
+
+	if buffs.size() > 0:
+		var header: String = "[color=#c9a14a][b]— ⚡ 战斗加成 —[/b][/color]"
+		var buff_block: Array[String] = [header]
+		buff_block.append_array(buffs)
+		lines.append("")
+		lines.append_array(buff_block)
+
 	if not is_mine:
 		lines.append("[color=#c63a3a]⚠ 敌方单位·无法操作[/color]")
 	elif not can_act:
@@ -7285,32 +6197,34 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 
 
 func _set_unit_info_portrait(hero_id: String) -> void:
-	if info_panel == null or not is_instance_valid(info_panel):
+	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
+	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
+	# 还原默认 -12.0。
+	if hero_portrait_panel == null or not is_instance_valid(hero_portrait_panel):
 		return
 	if _unit_info_portrait_tex == null:
 		_unit_info_portrait_tex = TextureRect.new()
-		_unit_info_portrait_tex.size = Vector2(86, 118)
-		_unit_info_portrait_tex.position = Vector2(282, 108)
-		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_panel.add_child(_unit_info_portrait_tex)
+		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hero_portrait_panel.add_child(_unit_info_portrait_tex)
 	if hero_id == "":
 		_unit_info_portrait_tex.visible = false
-		if unit_info != null and is_instance_valid(unit_info):
-			unit_info.offset_right = -12.0
+		hero_portrait_panel.visible = false
 		return
 	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
 	if not FileAccess.file_exists(portrait_path):
 		_unit_info_portrait_tex.visible = false
-		if unit_info != null and is_instance_valid(unit_info):
-			unit_info.offset_right = -12.0
+		hero_portrait_panel.visible = false
 		return
 	var tex := _load_portrait(portrait_path)
 	_unit_info_portrait_tex.texture = tex
+	if tex != null:
+		# T:V6 — 立绘按比例缩放到面板大小(高度一致,宽度按 800:1400 自适应,原图比例不变)。
+		# STRETCH_KEEP_ASPECT_CENTERED 自动居中,clip_contents 截溢出。
+		_unit_info_portrait_tex.size = hero_portrait_panel.size
 	_unit_info_portrait_tex.visible = tex != null
-	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_right = -108.0 if tex != null else -12.0
+	hero_portrait_panel.visible = tex != null
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)
@@ -7335,6 +6249,7 @@ func _use_skill_on_target(skill_id: String, unit_id: int, target_id: int) -> voi
 	_skill_targets = {}
 	if board != null: board.clear_selection_marks()
 	_hide_action_bubble()
+	_schedule_board_refresh()
 
 
 func _on_wait_pressed() -> void:

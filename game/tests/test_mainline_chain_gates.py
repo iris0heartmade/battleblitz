@@ -1,21 +1,15 @@
 """
-Campaign chain gate regression tests.
+Campaign chain config + "no chapter lock" regression tests.
 
-Targets the ``CAMPAIGN_CHAINS`` abstraction in
-``app.routes.mainline`` (07-21 Task 2).  These tests cover the rules that
-the rest of the test suite does not exercise directly:
+P2(FE8 对齐):章节锁(``mainline_locked`` 403)已删除。玩家可自由进入 /
+重玩任意章节;章节顺序不再被门控。``CAMPAIGN_CHAINS`` 配置保留(供未来
+UI 分组 + ``_has_cleared_mainline`` 只读 cleared 查询),但不再折叠列表
+或阻止 start。
 
-  * ``CAMPAIGN_CHAINS`` exposes the test chain and nothing else.
-  * A new profile can only enter the first chapter of a chain.
-  * Direct ``POST /mainlines/{locked_id}/start`` returns 403 with
-    ``error == "mainline_locked"`` and surfaces the available id.
-  * After the first chapter is formally cleared, the listing advances
-    to chapter_test_02.
-  * A finished chain (all three chapters cleared) collapses to its
-    final chapter ("current chapter" semantics) so the lobby still
-    renders something meaningful.
-  * Mainlines that do not belong to any chain are unaffected by the
-    gate.
+保留的门控(非章节锁):"单一活动态"—— profile 同时只能有一个 active
+mainline,重复 start 返回 409 ``mainline_already_active``(需 abandon 或
+force=true)。这是"内存活动态一份"的保护(对齐 FE8 的存档槽↔活动态模型),
+不是章节顺序锁。
 """
 
 from __future__ import annotations
@@ -63,7 +57,7 @@ async def _mark_chapter_cleared(
     mainline_id: str,
     slot_index: int = 0,
 ) -> None:
-    """Persist a "cleared" formal save so the gate sees the chapter done."""
+    """Persist a "cleared" formal save (chapter_index == battle count)."""
     from app.mainline import load_mainline
     from app.progression.models import PlayerProfile
     from app.save import SaveService
@@ -86,7 +80,7 @@ async def _mark_chapter_cleared(
 
 
 # ============================================================
-# 1) CAMPAIGN_CHAINS surface
+# 1) CAMPAIGN_CHAINS surface (retained — config + chain helpers)
 # ============================================================
 
 class TestCampaignChainsConfig:
@@ -110,113 +104,67 @@ class TestCampaignChainsConfig:
 
 
 # ============================================================
-# 2) Fresh profile: only first chapter visible / start-able
+# 2) No chapter lock — all chapters listed & start-able freely
 # ============================================================
 
-class TestFreshProfileGate:
-    async def test_listing_only_shows_first_test_chapter(self, chain_client):
+class TestNoChapterLock:
+    async def test_listing_shows_all_chapters(self, chain_client):
         client, _ = chain_client
         await _create_profile(client, "fresh")
         r = await client.get("/mainlines", params={"user_name": "fresh"})
         assert r.status_code == 200, r.text
-        ids = [m["id"] for m in r.json() if str(m["id"]).startswith("chapter_test_")]
-        assert ids == ["chapter_test_01"], (
-            "fresh profile must only see the first chapter of the chain"
+        ids = {m["id"] for m in r.json() if str(m["id"]).startswith("chapter_test_")}
+        # 无锁:全部章节可见,不折叠成"当前章节"。
+        assert {"chapter_test_01", "chapter_test_02", "chapter_test_03"} <= ids, (
+            "chapter lock removed — listing must show all chapters"
         )
 
-    async def test_starting_locked_chapter_returns_403(self, chain_client):
+    async def test_non_chain_mainline_still_listed(self, chain_client):
         client, _ = chain_client
         await _create_profile(client, "fresh")
-        r = await client.post(
-            "/mainlines/chapter_test_02/start",
-            json={"user_name": "fresh", "skip_intro": True},
-        )
-        assert r.status_code == 403, r.text
-        # FastAPI wraps HTTPException detail as `{"detail": ...}`; pull
-        # the structured payload out before asserting the gate fields.
-        detail = r.json().get("detail", {})
-        if detail is None:
-            detail = {}
-        assert detail.get("error") == "mainline_locked", r.text
-        assert detail.get("mainline_id") == "chapter_test_02"
-        assert detail.get("available_mainline_id") == "chapter_test_01"
-        assert detail.get("chain") == "test"
-
-    async def test_non_chain_mainlines_are_unaffected_by_gate(
-        self, chain_client,
-    ):
-        client, _ = chain_client
-        await _create_profile(client, "fresh")
-        # The standalone production chapter must not be filtered by the
-        # chain gate; it is a non-chain mainline.
         r = await client.get("/mainlines", params={"user_name": "fresh"})
         assert r.status_code == 200, r.text
         ids = [m["id"] for m in r.json()]
         assert "chapter_01_steel_rebellion" in ids
 
-
-# ============================================================
-# 3) Cleared chapter advances the gate
-# ============================================================
-
-class TestClearedChapterAdvances:
-    async def test_clearing_first_chapter_unlocks_second(
-        self, chain_client,
-    ):
-        client, SessionLocal = chain_client
-        await _create_profile(client, "advancer")
-        await _mark_chapter_cleared(SessionLocal, "advancer", "chapter_test_01")
-
-        r = await client.get("/mainlines", params={"user_name": "advancer"})
-        assert r.status_code == 200, r.text
-        ids = [m["id"] for m in r.json() if str(m["id"]).startswith("chapter_test_")]
-        assert ids == ["chapter_test_02"], (
-            "clearing the first chapter must advance the visible chapter"
-        )
-
-    async def test_clearing_chain_keeps_final_chapter_visible(
-        self, chain_client,
-    ):
-        client, SessionLocal = chain_client
-        await _create_profile(client, "finisher")
-        # Use distinct save slots so the latest write does not overwrite
-        # the previous one — the gate only recognises a chapter as
-        # cleared when the formal save is on disk.
-        await _mark_chapter_cleared(SessionLocal, "finisher", "chapter_test_01", slot_index=0)
-        await _mark_chapter_cleared(SessionLocal, "finisher", "chapter_test_02", slot_index=1)
-        await _mark_chapter_cleared(SessionLocal, "finisher", "chapter_test_03", slot_index=2)
-
-        r = await client.get("/mainlines", params={"user_name": "finisher"})
-        assert r.status_code == 200, r.text
-        ids = [m["id"] for m in r.json() if str(m["id"]).startswith("chapter_test_")]
-        # Current-chapter semantics: when the entire chain is cleared
-        # the player still sees the final chapter.
-        assert ids == ["chapter_test_03"], (
-            "fully-cleared chain must collapse to the final chapter"
-        )
-
-    async def test_partial_chain_only_blocks_uncleared_starts(
-        self, chain_client,
-    ):
-        client, SessionLocal = chain_client
-        await _create_profile(client, "mid")
-        await _mark_chapter_cleared(SessionLocal, "mid", "chapter_test_01")
-
-        # chapter_test_02 is now allowed.
-        ok = await client.post(
+    async def test_starting_later_chapter_not_locked(self, chain_client):
+        client, _ = chain_client
+        await _create_profile(client, "jumper")
+        # fresh profile 直接 start 第二章 —— 不再返回 403 锁(可跳章)。
+        r = await client.post(
             "/mainlines/chapter_test_02/start",
-            json={"user_name": "mid", "skip_intro": True},
+            json={"user_name": "jumper", "skip_intro": True},
         )
-        assert ok.status_code in (201, 200, 409), ok.text  # 409 if a game is in-flight
+        assert r.status_code != 403, r.text
+        if r.status_code >= 400:
+            detail = r.json().get("detail", {})
+            if isinstance(detail, dict):
+                assert detail.get("error") != "mainline_locked", r.text
 
-        # chapter_test_03 must still be blocked, and the gate should
-        # point the player at the *next available* chapter (chapter_02)
-        # which is what the listing surfaces for this user.
-        blocked = await client.post(
-            "/mainlines/chapter_test_03/start",
-            json={"user_name": "mid", "skip_intro": True},
+    async def test_replaying_cleared_chapter_allowed(self, chain_client):
+        client, SessionLocal = chain_client
+        await _create_profile(client, "replayer")
+        await _mark_chapter_cleared(SessionLocal, "replayer", "chapter_test_01")
+        # 已通关第一章后仍可重玩 —— 无锁。
+        r = await client.post(
+            "/mainlines/chapter_test_01/start",
+            json={"user_name": "replayer", "skip_intro": True},
         )
-        assert blocked.status_code == 403, blocked.text
-        detail = blocked.json().get("detail", {}) or {}
-        assert detail.get("mainline_id") == "chapter_test_03"
-        assert detail.get("available_mainline_id") == "chapter_test_02"
+        assert r.status_code != 403, r.text
+
+
+# ============================================================
+# 3) Cleared query stays available (read-only, for UI annotation)
+# ============================================================
+
+class TestClearedQuery:
+    async def test_has_cleared_mainline_readonly(self, chain_client):
+        client, SessionLocal = chain_client
+        await _create_profile(client, "q")
+        from app.routes.mainline._common import _has_cleared_mainline
+
+        async with SessionLocal() as s:
+            assert await _has_cleared_mainline(s, "q", "chapter_test_01") is False
+        await _mark_chapter_cleared(SessionLocal, "q", "chapter_test_01")
+        async with SessionLocal() as s:
+            assert await _has_cleared_mainline(s, "q", "chapter_test_01") is True

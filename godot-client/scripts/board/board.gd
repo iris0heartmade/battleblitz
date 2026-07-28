@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 class_name Board
 ## Board coordinates the tile layers, static unit presenters, highlight
 ## overlay, and camera behavior for the current map.
@@ -20,9 +20,22 @@ var _unit_nodes_by_id: Dictionary = {}
 @onready var structure_layer: TileMapLayer = $StructureLayer
 @onready var decor_layer: TileMapLayer = $DecorLayer
 @onready var highlights: Node2D = $HighlightLayer
+@onready var flag_layer: Node2D = $FlagLayer
 @onready var units: Node2D = $UnitLayer
 @onready var effects: Node2D = $EffectsLayer
 @onready var board_camera: Camera2D = $BoardCamera
+
+# M4.16+:三角旗 polygon 顶点(本地 cell 坐标系 48px tile)。
+# 锚定在 tile 左下角外侧,顶点朝右(向右飘)。
+#   ( -8,  8)  # 旗杆底(贴在 tile 左下角外侧)
+#   ( -8, -4)  # 旗杆顶
+#   (  0,  2)  # 旗尖(向右)
+# PackedVector2Array 不能作 const,放成 var。
+static var _FLAG_POINTS: PackedVector2Array = PackedVector2Array([
+	Vector2(-8, 8), Vector2(-8, -4), Vector2(0, 2),
+])
+# M4.16+:哪些 terrain 算"建筑",显示阵营旗
+const _BUILDING_TERRAINS := ["barracks", "castle", "village"]
 
 var tile_set: TileSet = null
 var metrics = null
@@ -65,13 +78,25 @@ func _on_units_changed(units_data: Array) -> void:
 		var existing: Node = _unit_nodes_by_id.get(uid)
 		if existing != null and is_instance_valid(existing):
 			# 增量:update data + FLIP 动画(如果位置变化)。
-			existing.setup(unit_data, Config.player_color(String(unit_data.get("color", "red"))))
+			existing.setup(unit_data, _team_color_for_unit(unit_data), _team_id_for_unit(unit_data))
 			var new_cell := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 			var new_pos: Vector2 = metrics.cell_to_local(new_cell)
 			var prev_pos: Vector2 = existing.position  # 截图前一帧位置
 			if prev_pos != new_pos:
+				var optimistic_target: Variant = existing.get_meta("optimistic_target_cell") if existing.has_meta("optimistic_target_cell") else null
+				if optimistic_target != null and Vector2i(optimistic_target) == new_cell:
+					var optimistic_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+					if optimistic_tween != null and optimistic_tween.is_running():
+						optimistic_tween.kill()
+					existing.position = new_pos
+					existing.remove_meta("optimistic_target_cell")
+					continue
 				# 位置变化 — 用 Tween 0.32s 插值(FLIP 等价)
+				var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+				if old_tween != null and old_tween.is_running():
+					old_tween.kill()
 				var t: Tween = create_tween()
+				existing.set_meta("move_tween", t)
 				t.set_trans(Tween.TRANS_CUBIC)
 				t.set_ease(Tween.EASE_OUT)
 				# FIX: tween 从 prev_pos → new_pos。
@@ -98,12 +123,39 @@ func _add_unit_node(unit_data: Dictionary) -> void:
 	var unit_dict: Dictionary = unit_data
 	var color_name := String(unit_dict.get("color", "red"))
 	var cell := Vector2i(int(unit_dict.get("x", 0)), int(unit_dict.get("y", 0)))
-	presenter.setup(unit_dict, Config.player_color(color_name))
+	presenter.setup(unit_dict, _team_color_for_unit(unit_dict), _team_id_for_unit(unit_dict))
 	presenter.position = metrics.cell_to_local(cell)
 	units.add_child(presenter)
 	var uid: int = int(unit_dict.get("id", -1))
 	if uid >= 0:
 		_unit_nodes_by_id[uid] = presenter
+
+
+# M4.16+:查 unit owner 的 team_id(从 GameState.players[] 取)。
+# 1V1 free-for-all(team_id=None)→ 返回 None,unit_node 不显示 team 字母。
+# 2V2 队战 → 返回 "team_a"/"team_b" 等。
+func _team_id_for_unit(unit_data: Dictionary) -> Variant:
+	if GameState == null:
+		return null
+	var owner_pid: int = int(unit_data.get("player_id", -1))
+	if owner_pid <= 0:
+		return null
+	var owner: Dictionary = GameState.get_player(owner_pid)
+	if owner.is_empty():
+		return null
+	return owner.get("team", null)
+
+
+func _team_color_for_unit(unit_data: Dictionary) -> Color:
+	var team_id: Variant = _team_id_for_unit(unit_data)
+	var team_key: String = String(team_id) if team_id != null else ""
+	match team_key:
+		"team_a": return Config.player_color("red")
+		"team_b": return Config.player_color("blue")
+		"team_c": return Config.player_color("green")
+		"team_d": return Config.player_color("yellow")
+	var color_name := String(unit_data.get("color", "red"))
+	return Config.player_color(color_name)
 
 
 # M4.10:屏幕坐标 → cell,找该 cell 的单位
@@ -203,6 +255,78 @@ func spawn_floating_text_at_cell(cell: Vector2i, text: String, color_hex: String
 # 缩放(Zoom) + 拖拽(Pan) — 鼠标滚轮缩放,左键拖拽
 # ============================================================
 
+func preview_unit_move(unit_id: int, to_cell: Vector2i, duration_sec: float = 0.28) -> void:
+	if metrics == null:
+		return
+	var existing: Node2D = _unit_nodes_by_id.get(unit_id) as Node2D
+	if existing == null or not is_instance_valid(existing):
+		return
+	var new_pos: Vector2 = metrics.cell_to_local(to_cell)
+	var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+	if old_tween != null and old_tween.is_running():
+		old_tween.kill()
+	if existing.position == new_pos:
+		return
+	var start_pos: Vector2 = existing.position
+	existing.position = start_pos.lerp(new_pos, 0.08)
+	if duration_sec <= 0.0:
+		existing.position = new_pos
+		return
+	var t: Tween = create_tween()
+	existing.set_meta("move_tween", t)
+	t.set_trans(Tween.TRANS_CUBIC)
+	t.set_ease(Tween.EASE_OUT)
+	t.tween_property(existing, "position", new_pos, duration_sec)
+
+
+func preview_unit_path(unit_id: int, path_cells: Array, max_total_sec: float = 0.45) -> void:
+	if path_cells.is_empty():
+		return
+	var expanded_path: Array = _expand_to_orthogonal_path(path_cells)
+	if expanded_path.size() <= 2:
+		preview_unit_move(unit_id, Vector2i(expanded_path[-1]), min(max_total_sec, 0.28))
+		return
+	if metrics == null:
+		return
+	var existing: Node2D = _unit_nodes_by_id.get(unit_id) as Node2D
+	if existing == null or not is_instance_valid(existing):
+		return
+	var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+	if old_tween != null and old_tween.is_running():
+		old_tween.kill()
+	existing.position = metrics.cell_to_local(Vector2i(expanded_path[0]))
+	var steps: Array = expanded_path.slice(1)
+	var step_sec: float = min(0.10, max_total_sec / float(max(1, steps.size())))
+	var t: Tween = create_tween()
+	existing.set_meta("move_tween", t)
+	existing.set_meta("optimistic_target_cell", Vector2i(expanded_path[-1]))
+	t.set_trans(Tween.TRANS_LINEAR)
+	t.set_ease(Tween.EASE_IN_OUT)
+	for cell in steps:
+		t.tween_property(existing, "position", metrics.cell_to_local(Vector2i(cell)), step_sec)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(existing) and existing.has_meta("optimistic_target_cell"):
+			existing.remove_meta("optimistic_target_cell")
+	)
+
+
+func _expand_to_orthogonal_path(path_cells: Array) -> Array:
+	var out: Array = []
+	for raw_cell in path_cells:
+		var cell := Vector2i(raw_cell)
+		if out.is_empty():
+			out.append(cell)
+			continue
+		var cur := Vector2i(out[-1])
+		while cur.x != cell.x:
+			cur.x += 1 if cell.x > cur.x else -1
+			out.append(cur)
+		while cur.y != cell.y:
+			cur.y += 1 if cell.y > cur.y else -1
+			out.append(cur)
+	return out
+
+
 const ZOOM_MIN: float = 0.4
 const ZOOM_MAX: float = 3.0
 const ZOOM_STEP: float = 0.15
@@ -233,7 +357,7 @@ func _handle_camera_input(event: InputEvent) -> void:
 			_zoom_at_point(mb.global_position, -ZOOM_STEP)
 			get_viewport().set_input_as_handled()
 			return
-		if mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.button_index == MOUSE_BUTTON_LEFT or mb.button_index == MOUSE_BUTTON_MIDDLE:
 			if mb.pressed:
 				_press_start_mouse = mb.global_position
 				_pan_start_mouse = mb.global_position
@@ -294,6 +418,102 @@ func emit_tile_clicked(global_pos: Vector2) -> void:
 	tile_clicked.emit(ground_layer.local_to_map(local))
 
 
+# M4.16+:重建建筑阵营旗。tile_data 是 Array[Dictionary](server TileOut shape),
+# 包含 terrain / owner_id / x / y。闪烁由 _update_flag_blink() 单独处理。
+func rebuild_flags(tiles: Array) -> void:
+	if flag_layer == null or metrics == null:
+		return
+	# 清旧
+	for child in flag_layer.get_children():
+		child.queue_free()
+	if tiles.is_empty():
+		return
+	var _pending := _collect_pending_claim_tiles()
+	for t in tiles:
+		if not t is Dictionary:
+			continue
+		var terrain: String = String(t.get("terrain", ""))
+		if not _BUILDING_TERRAINS.has(terrain):
+			continue
+		var owner_v: Variant = t.get("owner_id", null)
+		if owner_v == null:
+			continue  # 无归属不显示旗
+		var owner_pid: int = int(owner_v)
+		if owner_pid <= 0:
+			continue
+		var cell := Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
+		_add_flag_at(cell, owner_pid)
+	_update_flag_blink()
+
+
+# M4.16+:从 GameState.pending_claims 收集正在占领的 (x,y) 集合。
+# 让闪烁的旗在 claim 期间视觉上突出。
+func _collect_pending_claim_tiles() -> Dictionary:
+	var claiming: Dictionary = {}
+	if GameState == null:
+		return claiming
+	for c in GameState.pending_claims:
+		if not c is Dictionary:
+			continue
+		claiming[Vector2i(int(c.get("tile_x", -1)), int(c.get("tile_y", -1)))] = true
+	return claiming
+
+
+# M4.16+:在 cell 中心放一面阵营色三角旗(polygon)。
+# 锚点是 cell 左下角外侧 8px(避免覆盖建筑 sprite)。
+func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
+	if metrics == null:
+		return
+	var poly := Polygon2D.new()
+	poly.polygon = _FLAG_POINTS
+	# 从 GameState.players[].color 取玩家阵营色。
+	var color_name := "red"
+	if GameState != null:
+		var owner: Dictionary = GameState.get_player(owner_pid)
+		if not owner.is_empty():
+			color_name = String(owner.get("color", "red"))
+	poly.color = Config.player_color(color_name)
+	poly.position = metrics.cell_to_local(cell)
+	# Z 索引:在 UnitLayer 之前(在 GroundLayer 之上)
+	flag_layer.add_child(poly)
+	# 存 cell → Polygon2D 引用,闪烁时 toggle visible
+	poly.set_meta("tile_cell", cell)
+
+
+# M4.16+:让属于 pending_claims 的旗闪烁(其他静态显示)。
+# 闪烁频率 0.5s on/off,用 _process 里的 accumulate timer 实现,避免
+# 频繁 Tween 创建/销毁。
+var _flag_blink_t: float = 0.0
+const _FLAG_BLINK_HALF_PERIOD := 0.45
+
+func _process(delta: float) -> void:
+	if flag_layer == null:
+		return
+	_flag_blink_t += delta
+	# 每隔 _FLAG_BLINK_HALF_PERIOD 秒翻转一次 modulate.a
+	if _flag_blink_t >= _FLAG_BLINK_HALF_PERIOD:
+		_flag_blink_t = 0.0
+		_update_flag_blink()
+
+
+func _update_flag_blink() -> void:
+	if flag_layer == null:
+		return
+	var claiming := _collect_pending_claim_tiles()
+	for child in flag_layer.get_children():
+		if not child is Polygon2D:
+			continue
+		var cell_v: Variant = child.get_meta("tile_cell", null)
+		if cell_v == null:
+			continue
+		var cell: Vector2i = cell_v
+		var is_being_claimed: bool = claiming.has(cell)
+		# 闪烁:每 _FLAG_BLINK_HALF_PERIOD 翻转 — 用 sin 让淡入淡出
+		var phase: float = fmod(Time.get_ticks_msec() / 1000.0, _FLAG_BLINK_HALF_PERIOD * 2.0)
+		var on: bool = phase < _FLAG_BLINK_HALF_PERIOD
+		child.modulate.a = 0.4 if (is_being_claimed and not on) else 1.0
+
+
 func load_map(map_json: Dictionary) -> Dictionary:
 	var result := MapLoader.apply_to_board(self, map_json)
 	map_size = Vector2i(int(result["width"]), int(result["height"]))
@@ -304,7 +524,10 @@ func load_map(map_json: Dictionary) -> Dictionary:
 	_rebuild_units(initial_units)
 	highlights.reset(metrics)
 	if board_camera != null:
-		board_camera.apply_metrics(metrics)
+		if board_camera.has_method("apply_new_map_metrics"):
+			board_camera.apply_new_map_metrics(metrics)
+		else:
+			board_camera.apply_metrics(metrics)
 	map_loaded.emit(map_size.x, map_size.y, map_biome)
 	return result
 

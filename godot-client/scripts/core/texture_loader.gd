@@ -38,8 +38,10 @@ static func load_resized(res_path: String, target_size: int = 0) -> Texture2D:
 static func load_image(res_path: String) -> Image:
 	if res_path == "":
 		return null
-	# Fast path: imported texture is preferred.
-	if ResourceLoader.exists(res_path):
+	# Fast path: imported texture is preferred when its generated .ctex is
+	# present. Some checked-in .import files can point at stale local cache
+	# entries, and calling load() on those emits noisy errors before fallback.
+	if _imported_texture_ready(res_path) and ResourceLoader.exists(res_path):
 		var res: Resource = load(res_path)
 		if res is Texture2D:
 			var tex: Texture2D = res
@@ -56,6 +58,29 @@ static func load_image(res_path: String) -> Image:
 		# "missing texture", which mirrors the prior behaviour.
 		return null
 	return Image.load_from_file(res_path)
+
+
+static func _imported_texture_ready(res_path: String) -> bool:
+	if not res_path.begins_with("res://"):
+		return false
+	var import_meta_path := res_path + ".import"
+	if not FileAccess.file_exists(import_meta_path):
+		return false
+	var file := FileAccess.open(import_meta_path, FileAccess.READ)
+	if file == null:
+		return false
+	var text := file.get_as_text()
+	file.close()
+	var marker := "dest_files=[\""
+	var start := text.find(marker)
+	if start < 0:
+		return true
+	start += marker.length()
+	var end := text.find("\"", start)
+	if end < 0:
+		return false
+	var dest_path := text.substr(start, end - start)
+	return FileAccess.file_exists(dest_path)
 
 
 # Crop transparent borders and resize to ``target_size`` preserving
@@ -78,7 +103,17 @@ static func fit_image_to_square(img: Image, target_size: int = 0) -> Texture2D:
 		)
 		var out_w: int = max(1, int(round(float(img.get_width()) * scale)))
 		var out_h: int = max(1, int(round(float(img.get_height()) * scale)))
-		img.resize(out_w, out_h, Image.INTERPOLATE_BILINEAR)
+		# Unit and hero illustrations are high-resolution art, so keep
+		# this resize smooth. Pixel-art tiles keep NEAREST in TileSetBuilder.
+		img.resize(out_w, out_h, Image.INTERPOLATE_LANCZOS)
+		var canvas: Image = Image.create(target_size, target_size, false, Image.FORMAT_RGBA8)
+		canvas.fill(Color(0, 0, 0, 0))
+		canvas.blit_rect(
+			img,
+			Rect2i(0, 0, out_w, out_h),
+			Vector2i((target_size - out_w) / 2, (target_size - out_h) / 2)
+		)
+		img = canvas
 	return ImageTexture.create_from_image(img)
 
 

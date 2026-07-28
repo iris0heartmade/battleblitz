@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import heapq
 import random
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from app.config import (
     TERRAIN_BARRACKS,
@@ -144,13 +144,28 @@ def place_buildings(
     village_castle_distance: int = 4,
     barracks_min_distance: int = 4,
     barracks_castle_distance: int = 5,
+    *,
+    # 学长 2026-07-22:经济点分布规则
+    # 默认 None = 用老逻辑(village_count/barracks_count 均匀分布)
+    # 非 None = 按 style_cfg 给的规则放置
+    per_faction_count: Optional[int] = None,   # 每个 HQ 附近保证 N 个经济点
+    neutral_count: Optional[int] = None,       # 无归属经济点(地图中央)
+    neutral_bias: Optional[str] = None,        # "toward_multi" / "toward_solo" / None
+    solo_faction_idx: Optional[int] = None,    # 1vN 模式下 solo 的 seat
+    seat_to_faction: Optional[Dict[int, str]] = None,  # seat → "solo"/"multi"/"neutral"
 ) -> Tuple[List[Coord], List[Coord]]:
     """Drop villages and barracks on passable tiles.
 
-    Returns ``(villages, barracks)`` — lists of placed coords (seat
-    order is unspecified).  Tiles are mutated in place.  No-op when
-    counts are zero or the map is too small to host the requested
-    buildings.
+    Returns ``(villages, barracks)`` — lists of placed coords in
+    seat order when ``per_faction_count`` is set, otherwise in
+    placement order.  Tiles are mutated in place.  No-op when
+    counts are zero or the map is too small.
+
+    学长 2026-07-22 新规则:
+    - ``per_faction_count=N``:每个 HQ 附近至少放 N 个经济点
+      (1 个 village + N-1 个 barracks,或全 village 看空间)。
+    - ``neutral_count=M``:另外放 M 个无归属经济点。
+    - ``neutral_bias="toward_multi"``:neutral 偏向多人方一侧(1vN 公平性)。
     """
     villages: List[Coord] = []
     barracks: List[Coord] = []
@@ -179,11 +194,17 @@ def place_buildings(
         other_dist: int,
         castle_dist: int,
         limit: int,
+        # 偏置:从指定方向采样更多次(学长 neutral 偏置需求)
+        preferred_sampler: Optional[Callable[[], Coord]] = None,
     ) -> Optional[Coord]:
         terrain_id = TERRAIN_VILLAGE if kind == "village" else TERRAIN_BARRACKS
-        for _ in range(limit):
-            x = rng.randint(0, size - 1)
-            y = rng.randint(0, size - 1)
+        attempts = max(limit, 50) if preferred_sampler is None else limit
+        for _ in range(attempts):
+            if preferred_sampler is not None and rng.random() < 0.6:
+                x, y = preferred_sampler()
+            else:
+                x = rng.randint(0, size - 1)
+                y = rng.randint(0, size - 1)
             if not _candidate_passes(
                 (x, y), others, other_dist, castle_dist,
             ):
@@ -192,9 +213,74 @@ def place_buildings(
             return (x, y)
         return None
 
-    # Villages first — barracks prefer to spawn away from both castles
-    # *and* villages.
     attempts_per_building = max(50, size * 5)
+
+    # ============================================================
+    # 学长 2026-07-22 新规则:per-faction + neutral 分配
+    # ============================================================
+    if per_faction_count is not None and castles:
+        # 1) 每个 HQ 附近先放 per_faction_count 个本阵营经济点
+        #    规则:第 1 个放 village(收入低/安全),第 2+ 放 barracks(出兵)
+        per_castle = list(castles)
+        for i, castle in enumerate(per_castle):
+            nearby: List[Coord] = []
+            for j in range(per_faction_count):
+                kind = "village" if j == 0 else "barracks"
+                # 学长 2026-07-22:per-faction 模式给更多尝试次数
+                # 因为周围可能已经被山/河占了
+                attempts = attempts_per_building * 4
+                placed = _try_place(
+                    kind, villages + barracks + nearby,
+                    other_dist=3, castle_dist=3,   # castle_dist 3 让城周围稍密
+                    limit=attempts,
+                )
+                if placed is not None:
+                    nearby.append(placed)
+                    if kind == "village":
+                        villages.append(placed)
+                    else:
+                        barracks.append(placed)
+
+        # 2) 放 neutral_count 个无归属经济点,带偏置
+        if neutral_count:
+            multi_centroid: Optional[Coord] = None
+            if neutral_bias == "toward_multi" and castles and solo_faction_idx is not None:
+                multi_coords = [c for i, c in enumerate(castles) if i != solo_faction_idx]
+                if multi_coords:
+                    mx = sum(c[0] for c in multi_coords) / len(multi_coords)
+                    my = sum(c[1] for c in multi_coords) / len(multi_coords)
+                    multi_centroid = (mx, my)
+
+            def _biased_sampler():
+                # 从 multi_centroid 周围 ±size/4 的方块内采样
+                if multi_centroid is None:
+                    return (rng.randint(0, size - 1), rng.randint(0, size - 1))
+                bx = int(multi_centroid[0]) + rng.randint(-size // 4, size // 4)
+                by = int(multi_centroid[1]) + rng.randint(-size // 4, size // 4)
+                bx = max(0, min(size - 1, bx))
+                by = max(0, min(size - 1, by))
+                return (bx, by)
+
+            for j in range(neutral_count):
+                kind = "village" if j % 2 == 0 else "barracks"
+                placed = _try_place(
+                    kind, villages + barracks,
+                    other_dist=3, castle_dist=4,
+                    limit=attempts_per_building * 2,
+                    preferred_sampler=_biased_sampler
+                    if neutral_bias == "toward_multi"
+                    else None,
+                )
+                if placed is not None:
+                    if kind == "village":
+                        villages.append(placed)
+                    else:
+                        barracks.append(placed)
+        return villages, barracks
+
+    # ============================================================
+    # 老的均匀分布逻辑(village_count/barracks_count 模式)
+    # ============================================================
     for _ in range(village_count):
         placed = _try_place(
             "village", villages, village_min_distance,

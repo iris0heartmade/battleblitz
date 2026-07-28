@@ -23,24 +23,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from app.agent.schemas import LegalAction
-from app.classes.units import get as _get_unit
 from app.config import (
-    AI_AGGRO_RANGE,
-    SKILL_DOUBLE_STRIKE,
     SKILL_SNIPE,
-    TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
-    TERRAIN_FOREST,
-    TERRAIN_MOUNTAIN,
-    TERRAIN_RIVER,
 )
 from app.game_logic import (
     calculate_damage,
     unit_attack_range,
+    unit_min_attack_range,
 )
 from app.models import Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile
-from app.utils import bfs_reachable, has_line_of_sight, manhattan
+from app.utils import bfs_reachable, manhattan
 
 
 # Cap the number of move targets we list. AI doesn't need to know about every
@@ -125,7 +119,20 @@ def _legal_actions_for_unit(
 
     # 2. Move — enumerate reachable tiles
     if unit.mp > 0:
-        blocked = {pos for pos, uid in occupied.items() if uid != unit.id}
+        # T:#20 — 火纹风格阻挡:
+        #   - enemy 棋子:既不能穿过也不能结束(完全阻挡)
+        #   - ally 棋子:能穿过(不阻挡),但不能在同一格结束(避免重叠)
+        # 之前:任何棋子(含 ally)都完全阻挡,fire emblem 风格崩坏
+        ally_unit_ids = {u.id for u in ally_units}
+        enemy_unit_ids = {u.id for u in enemy_units}
+        blocked = {
+            pos for pos, uid in occupied.items()
+            if uid in enemy_unit_ids
+        }
+        no_end = {
+            pos for pos, uid in occupied.items()
+            if uid in ally_unit_ids
+        }
         reachable = bfs_reachable(
             start=(unit.x, unit.y),
             terrain=terrain,
@@ -160,21 +167,13 @@ def _legal_actions_for_unit(
                     description=f"→{tx},{ty}",
                 ))
 
-    # 3. Attack — enemies in range
+    # 3. Attack - enemies in range by Manhattan distance only.
     atk_range = unit_attack_range(unit)
-    los_blockers = {
-        c for c, t in terrain.items()
-        if t in (TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER)
-    }
+    atk_min = unit_min_attack_range(unit)
     for e in enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
-        if d == 0 or d > atk_range:
+        if d == 0 or d < atk_min or d > atk_range:
             continue
-        if d > 1 and not _get_unit(unit.unit_type).ignores_line_of_sight:
-            # Ranged: check LOS (archer's "snipe" ignores obstacles)
-            los_blockers.discard((e.x, e.y))
-            if not has_line_of_sight((unit.x, unit.y), (e.x, e.y), los_blockers):
-                continue
 
         # Estimate damage
         def_tile_terrain = terrain.get((e.x, e.y), "plain")

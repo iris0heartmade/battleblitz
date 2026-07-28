@@ -56,6 +56,171 @@ def calculate_castle_positions(
     return list(layouts[n])
 
 
+# ---------------------------------------------------------------------
+# 学长 2026-07-22:差异化 HQ 摆位
+# ---------------------------------------------------------------------
+# 上面的 calculate_castle_positions 一直是固定模式:
+#   2 → 对角,3 → 三角,4 → 四角。学长反馈"位置都比较固定,没有差异化"。
+#
+# 新加 hq_layouts_for() 函数,根据 style_cfg["hq_layout"] 返回不同的
+# HQ 布局。仍然尊重"对角对称"等老传统,但加了 6+ 种新摆法:
+#
+#   scattered_2  : 2 个 HQ 不在对角,而在两条邻边
+#   scattered_3  : 3 个 HQ 三角形但每张图旋转不同角度
+#   scattered_4  : 4 个 HQ 不全在角,而是"3 角 + 1 中"或"全边"
+#   line_3       : 3 个 HQ 在同一边均匀分布(适合"三国鼎立"图)
+#   edge_pair_2  : 2 个 HQ 在对边中点(不是对角)
+#   ring_3_vs_1  : 1 HQ 在中心 + 3 HQ 在外围(主线夺王座用)
+#   asymmetric_1v2: 1 solo 在一角 + 2 multi 在对侧形成 base(学长新需求)
+#   asymmetric_1v3: 1 solo 在一角 + 3 multi 三角围剿
+#
+# 返回格式跟 calculate_castle_positions 一样:List[(x, y)] in seat order。
+# ---------------------------------------------------------------------
+
+
+def hq_layouts_for(
+    size: int,
+    player_count: int,
+    layout: str,
+    rng: random.Random,
+    inset: int = None,
+) -> List[Coord]:
+    """Dispatch to the right HQ layout function based on ``layout``.
+
+    ``layout == "auto"`` falls back to ``calculate_castle_positions``
+    (the original symmetric 2/3/4 layouts).  Other strings select
+    one of the variants below.
+    """
+    if inset is None:
+        inset = max(2, size // 8)
+    far_inset = size - 1 - inset
+    mid_x = size // 2
+    mid_y = size // 2
+
+    # "auto" → 老的固定对称布局
+    if layout == "auto" or not layout:
+        return calculate_castle_positions(size, player_count, inset=inset)
+
+    # 学长新需求:差异化摆位
+    if layout == "scattered_2":
+        # 2 个 HQ 在相邻两条边的中段(不是对角)
+        # 让一条边选 inset/2,另一条选 far_inset
+        half = max(2, inset // 2)
+        edge = rng.choice(["TL", "TR", "BL", "BR", "LR", "TB"])
+        if edge == "TL":  # 左上 + 右上
+            return [(half, half), (size - 1 - half, half)]
+        if edge == "TR":  # 右上 + 左下
+            return [(size - 1 - half, half), (half, size - 1 - half)]
+        if edge == "BL":  # 左下 + 右上
+            return [(half, size - 1 - half), (size - 1 - half, half)]
+        if edge == "BR":  # 左下 + 右下
+            return [(half, size - 1 - half), (size - 1 - half, size - 1 - half)]
+        if edge == "LR":  # 左 + 右(对边中段)
+            return [(half, mid_y), (size - 1 - half, mid_y)]
+        # TB: 上 + 下
+        return [(mid_x, half), (mid_x, size - 1 - half)]
+
+    if layout == "scattered_3":
+        # 3 HQ 三角形但每张图随机旋转
+        rotation = rng.choice([0, 1, 2, 3])  # 0/90/180/270 度
+        base = [(inset, inset), (far_inset, inset), (mid_x, far_inset)]
+        if rotation == 0:
+            return base
+        # 90 度旋转 = (x, y) → (y, size-1-x)
+        rot = [(y, size - 1 - x) for (x, y) in base]
+        if rotation == 1:
+            return rot
+        rot2 = [(size - 1 - x, size - 1 - y) for (x, y) in base]
+        if rotation == 2:
+            return rot2
+        return [(size - 1 - y, x) for (x, y) in base]
+
+    if layout == "scattered_4":
+        # 4 HQ 不全在角;两种变体随机
+        variant = rng.choice(["corners", "3corners_1mid"])
+        if variant == "corners":
+            return [
+                (inset, inset),
+                (far_inset, inset),
+                (inset, far_inset),
+                (far_inset, far_inset),
+            ]
+        # 3 角 + 1 中
+        corner = rng.choice([(inset, inset), (far_inset, inset),
+                             (inset, far_inset), (far_inset, far_inset)])
+        others = [
+            (inset, inset), (far_inset, inset),
+            (inset, far_inset), (far_inset, far_inset),
+        ]
+        others.remove(corner)
+        return others + [corner]  # mid 排最后
+
+    if layout == "line_3":
+        # 3 个 HQ 沿同一边均匀分布
+        side = rng.choice(["top", "bottom"])
+        if side == "top":
+            return [
+                (size // 4, inset),
+                (size // 2, inset),
+                (3 * size // 4, inset),
+            ]
+        return [
+            (size // 4, size - 1 - inset),
+            (size // 2, size - 1 - inset),
+            (3 * size // 4, size - 1 - inset),
+        ]
+
+    if layout == "edge_pair_2":
+        # 2 HQ 在对边中点(不是对角)
+        return [(mid_x, inset), (mid_x, size - 1 - inset)]
+
+    if layout == "ring_3_vs_1":
+        # 1 HQ 在中心 + 3 HQ 在外围(适合"夺王座"主线)
+        return [
+            (mid_x, mid_y),
+            (inset, inset),
+            (far_inset, inset),
+            (mid_x, far_inset),
+        ]
+
+    if layout == "asymmetric_1v2":
+        # 学长需求:1 solo 在一角,2 multi 在对侧成 base
+        # solo_seat 默认 0 → 右上角
+        solo = (far_inset, inset)
+        # multi 在左下形成一对 base(便于配合)
+        # 注意:y 用 far_inset - 1(留点空),x 用 inset 和 mid_x
+        return [
+            solo,                              # seat 0 = solo
+            (inset, far_inset),                # seat 1 = multi 左下
+            (mid_x, far_inset - 1),            # seat 2 = multi 中下偏内
+        ]
+
+    if layout == "asymmetric_1v3":
+        # 学长需求:1 solo 在一角,3 multi 围剿
+        solo = (far_inset, inset)
+        return [
+            solo,                              # seat 0 = solo
+            (inset, far_inset),                # seat 1 = multi 左下
+            (mid_x, far_inset - 1),            # seat 2 = multi 中下
+            (inset, mid_y),                    # seat 3 = multi 左中
+        ]
+
+    # 未知 layout → 回落到老 auto
+    return calculate_castle_positions(size, player_count, inset=inset)
+
+
+def solo_faction_index(style_cfg: Dict, player_count: int) -> Optional[int]:
+    """Return the seat index of the solo faction in 1vN mode, or None.
+
+    学长 2026-07-22:solo 玩家比多人方资源多。如果 style 不是 1vN 模式
+    返回 None(对称情况下不需要区分 solo vs multi)。
+    """
+    asymmetry = style_cfg.get("asymmetry") or {}
+    if asymmetry.get("mode") != "1vN":
+        return None
+    return asymmetry.get("solo_seat", 0)
+
+
 def calculate_safe_zones(
     castles: List[Coord],
     size: int,

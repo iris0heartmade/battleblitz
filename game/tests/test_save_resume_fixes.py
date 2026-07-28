@@ -78,9 +78,11 @@ class TestLoadAbortsInFlight:
             json={"user_name": "alice", "game_id": gid1},
         )
         # Now we want to test "load while in-flight":
-        # start a SECOND game (still active, not yet finished)
+        # start a SECOND game (still active, not yet finished).
+        # advance 已把进度推进到 chapter_test_02(章节链锁),因此这里 start
+        # 当前允许的章节 02 产生在飞游戏,用于验证 load 时会 abort 它。
         r2 = await c.post(
-            "/mainlines/chapter_test_01/start",
+            "/mainlines/chapter_test_02/start",
             json={"user_name": "alice", "skip_intro": True, "force": True},
         )
         assert r2.status_code == 201, r2.text
@@ -358,9 +360,10 @@ class TestStartForceParameter:
             "/saves/load",
             json={"user_name": "alice", "kind": "auto", "slot_index": 0},
         )
-        # Then /start with force=True
+        # Then /start with force=True — advance 后当前章为 chapter_test_02,
+        # 恢复流程应 start 当前允许的章节(章节链锁禁止回头进已通关的 01)。
         r2 = await c.post(
-            "/mainlines/chapter_test_01/start",
+            "/mainlines/chapter_test_02/start",
             json={"user_name": "alice", "skip_intro": True, "force": True},
         )
         assert r2.status_code == 201, r2.text

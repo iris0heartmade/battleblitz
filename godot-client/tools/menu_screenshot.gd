@@ -5,12 +5,12 @@ const _OUT_PATH := "user://menu_screenshot.png"
 
 
 func _ready() -> void:
-	for i in 5:
-		await RenderingServer.frame_post_draw
 	var main: Node = get_tree().current_scene
 	var menu: Node = main.find_child("Menu", true, false)
 	if menu != null:
 		menu.visible = true
+	for i in 5:
+		await get_tree().process_frame
 	var img: Image = get_viewport().get_texture().get_image()
 	if img == null:
 		printerr("viewport returned null image")

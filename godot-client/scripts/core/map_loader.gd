@@ -86,21 +86,29 @@ static func _size_dict(map_json: Dictionary) -> Dictionary:
 
 
 static func _apply_ground_cell(layer: TileMapLayer, x: int, y: int, terrain: String, subtype: String, biome: String) -> void:
-	var ground_key := MAP_THEME_SCRIPT.ground_lookup_key(terrain, subtype)
+	var ground_key := MAP_THEME_SCRIPT.ground_lookup_key(terrain, subtype, biome)
 	_apply_layer_cell(layer, x, y, ground_key, biome)
 
 
 static func _apply_layer_cell(layer: TileMapLayer, x: int, y: int, terrain_key: String, biome: String) -> void:
 	var lookup_biome := biome if MAP_THEME_SCRIPT.uses_biome(terrain_key) else ""
-	var source_id: int = TileSetBuilder.source_id_for(terrain_key, lookup_biome)
+	var source_id: int = TileSetBuilder.source_id_for(terrain_key, biome)
+	if source_id < 0:
+		source_id = TileSetBuilder.source_id_for(terrain_key, lookup_biome)
 	if source_id < 0:
 		source_id = TileSetBuilder.source_id_for(terrain_key, Config.DEFAULT_BIOME)
 	if source_id < 0:
 		push_warning("MapLoader: no source for %s (%s)" % [terrain_key, biome])
 		return
-	if TileSetBuilder.uses_fe8_atlas() and Config.FE8_TILE_COORDS.has(terrain_key):
-		var atlas_coord: Vector2i = Config.FE8_TILE_COORDS[terrain_key]
+	var atlas_coord: Vector2i = TileSetBuilder.atlas_coord_for(terrain_key, biome, x, y)
+	if atlas_coord == Vector2i(-1, -1):
+		atlas_coord = TileSetBuilder.atlas_coord_for(terrain_key, lookup_biome, x, y)
+	if atlas_coord != Vector2i(-1, -1):
 		layer.set_cell(Vector2i(x, y), source_id, atlas_coord, 0)
+		return
+	if TileSetBuilder.uses_fe8_atlas() and Config.FE8_TILE_COORDS.has(terrain_key):
+		var fe8_atlas_coord: Vector2i = Config.FE8_TILE_COORDS[terrain_key]
+		layer.set_cell(Vector2i(x, y), source_id, fe8_atlas_coord, 0)
 		return
 	var n_variants: int = int(Config.TERRAIN_VARIANT_COUNTS.get(terrain_key, 1))
 	var variant: int = Config.pick_tile_variant(terrain_key, x, y)

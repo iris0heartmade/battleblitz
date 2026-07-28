@@ -41,17 +41,25 @@ static func neighbors(pos: Vector2i) -> Array:
 # Passability
 # ============================================================
 
-## Mirrors `utils.terrain_passable`. Note the explicit blacklist of
-## `castle_wall` / `gate` (impassable for everyone) and the `castle`
-## ownership check.
+## Mirrors `utils.terrain_passable` (server `can_end_on_terrain`).
+## Note the explicit blacklist of `castle_wall` / `gate` (impassable for
+## everyone).
+##
+## M4.16+ fix:REMOVED the `castle` ownership check that used to prevent
+## units from stepping on enemy HQ tiles. The server intentionally allows
+## stepping onto enemy castles (comment in actions.py:222 — "Enemy HQs
+## are valid movement targets. Claiming the HQ remains an explicit
+## two-turn action after the unit arrives."). Without this fix the unit
+## could never reach the enemy HQ to start a claim session, so the seize
+## win condition was unreachable in the Godot client.
 static func terrain_passable(terrain: String, owner_id: int, viewer_owner_id: int) -> bool:
+	# `owner_id` / `viewer_owner_id` are intentionally unused — see comment
+	# above. Server uses `DEFAULT_MOVEMENT_PROFILE` (no rules) so any
+	# terrain with a finite move cost is endable.
+	var _owner_unused: int = owner_id
+	var _viewer_unused: int = viewer_owner_id
 	if terrain == "castle_wall" or terrain == "gate":
 		return false
-	if terrain == "castle":
-		# -1 / 0 sentinel "no owner" → anyone can stand.
-		return owner_id < 0 or owner_id == viewer_owner_id
-	# All other terrains (river / mountain / village / barracks / road /
-	# castle_*) are passable; their move cost is in TERRAIN_MOVE_COST.
 	return Config.TERRAIN_MOVE_COST.has(terrain)
 
 
@@ -92,9 +100,10 @@ static func has_line_of_sight(a: Vector2i, b: Vector2i, blocked: Dictionary, siz
 ## want MP-equivalent should divide by 2.
 ##
 ## `terrain` and `owners` are Dictionary[Vector2i -> String/int] built
-## from the latest GameState snapshot. `blocked_units` is a set of
-## Vector2i where friendly / enemy units stand (impassable except for
-## the unit's own start tile).
+## from the latest GameState snapshot.
+## `blocked_units`: fully blocks traversal and ending, used for enemies.
+## `no_end_units`: can be traversed but cannot be used as a destination,
+## used for allies.
 static func compute_reachable(
 	start: Vector2i,
 	terrain: Dictionary,
@@ -102,6 +111,7 @@ static func compute_reachable(
 	mov: int,
 	viewer_owner_id: int,
 	blocked_units: Dictionary = {},
+	no_end_units: Dictionary = {},
 	size: int = 0,
 ) -> Dictionary:
 	if size <= 0:
@@ -110,6 +120,7 @@ static func compute_reachable(
 		return {}
 	var budget: int = mov * 2
 	var dist: Dictionary = {start: 0}
+	var reachable: Dictionary = {start: 0}
 	var queue: Array = [start]
 	var qi: int = 0
 	while qi < queue.size():
@@ -136,7 +147,9 @@ static func compute_reachable(
 			if not dist.has(n) or new_cost < dist[n]:
 				dist[n] = new_cost
 				queue.append(n)
-	return dist
+				if not no_end_units.has(n):
+					reachable[n] = new_cost
+	return reachable
 
 
 # ============================================================
@@ -156,6 +169,7 @@ static func pathfind(
 	mov: int,
 	viewer_owner_id: int,
 	blocked_units: Dictionary = {},
+	no_end_units: Dictionary = {},
 	size: int = 0,
 ) -> Array:
 	if start == goal:
@@ -165,6 +179,8 @@ static func pathfind(
 	# Allow standing on own tile even if `blocked_units` includes it.
 	var blocked := blocked_units.duplicate()
 	blocked.erase(start)
+	var no_end := no_end_units.duplicate()
+	no_end.erase(start)
 	var budget: int = mov * 2
 
 	# A tiny binary-heap substitute (avoids pulling in stdlib heapq).
@@ -191,7 +207,7 @@ static func pathfind(
 			continue
 		# Accept goal only if cost within budget (P2.5 fix: prevents
 		# `pathfind` returning teleporting paths when cost > mov).
-		if node == goal and cost <= budget:
+		if node == goal and cost <= budget and not no_end.has(node):
 			var path: Array = [goal]
 			while came_from.has(path[-1]):
 				path.append(came_from[path[-1]])
@@ -249,7 +265,7 @@ static func attack_range_tiles(attacker_pos: Vector2i, attack_range: int, min_ra
 		for x in size:
 			var p := Vector2i(x, y)
 			var d: int = manhattan(attacker_pos, p)
-			if d >= min_range and d <= attack_range:
+			if d > min_range and d <= attack_range:
 				out.append(p)
 	return out
 

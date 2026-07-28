@@ -19,13 +19,25 @@ func _ready() -> void:
 func apply_metrics(metrics) -> void:
 	_metrics = metrics
 	if _user_positioned:
-		pass
+		enabled = true
+		return
 	else:
 		_refresh_from_metrics(false)
 	enabled = true
 
 
+func apply_new_map_metrics(metrics) -> void:
+	_metrics = metrics
+	if _user_positioned:
+		enabled = true
+		return
+	reset_to_fit()
+	enabled = true
+
+
 func _on_viewport_size_changed() -> void:
+	if _user_positioned:
+		return
 	_refresh_from_metrics(false)
 
 

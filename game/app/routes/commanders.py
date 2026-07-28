@@ -63,9 +63,12 @@ async def get_unlocked_commanders(
     profile = await session.scalar(select(PlayerProfile).where(PlayerProfile.user_name == user_name))
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    # 开发阶段:返回所有已注册指挥官而非仅 profile.unlocked_commanders
+    from app.classes.heroes import list_all
+    all_commanders = [h.hero_id for h in list_all() if getattr(h, "is_commander", False)]
     return {
         "user_name": user_name,
-        "unlocked_commanders": list(profile.unlocked_commanders or []),
+        "unlocked_commanders": list(all_commanders),
         "mainline_commanders": dict(profile.mainline_commanders or {}),
     }
 

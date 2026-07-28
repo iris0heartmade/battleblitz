@@ -16,6 +16,8 @@ script = ExtResource("1_board")
 [node name="HighlightLayer" type="Node2D" parent="."]
 script = ExtResource("2_highlights")
 
+[node name="FlagLayer" type="Node2D" parent="."]
+
 [node name="UnitLayer" type="Node2D" parent="."]
 
 [node name="EffectsLayer" type="Node2D" parent="."]

@@ -117,22 +117,24 @@ class TestListTestMainlines:
 
 @pytest.mark.integration
 class TestMainlineChapterUnlocks:
-    async def test_new_profile_can_only_enter_first_test_chapter(self, tml_client):
+    async def test_new_profile_sees_all_test_chapters(self, tml_client):
         client, _ = tml_client
         await _create_profile(client, "alice")
 
         listed = await client.get("/mainlines", params={"user_name": "alice"})
         assert listed.status_code == 200, listed.text
-        ids = [m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")]
-        assert ids == ["chapter_test_01"]
+        ids = {m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")}
+        # P2(FE8):章节锁已删 —— 全部 test 章节可见,可自由进入。
+        assert {"chapter_test_01", "chapter_test_02", "chapter_test_03"} <= ids
 
-        blocked = await client.post(
+        # 直接 start 第二章不再被 403 锁。
+        r = await client.post(
             "/mainlines/chapter_test_02/start",
             json={"user_name": "alice", "skip_intro": True},
         )
-        assert blocked.status_code == 403, blocked.text
+        assert r.status_code != 403, r.text
 
-    async def test_cleared_formal_save_unlocks_next_test_chapter(self, tml_client):
+    async def test_cleared_save_does_not_gate_listing(self, tml_client):
         client, SessionLocal = tml_client
         await _create_profile(client, "alice")
 
@@ -151,10 +153,11 @@ class TestMainlineChapterUnlocks:
             )
             await s.commit()
 
+        # 通关存档不再折叠列表 —— 全部章节仍可见(无锁)。
         listed = await client.get("/mainlines", params={"user_name": "alice"})
         assert listed.status_code == 200, listed.text
-        ids = [m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")]
-        assert ids == ["chapter_test_02"]
+        ids = {m["id"] for m in listed.json() if str(m["id"]).startswith("chapter_test_")}
+        assert {"chapter_test_01", "chapter_test_02", "chapter_test_03"} <= ids
 
 
 # ============================================================
