@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/mainline_prepare_panel.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/ui/rebuild/navy_gold_frame_overlay_9slice.png" id="2_frame"]
 
 [node name="MainlinePreparePanel" type="PanelContainer"]
 custom_minimum_size = Vector2(1000, 600)
@@ -178,14 +177,3 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(150, 46)
 text = "放弃主线"
-
-[node name="FrameOverlay" type="NinePatchRect" parent="."]
-layout_mode = 2
-mouse_filter = 2
-texture = ExtResource("2_frame")
-patch_margin_left = 128
-patch_margin_top = 128
-patch_margin_right = 128
-patch_margin_bottom = 128
-draw_center = false
-metadata/_ui_asset_role = "decorative-nine-slice-overlay"
