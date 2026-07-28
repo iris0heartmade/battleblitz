@@ -1,0 +1,191 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/mainline_prepare_panel.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/rebuild/navy_gold_frame_overlay_9slice.png" id="2_frame"]
+
+[node name="MainlinePreparePanel" type="PanelContainer"]
+custom_minimum_size = Vector2(1000, 600)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="CouncilTitle" type="Label" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "战前整备"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 27
+
+[node name="Tabs" type="HBoxContainer" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Heroes" type="Button" parent="Layout/Tabs"]
+layout_mode = 2
+text = "英雄"
+
+[node name="Roster" type="Button" parent="Layout/Tabs"]
+layout_mode = 2
+text = "部队"
+
+[node name="Equipment" type="Button" parent="Layout/Tabs"]
+layout_mode = 2
+text = "装备"
+
+[node name="Mercenary" type="Button" parent="Layout/Tabs"]
+layout_mode = 2
+text = "佣兵"
+
+[node name="Shop" type="Button" parent="Layout/Tabs"]
+layout_mode = 2
+text = "商店"
+
+[node name="Columns" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="RosterPanel" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
+[node name="RosterScroll" type="ScrollContainer" parent="Layout/Columns/RosterPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Roster" type="VBoxContainer" parent="Layout/Columns/RosterPanel/RosterScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ContentPanel" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ContentMargin" type="MarginContainer" parent="Layout/Columns/ContentPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ContentLayout" type="VBoxContainer" parent="Layout/Columns/ContentPanel/ContentMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ContentTitle" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "选择英雄"
+theme_override_font_sizes/font_size = 22
+
+[node name="ChoiceSelect" type="OptionButton" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(0, 42)
+
+[node name="ChoiceHint" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="ContentBody" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+text = "在左侧选择英雄。装备页只显示装备槽和背包，不会与其他页面共用选择器。"
+theme_override_font_sizes/font_size = 17
+
+[node name="MissionPanel" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+
+[node name="MissionMargin" type="MarginContainer" parent="Layout/Columns/MissionPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="MissionLayout" type="VBoxContainer" parent="Layout/Columns/MissionPanel/MissionMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MissionTitle" type="Label" parent="Layout/Columns/MissionPanel/MissionMargin/MissionLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "任务摘要"
+theme_override_font_sizes/font_size = 20
+
+[node name="MissionBody" type="Label" parent="Layout/Columns/MissionPanel/MissionMargin/MissionLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+text = "胜利条件、敌方预览、地图缩略与指挥官信息将在此显示。"
+
+[node name="ActionBar" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BackAction" type="Button" parent="Layout/ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(160, 46)
+text = "返回章节"
+
+[node name="ActionSpacer" type="Control" parent="Layout/ActionBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RefreshAction" type="Button" parent="Layout/ActionBar"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(150, 46)
+text = "刷新整备"
+
+[node name="StartAction" type="Button" parent="Layout/ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(170, 46)
+text = "开始战斗"
+
+[node name="CompleteAction" type="Button" parent="Layout/ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(150, 46)
+text = "完成整备"
+
+[node name="AbandonAction" type="Button" parent="Layout/ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(150, 46)
+text = "放弃主线"
+
+[node name="FrameOverlay" type="NinePatchRect" parent="."]
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("2_frame")
+patch_margin_left = 128
+patch_margin_top = 128
+patch_margin_right = 128
+patch_margin_bottom = 128
+draw_center = false
+metadata/_ui_asset_role = "decorative-nine-slice-overlay"

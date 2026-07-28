@@ -130,8 +130,10 @@ var _auto_save_toast_tween: Tween = null
 @onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
 
 # V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
+@onready var dialog_overlay: ColorRect = $GameView/HUD/DialogOverlay
 @onready var dialog_panel: Panel = $GameView/HUD/DialogPanel
 @onready var dialog_name: Label = $GameView/HUD/DialogPanel/CharacterName
+@onready var dialog_body: HBoxContainer = $GameView/HUD/DialogPanel/DialogBody
 @onready var dialog_text: RichTextLabel = $GameView/HUD/DialogPanel/DialogBody/DialogText
 @onready var dialog_continue_btn: Button = $GameView/HUD/DialogPanel/ContinueBtn
 @onready var dialog_portrait_panel: Panel = $GameView/HUD/DialogPanel/DialogBody/Portrait
@@ -2120,6 +2122,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				editor_view.request_redo()
 				get_viewport().set_input_as_handled()
 				return
+	# Dialogue is a strict modal layer: no board selection, camera drag, or
+	# action-mode input may leak through the dimmer while a line is on screen.
+	if _dialog_is_modal():
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
+				if _dialog_choice_container == null or not _dialog_choice_container.visible:
+					_on_dialog_continue_pressed()
+		get_viewport().set_input_as_handled()
+		return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
 	if event.is_action_pressed("pause"):
 		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
@@ -2728,6 +2739,7 @@ func _reset_game_state_for_main_menu() -> void:
 		battle_result_panel.visible = false
 	if dialog_panel != null and is_instance_valid(dialog_panel):
 		dialog_panel.visible = false
+	_set_dialog_overlay_visible(false)
 	# 6) 关 board 高亮
 	if board != null:
 		board.clear_selection_marks()
@@ -2814,6 +2826,8 @@ func show_dialog(character: String, text_bbcode: String) -> void:
 		"kind": _DIALOG_TYPE if character != "" else _DIALOG_NARRATION,
 	})
 	_ensure_dialog_choice_container()  # 确保选项层存在
+	_begin_dialog_modal()
+	_set_dialog_overlay_visible(true)
 	dialog_panel.visible = true
 	if not _dialog_active:
 		_advance_dialog()
@@ -2838,6 +2852,8 @@ func show_dialog_scene(scene: Dictionary) -> void:
 		var kind := _DIALOG_TYPE if speaker != "" else _DIALOG_NARRATION
 		_dialog_queue.append({"character": speaker, "text": text, "kind": kind, "color": col})
 	_ensure_dialog_choice_container()
+	_begin_dialog_modal()
+	_set_dialog_overlay_visible(true)
 	dialog_panel.visible = true
 	if not _dialog_active:
 		_advance_dialog()
@@ -2864,8 +2880,10 @@ func _render_dialog_choice(entry: Dictionary) -> void:
 	if dialog_name.has_theme_color_override("font_color"):
 		dialog_name.remove_theme_color_override("font_color")
 	_set_dialog_portrait("")
+	dialog_portrait_panel.visible = false
 	dialog_text.bbcode_enabled = true
 	dialog_text.text = question
+	dialog_text.visible = false
 	_dialog_full_text = question
 	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
 		dialog_continue_btn.visible = false
@@ -2878,6 +2896,8 @@ func _render_dialog_choice(entry: Dictionary) -> void:
 			var btn := Button.new()
 			btn.text = str(ch.get("text", ""))
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.custom_minimum_size = Vector2(0, 38)
+			MenuTheme.apply_button_theme(btn, 16)
 			btn.pressed.connect(_on_dialog_choice_selected)
 			_dialog_choice_container.add_child(btn)
 		_dialog_choice_container.visible = true
@@ -2888,6 +2908,8 @@ func _on_dialog_choice_selected() -> void:
 		_dialog_choice_container.visible = false
 	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
 		dialog_continue_btn.visible = true
+	if dialog_text != null and is_instance_valid(dialog_text):
+		dialog_text.visible = true
 	_advance_dialog()
 
 
@@ -2898,7 +2920,8 @@ func _set_dialog_portrait(speaker: String) -> void:
 		_dialog_portrait_tex = TextureRect.new()
 		_dialog_portrait_tex.anchor_right = 1.0
 		_dialog_portrait_tex.anchor_bottom = 1.0
-		_dialog_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		# Do not let a source portrait's native resolution inflate DialogPanel.
+		_dialog_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		_dialog_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		dialog_portrait_panel.add_child(_dialog_portrait_tex)
 	var tex: Texture2D = null
@@ -2912,6 +2935,7 @@ func _set_dialog_portrait(speaker: String) -> void:
 				_hero_speaker_map[speaker]["portrait_tex"] = tex
 	_dialog_portrait_tex.texture = tex
 	_dialog_portrait_tex.visible = tex != null
+	dialog_portrait_panel.visible = tex != null
 	if dialog_portrait_label != null and is_instance_valid(dialog_portrait_label):
 		dialog_portrait_label.visible = tex == null
 
@@ -3009,17 +3033,13 @@ func _ensure_dialog_choice_container() -> void:
 		return
 	var vb := VBoxContainer.new()
 	vb.name = "ChoiceContainer"
-	vb.anchor_left = 0.0
-	vb.anchor_top = 0.0
-	vb.anchor_right = 1.0
-	vb.anchor_bottom = 1.0
-	vb.offset_left = 16.0
-	vb.offset_top = 130.0
-	vb.offset_right = -16.0
-	vb.offset_bottom = -50.0
+	# Keep choices in DialogBody, beside (not over) the portrait.  The previous
+	# full-panel anchor layout overlaid both the copy and the portrait frame.
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 6)
 	vb.visible = false
-	dialog_panel.add_child(vb)
+	dialog_body.add_child(vb)
 	_dialog_choice_container = vb
 
 
@@ -3036,6 +3056,26 @@ func _on_dialog_continue_pressed() -> void:
 func hide_dialog() -> void:
 	if dialog_panel != null and is_instance_valid(dialog_panel):
 		dialog_panel.visible = false
+	_set_dialog_overlay_visible(false)
+
+
+func _set_dialog_overlay_visible(is_visible: bool) -> void:
+	if dialog_overlay != null and is_instance_valid(dialog_overlay):
+		dialog_overlay.visible = is_visible
+		dialog_overlay.mouse_filter = Control.MOUSE_FILTER_STOP if is_visible else Control.MOUSE_FILTER_IGNORE
+
+
+func _dialog_is_modal() -> bool:
+	return dialog_panel != null and is_instance_valid(dialog_panel) and dialog_panel.visible
+
+
+func _begin_dialog_modal() -> void:
+	# A dialogue line owns the tactical screen. Clear transient controls and
+	# target modes before the dimmer appears instead of merely covering them.
+	_cancel_action_mode()
+	_hide_action_bubble()
+	if recruit_panel != null and is_instance_valid(recruit_panel):
+		recruit_panel.visible = false
 
 
 func show_tutorial() -> void:
@@ -3205,20 +3245,10 @@ func _apply_hud_theme() -> void:
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
+	# The legacy full-height portrait is deliberately disabled. Portrait art is
+	# reserved for dialogue and preparation, never for a tactical HUD overlay.
 	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
-		MenuTheme.apply_panel_theme(hero_portrait_panel, MenuTheme.C_BG_PANEL)
-		var sb_portrait: StyleBoxFlat = hero_portrait_panel.get_theme_stylebox("panel").duplicate()
-		sb_portrait.border_width_left = 2
-		sb_portrait.border_width_right = 2
-		sb_portrait.border_width_top = 2
-		sb_portrait.border_width_bottom = 2
-		sb_portrait.set_corner_radius_all(3)
-		sb_portrait.content_margin_left = 2
-		sb_portrait.content_margin_right = 2
-		sb_portrait.content_margin_top = 2
-		sb_portrait.content_margin_bottom = 2
-		hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
+		hero_portrait_panel.visible = false
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.add_theme_font_size_override("normal_font_size", 13)
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -3226,7 +3256,7 @@ func _apply_hud_theme() -> void:
 	if action_bubble != null and is_instance_valid(action_bubble):
 		var sb_bubble := StyleBoxFlat.new()
 		var bg: Color = MenuTheme.C_BG_PANEL
-		bg.a = 0.7
+		bg.a = 0.94
 		sb_bubble.bg_color = bg
 		sb_bubble.border_color = MenuTheme.C_GOLD
 		sb_bubble.set_border_width_all(2)
@@ -5519,16 +5549,28 @@ func _on_war_report_close_pressed() -> void:
 func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = _ACTION_CONTEXT_INITIAL) -> void:
 	_selected_unit_id = unit_id
 	_refresh_action_bubble_buttons(unit_id, context)
-	# 浮在选中单位右侧(若空间不够则左侧)
+	# Keep this as a compact contextual menu. It must never cover the inspect
+	# card or sit under the top HUD, regardless of the unit's map position.
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
-	var bubble_size: Vector2 = action_bubble.size
-	var pos: Vector2 = viewport_pos + Vector2(48, -bubble_size.y * 0.5)
-	if pos.x + bubble_size.x > vp_size.x - 16.0:
-		pos.x = viewport_pos.x - bubble_size.x - 48
-	if pos.y + bubble_size.y > vp_size.y - 16.0:
-		pos.y = vp_size.y - bubble_size.y - 16.0
-	if pos.y < 32.0:
-		pos.y = 32.0
+	var visible_actions := 0
+	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
+		if button != null and is_instance_valid(button) and button.visible:
+			visible_actions += 1
+	var bubble_size := Vector2(204.0, 18.0 + float(visible_actions) * 36.0 + max(0, visible_actions - 1) * 4.0)
+	# The cancel row is deliberately a little shorter than regular actions.
+	if cancel_btn != null and is_instance_valid(cancel_btn) and cancel_btn.visible:
+		bubble_size.y -= 4.0
+	action_bubble.size = bubble_size
+	var top_safe := 108.0
+	var bottom_safe := 76.0
+	var right_edge := vp_size.x - 14.0
+	if info_panel != null and is_instance_valid(info_panel) and info_panel.visible:
+		right_edge = min(right_edge, info_panel.position.x - 12.0)
+	var pos: Vector2 = viewport_pos + Vector2(40.0, -bubble_size.y * 0.5)
+	if pos.x + bubble_size.x > right_edge:
+		pos.x = viewport_pos.x - bubble_size.x - 40.0
+	pos.x = clamp(pos.x, 14.0, max(14.0, right_edge - bubble_size.x))
+	pos.y = clamp(pos.y, top_safe, max(top_safe, vp_size.y - bottom_safe - bubble_size.y))
 	action_bubble.position = pos
 	action_bubble.visible = true
 
@@ -6105,6 +6147,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		return
 	if info_panel != null and is_instance_valid(info_panel):
 		info_panel.visible = true
+	_set_board_inspect_card_visible(true)
 	unit_info.bbcode_enabled = true
 	var name: String = _unit_cn_name(ud, "单位")
 	var lvl: int = int(ud.get("level", 1))
@@ -6207,34 +6250,19 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 
 
 func _set_unit_info_portrait(hero_id: String) -> void:
-	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
-	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
-	# 还原默认 -12.0。
+	# Full portrait art is not part of the tactical HUD. Keeping this method as
+	# a harmless compatibility hook avoids touching selection/network flows.
 	if hero_portrait_panel == null or not is_instance_valid(hero_portrait_panel):
 		return
-	if _unit_info_portrait_tex == null:
-		_unit_info_portrait_tex = TextureRect.new()
-		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		hero_portrait_panel.add_child(_unit_info_portrait_tex)
-	if hero_id == "":
-		_unit_info_portrait_tex.visible = false
-		hero_portrait_panel.visible = false
+	hero_portrait_panel.visible = false
+
+
+func _set_board_inspect_card_visible(is_visible: bool) -> void:
+	if board == null or not is_instance_valid(board):
 		return
-	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
-	if not FileAccess.file_exists(portrait_path):
-		_unit_info_portrait_tex.visible = false
-		hero_portrait_panel.visible = false
-		return
-	var tex := _load_portrait(portrait_path)
-	_unit_info_portrait_tex.texture = tex
-	if tex != null:
-		# T:V6 — 立绘按比例缩放到面板大小(高度一致,宽度按 800:1400 自适应,原图比例不变)。
-		# STRETCH_KEEP_ASPECT_CENTERED 自动居中,clip_contents 截溢出。
-		_unit_info_portrait_tex.size = hero_portrait_panel.size
-	_unit_info_portrait_tex.visible = tex != null
-	hero_portrait_panel.visible = tex != null
+	var camera := board.get_node_or_null("BoardCamera")
+	if camera != null and camera.has_method("set_inspect_card_visible"):
+		camera.call("set_inspect_card_visible", is_visible)
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)

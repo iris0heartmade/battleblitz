@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -7,6 +7,8 @@
 [ext_resource type="Script" path="res://scripts/mainline/mainline_controller.gd" id="5_mainline"]
 [ext_resource type="Script" path="res://scripts/ui/in_progress_controller.gd" id="6_in_progress"]
 [ext_resource type="Texture2D" path="res://assets/ui/chapter_banner_v1.png" id="7_chapter_banner"]
+[ext_resource type="PackedScene" path="res://scenes/ui/mainline_campaign_panel.tscn" id="8_campaign_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/mainline_prepare_panel.tscn" id="9_prepare_panel"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1185,6 +1187,21 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("5_mainline")
 
+; Responsive panels own the visible campaign/prepare layout.  The legacy
+; MLFrame children remain below only as compatibility targets for old flows.
+[node name="CampaignPanel" parent="MainlineView" instance=ExtResource("8_campaign_panel")]
+offset_left = 36.0
+offset_top = 24.0
+offset_right = -36.0
+offset_bottom = -36.0
+
+[node name="PreparePanel" parent="MainlineView" instance=ExtResource("9_prepare_panel")]
+visible = false
+offset_left = 36.0
+offset_top = 24.0
+offset_right = -36.0
+offset_bottom = -36.0
+
 [node name="MLFrame" type="Panel" parent="MainlineView"]
 anchor_left = 0.5
 anchor_top = 0.5
@@ -1560,24 +1577,18 @@ mouse_filter = 2
 
 ; COBar removed — 能量由 CORoster(顶部)+ InfoPanel/CommanderCOBar 显示
 
-; --- 英雄立绘槽(由 _set_unit_info_portrait 程序化写入 TextureRect)---
-; 之前 hero portrait 塞在 info_panel 右侧,遮挡 "Lv.1" / 攻击射程等文字;
-; 现在单独锚定到 HUD 左上,TurnBadge 下方、GoldPanel 上方 — 占用截图红框
-; 的整块面积,TextureRect 以原始尺寸放进槽里,溢出部分由 panel 的
-; clip_contents 截掉(不动原图缩放)。
+; --- 英雄立绘槽(仅选中英雄时显示的辅助卡)---
+; 不再预留左侧整列空间。检视卡负责文字，立绘仅作为左下角小尺寸点缀。
 [node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]
-; T:V6 — 锚定左上,尺寸 440x768(匹配 portrait_yun.png 800:1400 比例:
-; 440/768 ≈ 0.572 ≈ 800/1400 ≈ 0.571)。
-; TextureRect 用 STRETCH_KEEP_ASPECT_CENTERED 缩放到面板大小,
-; 高度一致(768),宽度按比例自适应(约 439),原图比例不变。
+visible = false
 anchor_left = 0.0
-anchor_top = 0.0
+anchor_top = 1.0
 anchor_right = 0.0
-anchor_bottom = 0.0
-offset_left = 28.0
-offset_top = 110.0
-offset_right = 468.0
-offset_bottom = 878.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -278.0
+offset_right = 166.0
+offset_bottom = -92.0
 clip_contents = true
 mouse_filter = 2
 
@@ -1624,33 +1635,31 @@ mouse_filter = 2
 text = "战报"
 custom_minimum_size = Vector2(150, 42)
 
-; --- 左侧 30% 信息区(选中单位详情 + 玩家列表) ---
-; 横向: anchor_left=0, offset_right = 384 (30% of 1280)
-; 纵向: anchor_top=0, anchor_bottom=1, offset_top=70 (避开左上 pill), offset_bottom=-60 (避开左下 pill)
+; --- 选中单位检视卡 ---
+; 按需显示的紧凑卡：不占用棋盘左侧，也不再承载整场玩家列表。
 [node name="InfoPanel" type="Panel" parent="GameView/HUD"]
 anchor_left = 1.0
 anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -420.0
+offset_left = -360.0
 offset_top = 105.0
 offset_right = -12.0
-offset_bottom = -90.0
+offset_bottom = 465.0
 mouse_filter = 0
 
 [node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
 offset_left = 18.0
-offset_top = 12.0
+offset_top = 10.0
 offset_right = -18.0
-offset_bottom = 48.0
+offset_bottom = 34.0
 text = "当前指挥官"
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 18
 
 [node name="CommanderName" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 offset_left = 18.0
-offset_top = 54.0
+offset_top = 38.0
 offset_right = -18.0
-offset_bottom = 96.0
+offset_bottom = 66.0
 bbcode_enabled = true
 fit_content_height = true
 scroll_active = false
@@ -1659,9 +1668,9 @@ text = "—"
 [node name="CommanderCOBar" type="ProgressBar" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 offset_left = 18.0
-offset_top = 102.0
+offset_top = 72.0
 offset_right = -18.0
-offset_bottom = 144.0
+offset_bottom = 94.0
 max_value = 100.0
 value = 0.0
 show_percentage = false
@@ -1669,9 +1678,9 @@ show_percentage = false
 [node name="CommanderDivider" type="ReferenceRect" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 offset_left = 18.0
-offset_top = 153.0
+offset_top = 102.0
 offset_right = -18.0
-offset_bottom = 156.0
+offset_bottom = 104.0
 border_color = Color(0.788, 0.631, 0.29, 1)
 border_width = 1.5
 editor_only = false
@@ -1679,23 +1688,25 @@ editor_only = false
 [node name="UnitInfoTitle" type="Label" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 offset_left = 18.0
-offset_top = 162.0
+offset_top = 110.0
 offset_right = -18.0
-offset_bottom = 198.0
+offset_bottom = 136.0
 text = "⚔ 选中单位"
-theme_override_font_sizes/font_size = 21
+theme_override_font_sizes/font_size = 16
 
 [node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 18.0
-offset_top = 204.0
+offset_top = 142.0
 offset_right = -18.0
-offset_bottom = -390.0
+offset_bottom = -16.0
 bbcode_enabled = true
+scroll_active = true
 text = "[i]点击单位查看详情[/i]"
 
 [node name="PlayersListLabel" type="Label" parent="GameView/HUD/InfoPanel"]
+visible = false
 anchor_top = 1.0
 anchor_right = 1.0
 offset_left = 18.0
@@ -1706,6 +1717,7 @@ text = "👥 参战玩家"
 theme_override_font_sizes/font_size = 21
 
 [node name="PlayersList" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
+visible = false
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1721,8 +1733,8 @@ text = "等待战场同步..."
 visible = false
 offset_left = 0.0
 offset_top = 0.0
-offset_right = 270.0
-offset_bottom = 420.0
+offset_right = 204.0
+offset_bottom = 282.0
 mouse_filter = 2
 
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
@@ -1732,31 +1744,31 @@ offset_left = 9.0
 offset_top = 9.0
 offset_right = -9.0
 offset_bottom = -9.0
-theme_override_constants/separation = 6
+theme_override_constants/separation = 4
 
 [node name="MoveBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "移动"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 36)
 
 [node name="AttackBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "攻击"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 36)
 
 [node name="SkillBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "技能"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 36)
 
 [node name="WaitBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "待命"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 36)
 
 [node name="ClaimBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "占领 / 招募"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 36)
 
 [node name="CancelBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "取消 (右键亦可)"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 32)
 
 ; --- 攻击确认卡:目标点击后先确认,再 POST attack ---
 [node name="AttackConfirmPanel" type="Panel" parent="GameView/HUD"]
@@ -2113,38 +2125,52 @@ custom_minimum_size = Vector2(0, 66)
 ; V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
 ; ============================================================
 
+; 对话专用遮罩：位于对话框下方，显示时拦截棋盘输入。
+[node name="DialogOverlay" type="ColorRect" parent="GameView/HUD"]
+visible = false
+z_index = 80
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.03, 0.05, 0.5)
+mouse_filter = 0
+
 ; --- 对话框(底部浮层)---
 [node name="DialogPanel" type="Panel" parent="GameView/HUD"]
 visible = false
-anchor_left = 0.5
+z_index = 81
+anchor_left = 0.18
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 0.82
 anchor_bottom = 1.0
-offset_left = -600.0
-offset_top = -315.0
-offset_right = 600.0
-offset_bottom = -30.0
+offset_left = 0.0
+offset_top = -230.0
+offset_right = 0.0
+offset_bottom = -24.0
 mouse_filter = 0
 
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
 offset_left = 24.0
-offset_top = 18.0
+offset_top = 14.0
 offset_right = -24.0
-offset_bottom = 54.0
+offset_bottom = 42.0
 text = "👤 指挥官 艾莉卡"
-theme_override_font_sizes/font_size = 27
+theme_override_font_sizes/font_size = 20
 
 [node name="DialogBody" type="HBoxContainer" parent="GameView/HUD/DialogPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 66.0
+offset_top = 50.0
 offset_right = -24.0
-offset_bottom = -84.0
-theme_override_constants/separation = 24
+offset_bottom = -66.0
+theme_override_constants/separation = 14
 
 [node name="Portrait" type="Panel" parent="GameView/HUD/DialogPanel/DialogBody"]
-custom_minimum_size = Vector2(180, 165)
+custom_minimum_size = Vector2(118, 116)
+clip_contents = true
 
 [node name="PortraitLabel" type="Label" parent="GameView/HUD/DialogPanel/DialogBody/Portrait"]
 anchor_right = 1.0
@@ -2152,7 +2178,7 @@ anchor_bottom = 1.0
 text = "👤"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 96
+theme_override_font_sizes/font_size = 64
 
 [node name="DialogText" type="RichTextLabel" parent="GameView/HUD/DialogPanel/DialogBody"]
 size_flags_horizontal = 3

@@ -20,6 +20,9 @@ const _MANUAL_SLOT_COUNT := 3
 
 var _main: Node = null
 
+@onready var campaign_panel = $CampaignPanel
+@onready var prepare_panel = $PreparePanel
+
 @onready var ml_title: Label = $MLFrame/MLTitle
 @onready var ml_frame: Panel = $MLFrame
 @onready var ml_border: ReferenceRect = $MLFrame/MLBorder
@@ -72,6 +75,7 @@ var _cleared_mainline_ids: Dictionary = {}  # { mainline_id: true }
 
 
 func _ready() -> void:
+	_connect_responsive_mainline_panels()
 	# Batch A: commander apply 由组件接(bind 内的函数都在 self)
 	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
 		ml_apply_commander_btn.pressed.connect(_on_apply_mainline_commander_pressed)
@@ -134,6 +138,55 @@ func _ready() -> void:
 	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
 		MenuTheme.apply_secondary_button_theme(ml_abandon_btn, MenuTheme.FS_BODY_SM)
 	_apply_mainline_visual_theme()
+
+
+func _connect_responsive_mainline_panels() -> void:
+	if campaign_panel != null and is_instance_valid(campaign_panel):
+		campaign_panel.connect("slot_requested", Callable(self, "_on_responsive_slot_requested"))
+		campaign_panel.connect("back_requested", Callable(self, "_on_ml_back_pressed"))
+	if prepare_panel != null and is_instance_valid(prepare_panel):
+		prepare_panel.connect("tab_requested", Callable(self, "_on_prepare_tab_pressed"))
+		prepare_panel.connect("hero_requested", Callable(self, "_on_responsive_hero_requested"))
+		prepare_panel.connect("action_requested", Callable(self, "_on_responsive_prepare_action"))
+		prepare_panel.connect("choice_requested", Callable(self, "_on_responsive_prepare_choice"))
+
+
+func _on_responsive_slot_requested(slot_index: int, occupied: bool) -> void:
+	if occupied:
+		_on_slot_continue_pressed(slot_index)
+	else:
+		_on_slot_new_game_pressed(slot_index)
+
+
+func _on_responsive_hero_requested(hero_id: String) -> void:
+	_main._selected_prepare_hero_id = hero_id
+	_render_mainline_prepare()
+
+
+func _on_responsive_prepare_choice(kind: String, index: int) -> void:
+	match kind:
+		"equipment":
+			_on_prepare_equipment_selected(index)
+		"shop":
+			_on_prepare_shop_item_selected(index)
+		"merc_unit":
+			_on_prepare_merc_unit_selected(index)
+		"merc_stat":
+			_on_prepare_merc_stat_selected(index)
+
+
+func _on_responsive_prepare_action(action: String) -> void:
+	match action:
+		"back":
+			_on_ml_back_pressed()
+		"refresh":
+			_on_prepare_refresh_pressed()
+		"complete":
+			_on_prepare_complete_pressed()
+		"start":
+			_on_prepare_start_pressed()
+		"abandon":
+			_on_ml_abandon_pressed()
 
 
 # Keep the campaign presentation in this controller.  The mainline module was
@@ -206,6 +259,11 @@ func _set_mainline_page(page: String) -> void:
 	_main._mainline_page = page
 	var showing_prepare := page == "prepare"
 	var showing_entry := page == "slot_select" or page == "chapter_list"
+	_set_node_visible(campaign_panel, showing_entry)
+	_set_node_visible(prepare_panel, showing_prepare)
+	# Legacy fixed-offset controls are retained for request compatibility only.
+	# Keeping all of them hidden prevents empty columns and selector overflow.
+	_set_node_visible(ml_frame, false)
 	_set_node_visible(ml_list_container, showing_entry)
 	_set_node_visible(ml_commander_status, showing_prepare)
 	_set_node_visible(ml_commander_option, showing_prepare)
@@ -247,6 +305,7 @@ func _on_ml_slots_response(body: Variant, code: int = 0) -> void:
 
 
 func _render_mainline_slots() -> void:
+	_render_responsive_slot_panel()
 	if ml_list_container == null or not is_instance_valid(ml_list_container):
 		return
 	for child in ml_list_container.get_children():
@@ -256,6 +315,37 @@ func _render_mainline_slots() -> void:
 		var rec: Dictionary = _manual_slot_records[slot_index] if slot_index < _manual_slot_records.size() else {}
 		ml_list_container.add_child(_build_slot_row(slot_index, rec))
 	_render_slot_entry_hint()
+
+
+func _render_responsive_slot_panel() -> void:
+	if campaign_panel == null or not is_instance_valid(campaign_panel):
+		return
+	var records: Array[Dictionary] = []
+	for slot_index in range(_MANUAL_SLOT_COUNT):
+		var record: Dictionary = _manual_slot_records[slot_index] if slot_index < _manual_slot_records.size() else {}
+		if record.is_empty():
+			records.append({})
+			continue
+		var chapter_index := int(record.get("chapter_index", 0)) + 1
+		var chapter_title := _display_mainline_title(str(record.get("mainline_id", "")))
+		records.append({
+			"title": chapter_title,
+			"summary": "第 %d 章 · 继续当前主线进度" % chapter_index,
+			"intel": "章节：%s\n进度：第 %d 章\n选择继续以进入战前整备。" % [chapter_title, chapter_index],
+		})
+	campaign_panel.set_slots(records)
+
+
+func _display_mainline_title(mainline_id: String) -> String:
+	for item in _mainline_list_cache:
+		if item is Dictionary and str((item as Dictionary).get("id", "")) == mainline_id:
+			return str((item as Dictionary).get("title", "主线章节"))
+	match mainline_id:
+		"chapter_01_steel_rebellion": return "钢铁起义"
+		"chapter_test_01": return "测试章节 1：单场残血战"
+		"chapter_test_02": return "测试章节 2：双场残血战"
+		"chapter_test_03": return "测试章节 3：转职事件"
+		_: return "主线章节"
 
 
 func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
@@ -774,6 +864,7 @@ func _on_prepare_refresh_pressed() -> void:
 func _render_mainline_prepare() -> void:
 	if ml_prep_summary == null or not is_instance_valid(ml_prep_summary):
 		return
+	_render_responsive_prepare_panel()
 	_update_prepare_tab_buttons()
 	_update_prepare_action_buttons()
 	if _main._mainline_prepare_payload.is_empty():
@@ -813,6 +904,104 @@ func _render_mainline_prepare() -> void:
 			_main._set_prepare_content(_build_prepare_saves_text())
 		_:
 			_main._set_prepare_content(_build_prepare_heroes_text(_main._mainline_prepare_payload))
+
+
+func _render_responsive_prepare_panel() -> void:
+	if prepare_panel == null or not is_instance_valid(prepare_panel):
+		return
+	var payload: Dictionary = _main._mainline_prepare_payload
+	var heroes: Array = payload.get("heroes", []) if payload.get("heroes", []) is Array else []
+	var roster: Array = payload.get("roster_units", []) if payload.get("roster_units", []) is Array else []
+	var inventory: Dictionary = payload.get("inventory", {}) if payload.get("inventory", {}) is Dictionary else {}
+	var roster_cards: Array[Dictionary] = []
+	for entry in heroes:
+		if not (entry is Dictionary):
+			continue
+		var hero: Dictionary = entry
+		var stats: Dictionary = hero.get("base_stats", {}) if hero.get("base_stats", {}) is Dictionary else {}
+		var equipment: Dictionary = hero.get("equipment", {}) if hero.get("equipment", {}) is Dictionary else {}
+		roster_cards.append({
+			"hero_id": str(hero.get("hero_id", "")),
+			"name": str(hero.get("name", "英雄")),
+			"level": int(hero.get("level", 1)),
+			"hp": str(stats.get("hp", "-")),
+			"equipment_summary": _display_equipment_name(str(equipment.get("weapon", "未装备"))),
+		})
+	prepare_panel.set_heroes(roster_cards)
+	prepare_panel.set_active_tab(_main._mainline_prepare_tab)
+	prepare_panel.set_prepare_ready(not payload.is_empty())
+	var chapter_title := _display_mainline_title(_main._selected_mainline_id)
+	var battle_index := int(payload.get("battle_index", 0)) + 1
+	var total_battles := int(payload.get("total_battles", 1))
+	var mission := "当前战役：第 %d/%d 战\n胜利条件：击败敌军或夺取敌方据点。\n推荐：先确认英雄装备与可部署部队。\n奖励：完成战斗后获得金币与成长经验。" % [battle_index, total_battles]
+	if roster.size() > 0:
+		mission += "\n可部署部队：%d" % roster.size()
+	if not _main._mainline_commander_ids.is_empty() and _selected_mainline_commander() != "":
+		mission += "\n出征指挥官：%s" % _commander_label(_selected_mainline_commander())
+	prepare_panel.set_mission("%s · 战役情报" % chapter_title, mission)
+	prepare_panel.set_choices("", [])
+	var title := "战前整备"
+	var body := "选择左侧英雄查看能力与装备。"
+	match _main._mainline_prepare_tab:
+		"heroes":
+			var focused := _focused_prepare_hero()
+			if not focused.is_empty():
+				var stats: Dictionary = focused.get("base_stats", {}) if focused.get("base_stats", {}) is Dictionary else {}
+				var skills: Array = focused.get("learned_skills", []) if focused.get("learned_skills", []) is Array else []
+				title = "%s · %s" % [str(focused.get("name", "英雄")), _display_class_name(str(focused.get("class_id", "")))]
+				body = "等级 %d · 经验 %d\n生命 %s  攻击 %s  防御 %s\n速度 %s  魔攻 %s  魔防 %s\n技能：%s" % [int(focused.get("level", 1)), int(focused.get("exp", 0)), stats.get("hp", "-"), stats.get("atk", "-"), stats.get("def", "-"), stats.get("spd", "-"), stats.get("matk", "-"), stats.get("mdef", "-"), "、".join(skills) if not skills.is_empty() else "暂无"]
+		"equipment":
+			var hero := _focused_prepare_hero()
+			var equipped: Dictionary = hero.get("equipment", {}) if hero.get("equipment", {}) is Dictionary else {}
+			var item := _selected_equippable_item()
+			title = "装备整备 · %s" % str(hero.get("name", "未选择英雄"))
+			body = "当前武器：%s\n当前防具：%s\n当前饰品：%s\n\n仓库选中：%s（%d 件）\n选择装备后可使用旧整备操作确认。" % [_display_equipment_name(str(equipped.get("weapon", "未装备"))), _display_equipment_name(str(equipped.get("armor", "未装备"))), _display_equipment_name(str(equipped.get("accessory", "未装备"))), _display_equipment_name(str(item.get("name", item.get("equipment_id", "未选择")))), int(inventory.get(str(item.get("equipment_id", "")), 0))]
+			var catalog: Array = payload.get("equipment_catalog", []) if payload.get("equipment_catalog", []) is Array else []
+			var choices: Array[String] = []
+			var selected_choice := 0
+			for i in range(catalog.size()):
+				if not catalog[i] is Dictionary:
+					continue
+				var entry: Dictionary = catalog[i]
+				var entry_id := str(entry.get("equipment_id", entry.get("item_id", "")))
+				choices.append("%s · %d 件" % [_display_equipment_name(str(entry.get("name", entry_id))), int(inventory.get(entry_id, 0))])
+				if entry_id == _main._selected_prepare_equipment_id:
+					selected_choice = i
+			prepare_panel.set_choices("equipment", choices, selected_choice, "选择仓库物品，再使用「整备操作」确认装备。")
+		"shop":
+			var shop_items: Array = _main._mainline_shop_payload.get("items", []) if _main._mainline_shop_payload.get("items", []) is Array else []
+			var shop_choices: Array[String] = []
+			for shop_item in shop_items:
+				if shop_item is Dictionary:
+					shop_choices.append("%s · %d 金币" % [str((shop_item as Dictionary).get("name", "商品")), int((shop_item as Dictionary).get("price", 0))])
+			prepare_panel.set_choices("shop", shop_choices, 0, "选择商品后使用整备操作购买。")
+			title = "战前商店"
+			body = "当前金币：%d\n选择商品后可进行购买。" % int(inventory.get("gold", 0))
+		"roster":
+			title = "部队编成"
+			body = "可部署部队：%d\n英雄将随主线出战；佣兵配置可在佣兵页调整。" % roster.size()
+		"mercenary":
+			title = "佣兵配置"
+			body = "可用点数与可强化兵种会在此页加载。"
+		"saves":
+			title = "主线存档"
+			body = "主线进度会自动保存；手动存档请从主菜单的存档管理进入。"
+	prepare_panel.show_content(title, body)
+
+
+func _display_class_name(class_id: String) -> String:
+	if class_id == "":
+		return "未定职业"
+	return _main._unit_type_cn(class_id)
+
+
+func _display_equipment_name(item_id: String) -> String:
+	match item_id:
+		"", "未装备": return "未装备"
+		"oak_staff": return "橡木法杖"
+		"ruby_ring": return "红宝石戒指"
+		"guardian_armor": return "守卫圆盾"
+		_: return item_id.replace("_", " ")
 
 
 func _render_prepare_focus_card(tab: String) -> void:

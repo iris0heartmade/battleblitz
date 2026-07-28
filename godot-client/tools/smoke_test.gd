@@ -590,6 +590,19 @@ func _ready() -> void:
 	var info_text: String = str(main_check.get_node("GameView/HUD/InfoPanel/UnitInfo").text)
 	_assert_true("Unit info tolerates string subtype", info_text.length() > 0,
 		"clicking a unit must not crash when the tile subtype is a non-empty string")
+	var inspect_card: Panel = main_check.get_node("GameView/HUD/InfoPanel")
+	_assert_true("Inspect card is compact", inspect_card.size.x <= 380.0 and inspect_card.size.y <= 400.0,
+		"unit inspection must not create a full-height tactical sidebar")
+	_assert_true("No tactical full portrait", not main_check.hero_portrait_panel.visible,
+		"hero art must not create a standalone tactical HUD column")
+	main_check.call("show_dialog", "旁白", "对话遮罩应阻止棋盘输入。")
+	_assert_true("Dialog overlay becomes visible", main_check.dialog_overlay.visible,
+		"opening dialogue should enable the input-blocking overlay")
+	_assert_eq("Dialog overlay blocks mouse input", main_check.dialog_overlay.mouse_filter, Control.MOUSE_FILTER_STOP,
+		"dialogue overlay must intercept pointer input before it reaches the board")
+	main_check.call("hide_dialog")
+	_assert_true("Dialog overlay hides with dialogue", not main_check.dialog_overlay.visible,
+		"closing dialogue should restore board interaction")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -1102,7 +1115,9 @@ func _test_one_map(map_id: String) -> void:
 	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
 		"board camera should be present")
 	var viewport_size := board.get_viewport().get_visible_rect().size
-	var usable_w: float = viewport_size.x * 0.55
+	# The compact inspect card is opt-in.  A fresh board must fit against the
+	# whole viewport; selecting a unit then reserves a small right-side area.
+	var usable_w: float = viewport_size.x
 	var usable_h: float = viewport_size.y
 	var board_pixel_w: float = float(w * MAP_METRICS_SCRIPT.TILE_SIZE.x)
 	var board_pixel_h: float = float(h * MAP_METRICS_SCRIPT.TILE_SIZE.y)
@@ -1111,7 +1126,14 @@ func _test_one_map(map_id: String) -> void:
 		(usable_h - 16.0) / board_pixel_h
 	)
 	_assert_eq("%s camera zoom matches viewport fit" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(expected_fit_zoom, 0.001),
-		"board camera should derive fit zoom from the active viewport and reserved HUD width")
+		"board camera should fit the full battlefield when no inspect card is open")
+	board.board_camera.set_inspect_card_visible(true)
+	var inspect_expected_zoom: float = min(
+		(viewport_size.x * 0.73 - 16.0) / board_pixel_w,
+		(usable_h - 16.0) / board_pixel_h
+	)
+	_assert_eq("%s camera zoom reserves inspect card" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(inspect_expected_zoom, 0.001),
+		"board camera should reserve only the compact inspect-card width")
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()
