@@ -179,17 +179,20 @@ func open() -> void:
 	_main._selected_prepare_merc_unit_type = ""
 	_main._selected_prepare_merc_stat = ""
 	_render_mainline_prepare()
-	# VBoxContainer 没有 text 属性,清空用 queue_free 子节点
-	for child in ml_list_container.get_children():
-		ml_list_container.remove_child(child)
-		child.queue_free()
+	# Render the three formal slots immediately. NetworkClient serializes HTTP
+	# requests, therefore waiting behind heroes/commanders used to leave an
+	# apparently frozen, empty page while those unrelated requests were pending.
+	_manual_slot_records = [{}, {}, {}]
+	_render_mainline_slots()
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
 		ml_commander_status.text = "指挥官: 正在加载..."
+	# The save response drives the entry screen, so it must be first in the
+	# serialized request queue. The other data can arrive afterwards.
+	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
+	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
 	if _main._hero_speaker_map.is_empty():
 		NetworkClient.list_heroes(Callable(_main, "_on_heroes_response"))
-	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
-	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
 
 
 func _set_node_visible(node: Node, value: bool) -> void:
@@ -1740,4 +1743,3 @@ func _sync_prepare_mercenary_selects() -> void:
 			ml_prep_merc_stat_select.select(selected_stat_index)
 			_main._selected_prepare_merc_stat = str(ml_prep_merc_stat_select.get_item_metadata(selected_stat_index))
 		ml_prep_merc_stat_select.disabled = ml_prep_merc_stat_select.item_count <= 0
-
