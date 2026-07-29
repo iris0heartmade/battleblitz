@@ -73,6 +73,7 @@ func set_prepare_ready(ready: bool) -> void:
 
 
 func set_choices(kind: String, entries: Array, selected_index: int = 0, hint: String = "") -> void:
+	%EquipmentIconRow.visible = kind == "equipment"
 	%ChoiceSelect.clear()
 	for entry in entries:
 		%ChoiceSelect.add_item(entry)
