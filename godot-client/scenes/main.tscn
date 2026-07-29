@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -12,6 +12,16 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_heart_24.png" id="10_stat_heart"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_sword_24.png" id="11_stat_sword"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_shield_24.png" id="12_stat_shield"]
+[ext_resource type="Texture2D" path="res://assets/ui/battle_hud_frame_v1.png" id="13_battle_frame"]
+[ext_resource type="Texture2D" path="res://assets/ui/battle_hud_icon_atlas_v1.png" id="14_battle_icons"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_dialog_trim"]
+atlas = ExtResource("13_battle_frame")
+region = Rect2(0, 0, 1672, 132)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_dialog_emblem"]
+atlas = ExtResource("14_battle_icons")
+region = Rect2(0, 512, 512, 512)
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -2183,8 +2193,30 @@ offset_right = 0.0
 offset_bottom = -24.0
 mouse_filter = 0
 
+[node name="HeaderTrim" type="TextureRect" parent="GameView/HUD/DialogPanel"]
+anchor_right = 1.0
+offset_left = 8.0
+offset_top = 4.0
+offset_right = -8.0
+offset_bottom = 70.0
+texture = SubResource("AtlasTexture_dialog_trim")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 1, 1, 0.72)
+mouse_filter = 2
+
+[node name="DialogEmblem" type="TextureRect" parent="GameView/HUD/DialogPanel"]
+offset_left = 22.0
+offset_top = 10.0
+offset_right = 64.0
+offset_bottom = 52.0
+texture = SubResource("AtlasTexture_dialog_emblem")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
-offset_left = 24.0
+offset_left = 74.0
 offset_top = 14.0
 offset_right = -24.0
 offset_bottom = 42.0
