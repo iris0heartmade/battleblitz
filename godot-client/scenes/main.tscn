@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -14,6 +14,16 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_shield_24.png" id="12_stat_shield"]
 [ext_resource type="Texture2D" path="res://assets/ui/battle_hud_frame_v1.png" id="13_battle_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/battle_side_panel_translucent_v1.png" id="14_battle_side_frame"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_hud_top"]
+atlas = ExtResource("13_battle_frame")
+region = Rect2(0, 0, 1672, 180)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_panel_top"]
+atlas = ExtResource("14_battle_side_frame")
+region = Rect2(0, 36, 1024, 190)
+filter_clip = true
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1651,15 +1661,17 @@ offset_right = -12.0
 offset_bottom = 465.0
 mouse_filter = 0
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/InfoPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("14_battle_side_frame")
-patch_margin_left = 76
-patch_margin_top = 100
-patch_margin_right = 76
-patch_margin_bottom = 100
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/InfoPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -156.0
+offset_top = 0.0
+offset_right = 156.0
+offset_bottom = 58.0
+texture = SubResource("AtlasTexture_panel_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.78)
 mouse_filter = 2
 
 [node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
@@ -1782,15 +1794,17 @@ offset_right = 204.0
 offset_bottom = 282.0
 mouse_filter = 2
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/ActionBubble"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("14_battle_side_frame")
-patch_margin_left = 42
-patch_margin_top = 52
-patch_margin_right = 42
-patch_margin_bottom = 52
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/ActionBubble"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -84.0
+offset_top = 0.0
+offset_right = 84.0
+offset_bottom = 31.0
+texture = SubResource("AtlasTexture_panel_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.7)
 mouse_filter = 2
 
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
@@ -1839,15 +1853,17 @@ offset_right = 285.0
 offset_bottom = 168.0
 mouse_filter = 0
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/AttackConfirmPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("13_battle_frame")
-patch_margin_left = 104
-patch_margin_top = 92
-patch_margin_right = 104
-patch_margin_bottom = 92
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/AttackConfirmPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 0.0
+offset_right = 250.0
+offset_bottom = 54.0
+texture = SubResource("AtlasTexture_hud_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.82)
 mouse_filter = 2
 
 [node name="Title" type="Label" parent="GameView/HUD/AttackConfirmPanel"]
@@ -1904,15 +1920,17 @@ offset_right = 390.0
 offset_bottom = 270.0
 mouse_filter = 0
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/WarReportPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("13_battle_frame")
-patch_margin_left = 104
-patch_margin_top = 92
-patch_margin_right = 104
-patch_margin_bottom = 92
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/WarReportPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -350.0
+offset_top = 0.0
+offset_right = 350.0
+offset_bottom = 76.0
+texture = SubResource("AtlasTexture_hud_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.82)
 mouse_filter = 2
 
 [node name="AutoSaveToast" type="Panel" parent="GameView/HUD"]
@@ -2229,22 +2247,24 @@ offset_right = 0.0
 offset_bottom = -24.0
 mouse_filter = 0
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/DialogPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("13_battle_frame")
-patch_margin_left = 104
-patch_margin_top = 92
-patch_margin_right = 104
-patch_margin_bottom = 92
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/DialogPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -450.0
+offset_top = 0.0
+offset_right = 450.0
+offset_bottom = 97.0
+texture = SubResource("AtlasTexture_hud_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.9)
 mouse_filter = 2
 
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
 offset_left = 24.0
-offset_top = 14.0
+offset_top = 68.0
 offset_right = -24.0
-offset_bottom = 42.0
+offset_bottom = 96.0
 text = "👤 指挥官 艾莉卡"
 theme_override_font_sizes/font_size = 20
 
@@ -2252,7 +2272,7 @@ theme_override_font_sizes/font_size = 20
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 50.0
+offset_top = 102.0
 offset_right = -24.0
 offset_bottom = -66.0
 theme_override_constants/separation = 14
@@ -2345,15 +2365,17 @@ offset_right = 450.0
 offset_bottom = 300.0
 mouse_filter = 0
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/BattleResultPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("13_battle_frame")
-patch_margin_left = 104
-patch_margin_top = 92
-patch_margin_right = 104
-patch_margin_bottom = 92
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/BattleResultPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -400.0
+offset_top = 0.0
+offset_right = 400.0
+offset_bottom = 86.0
+texture = SubResource("AtlasTexture_hud_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.82)
 mouse_filter = 2
 
 [node name="Header" type="Label" parent="GameView/HUD/BattleResultPanel"]
@@ -2433,15 +2455,17 @@ offset_right = 360.0
 offset_bottom = 270.0
 visible = false
 
-[node name="ArtFrame" type="NinePatchRect" parent="GameView/HUD/RecruitPanel"]
-anchor_right = 1.0
-anchor_bottom = 1.0
-texture = ExtResource("13_battle_frame")
-patch_margin_left = 104
-patch_margin_top = 92
-patch_margin_right = 104
-patch_margin_bottom = 92
-draw_center = false
+[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/RecruitPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -320.0
+offset_top = 0.0
+offset_right = 320.0
+offset_bottom = 69.0
+texture = SubResource("AtlasTexture_hud_top")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.82)
 mouse_filter = 2
 
 [node name="Header" type="Label" parent="GameView/HUD/RecruitPanel"]
