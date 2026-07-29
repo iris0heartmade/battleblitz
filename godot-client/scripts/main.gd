@@ -79,6 +79,7 @@ var _recruit_mode_unit_id: int = -1
 
 # HUD 是 CanvasLayer — 独立 transform 层,不受 GameView.visible 控制
 @onready var hud_layer: CanvasLayer = $GameView/HUD
+@onready var battle_backdrop_layer: CanvasLayer = $GameView/BattleBackdrop
 
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
@@ -93,12 +94,14 @@ var _recruit_mode_unit_id: int = -1
 # M5.1 CO Roster — 顶部全玩家头像 + meter + 发动按钮
 @onready var co_roster: HBoxContainer = $GameView/HUD/CORoster
 @onready var commander_co_bar: ProgressBar = $GameView/HUD/InfoPanel/CommanderCOBar
+@onready var commander_co_label: Label = $GameView/HUD/InfoPanel/CommanderCOBar/ValueLabel
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
-# T:#18 — 英雄立绘槽,挂载到 HUD 左下角(GoldPanel 上方),不再塞在 InfoPanel 里
-# 遮挡 "Lv.1" / 攻击射程等文字。TextureRect 由 _set_unit_info_portrait 程序化写入。
-@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel
+# T:#18 — 英雄立绘与单位详情使用同一张检视卡，避免视线横跨整屏。
+# TextureRect 由 _set_unit_info_portrait 程序化写入。
+@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel
+@onready var hero_portrait_caption: Label = $GameView/HUD/InfoPanel/UnitPortraitPanel/Caption
 @onready var turn_banner: ColorRect = $GameView/TurnBannerFrame
 @onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
 var _turn_banner_tween: Tween = null
@@ -168,12 +171,14 @@ var _confirm_no_callback: Callable = Callable()
 
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
+@onready var action_title: Label = $GameView/HUD/ActionBubble/ActionTitle
 @onready var cancel_btn: Button = $GameView/HUD/ActionBubble/ActionList/CancelBtn
 @onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
 @onready var attack_btn: Button = $GameView/HUD/ActionBubble/ActionList/AttackBtn
 @onready var skill_btn: Button = $GameView/HUD/ActionBubble/ActionList/SkillBtn
 @onready var wait_btn: Button = $GameView/HUD/ActionBubble/ActionList/WaitBtn
 @onready var claim_btn: Button = $GameView/HUD/ActionBubble/ActionList/ClaimBtn
+@onready var action_pointer: Polygon2D = $GameView/HUD/ActionBubble/ActionPointer
 @onready var attack_confirm_panel: Panel = $GameView/HUD/AttackConfirmPanel
 @onready var attack_confirm_body: RichTextLabel = $GameView/HUD/AttackConfirmPanel/Body
 @onready var attack_confirm_btn: Button = $GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn
@@ -738,9 +743,10 @@ func _show_view(name: String) -> void:
 	# game view 时启动状态轮询(每 1s GET /state 追 AI 行动)
 	if name == "game":
 		_start_state_polling()
-		# 棋盘右边有空档(Backdrop 绿色露出来) — 切暗色调融合棋盘边界
+		# 棋盘以外的侧翼必须属于战斗 HUD，而不是透出窗口默认灰色。
+		# 使用不抢地图视觉权重的深海军蓝，和金边面板保持同一套色阶。
 		if backdrop != null and is_instance_valid(backdrop):
-			backdrop.color = Color.TRANSPARENT
+			backdrop.color = Color(0.018, 0.035, 0.055, 1.0)
 	else:
 		_stop_state_polling()
 		# 恢复主题背景色
@@ -772,11 +778,15 @@ func _disable_board_camera(b: Node) -> void:
 
 # HUD (CanvasLayer) 显隐控制 — CanvasLayer 不受父 Control.visible 影响
 func _show_hud() -> void:
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.visible = true
 	if hud_layer != null and is_instance_valid(hud_layer):
 		hud_layer.visible = true
 
 
 func _hide_hud() -> void:
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.visible = false
 	if hud_layer != null and is_instance_valid(hud_layer):
 		hud_layer.visible = false
 
@@ -1370,8 +1380,10 @@ func _refresh_co_roster() -> void:
 		if not (c is Dictionary):
 			continue
 		var pid: int = int(c.get("player_id", -1))
-		var color_name: String = str(c.get("color", "—"))
-		var commander_id: String = str(c.get("commander_id", ""))
+		var color_v: Variant = c.get("color", "")
+		var color_name: String = "" if color_v == null else str(color_v)
+		var commander_v: Variant = c.get("commander_id", null)
+		var commander_id: String = "" if commander_v == null else str(commander_v)
 		var meter: int = int(c.get("meter", 0))
 		var threshold: int = max(1, int(c.get("threshold", 100)))
 		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
@@ -1380,7 +1392,7 @@ func _refresh_co_roster() -> void:
 		var is_local: bool = pid == _player_id
 		# Panel 容器(单行:HBox)
 		var row := Panel.new()
-		row.custom_minimum_size = Vector2(160, 32)
+		row.custom_minimum_size = Vector2(270, 38)
 		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		co_roster.add_child(row)
 		var row_inner := HBoxContainer.new()
@@ -1392,19 +1404,25 @@ func _refresh_co_roster() -> void:
 		row_inner.offset_bottom = -2.0
 		row_inner.add_theme_constant_override("separation", 4)
 		row.add_child(row_inner)
-		# 1) 阵营色块(16x16)
+		# 1) 阵营色条。窄色条比大色块更接近顶部对阵栏的视觉语言。
 		var swatch := ColorRect.new()
-		swatch.custom_minimum_size = Vector2(16, 16)
+		swatch.custom_minimum_size = Vector2(6, 24)
 		swatch.color = Config.player_color(color_name)
 		row_inner.add_child(swatch)
-		# 2) Label:颜色缩写 + 指挥官名
+		# 2) 正式界面禁止暴露 RED:<null> 之类内部值。
 		var lbl := Label.new()
-		lbl.text = "%s:%s" % [color_name.to_upper(), commander_id if commander_id != "" else "—"]
-		lbl.add_theme_font_size_override("font_size", 11)
+		var side_name := _team_cn(color_name)
+		if side_name == "":
+			side_name = "阵营"
+		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "未任命"
+		lbl.text = "%s · %s" % [side_name, commander_name_text]
+		lbl.custom_minimum_size = Vector2(112, 0)
+		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		lbl.add_theme_font_size_override("font_size", 14)
 		row_inner.add_child(lbl)
 		# 3) ProgressBar(meter / threshold)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(56, 12)
+		bar.custom_minimum_size = Vector2(72, 14)
 		bar.value = pct
 		bar.show_percentage = false
 		bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
@@ -1428,7 +1446,7 @@ func _refresh_co_roster() -> void:
 		else:
 			var meter_lbl := Label.new()
 			meter_lbl.text = "%d/%d" % [meter, threshold]
-			meter_lbl.add_theme_font_size_override("font_size", 10)
+			meter_lbl.add_theme_font_size_override("font_size", 12)
 			row_inner.add_child(meter_lbl)
 
 
@@ -1499,6 +1517,8 @@ func _refresh_commander_section() -> void:
 		commander_name.text = "—"
 		if commander_co_bar != null and is_instance_valid(commander_co_bar):
 			commander_co_bar.value = 0.0
+		if commander_co_label != null and is_instance_valid(commander_co_label):
+			commander_co_label.text = "统御 —"
 		return
 	var cp: Dictionary = GameState.get_player(cur_pid)
 	var name: String = str(cp.get("user_name", "—"))
@@ -1527,6 +1547,8 @@ func _refresh_commander_section() -> void:
 	if commander_co_bar != null and is_instance_valid(commander_co_bar):
 		commander_co_bar.value = pct
 		commander_co_bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+	if commander_co_label != null and is_instance_valid(commander_co_label):
+		commander_co_label.text = "统御 %d / %d" % [meter, threshold]
 
 
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
@@ -1582,7 +1604,9 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
 			terrain[k] = str(t.get("terrain", "plain"))
-	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
+	# Preview with the remaining-MP budget enforced by the server. Base MOV
+	# would let partially moved units preview destinations they cannot reach.
+	var mov: int = int(src_unit.get("mp", int(src_unit.get("move_points", int(src_unit.get("mov", 5))))))
 	var path: Array = MapLogic.pathfind(
 		src_cell, target_cell, terrain, owners, mov, _player_id, blocked, no_end, size_v
 	)
@@ -1607,8 +1631,10 @@ func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
 	if owner_pid != _player_id:
 		return
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
-	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
+	var marker_pos: Vector2 = board.tile_to_screen(cell) if board != null else Vector2.ZERO
 	var context := _ACTION_CONTEXT_POST_MOVE if action_name == "移动" else _ACTION_CONTEXT_POST_ACTION
+	if context == _ACTION_CONTEXT_POST_MOVE and _can_continue_move(ud):
+		_move_reachable_set = _compute_reachable_tiles_full(ud)
 	_show_action_bubble(unit_id, marker_pos, context)
 	_update_status("已%s,请选择后续指令" % ("移动" if action_name == "移动" else "行动"))
 
@@ -2423,30 +2449,36 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 		_skill_targets = {}
 		if board != null:
 			board.clear_selection_marks()
+			board.show_selected_mark(Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0))))
 		_hide_action_bubble()
 		return
 	# 否则:可行动己方 unit → 弹气泡 + reachable 高亮
 	_selected_unit_id = unit_id
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
-	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
-	_show_action_bubble(unit_id, marker_pos, _ACTION_CONTEXT_INITIAL)
+	var marker_pos: Vector2 = board.tile_to_screen(cell) if board != null else Vector2.ZERO
+	var action_context := _ACTION_CONTEXT_POST_MOVE if bool(ud.get("has_moved", false)) else _ACTION_CONTEXT_INITIAL
+	_show_action_bubble(unit_id, marker_pos, action_context)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
+	if is_mine and not bool(ud.get("has_acted", false)) and int(ud.get("mp", 0)) > 0:
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
 		_move_reachable_set = reach_dict
 		_clear_move_preview_path()
 		if tiles.size() > 0 and board != null:
 			board.show_path_marks([], tiles)
+			board.show_selected_mark(cell)
 	elif board != null:
 		board.clear_selection_marks()
+		board.show_selected_mark(cell)
 		_move_reachable_set = {}
 		_clear_move_preview_path()
 
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
 func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
-	var mp: int = int(unit_data.get("mov", int(unit_data.get("move_points", int(unit_data.get("mp", 5))))))
+	# `mp` is the remaining budget; `mov` is the class/base maximum. Match the
+	# backend route so continued movement never previews extra range.
+	var mp: int = int(unit_data.get("mp", int(unit_data.get("move_points", int(unit_data.get("mov", 5))))))
 	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
@@ -3036,19 +3068,25 @@ func _refresh_dialog_layout(has_portrait: bool, text_length: int, is_choice: boo
 	# cannot shrink their fixed-position parent panel by themselves.
 	if dialog_panel == null or dialog_body == null:
 		return
-	var height := 176.0
+	var viewport_width := get_viewport().get_visible_rect().size.x
+	var width: float = clampf(viewport_width * 0.78, 680.0, 1050.0)
+	dialog_panel.anchor_left = 0.5
+	dialog_panel.anchor_right = 0.5
+	dialog_panel.offset_left = -width * 0.5
+	dialog_panel.offset_right = width * 0.5
+	var height := 168.0
 	if is_choice:
 		height = 248.0
 	elif has_portrait:
-		height = 244.0
+		height = 238.0 if text_length > 70 else 214.0
 	elif text_length > 42:
-		height = 206.0
+		height = 196.0
 	dialog_panel.offset_top = -height - 20.0
 	dialog_panel.offset_bottom = -20.0
 	dialog_body.offset_top = 50.0
 	dialog_body.offset_bottom = -58.0
 	if dialog_portrait_panel != null and is_instance_valid(dialog_portrait_panel):
-		dialog_portrait_panel.custom_minimum_size = Vector2(92, 88) if has_portrait else Vector2.ZERO
+		dialog_portrait_panel.custom_minimum_size = Vector2(112, 120) if has_portrait else Vector2.ZERO
 
 
 func _ensure_dialog_choice_container() -> void:
@@ -3217,25 +3255,10 @@ func _apply_hud_theme() -> void:
 	# The tactical board remains the primary surface until inspection is needed.
 	if info_panel != null and is_instance_valid(info_panel):
 		info_panel.visible = false
-	# Pills are ColorRect containers with ReferenceRect borders added
-	# in _ready. We only need to set font sizes / colors on inner Labels.
+	# Compact HUD plaques are scene-authored NinePatch assets. Do not append
+	# procedural ReferenceRects here: this method runs more than once and the
+	# duplicate lines obscure the production artwork.
 	var pill_size := 14
-	# Add a gold ReferenceRect border around each pill ColorRect.
-	for p in [turn_badge, phase_badge, current_player_badge, gold_panel, ai_thinking_label]:
-		if p == null or not is_instance_valid(p):
-			continue
-		var border := ReferenceRect.new()
-		border.anchor_right = 1.0
-		border.anchor_bottom = 1.0
-		border.offset_left = 0
-		border.offset_top = 0
-		border.offset_right = 0
-		border.offset_bottom = 0
-		border.border_color = MenuTheme.C_GOLD
-		border.border_width = 2.0
-		border.editor_only = false
-		border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(border)
 	for lbl in [turn_badge_label, phase_badge_label, current_player_label, gold_label]:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_font_size_override("font_size", pill_size)
@@ -3268,13 +3291,16 @@ func _apply_hud_theme() -> void:
 	if players_list != null and is_instance_valid(players_list):
 		players_list.add_theme_font_size_override("normal_font_size", 13)
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# The legacy full-height portrait is deliberately disabled. Portrait art is
-	# reserved for dialogue and preparation, never for a tactical HUD overlay.
-	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
+	# The compact portrait card starts hidden and is shown by unit selection for
+	# heroes only. Do not permanently disable it here: this theme pass also runs
+	# before the first tactical selection.
+	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel) and _unit_info_portrait_tex == null:
 		hero_portrait_panel.visible = false
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.add_theme_font_size_override("normal_font_size", 13)
+		unit_info.add_theme_font_size_override("normal_font_size", 15)
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
+		hero_portrait_caption.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
 	# V2 第 4 轮:行动气泡主题(深绿底 + 烫金粗边)
 	if action_bubble != null and is_instance_valid(action_bubble):
 		var sb_bubble := StyleBoxFlat.new()
@@ -3386,11 +3412,11 @@ func _apply_hud_theme() -> void:
 		portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	# Dialog name
 	if dialog_name != null and is_instance_valid(dialog_name):
-		dialog_name.add_theme_font_size_override("font_size", 18)
+		dialog_name.add_theme_font_size_override("font_size", 20)
 		dialog_name.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 	if dialog_text != null and is_instance_valid(dialog_text):
-		dialog_text.add_theme_font_size_override("normal_font_size", 16)
-		dialog_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+		dialog_text.add_theme_font_size_override("normal_font_size", 17)
+		dialog_text.add_theme_color_override("default_color", Color("#f2e8c8"))
 	# Tutorial header
 	var tut_header: Label = tutorial_bubble.find_child("Header", true, false)
 	if tut_header != null:
@@ -5572,29 +5598,88 @@ func _on_war_report_close_pressed() -> void:
 func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = _ACTION_CONTEXT_INITIAL) -> void:
 	_selected_unit_id = unit_id
 	_refresh_action_bubble_buttons(unit_id, context)
-	# Keep this as a compact contextual menu. It must never cover the inspect
-	# card or sit under the top HUD, regardless of the unit's map position.
+	var selected_unit: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+	if action_title != null and is_instance_valid(action_title):
+		action_title.text = "%s · 行动" % _unit_cn_name(selected_unit, "单位")
+	# Keep this as a compact contextual menu anchored to the selected unit.
+	# Board coordinates live under Camera2D while this panel lives in a
+	# CanvasLayer, so viewport_pos must already be converted by tile_to_screen().
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
 	var visible_actions := 0
+	var actions_height := 0.0
 	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
 		if button != null and is_instance_valid(button) and button.visible:
 			visible_actions += 1
-	var bubble_size := Vector2(204.0, 18.0 + float(visible_actions) * 36.0 + max(0, visible_actions - 1) * 4.0)
-	# The cancel row is deliberately a little shorter than regular actions.
-	if cancel_btn != null and is_instance_valid(cancel_btn) and cancel_btn.visible:
-		bubble_size.y -= 4.0
+			actions_height += maxf(button.custom_minimum_size.y, button.get_combined_minimum_size().y)
+	# The header occupies 42 px; the action list keeps 12 px side/bottom padding.
+	# Derive height from each visible button so the shorter cancel row never
+	# gets pushed into the ornamental bottom border.
+	var bubble_size := Vector2(176.0, 70.0 + actions_height + float(max(0, visible_actions - 1)) * 4.0)
 	action_bubble.size = bubble_size
-	var top_safe := 108.0
-	var bottom_safe := 76.0
-	var right_edge := vp_size.x - 14.0
-	if info_panel != null and is_instance_valid(info_panel) and info_panel.visible:
-		right_edge = min(right_edge, info_panel.position.x - 12.0)
-	var pos: Vector2 = viewport_pos + Vector2(40.0, -bubble_size.y * 0.5)
-	if pos.x + bubble_size.x > right_edge:
-		pos.x = viewport_pos.x - bubble_size.x - 40.0
-	pos.x = clamp(pos.x, 14.0, max(14.0, right_edge - bubble_size.x))
-	pos.y = clamp(pos.y, top_safe, max(top_safe, vp_size.y - bottom_safe - bubble_size.y))
+	var viewport_safe := Rect2(Vector2(14.0, 108.0), Vector2(vp_size.x - 28.0, vp_size.y - 196.0))
+	var safe_rect := viewport_safe
+	var board_screen := Rect2()
+	if board != null and board.has_method("screen_rect"):
+		board_screen = board.screen_rect()
+	var gap := 34.0
+	var raw_candidates := {
+		"right": viewport_pos + Vector2(gap, -bubble_size.y * 0.5),
+		"left": viewport_pos + Vector2(-bubble_size.x - gap, -bubble_size.y * 0.5),
+		"above": viewport_pos + Vector2(-bubble_size.x * 0.5, -bubble_size.y - gap),
+		"below": viewport_pos + Vector2(-bubble_size.x * 0.5, gap),
+	}
+	if board_screen.size.x > 0.0:
+		raw_candidates["left_gutter"] = Vector2(board_screen.position.x - bubble_size.x - 12.0, viewport_pos.y - bubble_size.y * 0.5)
+		raw_candidates["right_gutter"] = Vector2(board_screen.end.x + 12.0, viewport_pos.y - bubble_size.y * 0.5)
+	var best_direction := "right"
+	var pos: Vector2 = raw_candidates[best_direction]
+	var best_score := INF
+	for direction in raw_candidates.keys():
+		var raw_pos: Vector2 = raw_candidates[direction]
+		var candidate_pos := Vector2(
+			clamp(raw_pos.x, safe_rect.position.x, max(safe_rect.position.x, safe_rect.end.x - bubble_size.x)),
+			clamp(raw_pos.y, safe_rect.position.y, max(safe_rect.position.y, safe_rect.end.y - bubble_size.y))
+		)
+		var candidate_rect := Rect2(candidate_pos, bubble_size)
+		var score: float = candidate_pos.distance_to(raw_pos) * 4.0
+		# Prefer horizontal placement when equally clear, but never at the cost of
+		# covering another unit. This keeps the menu connected to its source while
+		# allowing crowded formations to use the space above or below.
+		if direction == "left":
+			score += 6.0
+		elif direction == "above" or direction == "below":
+			score += 14.0
+		elif direction.ends_with("_gutter"):
+			score += 60.0
+		for other in _all_units_including_self():
+			var other_tile := Vector2i(int(other.get("x", 0)), int(other.get("y", 0)))
+			var other_screen: Vector2 = board.tile_to_screen(other_tile) if board != null and board.has_method("tile_to_screen") else Vector2.ZERO
+			var is_source := int(other.get("id", -1)) == unit_id
+			var exclusion_size := 72.0 if is_source else 64.0
+			var unit_rect := Rect2(other_screen - Vector2.ONE * exclusion_size * 0.5, Vector2.ONE * exclusion_size)
+			if candidate_rect.intersects(unit_rect):
+				var overlap_area: float = candidate_rect.intersection(unit_rect).get_area()
+				score += (5000.0 if is_source else 1200.0) + overlap_area * 2.0
+		if score < best_score:
+			best_score = score
+			best_direction = direction
+			pos = candidate_pos
 	action_bubble.position = pos
+	if action_pointer != null and is_instance_valid(action_pointer):
+		action_pointer.rotation = 0.0
+		action_pointer.scale = Vector2.ONE
+		match best_direction:
+			"left", "left_gutter":
+				action_pointer.position = Vector2(bubble_size.x + 12.0, bubble_size.y * 0.5 - 10.0)
+				action_pointer.scale.x = -1.0
+			"above":
+				action_pointer.position = Vector2(bubble_size.x * 0.5 + 10.0, bubble_size.y + 12.0)
+				action_pointer.rotation = -PI * 0.5
+			"below":
+				action_pointer.position = Vector2(bubble_size.x * 0.5 - 10.0, -12.0)
+				action_pointer.rotation = PI * 0.5
+			"right_gutter", "right":
+				action_pointer.position = Vector2(-12.0, bubble_size.y * 0.5 - 10.0)
 	action_bubble.visible = true
 
 
@@ -5703,6 +5788,12 @@ func _on_move_pressed() -> void:
 	if _selected_unit_id <= 0:
 		_update_status("移动: 请先选中单位")
 		return
+	# Immediate move feedback clears the old cache. Rebuild it from the unit's
+	# remaining MP so a visible "继续移动" command always works.
+	if _move_reachable_set.is_empty():
+		var selected_unit: Dictionary = GameState.get_unit(_selected_unit_id) if GameState != null else {}
+		if not selected_unit.is_empty():
+			_move_reachable_set = _compute_reachable_tiles_full(selected_unit)
 	if _move_reachable_set.is_empty() or _move_reachable_set.size() <= 1:
 		_update_status("移动: 该单位没有可达格")
 		return
@@ -6193,7 +6284,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var cur_pid_v: Variant = GameState.current_player_id if GameState != null else null
 	var cur_pid: int = -1 if cur_pid_v == null else int(cur_pid_v)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
+	var can_act: bool = not bool(ud.get("has_acted", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
 	# Bug fix: GDScript 的 str(null) 返回字面字符串 "<null>",跟空字符串
 	# 比较仍然不为空 → 之前会把没有 hero_id 的普通单位误判成英雄。
@@ -6201,18 +6292,23 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var hero_id_v: Variant = ud.get("hero_id", null)
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	_set_unit_info_portrait(hero_id)
+	if unit_info != null and is_instance_valid(unit_info):
+		unit_info.offset_left = 184.0 if hero_id != "" and hero_portrait_panel.visible else 44.0
+	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
+		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
 	var lines: Array = [
-		("[color=#f0c75e]✦ Hero ID[/color]  %s" % mainline_view._bb_escape(hero_id)) if hero_id != "" else "",
-		"[color=#a89878]⛓ 位置[/color]  (%d, %d)   %s" % [pos.x, pos.y, owner_str],
-		("[color=#f4e8c1]❤ 生命[/color]  %d / %d   [color=#5fa8e8]⚡ 能量[/color]  %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]❤ 生命[/color]  %d / %d" % [hp, max_hp]),
-		"[color=#c9a14a]⚔ 攻击[/color] %d  [color=#c9a14a]🛡 防御[/color] %d  [color=#c9a14a]✨ 魔攻[/color] %d  [color=#c9a14a]🔮 魔防[/color] %d" % [atk, def, matk, mdef],
-		"[color=#a89878]👣 移动力[/color] %d   [color=#a89878]🎯 攻击射程[/color] %d-%d" % [mov, range_min + 1, range_max],
-		"[color=#a89878]⭐ 士气[/color] %d / 3   [color=#a89878]📜 技能[/color] %s" % [morale, ", ".join(skill_names) if skill_names.size() > 0 else "—"],
+		"[color=#a89878]位置 (%d, %d)[/color]   %s" % [pos.x, pos.y, owner_str],
+		("[color=#f4e8c1]生命[/color] %d/%d      [color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
+		"[color=#c9a14a]攻击[/color] %-3d       [color=#c9a14a]防御[/color] %d" % [atk, def],
+		"[color=#c9a14a]魔攻[/color] %-3d       [color=#c9a14a]魔防[/color] %d" % [matk, mdef],
+		"[color=#a89878]移动[/color] %-3d       [color=#a89878]射程[/color] %d-%d" % [mov, range_min + 1, range_max],
+		"[color=#a89878]士气[/color] %d/3" % morale,
+		"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
 	]
 
 	# ── 战斗加成 / Buffs 区段(P2.6+ 用户要的逐条列出) ──
@@ -6273,11 +6369,35 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 
 
 func _set_unit_info_portrait(hero_id: String) -> void:
-	# Full portrait art is not part of the tactical HUD. Keeping this method as
-	# a harmless compatibility hook avoids touching selection/network flows.
 	if hero_portrait_panel == null or not is_instance_valid(hero_portrait_panel):
 		return
-	hero_portrait_panel.visible = false
+	if _unit_info_portrait_tex == null:
+		_unit_info_portrait_tex = TextureRect.new()
+		_unit_info_portrait_tex.name = "PortraitTexture"
+		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_unit_info_portrait_tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_unit_info_portrait_tex.offset_left = 12.0
+		_unit_info_portrait_tex.offset_top = 12.0
+		_unit_info_portrait_tex.offset_right = -12.0
+		_unit_info_portrait_tex.offset_bottom = -12.0
+		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hero_portrait_panel.add_child(_unit_info_portrait_tex)
+		# The generated frame must remain above the portrait rather than being
+		# covered by a dynamically appended TextureRect.
+		hero_portrait_panel.move_child(_unit_info_portrait_tex, 0)
+	if hero_id == "":
+		_unit_info_portrait_tex.texture = null
+		_unit_info_portrait_tex.visible = false
+		hero_portrait_panel.visible = false
+		if unit_info != null and is_instance_valid(unit_info):
+			unit_info.offset_left = 44.0
+		return
+	var portrait_path := "res://assets/heroes/portrait_%s.png" % hero_id
+	var tex := _load_portrait(portrait_path)
+	_unit_info_portrait_tex.texture = tex
+	_unit_info_portrait_tex.visible = tex != null
+	hero_portrait_panel.visible = tex != null
 
 
 func _set_board_inspect_card_visible(is_visible: bool) -> void:

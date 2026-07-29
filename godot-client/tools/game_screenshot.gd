@@ -7,11 +7,16 @@ const _OUT_PATH := "user://game_screenshot.png"
 func _ready() -> void:
 	for i in 3:
 		await RenderingServer.frame_post_draw
+	# Wait for Main's asynchronous startup view selection to finish before
+	# applying the deterministic battle layout used by this screenshot.
+	await get_tree().create_timer(0.5).timeout
 	var root: Node = get_tree().current_scene
 	var main: Node = root
 	if root.name == "GameScreenshot":
 		main = root.get_child(0) if root.get_child_count() > 0 else root
 	# Force the game view visible, hide menu/connecting.
+	if main.has_method("_show_view"):
+		main.call("_show_view", "game")
 	var game_view: Node = main.find_child("GameView", true, false)
 	if game_view != null:
 		game_view.visible = true

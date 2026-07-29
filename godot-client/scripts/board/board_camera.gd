@@ -3,6 +3,8 @@ class_name BoardCamera
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const _FIT_MARGIN := 16.0
+const _UI_TOP_SAFE_PX := 112.0
+const _UI_BOTTOM_SAFE_PX := 16.0
 # The inspect card is opt-in. The normal battlefield must not reserve an
 # invisible sidebar, while a visible card gets a modest right-side safe area.
 const _UI_LEFT_FRACTION := 0.00
@@ -78,12 +80,13 @@ func _refresh_from_metrics(position_only: bool = false) -> void:
 
 	var reserved_right: float = _UI_RIGHT_FRACTION if _inspect_card_visible else 0.0
 	var usable_w: float = viewport_size.x * (1.0 - _UI_LEFT_FRACTION - reserved_right)
-	var usable_h: float = viewport_size.y
+	var usable_h: float = max(1.0, viewport_size.y - _UI_TOP_SAFE_PX - _UI_BOTTOM_SAFE_PX)
 	# Board 实际可视区中心 = viewport 中心 + 偏移(因为棋盘偏向 viewport 右侧)
 	var ui_left_px: float = viewport_size.x * _UI_LEFT_FRACTION
 	var center_offset_x: float = (ui_left_px + usable_w * 0.5) - viewport_size.x * 0.5
+	var center_offset_y: float = (_UI_TOP_SAFE_PX + usable_h * 0.5) - viewport_size.y * 0.5
 	var board_center := _board_center_for(_metrics, board_rect)
-	position = Vector2(board_center.x - center_offset_x, board_center.y)
+	position = Vector2(board_center.x - center_offset_x, board_center.y - center_offset_y)
 
 	var zoom_x: float = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
 	var zoom_y: float = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)

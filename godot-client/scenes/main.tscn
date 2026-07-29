@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -12,6 +12,9 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_heart_24.png" id="10_stat_heart"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_sword_24.png" id="11_stat_sword"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_shield_24.png" id="12_stat_shield"]
+[ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/panel_frame_9slice_384_v1.png" id="13_battle_panel_frame"]
+[ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/top_status_rail_clean_1000x96_v2.png" id="14_battle_status_rail"]
+[ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/compact_hud_plaque_180x72_v1.png" id="15_battle_compact_plaque"]
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 
@@ -1487,6 +1490,20 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
+; 固定战斗底幕必须脱离 BoardCamera 的 canvas transform，否则缩放地图时
+; 视口两侧会分别露出窗口灰色和根背景黑色。
+[node name="BattleBackdrop" type="CanvasLayer" parent="GameView"]
+layer = -5
+
+[node name="Background" type="ColorRect" parent="GameView/BattleBackdrop"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.018, 0.035, 0.055, 1)
+mouse_filter = 2
+
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
 
 ; HUD 包在 CanvasLayer 内 → 不受 BoardCamera 缩放/平移影响
@@ -1494,6 +1511,20 @@ mouse_filter = 2
 	layer = 10
 
 ; M5.1 CO Roster — 顶部全玩家头像 + 能量条 + Power 按钮
+
+; 战斗顶部常驻装饰底板。先绘制，回合、阵营状态和操作按钮随后覆盖在上方。
+[node name="TopStatusArt" type="TextureRect" parent="GameView/HUD"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -500.0
+offset_top = 26.0
+offset_right = 500.0
+offset_bottom = 109.0
+mouse_filter = 2
+texture = ExtResource("14_battle_status_rail")
+expand_mode = 1
+stretch_mode = 5
+modulate = Color(1, 1, 1, 0.96)
 
 ; --- 左上:回合 + 阶段 pill ---
 [node name="TopLeft" type="HBoxContainer" parent="GameView/HUD"]
@@ -1507,6 +1538,20 @@ theme_override_constants/separation = 9
 custom_minimum_size = Vector2(120, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/TurnBadge"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
+
 [node name="Label" type="Label" parent="GameView/HUD/TopLeft/TurnBadge"]
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1518,6 +1563,20 @@ mouse_filter = 2
 [node name="PhaseBadge" type="ColorRect" parent="GameView/HUD/TopLeft"]
 custom_minimum_size = Vector2(210, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/PhaseBadge"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
 
 [node name="Label" type="Label" parent="GameView/HUD/TopLeft/PhaseBadge"]
 anchor_right = 1.0
@@ -1542,6 +1601,20 @@ alignment = 2
 custom_minimum_size = Vector2(210, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
+
 [node name="Label" type="Label" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1554,6 +1627,20 @@ mouse_filter = 2
 text = "结束回合"
 custom_minimum_size = Vector2(180, 42)
 disabled = true
+
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/EndTurnButton"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
 
 ; --- 左下:金币 + CO meter ---
 [node name="BottomLeft" type="HBoxContainer" parent="GameView/HUD"]
@@ -1568,6 +1655,20 @@ theme_override_constants/separation = 9
 [node name="GoldPanel" type="ColorRect" parent="GameView/HUD/BottomLeft"]
 custom_minimum_size = Vector2(135, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
+
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/BottomLeft/GoldPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
 
 [node name="GoldLabel" type="Label" parent="GameView/HUD/BottomLeft/GoldPanel"]
 anchor_right = 1.0
@@ -1593,6 +1694,20 @@ offset_right = 166.0
 offset_bottom = -92.0
 clip_contents = true
 mouse_filter = 2
+
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/HeroPortraitPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 32
+patch_margin_top = 32
+patch_margin_right = 32
+patch_margin_bottom = 32
+draw_center = false
 
 ; --- 顶部中央:CO Roster — 全玩家头像 + meter + 发动按钮 ---
 ; 动态生成:每玩家一个 Panel(头像 + 名字 + ProgressBar + 发动按钮)
@@ -1625,6 +1740,20 @@ visible = false
 custom_minimum_size = Vector2(225, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/BottomRight/AIThinking"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
+
 [node name="Label" type="Label" parent="GameView/HUD/BottomRight/AIThinking"]
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1637,31 +1766,59 @@ mouse_filter = 2
 text = "战报"
 custom_minimum_size = Vector2(150, 42)
 
+[node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/BottomRight/WarReportButton"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("15_battle_compact_plaque")
+patch_margin_left = 18
+patch_margin_top = 14
+patch_margin_right = 18
+patch_margin_bottom = 14
+draw_center = false
+
 ; --- 选中单位检视卡 ---
 ; 按需显示的紧凑卡：不占用棋盘左侧，也不再承载整场玩家列表。
 [node name="InfoPanel" type="Panel" parent="GameView/HUD"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -360.0
+offset_left = -452.0
 offset_top = 105.0
 offset_right = -12.0
-offset_bottom = 465.0
+offset_bottom = 545.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/InfoPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 40
+patch_margin_top = 40
+patch_margin_right = 40
+patch_margin_bottom = 40
+draw_center = false
+
 [node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
-offset_left = 18.0
-offset_top = 10.0
-offset_right = -18.0
-offset_bottom = 34.0
+offset_left = 44.0
+offset_top = 42.0
+offset_right = -44.0
+offset_bottom = 66.0
 text = "当前指挥官"
 theme_override_font_sizes/font_size = 18
 
 [node name="CommanderName" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 38.0
-offset_right = -18.0
-offset_bottom = 66.0
+offset_left = 44.0
+offset_top = 70.0
+offset_right = -44.0
+offset_bottom = 100.0
 bbcode_enabled = true
 fit_content_height = true
 scroll_active = false
@@ -1669,38 +1826,51 @@ text = "—"
 
 [node name="CommanderCOBar" type="ProgressBar" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 72.0
-offset_right = -18.0
-offset_bottom = 94.0
+offset_left = 44.0
+offset_top = 106.0
+offset_right = -44.0
+offset_bottom = 130.0
 max_value = 100.0
 value = 0.0
 show_percentage = false
 
+[node name="ValueLabel" type="Label" parent="GameView/HUD/InfoPanel/CommanderCOBar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "统御 0 / 20"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+theme_override_font_sizes/font_size = 13
+
 [node name="CommanderDivider" type="ReferenceRect" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 102.0
-offset_right = -18.0
-offset_bottom = 104.0
+offset_left = 44.0
+offset_top = 140.0
+offset_right = -44.0
+offset_bottom = 142.0
 border_color = Color(0.788, 0.631, 0.29, 1)
 border_width = 1.5
 editor_only = false
 
 [node name="UnitInfoTitle" type="Label" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 110.0
-offset_right = -18.0
-offset_bottom = 136.0
+offset_left = 44.0
+offset_top = 150.0
+offset_right = -44.0
+offset_bottom = 176.0
 text = "⚔ 选中单位"
 theme_override_font_sizes/font_size = 16
 
 [node name="StatIconRail" type="VBoxContainer" parent="GameView/HUD/InfoPanel"]
-offset_left = 18.0
-offset_top = 144.0
-offset_right = 42.0
-offset_bottom = 234.0
+visible = false
+offset_left = 36.0
+offset_top = 154.0
+offset_right = 60.0
+offset_bottom = 244.0
 theme_override_constants/separation = 9
 mouse_filter = 2
 
@@ -1728,13 +1898,49 @@ tooltip_text = "防御"
 [node name="UnitInfo" type="RichTextLabel" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 52.0
-offset_top = 142.0
-offset_right = -18.0
-offset_bottom = -16.0
+offset_left = 44.0
+offset_top = 184.0
+offset_right = -44.0
+offset_bottom = -40.0
 bbcode_enabled = true
 scroll_active = true
 text = "[i]点击单位查看详情[/i]"
+
+[node name="UnitPortraitPanel" type="Panel" parent="GameView/HUD/InfoPanel"]
+visible = false
+offset_left = 40.0
+offset_top = 184.0
+offset_right = 160.0
+offset_bottom = 344.0
+clip_contents = true
+mouse_filter = 2
+
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/InfoPanel/UnitPortraitPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 20
+patch_margin_top = 20
+patch_margin_right = 20
+patch_margin_bottom = 20
+draw_center = false
+
+[node name="Caption" type="Label" parent="GameView/HUD/InfoPanel/UnitPortraitPanel"]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = -34.0
+offset_right = -18.0
+offset_bottom = -10.0
+text = "英雄 · 未行动"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 13
 
 [node name="PlayersListLabel" type="Label" parent="GameView/HUD/InfoPanel"]
 visible = false
@@ -1764,42 +1970,73 @@ text = "等待战场同步..."
 visible = false
 offset_left = 0.0
 offset_top = 0.0
-offset_right = 204.0
-offset_bottom = 282.0
+offset_right = 176.0
+offset_bottom = 246.0
 mouse_filter = 2
+
+[node name="ActionTitle" type="Label" parent="GameView/HUD/ActionBubble"]
+z_index = 3
+offset_left = 34.0
+offset_top = 12.0
+offset_right = -34.0
+offset_bottom = 36.0
+text = "单位行动"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 15
+
+[node name="ActionPointer" type="Polygon2D" parent="GameView/HUD/ActionBubble"]
+position = Vector2(-12, 131)
+polygon = PackedVector2Array(0, 10, 12, 2, 12, 18)
+color = Color(0.94, 0.76, 0.31, 0.96)
+z_index = 2
+
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/ActionBubble"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 28
+patch_margin_top = 28
+patch_margin_right = 28
+patch_margin_bottom = 28
+draw_center = false
 
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 9.0
-offset_top = 9.0
-offset_right = -9.0
-offset_bottom = -9.0
+offset_left = 12.0
+offset_top = 42.0
+offset_right = -12.0
+offset_bottom = -28.0
 theme_override_constants/separation = 4
 
 [node name="MoveBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "移动"
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 34)
 
 [node name="AttackBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "攻击"
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 34)
 
 [node name="SkillBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "技能"
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 34)
 
 [node name="WaitBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "待命"
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 34)
 
 [node name="ClaimBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "占领 / 招募"
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 34)
 
 [node name="CancelBtn" type="Button" parent="GameView/HUD/ActionBubble/ActionList"]
 text = "取消 (右键亦可)"
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 34)
 
 ; --- 攻击确认卡:目标点击后先确认,再 POST attack ---
 [node name="AttackConfirmPanel" type="Panel" parent="GameView/HUD"]
@@ -1813,6 +2050,20 @@ offset_top = -168.0
 offset_right = 285.0
 offset_bottom = 168.0
 mouse_filter = 0
+
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/AttackConfirmPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
 
 [node name="Title" type="Label" parent="GameView/HUD/AttackConfirmPanel"]
 anchor_right = 1.0
@@ -1868,6 +2119,20 @@ offset_right = 390.0
 offset_bottom = 270.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/WarReportPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
+
 [node name="AutoSaveToast" type="Panel" parent="GameView/HUD"]
 visible = false
 anchor_left = 0.5
@@ -1892,30 +2157,30 @@ theme_override_font_sizes/font_size = 21
 
 [node name="Header" type="Label" parent="GameView/HUD/WarReportPanel"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 12.0
-offset_right = -60.0
-offset_bottom = 48.0
+offset_left = 64.0
+offset_top = 24.0
+offset_right = -112.0
+offset_bottom = 58.0
 text = "📜 战报日志"
 theme_override_font_sizes/font_size = 24
 
 [node name="CloseBtn" type="Button" parent="GameView/HUD/WarReportPanel"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -54.0
-offset_top = 9.0
-offset_right = -12.0
-offset_bottom = 48.0
+offset_left = -112.0
+offset_top = 18.0
+offset_right = -70.0
+offset_bottom = 57.0
 text = "✕"
 custom_minimum_size = Vector2(42, 39)
 
 [node name="ActionLog" type="RichTextLabel" parent="GameView/HUD/WarReportPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 12.0
-offset_top = 60.0
-offset_right = -12.0
-offset_bottom = -12.0
+offset_left = 42.0
+offset_top = 72.0
+offset_right = -42.0
+offset_bottom = -42.0
 bbcode_enabled = true
 text = "[i]战报 / 日志[/i]"
 scroll_following = true
@@ -1967,32 +2232,46 @@ offset_right = 390.0
 offset_bottom = 345.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/SettingsPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
+
 [node name="Header" type="Label" parent="GameView/HUD/SettingsPanel"]
 anchor_right = 1.0
-offset_left = 24.0
-offset_top = 18.0
-offset_right = -66.0
-offset_bottom = 60.0
+offset_left = 72.0
+offset_top = 24.0
+offset_right = -120.0
+offset_bottom = 66.0
 text = "⚙ 设置"
 theme_override_font_sizes/font_size = 30
 
 [node name="CloseBtn" type="Button" parent="GameView/HUD/SettingsPanel"]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -60.0
-offset_top = 15.0
-offset_right = -15.0
-offset_bottom = 57.0
+offset_left = -120.0
+offset_top = 21.0
+offset_right = -72.0
+offset_bottom = 63.0
 text = "✕"
 custom_minimum_size = Vector2(42, 39)
 
 [node name="SettingsList" type="VBoxContainer" parent="GameView/HUD/SettingsPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = 84.0
-offset_right = -24.0
-offset_bottom = -96.0
+offset_left = 54.0
+offset_top = 90.0
+offset_right = -54.0
+offset_bottom = -72.0
 theme_override_constants/separation = 24
 
 [node name="NameRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
@@ -2112,6 +2391,20 @@ offset_right = 270.0
 offset_bottom = 240.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/PausePanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
+
 [node name="Header" type="Label" parent="GameView/HUD/PausePanel"]
 anchor_right = 1.0
 offset_left = 24.0
@@ -2125,32 +2418,32 @@ theme_override_font_sizes/font_size = 36
 [node name="PauseList" type="VBoxContainer" parent="GameView/HUD/PausePanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 36.0
-offset_top = 96.0
-offset_right = -36.0
-offset_bottom = -36.0
-theme_override_constants/separation = 18
+offset_left = 64.0
+offset_top = 88.0
+offset_right = -64.0
+offset_bottom = -48.0
+theme_override_constants/separation = 12
 alignment = 1
 
 [node name="ResumeBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "▶  继续游戏"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 [node name="SettingsBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "⚙  设置"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 [node name="MainMenuBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "↩  返回主菜单"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 [node name="PauseSuspendBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "⏸  中断退出"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 [node name="QuitBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
 text = "❌  退出游戏"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 ; ============================================================
 ; V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
@@ -2165,7 +2458,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.01, 0.03, 0.05, 0.5)
+color = Color(0.01, 0.03, 0.05, 0.38)
 mouse_filter = 0
 
 ; --- 对话框(底部浮层)---
@@ -2182,25 +2475,39 @@ offset_right = 0.0
 offset_bottom = -20.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/DialogPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
+
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
-offset_left = 24.0
-offset_top = 14.0
-offset_right = -24.0
-offset_bottom = 38.0
+offset_left = 64.0
+offset_top = 20.0
+offset_right = -64.0
+offset_bottom = 44.0
 text = "👤 指挥官 艾莉卡"
 theme_override_font_sizes/font_size = 20
 
 [node name="DialogBody" type="HBoxContainer" parent="GameView/HUD/DialogPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = 50.0
-offset_right = -24.0
+offset_left = 64.0
+offset_top = 54.0
+offset_right = -64.0
 offset_bottom = -66.0
 theme_override_constants/separation = 14
 
 [node name="Portrait" type="Panel" parent="GameView/HUD/DialogPanel/DialogBody"]
-custom_minimum_size = Vector2(92, 88)
+custom_minimum_size = Vector2(112, 120)
 clip_contents = true
 
 [node name="PortraitLabel" type="Label" parent="GameView/HUD/DialogPanel/DialogBody/Portrait"]
@@ -2223,12 +2530,12 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -168.0
-offset_top = -50.0
-offset_right = -28.0
-offset_bottom = -14.0
+offset_left = -180.0
+offset_top = -60.0
+offset_right = -32.0
+offset_bottom = -20.0
 text = "继续 ▶"
-custom_minimum_size = Vector2(140, 36)
+custom_minimum_size = Vector2(148, 40)
 
 ; --- 教程气泡(浮在右下角)---
 [node name="TutorialBubble" type="Panel" parent="GameView/HUD"]
@@ -2243,12 +2550,26 @@ offset_right = -24.0
 offset_bottom = -108.0
 mouse_filter = 0
 
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/TutorialBubble"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+draw_center = false
+
 [node name="Header" type="Label" parent="GameView/HUD/TutorialBubble"]
 anchor_right = 1.0
-offset_left = 18.0
-offset_top = 12.0
-offset_right = -18.0
-offset_bottom = 48.0
+offset_left = 64.0
+offset_top = 24.0
+offset_right = -64.0
+offset_bottom = 54.0
 text = "💡 教程"
 theme_override_font_sizes/font_size = 24
 
@@ -2286,6 +2607,20 @@ offset_top = -300.0
 offset_right = 450.0
 offset_bottom = 300.0
 mouse_filter = 0
+
+[node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/BattleResultPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_battle_panel_frame")
+patch_margin_left = 64
+patch_margin_top = 64
+patch_margin_right = 64
+patch_margin_bottom = 64
+draw_center = false
 
 [node name="Header" type="Label" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0

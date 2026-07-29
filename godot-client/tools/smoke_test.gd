@@ -287,6 +287,46 @@ func _ready() -> void:
 		"in_progress view should expose a back button")
 	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
 		"attack flow should expose a confirm panel before POSTing")
+	var battle_top_art := main_check.get_node_or_null("GameView/HUD/TopStatusArt") as TextureRect
+	_assert_true("HUD top status art is wired", battle_top_art != null and battle_top_art.texture != null,
+		"the always-visible battle header must render its production art asset")
+	_assert_true("HUD top status art uses clean center rail",
+		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_status_rail_clean"),
+		"team meters need a center-safe rail without an overlapping emblem")
+	var compact_plaque_paths: Array[String] = [
+		"GameView/HUD/TopLeft/TurnBadge/OrnatePlaque",
+		"GameView/HUD/TopLeft/PhaseBadge/OrnatePlaque",
+		"GameView/HUD/TopRight/CurrentPlayerBadge/OrnatePlaque",
+		"GameView/HUD/TopRight/EndTurnButton/OrnatePlaque",
+		"GameView/HUD/BottomLeft/GoldPanel/OrnatePlaque",
+		"GameView/HUD/BottomRight/AIThinking/OrnatePlaque",
+		"GameView/HUD/BottomRight/WarReportButton/OrnatePlaque",
+	]
+	for plaque_path in compact_plaque_paths:
+		var plaque := main_check.get_node_or_null(plaque_path) as NinePatchRect
+		_assert_true("Compact HUD art wired: %s" % plaque_path,
+			plaque != null and plaque.texture != null and not plaque.draw_center,
+			"always-visible corner controls must keep their compact plaque art")
+	var ornate_panel_paths: Array[String] = [
+		"GameView/HUD/InfoPanel/OrnateFrame",
+		"GameView/HUD/ActionBubble/OrnateFrame",
+		"GameView/HUD/AttackConfirmPanel/OrnateFrame",
+		"GameView/HUD/WarReportPanel/OrnateFrame",
+		"SettingsPanel/OrnateFrame",
+		"GameView/HUD/PausePanel/OrnateFrame",
+		"GameView/HUD/DialogPanel/OrnateFrame",
+		"GameView/HUD/TutorialBubble/OrnateFrame",
+		"GameView/HUD/BattleResultPanel/OrnateFrame",
+	]
+	for ornate_path in ornate_panel_paths:
+		var ornate_frame := main_check.get_node_or_null(ornate_path) as NinePatchRect
+		_assert_true("Battle art wired: %s" % ornate_path,
+			ornate_frame != null and ornate_frame.texture != null and not ornate_frame.draw_center,
+			"battle panels must keep their non-blocking nine-slice ornament")
+	var battle_backdrop := main_check.get_node_or_null("GameView/BattleBackdrop/Background") as ColorRect
+	_assert_true("Battle backdrop is camera independent",
+		battle_backdrop != null and battle_backdrop.get_parent() is CanvasLayer and battle_backdrop.color.a >= 0.99,
+		"side gutters must use a fixed opaque CanvasLayer instead of the camera-transformed root background")
 	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
 		"attack confirm panel should expose a confirm action")
 	_assert_true("BattleResult has MainlineNextBtn", main_check.get_node_or_null("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn") != null,
@@ -440,7 +480,25 @@ func _ready() -> void:
 		"battlefield hero units should render a visible hero badge")
 	hero_node.queue_free()
 	_setup_action_bubble_state(main_check)
-	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
+	var action_board: Node = main_check.get_node("GameView/Board")
+	var source_screen: Vector2 = action_board.call("tile_to_screen", Vector2i(1, 1))
+	main_check.call("_show_action_bubble", 10, source_screen)
+	var board_screen_rect: Rect2 = action_board.call("screen_rect")
+	var action_bubble: Panel = main_check.get_node("GameView/HUD/ActionBubble")
+	_assert_true("Action menu remains inside viewport",
+		get_viewport().get_visible_rect().encloses(Rect2(action_bubble.position, action_bubble.size)),
+		"crowded edge formations may use a side HUD gutter, but must never leave the viewport")
+	_assert_true("Action menu never covers source unit",
+		not Rect2(action_bubble.position, action_bubble.size).intersects(Rect2(source_screen - Vector2(36, 36), Vector2(72, 72))),
+		"the selected unit must remain visible while choosing its action")
+	var action_title: Label = main_check.get_node("GameView/HUD/ActionBubble/ActionTitle")
+	_assert_true("Action menu identifies source unit", action_title.text.contains("治疗师"),
+		"context menus need a visible identity anchor in addition to their pointer")
+	await get_tree().process_frame
+	var action_list: VBoxContainer = main_check.get_node("GameView/HUD/ActionBubble/ActionList")
+	_assert_true("Action menu content clears ornate border",
+		action_list.position.y + action_list.size.y <= action_bubble.size.y - 12.0,
+		"dynamic action combinations must not push cancel text into the bottom frame")
 	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,
 		"fresh unit should be offered movement")
 	_assert_action_button("Initial bubble hides attack without target", main_check, "AttackBtn", false,
@@ -452,6 +510,9 @@ func _ready() -> void:
 	main_check.call("_show_post_action_bubble", 10, "移动")
 	_assert_action_button("Post-move bubble keeps continue move", main_check, "MoveBtn", true,
 		"post-move menu should allow continued movement when MP remains")
+	var continued_reach: Dictionary = main_check.get("_move_reachable_set")
+	_assert_true("Post-move bubble rebuilds reachable cache", continued_reach.size() > 1,
+		"a visible continue-move command must retain destinations after immediate feedback clears the old cache")
 	var post_move_btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/MoveBtn")
 	_assert_true("Post-move bubble relabels move", post_move_btn.text.contains("继续"),
 		"post-move menu should distinguish continuing movement from initial movement")
@@ -459,6 +520,21 @@ func _ready() -> void:
 		"post-move menu should keep legal active skills")
 	_assert_action_button("Post-move bubble keeps claim", main_check, "ClaimBtn", true,
 		"post-move menu should keep legal claim")
+	var moved_unit: Dictionary = _game_state.get_unit(10)
+	moved_unit["has_moved"] = true
+	moved_unit["mp"] = 2
+	main_check.call("_handle_unit_click", 10, Vector2.ZERO)
+	_assert_action_button("Reselected moved unit keeps continue move", main_check, "MoveBtn", true,
+		"reselecting a unit with remaining MP must not collapse the menu to wait/cancel")
+	_assert_true("Reselected moved unit uses continue label", post_move_btn.text.contains("继续"),
+		"the reselected unit should retain post-move action context")
+	var reselected_reach: Dictionary = main_check.get("_move_reachable_set")
+	var within_remaining_mp := true
+	for path_cost in reselected_reach.values():
+		if int(path_cost) > 4:
+			within_remaining_mp = false
+	_assert_true("Continued movement respects remaining MP", within_remaining_mp,
+		"reachable preview must use remaining mp=2 rather than the unit's base mov=3")
 	main_check.call("_show_action_bubble", 11, Vector2(320, 240))
 	_assert_action_button("Attack-ready bubble shows attack", main_check, "AttackBtn", true,
 		"unit with an enemy in range should show attack")
@@ -590,11 +666,48 @@ func _ready() -> void:
 	var info_text: String = str(main_check.get_node("GameView/HUD/InfoPanel/UnitInfo").text)
 	_assert_true("Unit info tolerates string subtype", info_text.length() > 0,
 		"clicking a unit must not crash when the tile subtype is a non-empty string")
+	_assert_true("Unit info hides backend hero id", not info_text.contains("Hero ID"),
+		"production inspection copy must not expose backend field names")
 	var inspect_card: Panel = main_check.get_node("GameView/HUD/InfoPanel")
-	_assert_true("Inspect card is compact", inspect_card.size.x <= 380.0 and inspect_card.size.y <= 400.0,
-		"unit inspection must not create a full-height tactical sidebar")
-	_assert_true("No tactical full portrait", not main_check.hero_portrait_panel.visible,
-		"hero art must not create a standalone tactical HUD column")
+	var viewport_height: float = get_viewport().get_visible_rect().size.y
+	_assert_true("Inspect card is compact", inspect_card.size.x <= 460.0 and inspect_card.size.y <= viewport_height * 0.7,
+		"unit inspection may grow for readable stats but must remain a bounded tactical card")
+	_assert_true("Hero portrait is integrated with inspection",
+		main_check.hero_portrait_panel.get_parent() == inspect_card,
+		"hero identity and unit stats must share one visual card instead of opposite screen edges")
+	var previous_co_states: Array = _game_state.co_states
+	_game_state.co_states = [{
+		"player_id": 1,
+		"color": "red",
+		"commander_id": null,
+		"meter": 0,
+		"threshold": 20,
+	}]
+	main_check.call("_refresh_co_roster")
+	await get_tree().process_frame
+	var roster_text := ""
+	for roster_label in main_check.get_node("GameView/HUD/CORoster").find_children("*", "Label", true, false):
+		roster_text += str((roster_label as Label).text)
+	_assert_true("CO roster localizes missing commander", roster_text.contains("未任命") and not roster_text.contains("<null>"),
+		"top status must replace nullable backend ids with player-facing copy")
+	_game_state.co_states = previous_co_states
+	main_check.call("_refresh_co_roster")
+	main_check.call("_set_unit_info_portrait", "yun")
+	var tactical_portrait := main_check.get("_unit_info_portrait_tex") as TextureRect
+	_assert_true("Hero selection shows compact portrait",
+		main_check.hero_portrait_panel.visible and tactical_portrait != null and tactical_portrait.visible,
+		"selecting a hero must reveal the compact tactical portrait card")
+	_assert_true("Hero portrait texture is loaded",
+		tactical_portrait != null and tactical_portrait.texture != null
+			and tactical_portrait.texture.resource_path.ends_with("portrait_yun.png"),
+		"the tactical card must load the selected hero's portrait resource")
+	_assert_true("Hero portrait stays inside compact card",
+		tactical_portrait != null and tactical_portrait.size.x <= main_check.hero_portrait_panel.size.x
+			and tactical_portrait.size.y <= main_check.hero_portrait_panel.size.y,
+		"portrait art must not recreate the removed full-height sidebar")
+	main_check.call("_set_unit_info_portrait", "")
+	_assert_true("Non-hero selection hides portrait", not main_check.hero_portrait_panel.visible,
+		"ordinary units must not leave stale hero art visible")
 	main_check.call("show_dialog", "旁白", "对话遮罩应阻止棋盘输入。")
 	_assert_true("Dialog overlay becomes visible", main_check.dialog_overlay.visible,
 		"opening dialogue should enable the input-blocking overlay")
@@ -1118,7 +1231,8 @@ func _test_one_map(map_id: String) -> void:
 	# The compact inspect card is opt-in.  A fresh board must fit against the
 	# whole viewport; selecting a unit then reserves a small right-side area.
 	var usable_w: float = viewport_size.x
-	var usable_h: float = viewport_size.y
+	# The top status rail owns 112 px and the bottom HUD keeps 16 px clear.
+	var usable_h: float = viewport_size.y - 128.0
 	var board_pixel_w: float = float(w * MAP_METRICS_SCRIPT.TILE_SIZE.x)
 	var board_pixel_h: float = float(h * MAP_METRICS_SCRIPT.TILE_SIZE.y)
 	var expected_fit_zoom: float = min(

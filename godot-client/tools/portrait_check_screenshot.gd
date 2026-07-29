@@ -22,14 +22,18 @@ func _ready() -> void:
 	main._player_id = 1
 	main._show_view("game")
 	await _await_frames(3)
-	# 显式设置 hero portrait panel + texture
+	# Use the production path; never force visibility, otherwise this screenshot
+	# hides regressions where unit selection no longer enables the portrait card.
 	main._set_unit_info_portrait("yun")
-	# 确保 panel visible(防御 _apply_hud_theme 还没跑的边界)
-	if main.hero_portrait_panel != null:
-		main.hero_portrait_panel.visible = true
-	if main._unit_info_portrait_tex != null:
-		main._unit_info_portrait_tex.visible = true
 	await _await_frames(3)
+	if main.hero_portrait_panel == null or not main.hero_portrait_panel.visible:
+		printerr("[portrait_check] production portrait panel stayed hidden")
+		get_tree().quit(1)
+		return
+	if main._unit_info_portrait_tex == null or main._unit_info_portrait_tex.texture == null:
+		printerr("[portrait_check] production portrait texture was not loaded")
+		get_tree().quit(1)
+		return
 	if main.hero_portrait_panel != null:
 		print("[portrait_check] panel.size=%s visible=%s pos=%s" % [
 			str(main.hero_portrait_panel.size),

@@ -24,11 +24,11 @@ const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER }
 
 const _COLORS := {
-	Mode.MOVE:     Color(0.37, 0.78, 0.98, 0.40),
-	Mode.ATTACK:   Color(0.95, 0.40, 0.45, 0.40),
+	Mode.MOVE:     Color(0.37, 0.78, 0.98, 0.28),
+	Mode.ATTACK:   Color(0.95, 0.40, 0.45, 0.34),
 	Mode.PATH:     Color(0.37, 0.78, 0.98, 0.85),
 	Mode.THREAT:   Color(0.98, 0.65, 0.30, 0.50),
-	Mode.SELECTED: Color(0.98, 0.85, 0.30, 0.85),
+	Mode.SELECTED: Color(1.00, 0.78, 0.18, 0.96),
 	Mode.HOVER:    Color(1.00, 1.00, 1.00, 0.60),
 }
 
@@ -178,10 +178,10 @@ func _make_outline_sprite(color: Color) -> Node2D:
 	# trick looks chunky at high DPI.
 	var wrapper := Node2D.new()
 	for side in [
-		{"x": 0, "y": 0, "w": _tile_size.x, "h": 3},
-		{"x": 0, "y": _tile_size.y - 3, "w": _tile_size.x, "h": 3},
-		{"x": 0, "y": 0, "w": 3, "h": _tile_size.y},
-		{"x": _tile_size.x - 3, "y": 0, "w": 3, "h": _tile_size.y},
+		{"x": 0, "y": 0, "w": _tile_size.x, "h": 2},
+		{"x": 0, "y": _tile_size.y - 2, "w": _tile_size.x, "h": 2},
+		{"x": 0, "y": 0, "w": 2, "h": _tile_size.y},
+		{"x": _tile_size.x - 2, "y": 0, "w": 2, "h": _tile_size.y},
 	]:
 		var bar := ColorRect.new()
 		bar.size = Vector2(side.w, side.h)
