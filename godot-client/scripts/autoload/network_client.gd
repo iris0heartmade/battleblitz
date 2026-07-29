@@ -403,9 +403,9 @@ func action_move(game_id: int, player_id: int, unit_id: int, to_x: int, to_y: in
 		{"player_id": player_id, "unit_id": unit_id, "to_x": to_x, "to_y": to_y})
 
 
-func action_attack(game_id: int, player_id: int, attacker_id: int, target_id: int) -> void:
+func action_attack(game_id: int, player_id: int, attacker_id: int, target_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/attack",
-		{"player_id": player_id, "attacker_id": attacker_id, "target_id": target_id})
+		{"player_id": player_id, "attacker_id": attacker_id, "target_id": target_id}, callback)
 
 
 func action_skill(game_id: int, player_id: int, unit_id: int, skill: String, target_id: int = -1) -> void:
@@ -420,9 +420,9 @@ func action_wait(game_id: int, player_id: int, unit_id: int) -> void:
 		{"player_id": player_id, "unit_id": unit_id})
 
 
-func action_claim(game_id: int, player_id: int, unit_id: int) -> void:
+func action_claim(game_id: int, player_id: int, unit_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/claim",
-		{"player_id": player_id, "unit_id": unit_id})
+		{"player_id": player_id, "unit_id": unit_id}, callback)
 
 
 func action_recruit(game_id: int, player_id: int, tile_x: int, tile_y: int, unit_type: String, callback: Callable = Callable()) -> void:
@@ -435,9 +435,9 @@ func action_end_turn(game_id: int, player_id: int) -> void:
 		{"player_id": player_id})
 
 
-func action_co_power(game_id: int, player_id: int) -> void:
+func action_co_power(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/co-power",
-		{"player_id": player_id})
+		{"player_id": player_id}, callback)
 
 
 # ============================================================

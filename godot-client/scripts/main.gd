@@ -1,6 +1,9 @@
 extends Node
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
+const CnLabels = preload("res://scripts/ui/cn_labels.gd")
+const HudTheme = preload("res://scripts/ui/hud_theme.gd")
+const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -129,12 +132,6 @@ var _auto_save_toast_tween: Tween = null
 @onready var pause_quit_btn: Button = $GameView/HUD/PausePanel/PauseList/QuitBtn
 
 # V2 第 7 轮:对话框 + 教程气泡 + 战斗结算
-@onready var dialog_panel: Panel = $GameView/HUD/DialogPanel
-@onready var dialog_name: Label = $GameView/HUD/DialogPanel/CharacterName
-@onready var dialog_text: RichTextLabel = $GameView/HUD/DialogPanel/DialogBody/DialogText
-@onready var dialog_continue_btn: Button = $GameView/HUD/DialogPanel/ContinueBtn
-@onready var dialog_portrait_panel: Panel = $GameView/HUD/DialogPanel/DialogBody/Portrait
-@onready var dialog_portrait_label: Label = $GameView/HUD/DialogPanel/DialogBody/Portrait/PortraitLabel
 
 # T:4 RecruitPanel — 真 modal(替换 status 凑合)
 @onready var recruit_panel: Panel = $GameView/HUD/RecruitPanel
@@ -242,83 +239,12 @@ var _resume_kind: String = ""
 @onready var editor_view = $EditorView  # -> editor_controller.gd (P2)
 
 @onready var lobby_view: Control = $Lobby
-@onready var lobby_status_label: Label = $Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus
-@onready var lobby_list: RichTextLabel = $Lobby/LobbyFrame/LobbyList
-@onready var lobby_win_banner: Label = $Lobby/LobbyFrame/LobbyInfoBar/LobbyWinBanner
-@onready var ai_difficulty_option: OptionButton = $Lobby/LobbyFrame/AiConfigRow/AiDifficultyOption
-@onready var ai_kind_option: OptionButton = $Lobby/LobbyFrame/AiConfigRow/AiKindOption
-@onready var ai_personality_option: OptionButton = $Lobby/LobbyFrame/AiConfigRow/AiPersonalityOption
-@onready var ai_commander_option: OptionButton = $Lobby/LobbyFrame/AiCommanderOption
-@onready var ai_player_option: OptionButton = $Lobby/LobbyFrame/AiActionRow/AiPlayerOption
-@onready var lobby_add_ai_btn: Button = $Lobby/LobbyFrame/AiActionRow/LobbyAddAiBtn
-@onready var lobby_remove_ai_btn: Button = $Lobby/LobbyFrame/AiActionRow/LobbyRemoveAiBtn
-@onready var lobby_start_btn: Button = $Lobby/LobbyFrame/BottomBar/LobbyStartBtn
-@onready var player_count_label: Label = $Lobby/LobbyFrame/LobbyDualCol/RightCol/PlayerCountLabel
-@onready var start_game_inline_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/StartGameInlineBtn
-@onready var lobby_back_btn: Button = $Lobby/LobbyFrame/BottomBar/LobbyBackBtn
-@onready var lobby_game_id_label: Label = $Lobby/LobbyFrame/LobbyTopBar/LobbyGameIdLabel
-@onready var room_list: RichTextLabel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/RoomList
-@onready var room_select_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/RoomSelectOption
-@onready var join_mode_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/JoinModeOption
-@onready var refresh_rooms_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow/RefreshRoomsBtn
-@onready var join_selected_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow/JoinSelectedBtn
-@onready var lobby_name_input: LineEdit = $Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateNameInput
-@onready var lobby_seat_panel: Panel = $Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel
-@onready var lobby_seat_grid: GridContainer = $Lobby/LobbyFrame/LobbyDualCol/RightCol/SeatPanel/SeatGrid
-@onready var map_player_count_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow/MapPlayerCountOption
-@onready var map_preset_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow/MapPresetOption
-@onready var map_preview_panel: Panel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel
-@onready var map_preview_texture: TextureRect = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel/MapPreviewTexture
-@onready var map_faction_summary: RichTextLabel = $Lobby/LobbyFrame/LobbyDualCol/LeftCol/MapPreviewPanel/MapFactionSummary
-@onready var team_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow/TeamOption
-@onready var lobby_apply_team_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/TeamRow/LobbyApplyTeamBtn
-# P1#8 房主行级队伍控制 + P1#7 切换观战(转换自己为观战者)
-@onready var lobby_host_player_option: OptionButton = $Lobby/LobbyFrame/HostRow/LobbyHostPlayerOption
-@onready var lobby_host_team_option: OptionButton = $Lobby/LobbyFrame/HostRow/LobbyHostTeamOption
-@onready var lobby_host_apply_btn: Button = $Lobby/LobbyFrame/HostRow/LobbyHostApplyBtn
-@onready var lobby_to_spec_btn: Button = $Lobby/LobbyFrame/LobbyToSpecBtn
-@onready var lobby_commander_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyCommanderOption
-@onready var lobby_bgm_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/LobbyBgmOption
-@onready var win_condition_option: OptionButton = $Lobby/LobbyFrame/LobbyDualCol/RightCol/WinConditionOption
-@onready var create_room_btn: Button = $Lobby/LobbyFrame/LobbyDualCol/RightCol/CreateRoomBtn
-# Lobby 二层菜单导航
-@onready var choose_panel: VBoxContainer = $Lobby/LobbyFrame/ChoosePanel
-@onready var create_card_btn: Button = $Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/CreateCard/CreateCardInner/CreateCardBtn
-@onready var join_card_btn: Button = $Lobby/LobbyFrame/ChoosePanel/ChooseBtnRow/JoinCard/JoinCardInner/JoinCardBtn
+# 大厅子控件引用已搬到 lobby_controller.gd(相对 $LobbyFrame 路径)
 var _entry_flow: String = "free"
-var _lobby_mode: String = "choose"  # choose / create / join / in_room
-var _lobby_rooms: Array = []
-var _selected_room_id: int = 0
-var _selected_ai_player_id: int = 0
-var _preset_options: Array = []
-var _all_preset_options: Array = []
-var _lobby_preset_filter_players: int = 0
-var _lobby_commander_ids: Array[String] = [""]
-var _lobby_ai_commander_ids: Array[String] = [""]
-var _lobby_bgm_track_ids: Array[String] = [""]
-# P1#8 房主:seat==0 即房主。_lobby_host_target_id = 当前选中的目标玩家 id。
-# _lobby_host_team_ids: 与 lobby_host_team_option 下标对齐的队伍名(""=自由)。
-var _lobby_is_host: bool = false
-var _lobby_self_is_spectator: bool = false
-var _lobby_host_target_id: int = 0
-var _lobby_host_team_ids: Array[String] = [""]
-var _lobby_last_players: Array = []
-var _lobby_host_player_sig: String = ""
-var _lobby_seat_team_ids: Array[String] = ["team_a", "team_b", "team_c", "team_d"]
-var _lobby_seat_ai_replacements: Array[bool] = [false, false, false, false]
-var _lobby_seat_ai_personalities: Array[String] = ["balanced", "balanced", "balanced", "balanced"]
-var _lobby_seat_commander_indices: Array[int] = [0, 0, 0, 0]
 # M4.16+:game-over 保险。_on_match_ended 触发后置 true,屏蔽后续 state
 # poll / AI 操作。重置场景时(_on_lobby_pressed / 新 game 创建)→ false。
 var _game_over: bool = false
-var _lobby_seat_occupants: Array[String] = ["", "", "", ""]
-var _lobby_commanders_fetched: bool = false  # API 响应后置 true,防"加载中…"误判
-var _selected_lobby_seat_index: int = 0
-var _pending_lobby_start_after_create: bool = false
-var _pending_lobby_ai_seats: Array[int] = []
-var _pending_lobby_team_updates: Array[Dictionary] = []
-# 大厅轮询(2s)— 与 web app.js:918 一致
-var _lobby_poll_timer: Timer = null
+var _death_event_seq: int = 0  # 阵亡事件单调序列号,去重 DialogManager 触发
 @onready var menu_title: Label = $Menu/CenterContainer/TitleBlock/TitleLine1
 @onready var menu_subtitle: Label = $Menu/CenterContainer/TitleBlock/TitleLine2
 @onready var menu_footer: Label = $Menu/Footer/FooterLabel
@@ -400,47 +326,7 @@ func _ready() -> void:
 		saves_button.pressed.connect(_on_saves_pressed)
 	# CreateFormPanel(自由模式)按钮
 	# T:96 Mainline — ml_* connects 全部搬到 mainline_controller._ready(节点在组件里)
-	if ai_player_option != null and is_instance_valid(ai_player_option):
-		ai_player_option.item_selected.connect(_on_ai_player_selected)
-	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
-		lobby_remove_ai_btn.pressed.connect(_on_lobby_remove_ai_pressed)
-	# P1:audit 发现 LobbyAddAiBtn 在 tscn 存在但 var 未接 .pressed.connect
-	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
-		lobby_add_ai_btn.pressed.connect(_on_lobby_add_ai_pressed)
-	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
-		lobby_start_btn.pressed.connect(_on_lobby_start_pressed)
-	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.pressed.connect(_on_lobby_start_pressed)
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		lobby_back_btn.pressed.connect(_on_lobby_back_pressed)
-	if room_select_option != null and is_instance_valid(room_select_option):
-		room_select_option.item_selected.connect(_on_room_selected)
-	if join_mode_option != null and is_instance_valid(join_mode_option):
-		join_mode_option.item_selected.connect(_on_join_mode_changed)
-	if refresh_rooms_btn != null and is_instance_valid(refresh_rooms_btn):
-		refresh_rooms_btn.pressed.connect(_refresh_room_list)
-	if join_selected_btn != null and is_instance_valid(join_selected_btn):
-		join_selected_btn.pressed.connect(_on_join_selected_pressed)
-	if map_player_count_option != null and is_instance_valid(map_player_count_option):
-		map_player_count_option.item_selected.connect(_on_lobby_map_player_count_selected)
-	if map_preset_option != null and is_instance_valid(map_preset_option):
-		map_preset_option.item_selected.connect(_on_lobby_map_preset_selected)
-	if create_room_btn != null and is_instance_valid(create_room_btn):
-		create_room_btn.text = "开启游戏"
-		create_room_btn.pressed.connect(_on_create_room_pressed)
-	# Lobby 二层菜单导航
-	if create_card_btn != null and is_instance_valid(create_card_btn):
-		create_card_btn.pressed.connect(_on_create_card_pressed)
-	if join_card_btn != null and is_instance_valid(join_card_btn):
-		join_card_btn.pressed.connect(_on_join_card_pressed)
-	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
-		lobby_apply_team_btn.pressed.connect(_on_lobby_apply_team_pressed)
-	if lobby_host_player_option != null and is_instance_valid(lobby_host_player_option):
-		lobby_host_player_option.item_selected.connect(_on_lobby_host_player_selected)
-	if lobby_host_apply_btn != null and is_instance_valid(lobby_host_apply_btn):
-		lobby_host_apply_btn.pressed.connect(_on_lobby_host_apply_pressed)
-	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
-		lobby_to_spec_btn.pressed.connect(_on_lobby_to_spec_pressed)
+	# T:3 联机大厅 —— 全部子控件信号已搬到 lobby_controller._ready()
 	settings_button.pressed.connect(_on_settings_open_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
 	# T:#16 — InProgressButton 接线(主菜单"▶ 进行中"按钮)
@@ -457,13 +343,16 @@ func _ready() -> void:
 	# P2: mainline_controller.gd 组件接线
 	if mainline_view != null and is_instance_valid(mainline_view):
 		mainline_view._main = self
+	# P2: lobby_controller.gd 组件接线(大厅节点/状态/信号全部自管,这里只注入 _main)
+	if lobby_view != null and is_instance_valid(lobby_view):
+		lobby_view._main = self
 	# P2: editor_controller.gd 组件接线(注入共享 helper + 跨域信号)
 	if editor_view != null and is_instance_valid(editor_view):
 		editor_view.unit_label_fn = Callable(self, "_unit_type_cn")
 		if not editor_view.back_requested.is_connected(_on_editor_back_requested):
 			editor_view.back_requested.connect(_on_editor_back_requested)
-		if not editor_view.map_saved.is_connected(_upsert_editor_map_as_lobby_preset):
-			editor_view.map_saved.connect(_upsert_editor_map_as_lobby_preset)
+		if not editor_view.map_saved.is_connected(Callable(lobby_view, "_upsert_editor_map_as_lobby_preset")):
+			editor_view.map_saved.connect(Callable(lobby_view, "_upsert_editor_map_as_lobby_preset"))
 	# T:5 主菜单 load 时尝试匹配存档
 	_check_resume_session()
 	# T:8 启动时应用上次的字号偏好
@@ -539,7 +428,6 @@ func _ready() -> void:
 		pause_suspend_btn.pressed.connect(_on_pause_suspend_pressed)
 	pause_quit_btn.pressed.connect(_on_pause_quit_pressed)
 	# V2 第 7 轮:对话 + 教程 + 战斗结算
-	dialog_continue_btn.pressed.connect(_on_dialog_continue_pressed)
 	tutorial_got_it_btn.pressed.connect(_on_tutorial_got_it_pressed)
 	battle_detail_btn.pressed.connect(_on_battle_detail_pressed)
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
@@ -727,7 +615,7 @@ func _show_view(name: String) -> void:
 		_hide_hud()
 	# lobby 视图默认进二层菜单(创建/加入选择)
 	if name == "lobby":
-		_show_lobby_choose()
+		lobby_view.show_choose()
 	# 最强保险:切到 game view 时强制 GameView 不吞棋盘点击
 	# (tscn mouse_filter=2 + _ready 兜底都没生效时,这里再设一次绝对生效)
 	if name == "game" and game_view != null and is_instance_valid(game_view):
@@ -820,7 +708,7 @@ func _on_create_game_response(body: Dictionary) -> void:
 	if _entry_flow == "free":
 		NetworkClient.join_game(_game_id, _user_name, "red")
 	else:
-		NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role())
+		NetworkClient.join_game(_game_id, _user_name, "red", lobby_view.selected_join_team(), lobby_view.selected_join_role())
 
 
 func _on_join_game_response(body: Dictionary) -> void:
@@ -842,11 +730,7 @@ func _on_join_game_response(body: Dictionary) -> void:
 	UserSettings.set_value("session.v1.last_player_id", _player_id)
 	if _entry_flow != "free":
 		_show_view("lobby")
-		if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-			lobby_game_id_label.text = "对局 #%d" % _game_id
-		_start_lobby_polling()
-		_refresh_room_list()
-		_show_lobby_in_room()
+		lobby_view.enter_room_after_join()
 		return
 	connecting_label.text = "已加入(玩家 #%d),添加电脑对手中..." % _player_id
 	# 3) Add an AI opponent. M3 will let the user pick kind/personality.
@@ -1171,6 +1055,18 @@ func _on_state_updated(_snapshot: Dictionary) -> void:
 	_repaint_board_from_state()
 	_refresh_hud_from_state()
 
+	# 8a: 回合开始(仅本地玩家),DialogManager 去重避免 state poll 反复触发
+	if GameState != null and not DialogManager.is_playing() and _player_id > 0:
+		var _sum_turn := int(GameState.game_summary.get("turn_number", 0))
+		var _sum_pid: Variant = GameState.current_player_id
+		if _sum_turn > 0 and _sum_pid != null and int(_sum_pid) == _player_id:
+			if DialogManager.record_turn_shown(_game_id, _sum_turn, int(_sum_pid)):
+				DialogManager.show_dialog({
+					"speaker": "",
+					"text": "— 第 %d 回合,你的部队开始行动。" % _sum_turn,
+					"type": "narration",
+				})
+
 	var summary: Dictionary = GameState.game_summary if GameState != null else {}
 	var battle_config: Dictionary = (summary.get("battle_config", {}) as Dictionary)
 	if battle_config != null and battle_config.has("audio"):
@@ -1452,21 +1348,11 @@ func _rewrite_players_list() -> void:
 
 
 func _color_name_to_godot(c: String) -> String:
-	match c:
-		"red": return "#e85a6a"
-		"blue": return "#5fa8e8"
-		"green": return "#7ec97e"
-		"yellow": return "#f0c75e"
-		_: return "#cccccc"
+	return CnLabels.color_name_to_godot(c)
 
 
 func _color_emoji(c: String) -> String:
-	match c:
-		"red": return "🔴"
-		"blue": return "🔵"
-		"green": return "🟢"
-		"yellow": return "🟡"
-		_: return "⚪"
+	return CnLabels.color_emoji(c)
 
 
 # ============================================================
@@ -1668,6 +1554,16 @@ func _on_unit_killed(unit_id: int, _killer_id: int) -> void:
 			var cell := Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
 			board.spawn_floating_text_at_cell(cell, "💀击杀", "#c63a3a", "kill")
 	_schedule_board_refresh()
+	# 8b: 阵亡旁白(去重:每次 GameState 重新连接也算新 seq)
+	_death_event_seq += 1
+	if DialogManager.record_death_shown(_game_id, unit_id, _death_event_seq):
+		var _u := GameState.get_unit(unit_id) if GameState != null else {}
+		var _name := str(_u.get("display_cn", _u.get("unit_type", "单位"))) if not _u.is_empty() else "单位"
+		DialogManager.show_dialog({
+			"speaker": "",
+			"text": "「%s」阵亡。" % _name,
+			"type": "narration",
+		})
 
 
 # 200ms 防抖拉一次 GET /state。多个连续事件会被合并成一次 REST 调用,
@@ -1707,10 +1603,34 @@ func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y
 func _on_co_power_pressed(pid: int) -> void:
 	if _game_id <= 0:
 		return
-	NetworkClient.action_co_power(_game_id, pid)
+	# 8c: 可选 pre-action 对话(默认关闭,设置开关)
+	if UserSettings.get_value("dialog.v1.co_power_confirm", false):
+		await DialogManager.play([{
+			"speaker": "",
+			"text": "指挥官技即将发动,确认?",
+			"type": "narration",
+		}])
+	NetworkClient.action_co_power(
+		_game_id, pid,
+		Callable(self, "_on_co_power_response"),
+	)
 	_update_status("⚡ 指挥官技激活中 (#%d)..." % pid)
 	# 视觉反馈:屏幕中央大飘字 + 屏幕震动
 	_play_co_power_fx()
+
+
+## 8c: CO power 响应 — 成功后播一句旁白
+func _on_co_power_response(body: Variant, code: int) -> void:
+	if code < 200 or code >= 300:
+		_update_status("指挥官技失败 (HTTP %d)" % code)
+		return
+	if DialogManager.is_playing():
+		return
+	DialogManager.show_dialog({
+		"speaker": "",
+		"text": "⚡ 指挥官技已就绪。",
+		"type": "narration",
+	})
 
 
 # M5.3 CO Power 视觉反馈:屏幕中央大飘字 + Camera2D 抖动 0.4s
@@ -1785,68 +1705,7 @@ func _on_theme_change(theme_name: String) -> void:
 
 
 func _apply_theme(theme_name: String) -> void:
-	var bg_color: Color = Color(0.06, 0.13, 0.10)  # deep_gba 兜底
-	var panel_color: Color = Color(0.06, 0.13, 0.10)
-	var border_color: Color = Color(0.79, 0.63, 0.29)  # 金 C_GOLD
-	var text_color: Color = Color(0.96, 0.91, 0.76)   # 暖白 C_TEXT_WARM
-	var btn_bg: Color = Color(0.16, 0.25, 0.36)       # 蓝底 C_BTN_BLUE
-	if theme_name == "metal_silver":
-		bg_color = Color(0.10, 0.10, 0.13)
-		panel_color = Color(0.16, 0.16, 0.18)
-		border_color = Color(0.70, 0.73, 0.78)  # 银
-		text_color = Color(0.92, 0.94, 0.96)
-		btn_bg = Color(0.30, 0.34, 0.40)
-	elif theme_name == "minimal_light":
-		bg_color = Color(0.92, 0.92, 0.88)
-		panel_color = Color(0.96, 0.96, 0.94)
-		border_color = Color(0.30, 0.30, 0.30)  # 深灰边
-		text_color = Color(0.12, 0.12, 0.12)   # 深色字
-		btn_bg = Color(0.78, 0.80, 0.84)       # 浅灰按钮
-	if backdrop != null and is_instance_valid(backdrop):
-		backdrop.color = bg_color
-	# 重灌核心面板的 StyleBoxFlat 让边界和底色跟主题
-	var theme_panels: Array = [settings_panel, pause_panel, dialog_panel, battle_result_panel, war_report_panel]
-	for p in theme_panels:
-		if p == null or not is_instance_valid(p):
-			continue
-		var sb: StyleBoxFlat = StyleBoxFlat.new()
-		sb.bg_color = panel_color
-		sb.border_color = border_color
-		sb.set_border_width_all(2)
-		sb.set_corner_radius_all(2)
-		p.add_theme_stylebox_override("panel", sb)
-	# 重灌按钮 StyleBoxFlat 影响主菜单 + 子菜单底部按钮
-	# (P2:save_*_btn 由 saves_controller.gd 自管主题,不再列在这里)
-	var theme_btns: Array = [settings_button, settings_apply_btn, settings_cancel_btn,
-		settings_close_btn, settings_font_small_btn, settings_font_med_btn, settings_font_big_btn,
-		settings_red_btn, settings_blue_btn, settings_green_btn, settings_yellow_btn,
-		settings_mute_btn, pause_resume_btn, pause_suspend_btn, pause_main_menu_btn,
-		pause_quit_btn, pause_settings_btn, dialog_continue_btn, tutorial_got_it_btn,
-		battle_detail_btn, end_turn_button, help_button,
-		exit_button, resume_button, lobby_button, lobby_add_ai_btn, lobby_remove_ai_btn,
-		lobby_start_btn, lobby_back_btn, lobby_apply_team_btn, lobby_host_apply_btn,
-		join_by_code_button]
-	for b in theme_btns:
-		if b == null or not is_instance_valid(b):
-			continue
-		var sb2: StyleBoxFlat = StyleBoxFlat.new()
-		sb2.bg_color = btn_bg
-		sb2.border_color = border_color
-		sb2.set_border_width_all(2)
-		sb2.set_corner_radius_all(4)
-		b.add_theme_stylebox_override("normal", sb2)
-		var sbh: StyleBoxFlat = sb2.duplicate()
-		sbh.bg_color = btn_bg.lightened(0.15)
-		b.add_theme_stylebox_override("hover", sbh)
-		var sbp: StyleBoxFlat = sb2.duplicate()
-		sbp.bg_color = btn_bg.darkened(0.15)
-		b.add_theme_stylebox_override("pressed", sbp)
-	# 文本色整体调节主菜单 / SettingPanel 内的关键 label
-	var theme_text_labels: Array = [settings_panel.find_child("Header", true, false)] if settings_panel != null else []
-	for lbl in theme_text_labels:
-		if lbl != null and is_instance_valid(lbl):
-			lbl.add_theme_color_override("font_color", text_color)
-	_update_status("主题: %s" % theme_name)
+	HudTheme.apply_theme(self, theme_name)
 
 
 # M6.13 Help / 玩法说明 — 显示游戏规则静态指南
@@ -2725,8 +2584,11 @@ func _reset_game_state_for_main_menu() -> void:
 		recruit_panel.visible = false
 	if battle_result_panel != null and is_instance_valid(battle_result_panel):
 		battle_result_panel.visible = false
-	if dialog_panel != null and is_instance_valid(dialog_panel):
-		dialog_panel.visible = false
+	# DialogManager:回主菜单硬重置(清队列 + heroes + 锁)
+	if DialogManager != null:
+		DialogManager.reset()
+		DialogManager.hide_dialog()
+
 	# 6) 关 board 高亮
 	if board != null:
 		board.clear_selection_marks()
@@ -2741,10 +2603,8 @@ func _reset_game_state_for_main_menu() -> void:
 	# 清掉不影响 Resume 流程。
 	_player_id = 0
 	_game_id = 0
-	_lobby_seat_commander_indices = [0, 0, 0, 0]
-	_lobby_commander_ids = [""]
-	_selected_ai_player_id = 0
-	_lobby_is_host = false
+	if lobby_view != null and is_instance_valid(lobby_view):
+		lobby_view.reset_state()
 
 
 func _on_pause_quit_pressed() -> void:
@@ -2789,252 +2649,8 @@ func _on_capture_suspend_response(body: Variant, code: int) -> void:
 # 简化版:本地一份队列 + typewriter,不接 server side (Mainline
 # _requestNextBattle 待 V5.4 实装)。
 
-const _DIALOG_TYPE := 0   # 角色说话
-const _DIALOG_NARRATION := 1  # 旁白(无角色名)
-const _DIALOG_CHOICE := 2   # 选项(底部按钮)
 
-var _dialog_queue: Array = []  # [{character, text, kind, choices?}]
-var _hero_speaker_map: Dictionary = {}
-var _dialog_portrait_tex: TextureRect = null
-var _unit_info_portrait_tex: TextureRect = null
-var _dialog_active: bool = false
-var _dialog_full_text: String = ""
-var _dialog_visible_text: String = ""
-var _dialog_type_tween: Tween = null
-var _dialog_choice_container: VBoxContainer = null
-
-func show_dialog(character: String, text_bbcode: String) -> void:
-	if dialog_panel == null or not is_instance_valid(dialog_panel):
-		return
-	# 推入队列
-	_dialog_queue.append({
-		"character": character,
-		"text": text_bbcode,
-		"kind": _DIALOG_TYPE if character != "" else _DIALOG_NARRATION,
-	})
-	_ensure_dialog_choice_container()  # 确保选项层存在
-	dialog_panel.visible = true
-	if not _dialog_active:
-		_advance_dialog()
-
-
-func show_dialog_scene(scene: Dictionary) -> void:
-	# 富场景入口:按 server 对话 JSON 的 type 分发(web Dialog parity)。
-	# dialogue/narration/choice/battle_ref/wait。简单对话仍用 show_dialog。
-	if dialog_panel == null or not is_instance_valid(dialog_panel):
-		return
-	var stype := str(scene.get("type", "dialogue"))
-	if stype == "battle_ref" or stype == "wait":
-		return  # 战斗标记/等待:无 UI,跳过(主线靠 start_mainline 单独开战)
-	if stype == "choice":
-		var q := str(scene.get("question", "请选择:"))
-		var choices: Array = scene.get("choices", []) if scene.get("choices", []) is Array else []
-		_dialog_queue.append({"kind": _DIALOG_CHOICE, "question": q, "choices": choices})
-	else:
-		var speaker := str(scene.get("speaker", scene.get("character", "")))
-		var text := str(scene.get("text", ""))
-		var col := str(scene.get("speaker_color", ""))
-		var kind := _DIALOG_TYPE if speaker != "" else _DIALOG_NARRATION
-		_dialog_queue.append({"character": speaker, "text": text, "kind": kind, "color": col})
-	_ensure_dialog_choice_container()
-	dialog_panel.visible = true
-	if not _dialog_active:
-		_advance_dialog()
-
-
-func _play_dialogue_scenes(payload: Variant) -> void:
-	# 兼容 Array / {scenes:[...]} / 单 scene Dict 三种形状(server /mainlines/dialogue 返回 {scenes:[...]})。
-	var scenes: Array = []
-	if payload is Array:
-		scenes = payload
-	elif payload is Dictionary:
-		if payload.has("scenes") and payload["scenes"] is Array:
-			scenes = payload["scenes"]
-		else:
-			scenes = [payload]
-	for sc in scenes:
-		if sc is Dictionary:
-			show_dialog_scene(sc)
-
-
-func _render_dialog_choice(entry: Dictionary) -> void:
-	var question: String = str(entry.get("question", "请选择:"))
-	dialog_name.text = ""
-	if dialog_name.has_theme_color_override("font_color"):
-		dialog_name.remove_theme_color_override("font_color")
-	_set_dialog_portrait("")
-	dialog_text.bbcode_enabled = true
-	dialog_text.text = question
-	_dialog_full_text = question
-	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
-		dialog_continue_btn.visible = false
-	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
-		for child in _dialog_choice_container.get_children():
-			child.queue_free()
-		var choices: Array = entry.get("choices", []) if entry.get("choices", []) is Array else []
-		for ch in choices:
-			if not (ch is Dictionary): continue
-			var btn := Button.new()
-			btn.text = str(ch.get("text", ""))
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.pressed.connect(_on_dialog_choice_selected)
-			_dialog_choice_container.add_child(btn)
-		_dialog_choice_container.visible = true
-
-
-func _on_dialog_choice_selected() -> void:
-	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
-		_dialog_choice_container.visible = false
-	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
-		dialog_continue_btn.visible = true
-	_advance_dialog()
-
-
-func _set_dialog_portrait(speaker: String) -> void:
-	if dialog_portrait_panel == null or not is_instance_valid(dialog_portrait_panel):
-		return
-	if _dialog_portrait_tex == null:
-		_dialog_portrait_tex = TextureRect.new()
-		_dialog_portrait_tex.anchor_right = 1.0
-		_dialog_portrait_tex.anchor_bottom = 1.0
-		_dialog_portrait_tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		_dialog_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		dialog_portrait_panel.add_child(_dialog_portrait_tex)
-	var tex: Texture2D = null
-	if speaker != "" and _hero_speaker_map.has(speaker):
-		var info: Dictionary = _hero_speaker_map[speaker]
-		if info.has("portrait_tex") and info["portrait_tex"] != null:
-			tex = info["portrait_tex"]
-		elif info.has("portrait_path") and str(info["portrait_path"]) != "":
-			tex = _load_portrait(str(info["portrait_path"]))
-			if tex != null:
-				_hero_speaker_map[speaker]["portrait_tex"] = tex
-	_dialog_portrait_tex.texture = tex
-	_dialog_portrait_tex.visible = tex != null
-	if dialog_portrait_label != null and is_instance_valid(dialog_portrait_label):
-		dialog_portrait_label.visible = tex == null
-
-
-func _load_portrait(res_path: String) -> Texture2D:
-	# T:#18 — ResourceLoader 优先(res:// 路径 Godot 4 推荐走 ResourceLoader),
-	# 退回 Image.load + globalize_path。早期直接 img.load(res://...) 在
-	# 4.7 上偶发返回 null,导致 _set_unit_info_portrait 走"文件不存在"分支
-	# 把整个 panel.visible = false,玩家看到的就是"一块不透明面版没图"。
-	if ResourceLoader.exists(res_path):
-		var res := ResourceLoader.load(res_path)
-		if res is Texture2D:
-			return res
-	var img := Image.new()
-	var abs_path: String = res_path
-	if res_path.begins_with("res://"):
-		abs_path = ProjectSettings.globalize_path(res_path)
-	if img.load(abs_path) != OK:
-		return null
-	return ImageTexture.create_from_image(img)
-
-
-func _on_heroes_response(body: Variant, _code: int = 0) -> void:
-	var heroes: Array = body if body is Array else []
-	for h in heroes:
-		if not (h is Dictionary): continue
-		var dialogue_name := str(h.get("dialogue_name", h.get("display_cn", "")))
-		if dialogue_name == "": continue
-		var portrait_url := str(h.get("portrait_url", ""))
-		var portrait_path := ""
-		if portrait_url != "":
-			portrait_path = "res://assets/heroes/" + portrait_url.get_file()
-		_hero_speaker_map[dialogue_name] = {"portrait_path": portrait_path}
-
-
-func _advance_dialog() -> void:
-	if _dialog_queue.is_empty():
-		_dialog_active = false
-		hide_dialog()
-		return
-	_dialog_active = true
-	var entry: Dictionary = _dialog_queue.pop_front()
-	var kind: int = int(entry.get("kind", _DIALOG_TYPE))
-	if kind == _DIALOG_CHOICE:
-		_render_dialog_choice(entry)
-		return
-	var speaker: String = str(entry.get("character", ""))
-	dialog_name.text = speaker if speaker != "" else "（旁白）"
-	var col_str: String = str(entry.get("color", ""))
-	if col_str != "":
-		dialog_name.add_theme_color_override("font_color", Color(col_str))
-	elif dialog_name.has_theme_color_override("font_color"):
-		dialog_name.remove_theme_color_override("font_color")
-	_set_dialog_portrait(speaker)
-	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
-		dialog_continue_btn.visible = true
-	dialog_text.bbcode_enabled = true
-	# 隐藏选项层
-	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
-		_dialog_choice_container.visible = false
-	# typewriter:full text 缓存,visible 渐进加
-	var full_text: String = str(entry.get("text", ""))
-	_dialog_full_text = full_text
-	_dialog_visible_text = ""
-	dialog_text.text = ""
-	# kill 旧 tween
-	if _dialog_type_tween != null and _dialog_type_tween.is_running():
-		_dialog_type_tween.kill()
-	var per_char: float = 0.03
-	# 每 N 个字符加长
-	var n: int = full_text.length()
-	_dialog_type_tween = create_tween()
-	for i in n:
-		var ch: String = full_text.substr(i, 1)
-		_dialog_visible_text += ch
-		dialog_text.text = _dialog_visible_text
-	# 用 set_tween + interval 的简化:每 0.03s 显一字符
-	_dialog_type_tween.kill()
-	_dialog_type_tween = create_tween()
-	_dialog_type_tween.set_trans(Tween.TRANS_LINEAR)
-	for i in n:
-		var ch2: String = full_text.substr(i, 1)
-		_dialog_type_tween.tween_callback(func(c=ch2): _dialog_visible_text += c).set_delay(float(i) * per_char)
-	_dialog_type_tween.tween_callback(_on_dialog_typing_done).set_delay(float(n) * per_char + 0.05)
-	dialog_text.text = ""  # typewriter 在 callback 里推进
-
-
-func _on_dialog_typing_done() -> void:
-	# 打字结束 → show 最终 text
-	dialog_text.text = _dialog_full_text
-
-
-func _ensure_dialog_choice_container() -> void:
-	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
-		return
-	var vb := VBoxContainer.new()
-	vb.name = "ChoiceContainer"
-	vb.anchor_left = 0.0
-	vb.anchor_top = 0.0
-	vb.anchor_right = 1.0
-	vb.anchor_bottom = 1.0
-	vb.offset_left = 16.0
-	vb.offset_top = 130.0
-	vb.offset_right = -16.0
-	vb.offset_bottom = -50.0
-	vb.add_theme_constant_override("separation", 6)
-	vb.visible = false
-	dialog_panel.add_child(vb)
-	_dialog_choice_container = vb
-
-
-func _on_dialog_continue_pressed() -> void:
-	# 如果正在打字 → 完成剩余;否则下一行
-	if _dialog_type_tween != null and _dialog_type_tween.is_running():
-		_dialog_type_tween.kill()
-		dialog_text.text = _dialog_full_text
-		_dialog_visible_text = _dialog_full_text
-		return
-	_advance_dialog()
-
-
-func hide_dialog() -> void:
-	if dialog_panel != null and is_instance_valid(dialog_panel):
-		dialog_panel.visible = false
+	if DialogManager != null: DialogManager.hide_dialog()
 
 
 func show_tutorial() -> void:
@@ -3108,262 +2724,11 @@ func _on_battle_back_lobby_pressed() -> void:
 # ============================================================
 
 func _apply_gba_theme() -> void:
-	# 1) 全屏深绿背景(ColorRect 颜色已在 .tscn 设)
-	backdrop.color = MenuTheme.C_BG_DEEP
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 2) 边框由 ReferenceRect 画,这里只调整颜色变量(已硬编码在 .tscn)
-	# 3) Connecting 框(深绿底)
-	connecting_frame.color = MenuTheme.C_BG_PANEL
-	# 4) 主菜单 + 游戏内按钮统一灌主题
-	# (P2:save_*_btn 由 saves_controller.gd 自管主题,不再列在这里)
-	# (Batch A:ml_*_btn 由 mainline_controller.gd 自管主题,这里只保留 mainline_button)
-	for btn in [lobby_button, saves_button, mainline_button, editor_button, settings_button, exit_button,
-				reconnect_button, end_turn_button, war_report_button,
-				attack_confirm_btn, attack_cancel_btn]:
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, MenuTheme.FS_BTN)
-	# end_turn 和 war_report 用小一号字号(4 角极小 pill)
-	if end_turn_button != null and is_instance_valid(end_turn_button):
-		MenuTheme.apply_button_theme(end_turn_button, 14)
-	if war_report_button != null and is_instance_valid(war_report_button):
-		MenuTheme.apply_button_theme(war_report_button, 14)
-	# 5) 标题/副标题/footer 文字色
-	MenuTheme.apply_label_theme(menu_title, MenuTheme.FS_HERO, MenuTheme.C_GOLD)
-	MenuTheme.apply_label_theme(menu_subtitle, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
-	MenuTheme.apply_label_theme(menu_footer, MenuTheme.FS_FOOT, MenuTheme.C_TEXT_DIM)
-	MenuTheme.apply_label_theme(connecting_title, 22, MenuTheme.C_GOLD)
-	MenuTheme.apply_label_theme(connecting_label, MenuTheme.FS_SUB, MenuTheme.C_TEXT_WARM)
-	# === V2 第 2 轮:HUD 4 角 pill 主题 ===
-	_apply_hud_theme()
-	# 战报/信息浮层(深绿底 + 烫金边)
-	var sb_popup := StyleBoxFlat.new()
-	sb_popup.bg_color = MenuTheme.C_BG_PANEL
-	sb_popup.border_color = MenuTheme.C_GOLD
-	sb_popup.set_border_width_all(2)
-	sb_popup.content_margin_left = MenuTheme.PAD
-	sb_popup.content_margin_right = MenuTheme.PAD
-	sb_popup.content_margin_top = MenuTheme.PAD
-	sb_popup.content_margin_bottom = MenuTheme.PAD
-	war_report_panel.add_theme_stylebox_override("panel", sb_popup)
-	info_panel.add_theme_stylebox_override("panel", sb_popup)
+	HudTheme.apply_gba(self)
 
 
 func _apply_hud_theme() -> void:
-	# Pills are ColorRect containers with ReferenceRect borders added
-	# in _ready. We only need to set font sizes / colors on inner Labels.
-	var pill_size := 14
-	# Add a gold ReferenceRect border around each pill ColorRect.
-	for p in [turn_badge, phase_badge, current_player_badge, gold_panel, ai_thinking_label]:
-		if p == null or not is_instance_valid(p):
-			continue
-		var border := ReferenceRect.new()
-		border.anchor_right = 1.0
-		border.anchor_bottom = 1.0
-		border.offset_left = 0
-		border.offset_top = 0
-		border.offset_right = 0
-		border.offset_bottom = 0
-		border.border_color = MenuTheme.C_GOLD
-		border.border_width = 2.0
-		border.editor_only = false
-		border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(border)
-	for lbl in [turn_badge_label, phase_badge_label, current_player_label, gold_label]:
-		if lbl != null and is_instance_valid(lbl):
-			lbl.add_theme_font_size_override("font_size", pill_size)
-			lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	# V2 第 3 轮:InfoPanel 主题(当前指挥官 + 单位详情 + 玩家列表)
-	if commander_title != null and is_instance_valid(commander_title):
-		commander_title.add_theme_font_size_override("font_size", 16)
-		commander_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.add_theme_font_size_override("font_size", 14)
-		unit_info_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if commander_name != null and is_instance_valid(commander_name):
-		commander_name.add_theme_font_size_override("normal_font_size", 13)
-		commander_name.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	if commander_co_bar != null and is_instance_valid(commander_co_bar):
-		var sb_bg := StyleBoxFlat.new()
-		sb_bg.bg_color = Color(0.18, 0.12, 0.06, 1)
-		sb_bg.border_color = MenuTheme.C_GOLD
-		sb_bg.set_border_width_all(1)
-		sb_bg.content_margin_left = 4
-		sb_bg.content_margin_right = 4
-		sb_bg.content_margin_top = 3
-		sb_bg.content_margin_bottom = 3
-		var sb_fg := StyleBoxFlat.new()
-		sb_fg.bg_color = MenuTheme.C_GOLD
-		sb_fg.border_color = MenuTheme.C_GOLD_BRIGHT
-		sb_fg.set_border_width_all(1)
-		commander_co_bar.add_theme_stylebox_override("background", sb_bg)
-		commander_co_bar.add_theme_stylebox_override("fill", sb_fg)
-	if players_list != null and is_instance_valid(players_list):
-		players_list.add_theme_font_size_override("normal_font_size", 13)
-		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
-	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
-		hero_portrait_panel.self_modulate = Color(1, 1, 1, 0)
-		var sb_portrait := StyleBoxFlat.new()
-		sb_portrait.bg_color = Color(0, 0, 0, 0)
-		sb_portrait.border_color = Color(0, 0, 0, 0)
-		sb_portrait.border_width_left = 0
-		sb_portrait.border_width_right = 0
-		sb_portrait.border_width_top = 0
-		sb_portrait.border_width_bottom = 0
-		sb_portrait.content_margin_left = 0
-		sb_portrait.content_margin_right = 0
-		sb_portrait.content_margin_top = 0
-		sb_portrait.content_margin_bottom = 0
-		hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
-	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.add_theme_font_size_override("normal_font_size", 13)
-		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# V2 第 4 轮:行动气泡主题(深绿底 + 烫金粗边)
-	if action_bubble != null and is_instance_valid(action_bubble):
-		var sb_bubble := StyleBoxFlat.new()
-		var bg: Color = MenuTheme.C_BG_PANEL
-		bg.a = 0.7
-		sb_bubble.bg_color = bg
-		sb_bubble.border_color = MenuTheme.C_GOLD
-		sb_bubble.set_border_width_all(2)
-		sb_bubble.set_corner_radius_all(3)
-		sb_bubble.content_margin_left = 6
-		sb_bubble.content_margin_right = 6
-		sb_bubble.content_margin_top = 6
-		sb_bubble.content_margin_bottom = 6
-		action_bubble.add_theme_stylebox_override("panel", sb_bubble)
-	# V2 第 5 轮:战报浮层主题(深绿底 + 烫金粗边 + Header/Close 烫金)
-	var sb_war := StyleBoxFlat.new()
-	sb_war.bg_color = MenuTheme.C_BG_PANEL
-	sb_war.border_color = MenuTheme.C_GOLD
-	sb_war.set_border_width_all(2)
-	sb_war.set_corner_radius_all(3)
-	sb_war.content_margin_left = MenuTheme.PAD
-	sb_war.content_margin_right = MenuTheme.PAD
-	sb_war.content_margin_top = MenuTheme.PAD
-	sb_war.content_margin_bottom = MenuTheme.PAD
-	if war_report_panel != null and is_instance_valid(war_report_panel):
-		war_report_panel.add_theme_stylebox_override("panel", sb_war)
-	var war_header: Label = war_report_panel.find_child("Header", true, false)
-	if war_header != null:
-		war_header.add_theme_font_size_override("font_size", 16)
-		war_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if war_report_close_btn != null and is_instance_valid(war_report_close_btn):
-		MenuTheme.apply_button_theme(war_report_close_btn, 16)
-	if action_log != null and is_instance_valid(action_log):
-		action_log.add_theme_font_size_override("normal_font_size", 14)
-		action_log.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# V2 第 6 轮:设置 + 暂停面板主题
-	var sb_popup2 := StyleBoxFlat.new()
-	sb_popup2.bg_color = MenuTheme.C_BG_PANEL
-	sb_popup2.border_color = MenuTheme.C_GOLD
-	sb_popup2.set_border_width_all(2)
-	sb_popup2.set_corner_radius_all(3)
-	sb_popup2.content_margin_left = MenuTheme.PAD
-	sb_popup2.content_margin_right = MenuTheme.PAD
-	sb_popup2.content_margin_top = MenuTheme.PAD
-	sb_popup2.content_margin_bottom = MenuTheme.PAD
-	if settings_panel != null and is_instance_valid(settings_panel):
-		settings_panel.add_theme_stylebox_override("panel", sb_popup2)
-	if pause_panel != null and is_instance_valid(pause_panel):
-		pause_panel.add_theme_stylebox_override("panel", sb_popup2)
-	# Settings Header
-	var settings_header: Label = settings_panel.find_child("Header", true, false)
-	if settings_header != null:
-		settings_header.add_theme_font_size_override("font_size", 20)
-		settings_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	# Settings row labels
-	for lbl in settings_panel.find_children("NameLabel", "", false, false):
-		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	for lbl in settings_panel.find_children("FontLabel", "", false, false):
-		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	for lbl in settings_panel.find_children("ColorLabel", "", false, false):
-		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	for lbl in settings_panel.find_children("ThemeLabel", "", false, false):
-		lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	# Settings buttons
-	for btn_name in ["CloseBtn", "FontSmallBtn", "FontMedBtn", "FontBigBtn",
-			"RedBtn", "BlueBtn", "GreenBtn", "YellowBtn",
-			"ApplyBtn", "CancelBtn"]:
-		var btn: Button = settings_panel.find_child(btn_name, true, false)
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 16)
-	# NameInput style
-	if settings_name_input != null and is_instance_valid(settings_name_input):
-		settings_name_input.add_theme_font_size_override("font_size", 16)
-		settings_name_input.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	# Pause Header
-	var pause_header: Label = pause_panel.find_child("Header", true, false)
-	if pause_header != null:
-		pause_header.add_theme_font_size_override("font_size", 24)
-		pause_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	# Pause buttons
-	for btn_name in ["ResumeBtn", "SettingsBtn", "MainMenuBtn", "QuitBtn"]:
-		var btn: Button = pause_panel.find_child(btn_name, true, false)
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 18)
-	# V2 第 7 轮:对话 + 教程 + 战斗结算主题
-	var sb_dlg := StyleBoxFlat.new()
-	sb_dlg.bg_color = MenuTheme.C_BG_PANEL
-	sb_dlg.border_color = MenuTheme.C_GOLD
-	sb_dlg.set_border_width_all(2)
-	sb_dlg.set_corner_radius_all(3)
-	sb_dlg.content_margin_left = MenuTheme.PAD
-	sb_dlg.content_margin_right = MenuTheme.PAD
-	sb_dlg.content_margin_top = MenuTheme.PAD
-	sb_dlg.content_margin_bottom = MenuTheme.PAD
-	if dialog_panel != null and is_instance_valid(dialog_panel):
-		dialog_panel.add_theme_stylebox_override("panel", sb_dlg)
-	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
-		tutorial_bubble.add_theme_stylebox_override("panel", sb_dlg)
-	if battle_result_panel != null and is_instance_valid(battle_result_panel):
-		battle_result_panel.add_theme_stylebox_override("panel", sb_dlg)
-	# Dialog portrait frame
-	var portrait_panel: Panel = dialog_panel.find_child("Portrait", true, false)
-	if portrait_panel != null:
-		var sb_portrait := StyleBoxFlat.new()
-		sb_portrait.bg_color = MenuTheme.C_BG_DEEP
-		sb_portrait.border_color = MenuTheme.C_GOLD
-		sb_portrait.set_border_width_all(2)
-		sb_portrait.set_corner_radius_all(3)
-		portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
-	# Dialog name
-	if dialog_name != null and is_instance_valid(dialog_name):
-		dialog_name.add_theme_font_size_override("font_size", 18)
-		dialog_name.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if dialog_text != null and is_instance_valid(dialog_text):
-		dialog_text.add_theme_font_size_override("normal_font_size", 16)
-		dialog_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# Tutorial header
-	var tut_header: Label = tutorial_bubble.find_child("Header", true, false)
-	if tut_header != null:
-		tut_header.add_theme_font_size_override("font_size", 16)
-		tut_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if tutorial_text != null and is_instance_valid(tutorial_text):
-		tutorial_text.add_theme_font_size_override("normal_font_size", 14)
-		tutorial_text.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# Dialog/Tutorial/Battle buttons
-	for btn in [dialog_continue_btn, tutorial_got_it_btn, battle_detail_btn, battle_mainline_next_btn, battle_back_menu_btn]:
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 16)
-	# Battle result header + winner
-	var res_header: Label = battle_result_panel.find_child("Header", true, false)
-	if res_header != null:
-		res_header.add_theme_font_size_override("font_size", 22)
-		res_header.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-	if battle_result_winner != null and is_instance_valid(battle_result_winner):
-		battle_result_winner.add_theme_font_size_override("normal_font_size", 18)
-	if battle_result_stats != null and is_instance_valid(battle_result_stats):
-		battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
-		battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
-	# Round 3:主按钮烫金主题(web 风格)— 联机大厅 启动/添加 AI/改队伍/应用队伍
-	for primary_btn in [lobby_start_btn, lobby_add_ai_btn, lobby_host_apply_btn, lobby_apply_team_btn]:
-		if primary_btn != null and is_instance_valid(primary_btn):
-			MenuTheme.apply_primary_button_theme(primary_btn)
-	# 次按钮(web 风格)— 返回/取消/移除/切换观战
-	for secondary_btn in [lobby_back_btn, lobby_to_spec_btn, lobby_remove_ai_btn]:
-		if secondary_btn != null and is_instance_valid(secondary_btn):
-			MenuTheme.apply_secondary_button_theme(secondary_btn)
+	HudTheme.apply_hud(self)
 
 
 # ============================================================
@@ -3381,2057 +2746,41 @@ func _on_editor_back_requested() -> void:
 
 
 func _unit_type_cn(unit_type: String) -> String:
-	match unit_type:
-		"swordsman":
-			return "剑士"
-		"archer":
-			return "弓箭手"
-		"knight":
-			return "骑士"
-		"warlock":
-			return "术士"
-		"healer":
-			return "治疗师"
-		"lancer":
-			return "枪骑兵"
-		"warrior":
-			return "战士"
-		"berserker":
-			return "狂战士"
-		"dragon_rider":
-			return "龙骑士"
-		"falcon_knight":
-			return "隼骑士"
-		"blade_master":
-			return "剑圣"
-		"paladin":
-			return "圣骑士"
-		"sniper":
-			return "狙击手"
-		"sage":
-			return "贤者"
-		"saint":
-			return "圣者"
-		_:
-			return unit_type
+	return CnLabels.unit_type_cn(unit_type)
 
 
 func _skill_cn(skill_id: String) -> String:
-	match skill_id:
-		"heal":
-			return "治疗"
-		"snipe":
-			return "狙击"
-		"double_strike":
-			return "连击"
-		"arcane_strike":
-			return "奥术冲击"
-		_:
-			return skill_id
+	return CnLabels.skill_cn(skill_id)
 
 
 # P2.6+: 地形名中文化(用于 InfoPanel 加成区段)
 func _terrain_cn(terrain_name: String, subtype: String = "") -> String:
-	# subtype 优先 — castle_floor / castle_wall / etc.
-	if subtype != "":
-		match subtype:
-			"castle_floor": return "城堡内部"
-			"castle_wall": return "城墙"
-			"castle_door": return "城门"
-			"castle_throne": return "王座厅"
-			"castle_stairs": return "城梯"
-			"castle_vault": return "金库"
-	match terrain_name:
-		"plain": return "平原"
-		"forest": return "森林"
-		"mountain": return "山地"
-		"snow_peak": return "雪峰"
-		"river": return "河流"
-		"road": return "道路"
-		"bridge": return "桥梁"
-		"castle": return "城堡"
-		"village": return "村庄"
-		"barracks": return "兵营"
-		"gate": return "城门"
-		_:
-			return terrain_name
+	return CnLabels.terrain_cn(terrain_name, subtype)
 
 
 # P2.6+: 指挥官名中文化(用于 InfoPanel 战斗加成区段)
 func _commander_cn(co_id: String) -> String:
-	match co_id:
-		"anna": return "安娜"
-		"yun": return "云"
-		"boss": return "Boss"
-		_:
-			return co_id
+	return CnLabels.commander_cn(co_id)
 
 
 func _color_name_cn(color_name: String) -> String:
-	match color_name:
-		"red":
-			return "红色"
-		"blue":
-			return "蓝色"
-		"green":
-			return "绿色"
-		"yellow":
-			return "黄色"
-		_:
-			return color_name
+	return CnLabels.color_name_cn(color_name)
 
 
-func _upsert_editor_map_as_lobby_preset(map_data: Dictionary) -> void:
-	var map_id := str(map_data.get("id", ""))
-	if map_id == "":
-		return
-	var preset_id := "custom:%s" % map_id
-	var biome := str(map_data.get("biome", "grass"))
-	var label := str(map_data.get("name", map_id))
-	if not label.begins_with("Custom: "):
-		label = "Custom: %s" % label
-	for i in range(_preset_options.size()):
-		var existing: Dictionary = _preset_options[i]
-		if str(existing.get("id", "")) == preset_id:
-			_preset_options[i] = {"id": preset_id, "biome": biome}
-			if map_preset_option != null and is_instance_valid(map_preset_option) and i < map_preset_option.item_count:
-				map_preset_option.set_item_text(i, label)
-			return
-	_preset_options.append({"id": preset_id, "biome": biome})
-	if map_preset_option != null and is_instance_valid(map_preset_option):
-		map_preset_option.add_item(label)
-
+# ============================================================
+# 联机大厅 —— 逻辑已抽到 scripts/ui/lobby_controller.gd(挂 $Lobby 节点)
+# 这里只保留 main 侧的入口与转发,节点/状态/信号全部由控制器自管。
+# ============================================================
 
 func _on_lobby_pressed() -> void:
-	# P0 UX gate:进联机大厅前先看主菜单里有没有中断存档。
-	# 有的话弹「已经有中断存档,将放弃该中断,是否继续?」
-	# - 是 → 调 discard_suspend,然后 _enter_lobby_view()
-	# - 否 → 留在主菜单,不进 lobby(避免 stale suspend 污染新房间)
-	# 没有就跳过 gate,直接进 lobby。
-	if _user_name == "" or _user_name == "Player":
-		# 没 user_name 的早期流程不挡人 — 跟原行为一致。
-		_enter_lobby_view()
-		return
-	NetworkClient.list_saves(
-		_user_name, Callable(self, "_on_lobby_list_saves_for_suspend_check")
-	)
+	if lobby_view != null and is_instance_valid(lobby_view):
+		lobby_view.open()
 
 
-func _on_lobby_list_saves_for_suspend_check(body: Variant, _code: int = 0) -> void:
-	if not (body is Dictionary):
-		# 拉失败兜底:不进 lobby,避免在用户不知情的情况下与 suspend 冲突。
-		_update_status("无法检查中断存档,请稍后重试")
-		return
-	var suspend: Variant = body.get("suspend", null)
-	if not (suspend is Dictionary):
-		_enter_lobby_view()
-		return
-	var suspend_game_id: int = int(suspend.get("game_id", 0))
-	if suspend_game_id <= 0:
-		_enter_lobby_view()
-		return
-	_show_confirm(
-		"放弃中断存档",
-		"已经有中断存档,将放弃该中断,是否继续?",
-		Callable(self, "_on_lobby_discard_suspend_yes"),
-		Callable(self, "_on_lobby_discard_suspend_no"),
-	)
-
-
-func _on_lobby_discard_suspend_yes() -> void:
-	# 用户点「继续」→ 先调 discard_suspend,等服务端 ack 后再进 lobby。
-	# 注意:_hide_confirm() 已在 _on_confirm_yes_pressed 里调用过了。
-	if _user_name == "" or _user_name == "Player":
-		_enter_lobby_view()
-		return
-	_update_status("正在放弃中断存档...")
-	NetworkClient.discard_suspend(
-		_user_name, Callable(self, "_on_lobby_discard_suspend_response")
-	)
-
-
-func _on_lobby_discard_suspend_no() -> void:
-	# 用户点「取消」→ 留在主菜单。什么都不做。
-	_update_status("已取消,可继续点 ▶ 继续中断战斗")
-
-
-func _on_lobby_discard_suspend_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300:
-		_update_status("放弃中断失败,请重试")
-		return
-	var cleared: bool = bool((body as Dictionary).get("cleared", false)) if body is Dictionary else false
-	if not cleared:
-		_update_status("没有可放弃的中断存档")
-	_enter_lobby_view()
-
-
-func _enter_lobby_view() -> void:
-	_entry_flow = "lobby"
-	_show_view("lobby")
-	_apply_lobby_theme()
-	_stop_lobby_polling()
-	_selected_room_id = 0
-	if lobby_name_input != null and is_instance_valid(lobby_name_input):
-		lobby_name_input.text = "%s 的房间" % _user_name
-	_setup_lobby_join_options()
-	# T:#16 — commander 拉取统一收口在 mainline_controller._on_commanders_response,
-	# 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
-	# 之前挂 Callable(self, ...) 是死链:main.gd 没有这个方法,导致不先点过主线的话
-	# lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander。
-	NetworkClient.get_unlocked_commanders(_user_name, Callable(mainline_view, "_on_commanders_response"))
-	_load_lobby_presets()
-	_load_lobby_audio_tracks()
-	_setup_lobby_win_condition_options()
-	_refresh_room_list()
-	_show_lobby_choose()
-
-func _show_lobby_choose() -> void:
-	_lobby_mode = "choose"
-	if choose_panel != null and is_instance_valid(choose_panel):
-		choose_panel.visible = true
-	_set_lobby_detail_visible(false)
-	# 切回非 in_room 模式:恢复 BottomBar 默认 anchor + 切换按钮可见性
-	_restore_lobby_default_layout()
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		lobby_back_btn.text = "返回主菜单"
-
-
-func _show_lobby_create_view() -> void:
-	_lobby_mode = "create"
-	if choose_panel != null and is_instance_valid(choose_panel):
-		choose_panel.visible = false
-	_set_lobby_detail_visible(false)
-	_set_lobby_dualcol_visible(true)
-	_set_lobby_leftcol_visible(true)
-	_set_lobby_rightcol_visible(true)
-	_set_lobby_join_controls_visible(false)
-	_set_lobby_map_controls_visible(true)
-	_set_lobby_left_header_text("地图预览")
-	_set_lobby_global_team_controls_visible(false)
-	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
-		lobby_commander_option.visible = false
-	if create_room_btn != null and is_instance_valid(create_room_btn):
-		create_room_btn.text = "开启游戏"
-	_restore_lobby_default_layout()
-	_layout_lobby_entry_form()
-	_refresh_lobby_create_start_gate()
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		lobby_back_btn.text = "返回模式选择"
-
-
-func _show_lobby_join_view() -> void:
-	_lobby_mode = "join"
-	if choose_panel != null and is_instance_valid(choose_panel):
-		choose_panel.visible = false
-	_set_lobby_detail_visible(false)
-	_set_lobby_dualcol_visible(true)
-	_set_lobby_leftcol_visible(true)
-	_set_lobby_rightcol_visible(false)
-	_set_lobby_join_controls_visible(true)
-	_set_lobby_map_controls_visible(false)
-	_set_lobby_left_header_text("房间列表")
-	_set_lobby_global_team_controls_visible(true)
-	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
-		lobby_commander_option.visible = true
-	_restore_lobby_default_layout()
-	_layout_lobby_entry_form()
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		lobby_back_btn.text = "返回模式选择"
-
-
-func _show_lobby_in_room() -> void:
-	_lobby_mode = "in_room"
-	if choose_panel != null and is_instance_valid(choose_panel):
-		choose_panel.visible = false
-	_set_lobby_detail_visible(true)
-	# 房主控制台: 隐藏冗余(房间列表/选房加入是加入者用的,房主不需要)
-	_set_lobby_leftcol_visible(false)
-	_set_lobby_rightcol_visible(true)
-	# 隐藏 HostRow(改队伍)/ LobbyToSpecBtn(切换观战)/ MidSectionBar / AiCommanderOption
-	_hide_lobby_host_extras(true)
-	# 启动游戏按钮移到 RightCol 底部,BottomBar 那个隐藏
-	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
-		lobby_start_btn.visible = false
-	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.visible = true
-	# 动态调整 anchor 让所有元素 fit 进 LobbyFrame(viewport 720 时 LobbyFrame ~648px)
-	_layout_lobby_in_room()
-	# 同步玩家人数 Label(从 MapPresetOption 的 selected text 取,如 "balanced_2p_15 (2p)")
-	if player_count_label != null and is_instance_valid(player_count_label):
-		if map_preset_option != null and is_instance_valid(map_preset_option) and map_preset_option.selected >= 0:
-			player_count_label.text = map_preset_option.get_item_text(map_preset_option.selected)
-		else:
-			player_count_label.text = "—"
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		lobby_back_btn.text = "返回主菜单"
-
-
-func _set_lobby_detail_visible(v: bool) -> void:
-	for node_name in ["LobbyInfoBar", "LobbyTopBar", "LobbyDualCol",
-			"MidSectionBar", "LobbyList", "HostRow", "LobbyToSpecBtn",
-			"AiConfigRow", "AiCommanderOption", "AiActionRow", "BottomBar"]:
-		if lobby_view == null:
-			continue
-		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
-		if n != null:
-			n.visible = v
-
-
-# 房主控制台专用: 隐藏"加入者/对局中"才需要的控件
-# 保留 LobbyList(玩家列表) + AiConfigRow/AiActionRow(房主需要加 AI)
-# 隐藏:LeftCol(房间列表,房主不需要选房) / HostRow(改队伍,合并到 TeamOption) /
-#       LobbyToSpecBtn(切换观战) / MidSectionBar(对局管理,合并到顶部信息)
-#       AiCommanderOption(AI 指挥官,合并到 AiConfigRow)
-func _hide_lobby_host_extras(hide: bool) -> void:
-	if lobby_view == null:
-		return
-	for node_name in ["HostRow", "LobbyToSpecBtn", "MidSectionBar", "AiCommanderOption"]:
-		var n: Node = lobby_view.get_node_or_null("LobbyFrame/" + node_name)
-		if n != null:
-			n.visible = not hide
-
-
-# 房主控制台专用: 动态调整 in_room 视图下各元素的 anchor
-# 让 TopBar / InfoBar / LobbyList / DualCol / AI 配置 / BottomBar
-# 全部 fit 进 LobbyFrame(避免 UI 溢出 viewport 720)
-#
-# viewport 720,LobbyFrame anchor_top=0.05 / anchor_bottom=0.95 → y=36-684,高 648
-# 布局(LobbyFrame 内部坐标,0-648):
-#   TopBar:       0-44     (标题,44px 紧凑)
-#   InfoBar:      48-72    (Game # + 玩家数,24px)
-#   LobbyList:    80-176   (玩家列表,96px)
-#   DualCol:      184-504  (RightCol 装 6 项 + 启动按钮,320px)
-#   AiConfigRow:  512-544  (AI 类型+性格+难度,32px)
-#   AiActionRow:  552-584  (添加 AI + 选 AI + 移除,32px)
-#   BottomBar:    592-632  (返回主菜单,40px) → 总 632,LobbyFrame 648 内,留 16px 边距
-func _layout_lobby_in_room() -> void:
-	if lobby_view == null:
-		return
-	var lobby_list: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyList") as Control
-	if lobby_list != null:
-		lobby_list.offset_top = 80.0
-		lobby_list.offset_bottom = 176.0
-	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
-	if dual_col != null:
-		dual_col.offset_top = 184.0
-		dual_col.offset_bottom = 504.0
-	var ai_cfg: Control = lobby_view.get_node_or_null("LobbyFrame/AiConfigRow") as Control
-	if ai_cfg != null:
-		ai_cfg.offset_top = 512.0
-		ai_cfg.offset_bottom = 544.0
-	var ai_act: Control = lobby_view.get_node_or_null("LobbyFrame/AiActionRow") as Control
-	if ai_act != null:
-		ai_act.offset_top = 552.0
-		ai_act.offset_bottom = 584.0
-	# BottomBar 改成绝对位置(原 anchor 1.0/1.0 → 顶部往上挪,避免溢出 LobbyFrame 648)
-	var bb: Control = lobby_view.get_node_or_null("LobbyFrame/BottomBar") as Control
-	if bb != null:
-		bb.anchor_top = 0.0
-		bb.anchor_bottom = 0.0
-		bb.offset_top = 592.0
-		bb.offset_bottom = 632.0
-
-
-# 还原 LobbyFrame 各元素到 tscn 默认 anchor(切回非 in_room 模式时调用)
-# 复位 LobbyList / DualCol / AiConfigRow / AiActionRow / BottomBar
-func _restore_lobby_default_layout() -> void:
-	if lobby_view == null:
-		return
-	var lobby_list: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyList") as Control
-	if lobby_list != null:
-		lobby_list.offset_top = 442.0
-		lobby_list.offset_bottom = 580.0
-	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
-	if dual_col != null:
-		dual_col.offset_top = 112.0
-		dual_col.offset_bottom = -16.0
-	var ai_cfg: Control = lobby_view.get_node_or_null("LobbyFrame/AiConfigRow") as Control
-	if ai_cfg != null:
-		ai_cfg.offset_top = 654.0
-		ai_cfg.offset_bottom = 686.0
-	var ai_act: Control = lobby_view.get_node_or_null("LobbyFrame/AiActionRow") as Control
-	if ai_act != null:
-		ai_act.offset_top = 726.0
-		ai_act.offset_bottom = 758.0
-	var bb: Control = lobby_view.get_node_or_null("LobbyFrame/BottomBar") as Control
-	if bb != null:
-		# 还原 tscn 默认 anchor(右下角)
-		bb.anchor_left = 1.0
-		bb.anchor_right = 1.0
-		bb.anchor_top = 1.0
-		bb.anchor_bottom = 1.0
-		bb.offset_left = -340.0
-		bb.offset_top = -56.0
-		bb.offset_right = -16.0
-		bb.offset_bottom = -16.0
-	# 切回非 in_room:BottomBar 的 LobbyStartBtn 可见,RightCol 的 StartGameInlineBtn 隐藏
-	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
-		lobby_start_btn.visible = true
-	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.visible = false
-
-
-func _layout_lobby_entry_form() -> void:
-	if lobby_view == null:
-		return
-	var dual_col: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol") as Control
-	if dual_col != null:
-		dual_col.offset_top = 24.0
-		dual_col.offset_bottom = -48.0
-
-
-func _set_lobby_dualcol_visible(v: bool) -> void:
-	if lobby_view == null:
-		return
-	var dc: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol")
-	if dc != null:
-		dc.visible = v
-
-
-func _set_lobby_leftcol_visible(v: bool) -> void:
-	if lobby_view == null:
-		return
-	var left_col: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol")
-	if left_col != null:
-		left_col.visible = v
-
-
-func _set_lobby_rightcol_visible(v: bool) -> void:
-	if lobby_view == null:
-		return
-	var right_col: Node = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/RightCol")
-	if right_col != null:
-		right_col.visible = v
-
-
-func _set_lobby_join_controls_visible(v: bool) -> void:
-	for node in [room_list, room_select_option, join_mode_option, refresh_rooms_btn, join_selected_btn]:
-		if node != null and is_instance_valid(node):
-			node.visible = v
-	var row := lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftBtnRow") if lobby_view != null else null
-	if row != null:
-		row.visible = v
-	var spacer := lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftBottomSpacer") if lobby_view != null else null
-	if spacer != null:
-		spacer.visible = v
-
-
-func _set_lobby_map_controls_visible(v: bool) -> void:
-	if lobby_view == null:
-		return
-	var picker: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/MapPickerRow") as Control
-	if picker != null:
-		picker.visible = v
-	if map_preview_panel != null and is_instance_valid(map_preview_panel):
-		map_preview_panel.visible = v
-
-
-func _set_lobby_left_header_text(text: String) -> void:
-	if lobby_view == null:
-		return
-	var header: Label = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/LeftCol/LeftHeader") as Label
-	if header != null:
-		header.text = text
-
-
-func _set_lobby_global_team_controls_visible(v: bool) -> void:
-	if lobby_view == null:
-		return
-	var team_row: Control = lobby_view.get_node_or_null("LobbyFrame/LobbyDualCol/RightCol/TeamRow") as Control
-	if team_row != null:
-		team_row.visible = v
-
-
-func _on_create_card_pressed() -> void:
-	_show_lobby_create_view()
-
-
-func _on_join_card_pressed() -> void:
-	_show_lobby_join_view()
-	_refresh_room_list()
-
-
-func _on_lobby_create_response(body: Dictionary, _code: int = 0) -> void:
-	_game_id = int(body.get("id", 0))
-	if _game_id <= 0:
-		lobby_status_label.text = "创建失败"
-		_pending_lobby_start_after_create = false
-		return
-	UserSettings.set_value("session.v1.last_game_id", _game_id)
-	lobby_game_id_label.text = "对局 #%d · 等待中" % _game_id
-	# 自动 join
-	var seat_index := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
-	var seat_color := str(MapPreviewSummary.SEAT_COLORS[seat_index])
-	NetworkClient.join_game(_game_id, _user_name, seat_color,
-		_selected_lobby_seat_team(seat_index), "", Callable(self, "_on_lobby_join_response"), seat_index)
-
-
-# 创建房间后自动加 AI(等同 webui app.js 的默认行为)
-# join_game 完成后调这里 → add-ai + add-ai(凑够 2 个 AI)
-func _on_lobby_join_response(body: Variant, _code: int = 0) -> void:
-	if body is Dictionary:
-		_player_id = int(body.get("id", 0))
-		if _player_id <= 0:
-			_player_id = int(body.get("player_id", 0))
-		if _player_id <= 0:
-			var p: Variant = body.get("player", {})
-			if p is Dictionary:
-				_player_id = int(p.get("id", 0))
-	if _player_id > 0:
-		GameState.local_player_id = _player_id
-		UserSettings.set_value("session.v1.last_player_id", _player_id)
-	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-		lobby_game_id_label.text = "对局 #%d" % _game_id
-	if _entry_flow == "lobby_create" and _game_id > 0 and _pending_lobby_start_after_create:
-		_continue_lobby_create_pipeline()
-		return
-	_show_lobby_in_room()
-	# 拉 lobby 启动轮询
-	_start_lobby_polling()
-
-
-func _auto_add_ai_after_lobby_create() -> void:
-	# 用 lobby AI 选项(如果有);默认 rules/balanced/normal
-	var difficulty := "normal"
-	var agent_kind := "rules"
-	var personality := "balanced"
-	if ai_difficulty_option != null and is_instance_valid(ai_difficulty_option):
-		var idx: int = ai_difficulty_option.selected
-		var items: Array = ["easy", "normal", "hard"]
-		if idx >= 0 and idx < items.size():
-			difficulty = items[idx]
-	NetworkClient.add_ai_player(_game_id, difficulty, agent_kind, personality, Callable(self, "_on_auto_add_ai_response").bind(true))
-
-
-func _on_auto_add_ai_response(_body: Variant, _code: int, _expect_more: bool = false) -> void:
-	pass  # 这里只触发,可以扩展添加多个 AI
-
-
-func _selected_lobby_player_count() -> int:
-	var selected: Dictionary = _selected_lobby_map_data()
-	if selected.is_empty():
-		return 2
-	return clampi(int(selected.get("recommended_players", 2)), 2, MapPreviewSummary.SEAT_COLORS.size())
-
-
-func _selected_lobby_seat_commanders() -> Dictionary:
-	var result: Dictionary = {}
-	for seat_index in range(_selected_lobby_player_count()):
-		var commander_id := _lobby_seat_commander_id(seat_index)
-		if commander_id != "":
-			result[seat_index] = commander_id
-	return result
-
-
-func _continue_lobby_create_pipeline() -> void:
-	_pending_lobby_ai_seats.clear()
-	_pending_lobby_team_updates.clear()
-	var host_seat := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
-	if _player_id > 0:
-		_pending_lobby_team_updates.append({
-			"player_id": _player_id,
-			"team": _selected_lobby_seat_team(host_seat),
-		})
-	var player_count := _selected_lobby_player_count()
-	for seat_index in range(player_count):
-		if seat_index != host_seat and _lobby_ai_replacement_for_seat(seat_index):
-			_pending_lobby_ai_seats.append(seat_index)
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在应用座位、AI 与队伍设置..."
-	_continue_lobby_ai_creation()
-
-
-func _continue_lobby_ai_creation() -> void:
-	if _pending_lobby_ai_seats.is_empty():
-		_continue_lobby_team_updates()
-		return
-	var seat_index: int = int(_pending_lobby_ai_seats.pop_front())
-	NetworkClient.add_ai_player(
-		_game_id,
-		_selected_ai_difficulty(),
-		_selected_ai_kind(),
-		_lobby_ai_personality_for_seat(seat_index),
-		Callable(self, "_on_lobby_configured_ai_added").bind(seat_index),
-		seat_index
-	)
-
-
-func _on_lobby_configured_ai_added(body: Variant, code: int = 0, seat_index: int = 0) -> void:
-	if code >= 200 and code < 300 and body is Dictionary:
-		var pid := int(body.get("id", body.get("player_id", 0)))
-		var player: Variant = body.get("player", {})
-		if pid <= 0 and player is Dictionary:
-			pid = int(player.get("id", 0))
-		if pid > 0:
-			_pending_lobby_team_updates.append({
-				"player_id": pid,
-				"team": _selected_lobby_seat_team(seat_index),
-			})
-	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "AI 座位配置失败，继续尝试开启游戏..."
-	_continue_lobby_ai_creation()
-
-
-func _on_lobby_configured_ai_seated(_body: Variant, _code: int = 0, pid: int = 0, seat_index: int = 0) -> void:
-	if pid > 0:
-		_pending_lobby_team_updates.append({
-			"player_id": pid,
-			"team": _selected_lobby_seat_team(seat_index),
-		})
-	_continue_lobby_ai_creation()
-
-
-func _continue_lobby_team_updates() -> void:
-	if _pending_lobby_team_updates.is_empty():
-		_start_configured_lobby_game()
-		return
-	var update: Dictionary = _pending_lobby_team_updates.pop_front()
-	NetworkClient.update_player_team(
-		_game_id,
-		int(update.get("player_id", 0)),
-		_player_id,
-		str(update.get("team", "")),
-		Callable(self, "_on_lobby_configured_team_updated")
-	)
-
-
-func _on_lobby_configured_team_updated(_body: Variant, _code: int = 0) -> void:
-	_continue_lobby_team_updates()
-
-
-func _start_configured_lobby_game() -> void:
-	if not _pending_lobby_start_after_create:
-		return
-	# T:#17 — 不在大厅里插一句"配置完成，正在开启游戏...":这条文案
-	# 会在 _on_lobby_start_response 跳到 game view 之前短暂闪在大厅,
-	# 让玩家误以为有中间过渡页面要再点一次。直接发 start_game,等
-	# 响应里 _show_view("game") 切走即可,大厅文本不更新。
-	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
-
-
-
-
-func _setup_lobby_join_options() -> void:
-	if join_mode_option != null and is_instance_valid(join_mode_option):
-		join_mode_option.clear()
-		join_mode_option.add_item("作为玩家加入")
-		join_mode_option.add_item("作为观战者加入")
-		join_mode_option.select(0)
-	if team_option != null and is_instance_valid(team_option):
-		team_option.clear()
-		# M4.16+ fix:统一 team 命名为 team_a/b/c/d(与 _lobby_seat_team_ids + server
-		# JoinGameRequest.team 对齐)。原来用 color(red/blue/green/yellow)作 team_id
-		# 跟 _lobby_seat_team_ids(team_a/b/c/d)不一致,创房和手动 join 走两套字段。
-		team_option.add_item("自动分队")
-		team_option.add_item("队伍 A")
-		team_option.add_item("队伍 B")
-		team_option.add_item("队伍 C")
-		team_option.add_item("队伍 D")
-		team_option.select(0)
-	_on_join_mode_changed(0)
-
-
-func _selected_join_role() -> String:
-	if join_mode_option != null and is_instance_valid(join_mode_option) and join_mode_option.selected == 1:
-		return "spectator"
-	return "player"
-
-
-func _on_join_mode_changed(_index: int) -> void:
-	if team_option != null and is_instance_valid(team_option):
-		team_option.disabled = _selected_join_role() == "spectator"
-
-
-func _selected_join_team() -> String:
-	# M4.16+ fix:返回 team_a/b/c/d(不再是 red/blue/green/yellow),
-	# 跟 _lobby_seat_team_ids + server JoinGameRequest.team 命名一致。
-	# 1V1 free-for-all: server 端 team=None → fallback 到 _team_of(player_id) → 各自独立。
-	# 2V2: 双方玩家传相同的 team_a 或 team_b → server AI 会把同 team 当 ally(不打)。
-	if team_option == null or not is_instance_valid(team_option):
-		return ""
-	if _selected_join_role() == "spectator":
-		return ""
-	match team_option.selected:
-		1:
-			return "team_a"
-		2:
-			return "team_b"
-		3:
-			return "team_c"
-		4:
-			return "team_d"
-		_:
-			return ""
-
-
-func _team_cn(team: String) -> String:
-	match team:
-		"red":
-			return "红队"
-		"blue":
-			return "蓝队"
-		"green":
-			return "绿队"
-		"yellow":
-			return "黄队"
-		_:
-			return team
-
-
+## mainline_controller 经 _main 转发过来的指挥官下拉刷新
 func _setup_lobby_commander_options(unlocked: Array = []) -> void:
-	_lobby_commander_ids = [""]
-	_lobby_ai_commander_ids = [""]
-	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
-		lobby_commander_option.clear()
-		lobby_commander_option.add_item("不选择指挥官")
-	if ai_commander_option != null and is_instance_valid(ai_commander_option):
-		ai_commander_option.clear()
-		ai_commander_option.add_item("电脑自动选择指挥官")
-	# 如果 API 返回空(新玩家无解锁),fallback 到硬编码默认指挥官(等同 webui 行为)
-	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna"]
-	for item in pool:
-		var commander_id := str(item)
-		if commander_id == "" or _lobby_commander_ids.has(commander_id):
-			continue
-		_lobby_commander_ids.append(commander_id)
-		_lobby_ai_commander_ids.append(commander_id)
-		if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
-			lobby_commander_option.add_item(_commander_label(commander_id))
-		if ai_commander_option != null and is_instance_valid(ai_commander_option):
-			ai_commander_option.add_item("电脑: %s" % _commander_label(commander_id))
-	if lobby_commander_option != null and is_instance_valid(lobby_commander_option):
-		lobby_commander_option.select(0)
-		lobby_commander_option.disabled = _lobby_commander_ids.size() <= 1
-	if ai_commander_option != null and is_instance_valid(ai_commander_option):
-		ai_commander_option.select(0)
-		ai_commander_option.disabled = _lobby_ai_commander_ids.size() <= 1
-
-
-func _selected_lobby_win_condition() -> String:
-	# P2.4 polish:win_condition 现在固定为 rout(rout+seize 二合一)。
-	# 下拉里只有 1 项,这个函数保持接口以便未来扩展。
-	if win_condition_option == null or not is_instance_valid(win_condition_option):
-		return "rout"
-	return "rout"
-
-
-func _selected_lobby_commander() -> String:
-	if lobby_commander_option == null or not is_instance_valid(lobby_commander_option):
-		return ""
-	var index := lobby_commander_option.selected
-	if index < 0 or index >= _lobby_commander_ids.size():
-		return ""
-	return _lobby_commander_ids[index]
-
-
-func _selected_lobby_ai_commander() -> String:
-	if ai_commander_option == null or not is_instance_valid(ai_commander_option):
-		return ""
-	var index := ai_commander_option.selected
-	if index < 0 or index >= _lobby_ai_commander_ids.size():
-		return ""
-	return _lobby_ai_commander_ids[index]
-
-
-func _selected_lobby_ai_commanders() -> Dictionary:
-	var commander_id := _selected_lobby_ai_commander()
-	if commander_id == "":
-		return {}
-	var result: Dictionary = {}
-	var host_seat := clampi(_selected_lobby_seat_index, 0, _selected_lobby_player_count() - 1)
-	for seat_index in range(_selected_lobby_player_count()):
-		if seat_index == host_seat:
-			continue
-		if _lobby_ai_replacement_for_seat(seat_index):
-			result[seat_index] = commander_id
-	return result
-
-
-# 胜利条件下拉:P2.4 polish 后只剩 rout+seize 二合一,默认 "rout"
-func _setup_lobby_win_condition_options() -> void:
-	if win_condition_option == null or not is_instance_valid(win_condition_option):
-		return
-	win_condition_option.clear()
-	win_condition_option.add_item("消灭所有敌方单位,或占领对方总部", 0)
-	win_condition_option.select(0)
-
-
-func _setup_lobby_bgm_options(tracks: Array = []) -> void:
-	_lobby_bgm_track_ids = [""]
-	if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
-		lobby_bgm_option.clear()
-		lobby_bgm_option.add_item("不播放背景音乐")
-	for item in tracks:
-		if not item is Dictionary:
-			continue
-		var track_id := str(item.get("track_id", ""))
-		if track_id == "" or _lobby_bgm_track_ids.has(track_id):
-			continue
-		var title := str(item.get("title", track_id))
-		var category := str(item.get("category", ""))
-		var label := title if category == "" else "%s (%s)" % [title, category]
-		_lobby_bgm_track_ids.append(track_id)
-		if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
-			lobby_bgm_option.add_item(label)
-	if lobby_bgm_option != null and is_instance_valid(lobby_bgm_option):
-		lobby_bgm_option.select(0)
-		lobby_bgm_option.disabled = _lobby_bgm_track_ids.size() <= 1
-
-
-func _selected_lobby_bgm_track() -> String:
-	if lobby_bgm_option == null or not is_instance_valid(lobby_bgm_option):
-		return ""
-	var index := lobby_bgm_option.selected
-	if index < 0 or index >= _lobby_bgm_track_ids.size():
-		return ""
-	return _lobby_bgm_track_ids[index]
-
-
-func _load_lobby_audio_tracks() -> void:
-	_setup_lobby_bgm_options()
-	NetworkClient.list_audio_tracks(Callable(self, "_on_audio_tracks_response"))
-
-
-func _on_audio_tracks_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		_setup_lobby_bgm_options()
-		return
-	var tracks: Array = body.get("tracks", []) if body.get("tracks", []) is Array else []
-	_setup_lobby_bgm_options(tracks)
-
-
-func _setup_lobby_ai_options() -> void:
-	if ai_difficulty_option != null and is_instance_valid(ai_difficulty_option):
-		ai_difficulty_option.clear()
-		ai_difficulty_option.add_item("电脑普通")
-		ai_difficulty_option.add_item("电脑简单")
-		ai_difficulty_option.add_item("电脑困难")
-		ai_difficulty_option.select(0)
-	if ai_kind_option != null and is_instance_valid(ai_kind_option):
-		ai_kind_option.clear()
-		ai_kind_option.add_item("规则电脑")
-		ai_kind_option.add_item("大模型电脑")
-		ai_kind_option.select(0)
-	if ai_personality_option != null and is_instance_valid(ai_personality_option):
-		ai_personality_option.clear()
-		ai_personality_option.add_item("均衡")
-		ai_personality_option.add_item("激进")
-		ai_personality_option.add_item("保守")
-		ai_personality_option.select(0)
-
-
-func _selected_ai_difficulty() -> String:
-	if ai_difficulty_option == null or not is_instance_valid(ai_difficulty_option):
-		return "normal"
-	match ai_difficulty_option.selected:
-		1:
-			return "easy"
-		2:
-			return "hard"
-		_:
-			return "normal"
-
-
-func _selected_ai_kind() -> String:
-	if ai_kind_option != null and is_instance_valid(ai_kind_option) and ai_kind_option.selected == 1:
-		return "llm"
-	return "rules"
-
-
-func _selected_ai_personality() -> String:
-	if ai_personality_option == null or not is_instance_valid(ai_personality_option):
-		return "balanced"
-	match ai_personality_option.selected:
-		1:
-			return "aggressive"
-		2:
-			return "conservative"
-		_:
-			return "balanced"
-
-
-func _load_lobby_presets() -> void:
-	if map_preset_option == null or not is_instance_valid(map_preset_option):
-		return
-	_setup_lobby_map_player_count_options()
-	map_preset_option.clear()
-	map_preset_option.add_item("标准双人图")
-	_all_preset_options = [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
-	_render_lobby_map_picker_options()
-	_render_lobby_map_preview()
-	NetworkClient.list_presets(Callable(self, "_on_lobby_presets_response"))
-
-
-func _on_lobby_presets_response(body: Variant, _code: int = 0) -> void:
-	if map_preset_option == null or not is_instance_valid(map_preset_option):
-		return
-	var maps: Array = []
-	if body is Dictionary:
-		maps = (body as Dictionary).get("maps", [])
-	if maps.is_empty():
-		_render_lobby_map_preview()
-		return
-	map_preset_option.clear()
-	_all_preset_options = []
-	for item in maps:
-		if not item is Dictionary:
-			continue
-		var id: String = str(item.get("id", ""))
-		if id == "":
-			continue
-		var name: String = str(item.get("name", id))
-		var biome: String = str(item.get("biome", "grass"))
-		var raw_players = item.get("recommended_players", 0)
-		var players: int = 0
-		if raw_players != null:
-			players = int(raw_players)
-		var label := name
-		if players > 0:
-			label = "%s (%d 人)" % [name, players]
-		var record: Dictionary = {"id": id, "name": name, "biome": biome, "recommended_players": players}
-		for key in item.keys():
-			if not record.has(key):
-				record[key] = item[key]
-		_all_preset_options.append(record)
-	_render_lobby_map_picker_options()
-	_render_lobby_map_preview()
-
-
-func _setup_lobby_map_player_count_options() -> void:
-	if map_player_count_option == null or not is_instance_valid(map_player_count_option):
-		return
-	map_player_count_option.clear()
-	map_player_count_option.add_item("全部地图")
-	for players in [2, 3, 4]:
-		map_player_count_option.add_item("%d人地图" % players)
-	map_player_count_option.select(0)
-
-
-func _on_lobby_map_player_count_selected(index: int) -> void:
-	_lobby_preset_filter_players = index + 1 if index > 0 else 0
-	_render_lobby_map_picker_options()
-	_render_lobby_map_preview()
-	_refresh_lobby_create_start_gate()
-
-
-func _on_lobby_map_preset_selected(_index: int) -> void:
-	_render_lobby_map_preview()
-	_refresh_lobby_create_start_gate()
-
-
-func _render_lobby_map_picker_options() -> void:
-	if map_preset_option == null or not is_instance_valid(map_preset_option):
-		return
-	map_preset_option.clear()
-	_preset_options = []
-	for item in _all_preset_options:
-		if not item is Dictionary:
-			continue
-		var record: Dictionary = item
-		var players := int(record.get("recommended_players", 0))
-		if _lobby_preset_filter_players > 0 and players != _lobby_preset_filter_players:
-			continue
-		_preset_options.append(record)
-		var name := str(record.get("name", record.get("id", "map")))
-		var label := name
-		if players > 0:
-			label = "%s (%d人)" % [name, players]
-		map_preset_option.add_item(label)
-	if _preset_options.is_empty():
-		map_preset_option.add_item("暂无该人数地图")
-		map_preset_option.disabled = true
-	else:
-		map_preset_option.disabled = false
-		map_preset_option.select(0)
-
-
-func _render_lobby_map_preview() -> void:
-	if map_faction_summary == null or not is_instance_valid(map_faction_summary):
-		return
-	var map_data := _selected_lobby_map_data()
-	if map_data.is_empty():
-		map_faction_summary.text = "请选择地图查看初始部署。"
-		if map_preview_texture != null and is_instance_valid(map_preview_texture):
-			map_preview_texture.texture = null
-		_render_lobby_seat_columns({})
-		_refresh_lobby_create_start_gate()
-		return
-	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
-	var title := str(summary.get("name", summary.get("id", "Map")))
-	var size_text := "%dx%d" % [int(summary.get("width", 0)), int(summary.get("height", 0))]
-	var players := int(summary.get("recommended_players", 0))
-	map_faction_summary.text = "[b]%s[/b]  %s  %dP\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
-	if map_preview_texture != null and is_instance_valid(map_preview_texture):
-		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
-	_render_lobby_seat_columns(summary)
-	_refresh_lobby_create_start_gate()
-
-
-func _selected_lobby_map_data() -> Dictionary:
-	var selected := _selected_lobby_preset_record()
-	if selected.is_empty():
-		return {}
-	var map_id := str(selected.get("id", ""))
-	var map_data := selected.duplicate(true)
-	if map_data.has("layout") and map_data.has("size"):
-		return map_data
-	var disk_map := _load_lobby_map_from_disk(map_id)
-	if not disk_map.is_empty():
-		for key in disk_map.keys():
-			map_data[key] = disk_map[key]
-	return map_data
-
-
-func _configured_lobby_create_participant_count() -> int:
-	var required := _selected_lobby_player_count()
-	var host_seat := clampi(_selected_lobby_seat_index, 0, required - 1)
-	var configured: Dictionary = {host_seat: true}
-	for seat_index in range(required):
-		if _lobby_ai_replacement_for_seat(seat_index):
-			configured[seat_index] = true
-		if _lobby_seat_occupant_name(seat_index) != "":
-			configured[seat_index] = true
-	return configured.size()
-
-
-func _refresh_lobby_create_start_gate() -> void:
-	if create_room_btn == null or not is_instance_valid(create_room_btn):
-		return
-	if _lobby_mode != "create":
-		create_room_btn.disabled = false
-		return
-	var required := _selected_lobby_player_count()
-	var configured := _configured_lobby_create_participant_count()
-	create_room_btn.disabled = configured < required
-	if configured < required:
-		create_room_btn.text = "开启游戏 (%d/%d)" % [configured, required]
-	else:
-		create_room_btn.text = "开启游戏"
-
-
-func _selected_lobby_preset_record() -> Dictionary:
-	var idx := 0
-	if map_preset_option != null and is_instance_valid(map_preset_option):
-		idx = map_preset_option.selected
-	if idx >= 0 and idx < _preset_options.size():
-		return (_preset_options[idx] as Dictionary)
-	return {}
-
-
-func _load_lobby_map_from_disk(map_id: String) -> Dictionary:
-	if map_id.begins_with("custom:"):
-		return {}
-	for path in ["res://../game/maps/%s.json" % map_id, "res://../../game/maps/%s.json" % map_id, "res://../../../game/maps/%s.json" % map_id]:
-		if not FileAccess.file_exists(path):
-			continue
-		var file := FileAccess.open(path, FileAccess.READ)
-		if file == null:
-			continue
-		var parsed: Variant = JSON.parse_string(file.get_as_text())
-		file.close()
-		if parsed is Dictionary:
-			return parsed
-	return {}
-
-
-func _render_lobby_seat_columns(summary: Dictionary = {}) -> void:
-	if lobby_seat_grid == null or not is_instance_valid(lobby_seat_grid):
-		return
-	# P2 修复:每张座位卡里有 prev_btn / next_btn / action_btn 等,它们的
-	# pressed signal 可能在 emit 过程中又来调用本函数导致 child.free() 时
-	# "Object freed or unreferenced" 报错。我们改用 queue_free() 来避开这
-	# 个问题 — Godot 会等当前帧 idle 处理时才真正释放,且对 PackedScene 的
-	# 常驻节点也能友好处理。
-	var children := lobby_seat_grid.get_children()
-	for child in children:
-		if not is_instance_valid(child):
-			continue
-		lobby_seat_grid.remove_child(child)
-		child.queue_free()
-	if summary.is_empty():
-		var map_data := _selected_lobby_map_data()
-		if not map_data.is_empty():
-			summary = MapPreviewSummary.summarize_map(map_data)
-	var factions: Dictionary = summary.get("factions", {})
-	var players := int(summary.get("recommended_players", factions.size()))
-	players = mini(maxi(players, 0), MapPreviewSummary.SEAT_COLORS.size())
-	for i in range(players):
-		var color_id: String = MapPreviewSummary.SEAT_COLORS[i]
-		lobby_seat_grid.add_child(_build_lobby_seat_card(i, color_id))
-
-
-func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
-	var card := Panel.new()
-	card.name = "Seat%d" % (index + 1)
-	card.custom_minimum_size = Vector2(0, 190)
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	MenuTheme.apply_panel_theme(card, Color(0.08, 0.13, 0.1, 0.96))
-	var box := VBoxContainer.new()
-	box.name = "SeatBox"
-	box.anchor_right = 1.0
-	box.anchor_bottom = 1.0
-	box.offset_left = 8.0
-	box.offset_top = 6.0
-	box.offset_right = -8.0
-	box.offset_bottom = -6.0
-	box.add_theme_constant_override("separation", 3)
-	card.add_child(box)
-	var top_row := HBoxContainer.new()
-	top_row.name = "SeatTopRow"
-	top_row.add_theme_constant_override("separation", 6)
-	box.add_child(top_row)
-	var portrait := ColorRect.new()
-	portrait.name = "FactionPortrait"
-	portrait.custom_minimum_size = Vector2(34, 34)
-	portrait.color = _seat_display_color(color_id)
-	top_row.add_child(portrait)
-	var status_box := VBoxContainer.new()
-	status_box.name = "SeatStatusBox"
-	status_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_row.add_child(status_box)
-	var seat_name := Label.new()
-	seat_name.name = "SeatName"
-	seat_name.text = "%d席  %s" % [index + 1, _seat_color_label(color_id)]
-	seat_name.add_theme_color_override("font_color", _seat_display_color(color_id))
-	status_box.add_child(seat_name)
-	var occupant := Label.new()
-	occupant.name = "SeatOccupant"
-	occupant.text = _lobby_seat_status_text(index)
-	occupant.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	status_box.add_child(occupant)
-	var control_row := HBoxContainer.new()
-	control_row.name = "SeatControlRow"
-	control_row.add_theme_constant_override("separation", 6)
-	box.add_child(control_row)
-	var action_btn := Button.new()
-	action_btn.name = "SeatActionBtn"
-	action_btn.text = "入座"
-	action_btn.custom_minimum_size = Vector2(50, 26)
-	MenuTheme.apply_button_theme(action_btn, 12)
-	action_btn.pressed.connect(
-		_on_lobby_seat_action_pressed.bind(index),
-		Object.CONNECT_DEFERRED
-	)
-	control_row.add_child(action_btn)
-	var side_option := OptionButton.new()
-	side_option.name = "TeamSideOption"
-	side_option.custom_minimum_size = Vector2(78, 26)
-	for side_name in ["Team A", "Team B", "Team C", "Team D"]:
-		side_option.add_item(side_name)
-	side_option.select(_lobby_team_index_for_seat(index))
-	side_option.item_selected.connect(_on_lobby_seat_team_selected.bind(index))
-	control_row.add_child(side_option)
-	var ai_toggle := CheckBox.new()
-	ai_toggle.name = "AiReplaceToggle"
-	ai_toggle.text = "AI替补"
-	ai_toggle.custom_minimum_size = Vector2(80, 26)
-	ai_toggle.button_pressed = _lobby_ai_replacement_for_seat(index)
-	ai_toggle.toggled.connect(
-		_on_lobby_seat_ai_toggled.bind(index),
-		Object.CONNECT_DEFERRED
-	)
-	ai_toggle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
-	control_row.add_child(ai_toggle)
-	var ai_style_row := HBoxContainer.new()
-	ai_style_row.name = "AiStyleRow"
-	ai_style_row.add_theme_constant_override("separation", 6)
-	box.add_child(ai_style_row)
-	var ai_style_label := Label.new()
-	ai_style_label.text = "AI风格"
-	ai_style_label.custom_minimum_size = Vector2(70, 24)
-	ai_style_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
-	ai_style_row.add_child(ai_style_label)
-	var ai_personality := OptionButton.new()
-	ai_personality.name = "AiPersonalityOption"
-	ai_personality.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ai_personality.custom_minimum_size = Vector2(0, 26)
-	ai_personality.add_item("均衡")
-	ai_personality.add_item("激进")
-	ai_personality.add_item("保守")
-	ai_personality.select(_lobby_ai_personality_index_for_seat(index))
-	ai_personality.disabled = not _lobby_ai_replacement_for_seat(index)
-	ai_personality.item_selected.connect(_on_lobby_seat_ai_personality_selected.bind(index))
-	ai_style_row.add_child(ai_personality)
-	var commander_row := HBoxContainer.new()
-	commander_row.name = "CommanderRow"
-	commander_row.add_theme_constant_override("separation", 4)
-	box.add_child(commander_row)
-	var commanders_loaded: bool = _lobby_commander_ids.size() > 1
-	var prev_btn := Button.new()
-	prev_btn.name = "PrevCommanderBtn"
-	prev_btn.text = "<"
-	prev_btn.custom_minimum_size = Vector2(28, 22)
-	prev_btn.disabled = not commanders_loaded
-	MenuTheme.apply_button_theme(prev_btn, 12)
-	# CONNECT_DEFERRED:让回调在 idle 阶段执行,避免 pressed emit 中途自
-	# 由其持有的 prev/next 按钮树时撞上 "Object freed while signal is
-	# being emitted" 报错。
-	prev_btn.pressed.connect(
-		_on_lobby_seat_commander_step.bind(index, -1),
-		Object.CONNECT_DEFERRED
-	)
-	commander_row.add_child(prev_btn)
-	var commander_label := Label.new()
-	commander_label.name = "CommanderName"
-	if commanders_loaded:
-		commander_label.text = _lobby_seat_commander_label(index)
-		commander_label.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
-	else:
-		# T:V3 — 加载中用 LOADING 色,跟 EMPTY 的 PLACEHOLDER 色区分开
-		commander_label.text = "⏳ 加载中…"
-		commander_label.add_theme_color_override("font_color", MenuTheme.C_LOADING)
-	commander_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	commander_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	commander_row.add_child(commander_label)
-	var next_btn := Button.new()
-	next_btn.name = "NextCommanderBtn"
-	next_btn.text = ">"
-	next_btn.custom_minimum_size = Vector2(28, 22)
-	next_btn.disabled = not commanders_loaded
-	MenuTheme.apply_button_theme(next_btn, 12)
-	next_btn.pressed.connect(
-		_on_lobby_seat_commander_step.bind(index, 1),
-		Object.CONNECT_DEFERRED
-	)
-	commander_row.add_child(next_btn)
-	var ability := Label.new()
-	ability.name = "CommanderAbility"
-	ability.text = _lobby_seat_commander_ability_text(index)
-	ability.custom_minimum_size = Vector2(0, 34)
-	ability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ability.clip_text = true
-	ability.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
-	box.add_child(ability)
-	return card
-
-
-func _lobby_team_index_for_seat(seat_index: int) -> int:
-	if seat_index >= 0 and seat_index < _lobby_seat_team_ids.size():
-		match _lobby_seat_team_ids[seat_index]:
-			"team_b": return 1
-			"team_c": return 2
-			"team_d": return 3
-			_: return 0
-	return mini(maxi(seat_index, 0), 3)
-
-
-func _lobby_team_id_for_index(index: int) -> String:
-	match index:
-		1: return "team_b"
-		2: return "team_c"
-		3: return "team_d"
-		_: return "team_a"
-
-
-func _selected_lobby_seat_team(seat_index: int) -> String:
-	if seat_index >= 0 and seat_index < _lobby_seat_team_ids.size():
-		return _lobby_seat_team_ids[seat_index]
-	return _lobby_team_id_for_index(seat_index)
-
-
-func _lobby_ai_replacement_for_seat(seat_index: int) -> bool:
-	if seat_index >= 0 and seat_index < _lobby_seat_ai_replacements.size():
-		return bool(_lobby_seat_ai_replacements[seat_index])
-	return false
-
-
-func _lobby_ai_personality_for_seat(seat_index: int) -> String:
-	if seat_index >= 0 and seat_index < _lobby_seat_ai_personalities.size():
-		var personality := str(_lobby_seat_ai_personalities[seat_index])
-		if personality in ["aggressive", "balanced", "conservative"]:
-			return personality
-	return "balanced"
-
-
-func _lobby_ai_personality_index_for_seat(seat_index: int) -> int:
-	match _lobby_ai_personality_for_seat(seat_index):
-		"aggressive": return 1
-		"conservative": return 2
-		_: return 0
-
-
-func _lobby_ai_personality_for_index(index: int) -> String:
-	match index:
-		1: return "aggressive"
-		2: return "conservative"
-		_: return "balanced"
-
-
-func _lobby_seat_occupant_name(seat_index: int) -> String:
-	if seat_index >= 0 and seat_index < _lobby_seat_occupants.size():
-		return str(_lobby_seat_occupants[seat_index])
-	return ""
-
-
-func _lobby_seat_status_text(seat_index: int) -> String:
-	var occupant_name := _lobby_seat_occupant_name(seat_index)
-	if occupant_name != "":
-		return "%s 已入座" % occupant_name
-	if _lobby_ai_replacement_for_seat(seat_index):
-		return "电脑-%d（入座中…）" % (seat_index + 1)
-	return "等待玩家入座"
-
-
-func _lobby_seat_commander_id(seat_index: int) -> String:
-	if _lobby_commander_ids.is_empty():
-		return ""
-	var idx := 0
-	if seat_index >= 0 and seat_index < _lobby_seat_commander_indices.size():
-		idx = int(_lobby_seat_commander_indices[seat_index])
-	idx = clampi(idx, 0, _lobby_commander_ids.size() - 1)
-	return _lobby_commander_ids[idx]
-
-
-# 服务器真值同步:把 game.battle_config.seat_commanders 写入本地镜像,使
-# 大厅其他玩家调左右的指挥官时,本端 2s 轮询后立刻看到。server-authoritative:
-# 永远以服务端返回为准(乐观更新被 server 接受后会写回 seat_commanders)。
-func _sync_lobby_seat_commanders(game: Dictionary) -> void:
-	if _lobby_commander_ids.is_empty():
-		return
-	var battle_config_v = game.get("battle_config", null)
-	if battle_config_v == null or not (battle_config_v is Dictionary):
-		return
-	var raw_seat_commanders = battle_config_v.get("seat_commanders", null)
-	if raw_seat_commanders == null or not (raw_seat_commanders is Dictionary):
-		return
-	var seat_commanders: Dictionary = raw_seat_commanders
-	while _lobby_seat_commander_indices.size() < MapPreviewSummary.SEAT_COLORS.size():
-		_lobby_seat_commander_indices.append(0)
-	for seat_v in seat_commanders.keys():
-		var seat_index := int(seat_v)
-		if seat_index < 0 or seat_index >= _lobby_seat_commander_indices.size():
-			continue
-		var commander_id := str(seat_commanders[seat_v])
-		var idx: int = _lobby_commander_ids.find(commander_id)
-		if idx < 0:
-			continue
-		_lobby_seat_commander_indices[seat_index] = idx
-
-
-func _lobby_seat_commander_label(seat_index: int) -> String:
-	var commander_id := _lobby_seat_commander_id(seat_index)
-	return "未选择" if commander_id == "" else _commander_label(commander_id)
-
-
-func _lobby_seat_commander_ability_text(seat_index: int) -> String:
-	var commander_id := _lobby_seat_commander_id(seat_index)
-	match commander_id:
-		"yun": return "能力：稳健推进"
-		"anna": return "能力：快速抢点"
-		"": return "能力：默认规则"
-		_: return "能力：专属指挥"
-
-
-func _on_lobby_seat_team_selected(option_index: int, seat_index: int) -> void:
-	while _lobby_seat_team_ids.size() <= seat_index:
-		_lobby_seat_team_ids.append("team_a")
-	_lobby_seat_team_ids[seat_index] = _lobby_team_id_for_index(option_index)
-
-
-func _on_lobby_seat_ai_toggled(pressed: bool, seat_index: int) -> void:
-	while _lobby_seat_ai_replacements.size() <= seat_index:
-		_lobby_seat_ai_replacements.append(false)
-	while _lobby_seat_ai_personalities.size() <= seat_index:
-		_lobby_seat_ai_personalities.append("balanced")
-	while _lobby_seat_occupants.size() <= seat_index:
-		_lobby_seat_occupants.append("")
-	_lobby_seat_ai_replacements[seat_index] = pressed
-	# T:#19 — 不变式:同一真人玩家至多占 1 槽。AI 替补是逐座位状态,
-	# 多个空座可以同时由不同 AI 补位。
-	if pressed:
-		_clear_player_from_other_seats(_user_name, seat_index)
-	if _game_id <= 0 or seat_index < 0:
-		_render_lobby_seat_columns()
-		_refresh_lobby_create_start_gate()
-		return
-	# 只房主能换人。/start 后 game.status != "waiting",后端会拒绝。
-	if not _lobby_is_host:
-		_update_status("只有房主可以替换该席位为 AI。")
-		_render_lobby_seat_columns()
-		_refresh_lobby_create_start_gate()
-		return
-	var existing_pid: int = 0
-	var existing_is_ai: bool = false
-	for p in _lobby_last_players:
-		if not p is Dictionary:
-			continue
-		if int(p.get("seat", -1)) == seat_index and not bool(p.get("is_spectator", false)):
-			existing_pid = int(p.get("id", 0))
-			existing_is_ai = bool(p.get("is_ai", false))
-			break
-	if not pressed:
-		# 取消 AI 替补 → 把这个 seat 上的 AI 删掉(若是 AI)。人类不动。
-		if existing_pid > 0 and existing_is_ai:
-			_lobby_seat_occupants[seat_index] = ""
-			NetworkClient.remove_player(_game_id, existing_pid,
-				Callable(self, "_on_lobby_seat_ai_remove_response").bind(seat_index))
-		_render_lobby_seat_columns()
-		_refresh_lobby_create_start_gate()
-		return
-	# 按下 AI → 乐观显示"入座中"→ 先删旧的(人类或 AI),再加 AI。
-	var ai_placeholder := "电脑-%d (入座中…)" % (seat_index + 1)
-	_lobby_seat_occupants[seat_index] = ai_placeholder
-	if existing_pid > 0:
-		NetworkClient.remove_player(_game_id, existing_pid,
-			Callable(self, "_on_lobby_seat_ai_add_after_remove").bind(seat_index))
-	else:
-		_request_add_ai_for_seat(seat_index)
-	_render_lobby_seat_columns()
-	_refresh_lobby_create_start_gate()
-
-
-func _request_add_ai_for_seat(seat_index: int) -> void:
-	if _game_id <= 0:
-		return
-	var personality := _lobby_ai_personality_for_seat(seat_index)
-	NetworkClient.add_ai_player(_game_id, "normal", "rules", personality,
-		Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index),
-		seat_index)
-
-
-func _on_lobby_seat_ai_remove_response(body: Variant, _code: int, seat_index: int) -> void:
-	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
-		_update_status("移除失败:%s" % str(body.get("detail", body)))
-		return
-	_refresh_lobby_view()
-
-
-func _on_lobby_seat_ai_add_after_remove(_body: Variant, _code: int, seat_index: int) -> void:
-	_request_add_ai_for_seat(seat_index)
-
-
-func _on_lobby_seat_ai_add_response(body: Variant, code: int, seat_index: int) -> void:
-	if code < 200 or code >= 300:
-		_update_status("AI 入座失败:HTTP %d" % code)
-		return
-	_refresh_lobby_view()
-
-
-func _on_lobby_seat_ai_personality_selected(option_index: int, seat_index: int) -> void:
-	while _lobby_seat_ai_personalities.size() <= seat_index:
-		_lobby_seat_ai_personalities.append("balanced")
-	_lobby_seat_ai_personalities[seat_index] = _lobby_ai_personality_for_index(option_index)
-
-
-func _on_lobby_seat_commander_step(seat_index: int, delta: int) -> void:
-	if _lobby_commander_ids.is_empty():
-		return
-	while _lobby_seat_commander_indices.size() <= seat_index:
-		_lobby_seat_commander_indices.append(0)
-	_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) + delta, _lobby_commander_ids.size())
-	_render_lobby_seat_columns()
-	# P1:同步服务端 — 房主改任意 seat / 玩家改自己 seat
-	var new_idx: int = int(_lobby_seat_commander_indices[seat_index])
-	new_idx = clampi(new_idx, 0, _lobby_commander_ids.size() - 1)
-	var commander_id: String = str(_lobby_commander_ids[new_idx])
-	if commander_id == "":
-		# "" = "未选择",服务端应保持现有值 / 或保留空。直接发空字符串让服务端 reset
-		pass
-	# 找 seat 上 player_id
-	var target_pid: int = 0
-	for p in _lobby_last_players:
-		if not p is Dictionary:
-			continue
-		if bool(p.get("is_spectator", false)):
-			continue
-		if int(p.get("seat", -1)) == seat_index:
-			target_pid = int(p.get("id", 0))
-			break
-	if _player_id <= 0 or _game_id <= 0:
-		return
-	# 空座位:用 player_id=0 + seat=seat_index 让后端只写
-	# battle_config.seat_commanders[seat],不需要 player 记录。
-	if target_pid <= 0:
-		NetworkClient.update_player_commander(
-			_game_id, 0, _player_id, commander_id,
-			Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta),
-			seat_index
-		)
-		return
-	# 发送后端;成功才确认;失败回退 1 step 并 toast
-	NetworkClient.update_player_commander(
-		_game_id,
-		target_pid,
-		_player_id,
-		commander_id,
-		Callable(self, "_on_lobby_seat_commander_response").bind(seat_index, delta)
-	)
-
-
-func _on_lobby_seat_commander_response(body: Variant, _code: int, seat_index: int, delta: int) -> void:
-	if not (body is Dictionary) or int(body.get("ok", 0)) != 1:
-		# 回退:把 index 倒回(因为我们乐观更新了)
-		if _lobby_commander_ids.is_empty():
-			return
-		while _lobby_seat_commander_indices.size() <= seat_index:
-			_lobby_seat_commander_indices.append(0)
-		var n: int = _lobby_commander_ids.size()
-		_lobby_seat_commander_indices[seat_index] = posmod(int(_lobby_seat_commander_indices[seat_index]) - delta, n)
-		_render_lobby_seat_columns()
-		var detail: String = "切换指挥官失败"
-		if body is Dictionary and body.has("detail"):
-			detail = "切换指挥官失败: %s" % str(body.get("detail"))
-		_update_status(detail)
-
-
-func _on_lobby_seat_action_pressed(seat_index: int) -> void:
-	_selected_lobby_seat_index = clampi(seat_index, 0, MapPreviewSummary.SEAT_COLORS.size() - 1)
-	# T:#19 — 不变式:同一玩家至多占 1 个座位(同样 AI 至多占 1 槽)。
-	# 在写入目标座位前,先把其它座位里出现的 _user_name / ai placeholder 全部清掉。
-	_clear_player_from_other_seats(_user_name, seat_index)
-	while _lobby_seat_occupants.size() <= seat_index:
-		_lobby_seat_occupants.append("")
-	while _lobby_seat_ai_replacements.size() <= seat_index:
-		_lobby_seat_ai_replacements.append(false)
-	_lobby_seat_occupants[seat_index] = _user_name
-	_lobby_seat_ai_replacements[seat_index] = false
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "%s 已入座 %d席。" % [_user_name, seat_index + 1]
-	_render_lobby_seat_columns()
-	_refresh_lobby_create_start_gate()
-	if _game_id > 0 and _player_id > 0:
-		NetworkClient.update_player_seat(
-			_game_id,
-			_player_id,
-			_player_id,
-			_selected_lobby_seat_index,
-			Callable(self, "_on_lobby_seat_update_response")
-		)
-
-
-# T:#19 — 清掉所有其它座位里出现的 player_name / ai 占位(确保"一个玩家最多一槽")。
-# exclude_seat = -1 表示所有座位都清。
-func _clear_player_from_other_seats(player_name: String, exclude_seat: int = -1) -> void:
-	for i in range(_lobby_seat_occupants.size()):
-		if i == exclude_seat:
-			continue
-		if _lobby_seat_occupants[i] == player_name:
-			_lobby_seat_occupants[i] = ""
-
-
-func _on_lobby_seat_update_response(_body: Variant, code: int = 0) -> void:
-	if code >= 200 and code < 300:
-		_refresh_lobby_view()
-	elif lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "座位调整失败，请刷新房间后重试。"
-
-
-func _seat_color_label(color_id: String) -> String:
-	match color_id:
-		"red": return "红方"
-		"blue": return "蓝方"
-		"green": return "绿方"
-		"yellow": return "黄方"
-		_: return color_id
-
-
-func _seat_display_color(color_id: String) -> Color:
-	match color_id:
-		"red": return Color(0.95, 0.32, 0.24)
-		"blue": return Color(0.36, 0.56, 1.0)
-		"green": return Color(0.3, 0.8, 0.38)
-		"yellow": return Color(0.95, 0.78, 0.25)
-		_: return MenuTheme.C_TEXT_WARM
-
-
-func _refresh_room_list() -> void:
-	if room_list != null and is_instance_valid(room_list):
-		room_list.text = "正在加载房间..."
-	if room_select_option != null and is_instance_valid(room_select_option):
-		room_select_option.clear()
-		room_select_option.add_item("正在加载房间...")
-		room_select_option.disabled = true
-	if join_selected_btn != null and is_instance_valid(join_selected_btn):
-		join_selected_btn.disabled = true
-	NetworkClient.list_games(Callable(self, "_on_room_list_response"))
-
-
-func _on_room_list_response(body: Variant, _code: int = 0) -> void:
-	_lobby_rooms = []
-	_selected_room_id = 0
-	var games: Array = body if body is Array else []
-	for g in games:
-		if not g is Dictionary:
-			continue
-		if str(g.get("status", "")) != "waiting":
-			continue
-		_lobby_rooms.append(g)
-	if _lobby_rooms.is_empty():
-		if room_list != null and is_instance_valid(room_list):
-			room_list.text = "暂无等待中的房间。可在右侧创建新房间。"
-		if room_select_option != null and is_instance_valid(room_select_option):
-			room_select_option.clear()
-			room_select_option.add_item("暂无等待房间")
-			room_select_option.disabled = true
-		if join_selected_btn != null and is_instance_valid(join_selected_btn):
-			join_selected_btn.disabled = true
-		return
-	if room_select_option != null and is_instance_valid(room_select_option):
-		room_select_option.clear()
-		room_select_option.disabled = false
-	for i in range(_lobby_rooms.size()):
-		var g: Dictionary = _lobby_rooms[i]
-		var id: int = int(g.get("id", 0))
-		if i == 0:
-			_selected_room_id = id
-		var name := str(g.get("name", "Room"))
-		if room_select_option != null and is_instance_valid(room_select_option):
-			room_select_option.add_item("#%d  %s" % [id, name])
-	_render_room_list()
-
-
-func _on_room_selected(index: int) -> void:
-	if index < 0 or index >= _lobby_rooms.size():
-		_selected_room_id = 0
-	else:
-		var g: Dictionary = _lobby_rooms[index]
-		_selected_room_id = int(g.get("id", 0))
-	_render_room_list()
-
-
-func _render_room_list() -> void:
-	var lines: Array = []
-	var selected_name := ""
-	var selected_cap := 0
-	for g in _lobby_rooms:
-		if not g is Dictionary:
-			continue
-		var id: int = int(g.get("id", 0))
-		var marker := ">" if id == _selected_room_id else " "
-		var name := str(g.get("name", "Room"))
-		var preset := str(g.get("map_preset", "?"))
-		var cap := int(g.get("capacity", 0))
-		if id == _selected_room_id:
-			selected_name = name
-			selected_cap = cap
-		lines.append("%s #%d  %s  [%s]  cap:%d" % [marker, id, name, preset, cap])
-	if room_list != null and is_instance_valid(room_list):
-		room_list.text = "\n".join(lines)
-	if lobby_status_label != null and is_instance_valid(lobby_status_label) and _selected_room_id > 0:
-		lobby_status_label.text = "已选择房间 #%d: %s (上限 %d 人)" % [_selected_room_id, selected_name, selected_cap]
-	if join_selected_btn != null and is_instance_valid(join_selected_btn):
-		join_selected_btn.disabled = _selected_room_id <= 0
-
-
-func _on_create_room_pressed() -> void:
-	if _configured_lobby_create_participant_count() < _selected_lobby_player_count():
-		_refresh_lobby_create_start_gate()
-		if lobby_status_label != null and is_instance_valid(lobby_status_label):
-			lobby_status_label.text = "请先补齐地图要求的玩家或 AI 座位。"
-		return
-	_entry_flow = "lobby_create"
-	var room_name := "%s room" % _user_name
-	if lobby_name_input != null and is_instance_valid(lobby_name_input):
-		var typed := lobby_name_input.text.strip_edges()
-		if typed != "":
-			room_name = typed
-	var preset_id := "balanced_2p_15"
-	var biome := "grass"
-	var idx := 0
-	if map_preset_option != null and is_instance_valid(map_preset_option):
-		idx = map_preset_option.selected
-	if idx >= 0 and idx < _preset_options.size():
-		var selected: Dictionary = _preset_options[idx]
-		preset_id = str(selected.get("id", preset_id))
-		biome = str(selected.get("biome", biome))
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在创建并开启游戏..."
-	_pending_lobby_start_after_create = true
-	NetworkClient.create_game(
-		room_name,
-		preset_id,
-		biome,
-		_selected_lobby_win_condition(),
-		_selected_lobby_commander(),
-		_selected_lobby_bgm_track(),
-		_selected_lobby_ai_commanders(),
-		Callable(self, "_on_lobby_create_response"),
-		_selected_lobby_seat_commanders(),
-		"free"
-	)
-
-
-func _on_join_selected_pressed() -> void:
-	if _selected_room_id <= 0:
-		return
-	_entry_flow = "lobby_join"
-	_game_id = _selected_room_id
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在加入房间 #%d..." % _game_id
-	NetworkClient.join_game(_game_id, _user_name, "red", _selected_join_team(), _selected_join_role(), Callable(self, "_on_lobby_join_response"))
-
-
-func _start_lobby_polling() -> void:
-	if _lobby_poll_timer == null:
-		_lobby_poll_timer = Timer.new()
-		_lobby_poll_timer.wait_time = 2.0
-		_lobby_poll_timer.timeout.connect(_refresh_lobby_view)
-		add_child(_lobby_poll_timer)
-	_lobby_poll_timer.start()
-	_refresh_lobby_view()
-
-
-func _stop_lobby_polling() -> void:
-	if _lobby_poll_timer != null:
-		_lobby_poll_timer.stop()
-
-
-func _refresh_lobby_view() -> void:
-	if _game_id <= 0:
-		return
-	NetworkClient.get_game_state(_game_id, Callable(self, "_on_lobby_state"))
-
-
-func _on_lobby_state(body: Dictionary, _code: int = 0) -> void:
-	if not (body is Dictionary): return
-	# /state 返回 GameStateOut:{ game, players, tiles, ... }。比 /lobby 的 teams
-	# 聚合更细 - 能逐玩家拿到 seat / is_ai / team / is_spectator,这是 P1#8
-	# 房主行级控制 + P1#7 观战者显示的前提。
-	var game: Dictionary = body.get("game", {}) if body.get("game", {}) is Dictionary else {}
-	var players: Array = body.get("players", []) if body.get("players", []) is Array else []
-	var max_spec: int = int(game.get("max_spectators", 8))
-	_lobby_last_players = players
-	for i in range(_lobby_seat_occupants.size()):
-		_lobby_seat_occupants[i] = ""
-	var host_player_id := 0
-	for p in players:
-		if p is Dictionary and not bool(p.get("is_spectator", false)):
-			var pid_for_host := int(p.get("id", 0))
-			if pid_for_host > 0 and (host_player_id <= 0 or pid_for_host < host_player_id):
-				host_player_id = pid_for_host
-			var pseat := int(p.get("seat", -1))
-			if pseat >= 0 and pseat < _lobby_seat_occupants.size():
-				_lobby_seat_occupants[pseat] = str(p.get("user_name", ""))
-				if bool(p.get("is_ai", false)) and pseat < _lobby_seat_ai_personalities.size():
-					var personality := str(p.get("agent_personality", "balanced"))
-					if personality in ["aggressive", "balanced", "conservative"]:
-						_lobby_seat_ai_personalities[pseat] = personality
-	# 自己的 seat / 观战标记(房主 = seat 0)
-	var self_seat: int = -1
-	var self_is_spec: bool = false
-	for p in players:
-		if p is Dictionary and int(p.get("id", -1)) == int(_player_id):
-			self_seat = int(p.get("seat", -1))
-			self_is_spec = bool(p.get("is_spectator", false))
-			break
-	if self_seat >= 0:
-		_selected_lobby_seat_index = self_seat
-	_lobby_is_host = (_player_id > 0 and _player_id == host_player_id)
-	_lobby_self_is_spectator = self_is_spec
-	# 同步 seat_commanders(大厅里其他玩家改的指挥官要实时反映给当前客户端)。
-	# server-authoritative:服务端 game.battle_config.seat_commanders 是真值,
-	# 本地 _lobby_seat_commander_indices 是 UI 镜像 — 始终以服务端为准。
-	_sync_lobby_seat_commanders(game)
-	_render_lobby_seat_columns()
-	# 渲染逐玩家列表(含 seat / 队伍 / 观战标记)
-	var lines: Array = []
-	var spec_count: int = 0
-	var real_count: int = 0
-	var fighter_count: int = 0
-	for p in players:
-		if not p is Dictionary: continue
-		var pname_v = p.get("user_name")
-		var pname: String = pname_v if pname_v is String else "-"
-		var color_v = p.get("color")
-		var color: String = color_v if color_v is String else "red"
-		var ai_v = p.get("is_ai")
-		var is_ai: bool = (ai_v == true) if ai_v != null else false
-		var spec_v = p.get("is_spectator")
-		var is_spec: bool = (spec_v == true) if spec_v != null else false
-		var id_v = p.get("id")
-		var is_self: bool = (id_v == _player_id) if (id_v != null and _player_id > 0) else false
-		var team_v = p.get("team")
-		var team: String = team_v if team_v is String else ""
-		var seat_v = p.get("seat")
-		var seat: int = int(seat_v) if seat_v is int else -1
-		if is_spec:
-			spec_count += 1
-		else:
-			fighter_count += 1
-			if not is_ai:
-				real_count += 1
-		var emoji: String = "👀" if is_spec else _color_emoji(color)
-		var tag: String = ""
-		if is_self: tag = " (你)"
-		elif is_ai: tag = " 🤖"
-		var team_tag: String = " [%s]" % team if team != "" else ""
-		var seat_tag: String = " #%d" % seat if seat >= 0 else ""
-		lines.append("%s %s%s%s%s" % [emoji, pname, tag, team_tag, seat_tag])
-	lobby_list.text = "\n".join(lines) if lines.size() > 0 else "(等待加入)"
-	_render_lobby_ai_options(players)
-	_render_lobby_host_controls(players)
-	var total_count: int = players.size()
-	lobby_status_label.text = "等待玩家加入... (%d 人 · 真人 %d · 观战 %d/%d)" % [
-		total_count, real_count, spec_count, max_spec
-	]
-	var required_count: int = int(game.get("capacity", _selected_lobby_player_count()))
-	# Start 按钮:参战玩家 + AI 必须补齐地图要求席位。
-	lobby_start_btn.disabled = fighter_count < required_count
-	if start_game_inline_btn != null and is_instance_valid(start_game_inline_btn):
-		start_game_inline_btn.disabled = fighter_count < required_count
-
-
-func _render_lobby_ai_options(players: Array) -> void:
-	_selected_ai_player_id = 0
-	if ai_player_option == null or not is_instance_valid(ai_player_option):
-		return
-	ai_player_option.clear()
-	for p in players:
-		if not (p is Dictionary):
-			continue
-		if not bool(p.get("is_ai", false)):
-			continue
-		var pid := int(p.get("id", 0))
-		var name := str(p.get("user_name", "AI"))
-		ai_player_option.add_item("#%d %s" % [pid, name], pid)
-	if ai_player_option.item_count > 0:
-		ai_player_option.select(0)
-		_selected_ai_player_id = ai_player_option.get_item_id(0)
-	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
-		lobby_remove_ai_btn.disabled = _selected_ai_player_id <= 0
-
-
-func _on_ai_player_selected(index: int) -> void:
-	if ai_player_option == null or not is_instance_valid(ai_player_option):
-		return
-	if index < 0 or index >= ai_player_option.item_count:
-		_selected_ai_player_id = 0
-	else:
-		_selected_ai_player_id = ai_player_option.get_item_id(index)
-	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
-		lobby_remove_ai_btn.disabled = _selected_ai_player_id <= 0
-
-
-func _on_lobby_add_ai_pressed() -> void:
-	if _game_id <= 0: return
-	# POST /games/{id}/add-ai(走 NetworkClient.request)
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在添加电脑玩家..."
-	NetworkClient.add_ai_player(
-		_game_id,
-		_selected_ai_difficulty(),
-		_selected_ai_kind(),
-		_selected_ai_personality(),
-		Callable(self, "_on_lobby_add_ai_response")
-	)
-
-
-func _on_lobby_add_ai_response(_body: Variant, _code: int = 0) -> void:
-	_refresh_lobby_view()
-	_refresh_room_list()
-
-
-func _on_lobby_remove_ai_pressed() -> void:
-	if _game_id <= 0 or _selected_ai_player_id <= 0:
-		return
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在移除电脑玩家 #%d..." % _selected_ai_player_id
-	NetworkClient.remove_player(_game_id, _selected_ai_player_id, Callable(self, "_on_lobby_remove_ai_response"))
-
-
-func _on_lobby_remove_ai_response(_body: Variant, _code: int = 0) -> void:
-	_selected_ai_player_id = 0
-	_refresh_lobby_view()
-	_refresh_room_list()
-
-
-func _on_lobby_apply_team_pressed() -> void:
-	if _game_id <= 0 or _player_id <= 0:
-		return
-	var team := _selected_join_team()
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "正在更新队伍..."
-	NetworkClient.update_player_team(_game_id, _player_id, _player_id, team, Callable(self, "_on_lobby_team_response"))
-
-
-func _on_lobby_team_response(body: Variant, code: int = 0) -> void:
-	if code < 200 or code >= 300 or not (body is Dictionary):
-		var msg := "Team update failed"
-		if body is Dictionary:
-			msg = "Team update failed: %s" % str(body.get("detail", body.get("message", msg)))
-		if lobby_status_label != null and is_instance_valid(lobby_status_label):
-			lobby_status_label.text = msg
-		return
-	var team := str(body.get("team", ""))
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "队伍已更新: %s" % (_team_cn(team) if team != "" else "自由分队")
-	_refresh_lobby_view()
-
-
-func _render_lobby_host_controls(players: Array) -> void:
-	# 房主可见 目标玩家/队伍/改队伍;所有人可见"切换观战"(转自己)。
-	var host_widgets: Array = [lobby_host_player_option, lobby_host_team_option, lobby_host_apply_btn]
-	for w in host_widgets:
-		if w != null and is_instance_valid(w):
-			w.visible = _lobby_is_host
-	if lobby_to_spec_btn != null and is_instance_valid(lobby_to_spec_btn):
-		lobby_to_spec_btn.visible = not _lobby_self_is_spectator
-		lobby_to_spec_btn.disabled = _player_id <= 0
-	if not _lobby_is_host:
-		return
-	if lobby_host_player_option == null or not is_instance_valid(lobby_host_player_option):
-		return
-	# 仅在玩家集合变化时重建下拉,避免 2s 轮询打断房主操作
-	var sig := ""
-	for p in players:
-		if p is Dictionary:
-			sig += "%d:%d:%d:%s|" % [int(p.get("id", 0)), int(p.get("seat", -1)), int(bool(p.get("is_spectator", false))), str(p.get("user_name", ""))]
-	if sig == _lobby_host_player_sig:
-		return
-	_lobby_host_player_sig = sig
-	var prev_target := _lobby_host_target_id
-	lobby_host_player_option.clear()
-	var idx := 0
-	var selected_idx := 0
-	for p in players:
-		if not p is Dictionary: continue
-		var pid: int = int(p.get("id", 0))
-		var pname: String = str(p.get("user_name", "-"))
-		var seat: int = int(p.get("seat", -1))
-		var is_spec: bool = bool(p.get("is_spectator", false))
-		var emoji: String = "👀" if is_spec else _color_emoji(str(p.get("color", "red")))
-		lobby_host_player_option.add_item("%s #%d %s" % [emoji, seat, pname], pid)
-		if pid == prev_target:
-			selected_idx = idx
-		idx += 1
-	if lobby_host_player_option.item_count > 0:
-		lobby_host_player_option.select(selected_idx)
-		_lobby_host_target_id = lobby_host_player_option.get_item_id(selected_idx)
-	else:
-		_lobby_host_target_id = 0
-	_refresh_host_team_options(players)
-
-
-func _refresh_host_team_options(players: Array) -> void:
-	if lobby_host_team_option == null or not is_instance_valid(lobby_host_team_option):
-		return
-	# 收集已有队伍名(去重,排除空)
-	var seen: Dictionary = {}
-	var teams: Array = []
-	for p in players:
-		if not p is Dictionary: continue
-		var t_raw = p.get("team")
-		var t: String = t_raw if t_raw is String else ""
-		if t != "" and not seen.has(t):
-			seen[t] = true
-			teams.append(t)
-	lobby_host_team_option.clear()
-	_lobby_host_team_ids = [""]
-	# 哨兵值:apply 时按已有队数生成新队名
-	_lobby_host_team_ids.append("__new__")
-	lobby_host_team_option.add_item("🆕 新建队伍")
-	lobby_host_team_option.select(0)
-
-
-func _on_lobby_host_player_selected(index: int) -> void:
-	if lobby_host_player_option == null or not is_instance_valid(lobby_host_player_option):
-		return
-	if index < 0 or index >= lobby_host_player_option.item_count:
-		_lobby_host_target_id = 0
-	else:
-		_lobby_host_target_id = lobby_host_player_option.get_item_id(index)
-
-
-func _on_lobby_host_apply_pressed() -> void:
-	if not _lobby_is_host or _lobby_host_target_id <= 0 or _game_id <= 0:
-		return
-	if lobby_host_team_option == null or not is_instance_valid(lobby_host_team_option):
-		return
-	var team := ""
-	var tidx := lobby_host_team_option.selected
-	if tidx >= 0 and tidx < _lobby_host_team_ids.size():
-		var raw := _lobby_host_team_ids[tidx]
-		if raw == "__new__":
-			team = _next_team_name()
-		else:
-			team = raw
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "更新玩家 #%d 队伍..." % _lobby_host_target_id
-	NetworkClient.update_player_team(_game_id, _lobby_host_target_id, _player_id, team, Callable(self, "_on_lobby_team_response"))
-
-
-func _next_team_name() -> String:
-	# 基于已有队伍数生成不冲突的新队名(team1 / team2 / ...)
-	var existing: Dictionary = {}
-	for p in _lobby_last_players:
-		if p is Dictionary:
-			var t := str(p.get("team", ""))
-			if t != "":
-				existing[t] = true
-	var n := 1
-	while existing.has("team%d" % n):
-		n += 1
-	return "team%d" % n
-
-
-func _on_lobby_to_spec_pressed() -> void:
-	if _game_id <= 0 or _player_id <= 0 or _lobby_self_is_spectator:
-		return
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		lobby_status_label.text = "切换为观战者..."
-	# convert:DELETE 自己 + POST /join role=spectator(后端无独立 convert 接口,
-	# 与 web 一致;join_game(role=spectator) 会分配 spectator 座位/颜色)。
-	NetworkClient.remove_player(_game_id, _player_id, Callable(self, "_on_lobby_to_spec_removed"))
-
-
-func _on_lobby_to_spec_removed(_body: Variant, _code: int = 0) -> void:
-	# 旧座位已删;以观战者身份重新加入。新 player_id 由全局 api_response ->
-	# _on_join_game_response 自动捕获。
-	NetworkClient.join_game(_game_id, _user_name, "", "", "spectator", Callable(self, "_on_lobby_to_spec_joined"))
-
-
-func _on_lobby_to_spec_joined(_body: Variant, _code: int = 0) -> void:
-	_refresh_lobby_view()
-
-
-func _on_lobby_start_pressed() -> void:
-	if _game_id <= 0: return
-	NetworkClient.start_game(_game_id, Callable(self, "_on_lobby_start_response"))
-
-
-func _on_lobby_start_response(_body: Dictionary, _code: int = 0) -> void:
-	if _code < 200 or _code >= 300:
-		_pending_lobby_start_after_create = false
-		if lobby_status_label != null and is_instance_valid(lobby_status_label):
-			lobby_status_label.text = "开启失败"
-		return
-	_pending_lobby_start_after_create = false
-	# 启动游戏 — 切到 game 视图,接 WS
-	_show_view("game")
-	NetworkClient.connect_to_game(_game_id, _player_id)
-	NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_poll_response"))
-	_stop_lobby_polling()
-
-
-func _on_lobby_back_pressed() -> void:
-	if _lobby_mode == "create" or _lobby_mode == "join":
-		_show_lobby_choose()
-	elif _lobby_mode == "in_room":
-		_show_lobby_choose()
-	else:
-		_stop_lobby_polling()
-		_show_view("menu")
-
-
-func _apply_lobby_theme() -> void:
-	if lobby_start_btn != null and is_instance_valid(lobby_start_btn):
-		MenuTheme.apply_button_theme(lobby_start_btn, 18)
-	if lobby_add_ai_btn != null and is_instance_valid(lobby_add_ai_btn):
-		MenuTheme.apply_button_theme(lobby_add_ai_btn, 14)
-	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
-		MenuTheme.apply_button_theme(lobby_remove_ai_btn, 14)
-	if lobby_apply_team_btn != null and is_instance_valid(lobby_apply_team_btn):
-		MenuTheme.apply_button_theme(lobby_apply_team_btn, 14)
-	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
-		MenuTheme.apply_button_theme(lobby_back_btn, 14)
-	if lobby_status_label != null and is_instance_valid(lobby_status_label):
-		MenuTheme.apply_label_theme(lobby_status_label, 14, MenuTheme.C_TEXT_WARM)
-	if lobby_win_banner != null and is_instance_valid(lobby_win_banner):
-		MenuTheme.apply_label_theme(lobby_win_banner, 12, MenuTheme.C_GOLD)
-	if lobby_game_id_label != null and is_instance_valid(lobby_game_id_label):
-		MenuTheme.apply_label_theme(lobby_game_id_label, 12, MenuTheme.C_TEXT_DIM)
-	if lobby_list != null and is_instance_valid(lobby_list):
-		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	if lobby_view != null and is_instance_valid(lobby_view):
+		lobby_view._setup_lobby_commander_options(unlocked)
 
 
 # T:96 — MainlineView 入口 thin wrapper(完整逻辑搬到 mainline_controller.open())
@@ -5442,13 +2791,7 @@ func _on_mainline_pressed() -> void:
 
 # Batch A:helper 留 main.gd(batch B 函数还在 main.gd 用)
 func _commander_label(commander_id: String) -> String:
-	match commander_id:
-		"yun":
-			return "云"
-		"anna":
-			return "安娜"
-		_:
-			return commander_id
+	return CnLabels.commander_label(commander_id)
 
 
 func _set_node_visible(node: Node, value: bool) -> void:
@@ -5887,15 +3230,7 @@ func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary
 
 
 func _unit_cn_name(unit: Dictionary, fallback: String = "单位") -> String:
-	var unit_type := str(unit.get("unit_type", unit.get("type", "")))
-	var mapped := _unit_type_cn(unit_type)
-	if mapped != unit_type:
-		return mapped
-	if unit.has("display_cn"):
-		return str(unit.get("display_cn"))
-	if unit.has("name_cn"):
-		return str(unit.get("name_cn"))
-	return fallback
+	return CnLabels.unit_cn_name(unit, fallback)
 
 
 func _hide_attack_confirm() -> void:
@@ -5938,8 +3273,56 @@ func _apply_immediate_attack_feedback(attacker_id: int, target_id: int) -> void:
 func _attack_unit_to(attacker_id: int, target_id: int) -> void:
 	if _game_id <= 0 or _player_id <= 0:
 		return
+	# 8d: 可选 pre-action 对话
+	if UserSettings.get_value("dialog.v1.attack_confirm", false):
+		await DialogManager.play([{
+			"speaker": "",
+			"text": "即将发动攻击,确认?",
+			"type": "narration",
+		}])
 	_apply_immediate_attack_feedback(attacker_id, target_id)
-	NetworkClient.action_attack(_game_id, _player_id, attacker_id, target_id)
+	NetworkClient.action_attack(
+		_game_id, _player_id, attacker_id, target_id,
+		Callable(self, "_on_attack_response").bind(attacker_id, target_id),
+	)
+
+
+## 8d: 攻击响应 — 成功后播旁白(lethal 优先,非致命带反击)
+## ⚠ 致命攻击后端只发 kill 不发 attack(WS 通道),但本 handler 走 REST 永远触发
+func _on_attack_response(body: Variant, code: int, attacker_id: int, target_id: int) -> void:
+	if code < 200 or code >= 300:
+		_update_status("攻击失败 (HTTP %d)" % code)
+		return
+	if not (body is Dictionary):
+		return
+	var turn: int = int(GameState.game_summary.get("turn_number", 0))
+	if not DialogManager.record_attack_shown(attacker_id, target_id, turn):
+		return
+	if DialogManager.is_playing():
+		return
+	# AttackResult 字段:damage / is_kill / counter_damage;hits[] 数组含 is_crit
+	var hits: Array = (body.get("hits", []) as Array)
+	var dmg: int = int(body.get("damage", hits[0].get("damage", 0) if not hits.is_empty() else 0))
+	var is_crit: bool = bool(hits[0].get("is_crit", false) if not hits.is_empty() else false)
+	var is_kill: bool = bool(body.get("is_kill", false))
+	var counter: int = int(body.get("counter_damage", 0))
+	var a: Dictionary = GameState.get_unit(attacker_id) if GameState != null else {}
+	var t: Dictionary = GameState.get_unit(target_id) if GameState != null else {}
+	var a_name: String = str(a.get("display_cn", a.get("unit_type", "?"))) if not a.is_empty() else "?"
+	var t_name: String = str(t.get("display_cn", t.get("unit_type", "?"))) if not t.is_empty() else "?"
+	var crit_str: String = " · 暴击" if is_crit else ""
+	var lines: Array = [{
+		"speaker": "",
+		"text": ("「%s」击破「%s」(%d 伤害%s)。" % [a_name, t_name, dmg, crit_str]) if is_kill else ("「%s」对「%s」造成 %d 伤害%s。" % [a_name, t_name, dmg, crit_str]),
+		"type": "narration",
+	}]
+	if not is_kill and counter > 0:
+		lines.append({
+			"speaker": "",
+			"text": "「%s」反击,造成 %d 伤害。" % [t_name, counter],
+			"type": "narration",
+		})
+	DialogManager.play(lines)
 
 
 func _active_skill_of(ud: Dictionary) -> String:
@@ -6080,6 +3463,13 @@ func _on_recruit_response(body: Variant, code: int = 0) -> void:
 		_update_status("招募成功: %s · -%d 金币" % [unit_name, cost])
 	if _game_id > 0:
 		NetworkClient.get_game_state(_game_id, Callable(self, "_on_state_response"))
+	# 8e: 招募后旁白
+	if not DialogManager.is_playing():
+		DialogManager.show_dialog({
+			"speaker": "",
+			"text": "新「%s」已加入战场 (花费 %d 金币)。" % [unit_name, cost],
+			"type": "narration",
+		})
 
 
 # S:4 适配 — 在 _unhandled_input 的空地点击分支里,加 empty-my-barracks → 招募入口
@@ -6210,6 +3600,7 @@ func _unit_portrait_path_for(unit: Dictionary) -> String:
 
 
 func _set_unit_info_portrait(unit: Dictionary) -> void:
+	var _unit_info_portrait_tex: TextureRect = null  # 局部位,原属 dialog 块
 	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
 	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
 	# 还原默认 -12.0。
@@ -6230,7 +3621,7 @@ func _set_unit_info_portrait(unit: Dictionary) -> void:
 		_unit_info_portrait_tex.visible = false
 		hero_portrait_panel.visible = false
 		return
-	var tex := _load_portrait(portrait_path)
+	var tex := PortraitLoader.load(portrait_path)
 	_unit_info_portrait_tex.texture = tex
 	if tex != null:
 		# T:V6 — 立绘按比例缩放到面板大小(高度一致,宽度按 800:1400 自适应,原图比例不变)。
@@ -6281,8 +3672,28 @@ func _on_claim_pressed() -> void:
 	if _game_id <= 0 or _player_id <= 0:
 		return
 	_update_status("正在占领(#%d)..." % _selected_unit_id)
-	NetworkClient.action_claim(_game_id, _player_id, _selected_unit_id)
+	NetworkClient.action_claim(
+		_game_id, _player_id, _selected_unit_id,
+		Callable(self, "_on_claim_response").bind(_selected_unit_id),
+	)
 	_hide_action_bubble()
+
+
+## 8f: 占领响应 — 仅在 completed=true 时旁白
+func _on_claim_response(body: Variant, code: int, _unit_id: int) -> void:
+	if code < 200 or code >= 300:
+		return
+	if not (body is Dictionary):
+		return
+	if not bool(body.get("completed", false)):
+		return
+	if DialogManager.is_playing():
+		return
+	DialogManager.show_dialog({
+		"speaker": "",
+		"text": "占领完成。",
+		"type": "narration",
+	})
 
 
 func _random_suffix() -> float:

@@ -152,8 +152,8 @@ func open() -> void:
 	_setup_mainline_commander_options()
 	if ml_commander_status != null and is_instance_valid(ml_commander_status):
 		ml_commander_status.text = "指挥官: 正在加载..."
-	if _main._hero_speaker_map.is_empty():
-		NetworkClient.list_heroes(Callable(_main, "_on_heroes_response"))
+	if DialogManager._heroes.is_empty():
+		NetworkClient.list_heroes(Callable(DialogManager, "_on_heroes_response"))
 	NetworkClient.get_unlocked_commanders(_main._user_name, Callable(self, "_on_commanders_response"))
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
 
@@ -524,7 +524,7 @@ func _on_ml_detail_response(body: Variant, _code: int = 0, mainline_id: String =
 	var dialogue: Variant = body.get("dialogue", null)
 	# 有 pre-battle 对话 → 播放
 	if dialogue != null:
-		_main._play_dialogue_scenes(dialogue)
+		DialogManager.play(dialogue)
 	_main._update_status("主线章节 %s: 加载战前准备..." % mainline_id)
 	NetworkClient.get_mainline_prepare(mainline_id, _main._user_name, Callable(self, "_on_mainline_prepare_response").bind(mainline_id))
 
@@ -1438,8 +1438,12 @@ func _on_mainline_auto_abandon_response(body: Variant, code: int, mainline_id: S
 
 # ── _on_mainline_dialogue_response ────────────────────────────────────────
 
-func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
-	_main._play_dialogue_scenes(body)
+func _on_mainline_dialogue_response(body: Variant, code: int = 0) -> void:
+	# BUG-FIX:404 容错(原代码丢弃 _code,404 渲染成空旁白框)
+	if code < 200 or code >= 300:
+		_main._update_status("对话加载失败 (HTTP %d)" % code)
+		return
+	DialogManager.play(body)
 
 
 

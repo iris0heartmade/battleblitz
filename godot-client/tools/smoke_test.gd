@@ -169,6 +169,8 @@ func _ready() -> void:
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_check = main_scene.instantiate()
 	add_child(main_check)
+	# P2:大厅逻辑已搬到 lobby_controller.gd(挂 $Lobby),断言改指控制器
+	var lobby_check = main_check.get_node("Lobby")
 	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
 	var lobby_create_col := "Lobby/LobbyFrame/LobbyDualCol/RightCol"
 	var lobby_map_panel := lobby_join_col + "/MapPreviewPanel"
@@ -202,9 +204,9 @@ func _ready() -> void:
 		"lobby hub should expose a team update action")
 	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null(lobby_create_col + "/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
-	_assert_true("Lobby can render lobby map preview", main_check.has_method("_render_lobby_map_preview"),
+	_assert_true("Lobby can render lobby map preview", lobby_check.has_method("_render_lobby_map_preview"),
 		"lobby hub should expose a refresh path for map preview and faction summary")
-	_assert_true("Lobby can render lobby seat columns", main_check.has_method("_render_lobby_seat_columns"),
+	_assert_true("Lobby can render lobby seat columns", lobby_check.has_method("_render_lobby_seat_columns"),
 		"lobby hub should expose a refresh path for map-driven seat cards")
 	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null(lobby_create_col + "/LobbyCommanderOption") != null,
 		"lobby hub should expose commander selection for room creation")
@@ -464,15 +466,15 @@ func _ready() -> void:
 		"unit with an enemy in range should show attack")
 	var room_select: OptionButton = main_check.get_node(lobby_join_col + "/RoomSelectOption")
 	var room_list: RichTextLabel = main_check.get_node(lobby_join_col + "/RoomList")
-	main_check.call("_on_room_list_response", [
+	lobby_check.call("_on_room_list_response", [
 		{"id": 101, "name": "Alpha", "status": "waiting", "map_preset": "balanced_2p_15", "capacity": 2},
 		{"id": 202, "name": "Beta", "status": "waiting", "map_preset": "balanced_3p_15", "capacity": 3},
 	], 200)
 	room_select.select(1)
-	main_check.call("_on_room_selected", 1)
+	lobby_check.call("_on_room_selected", 1)
 	_assert_true("Lobby room selection marker moves", room_list.text.contains("> #202"),
 		"selecting a different room should move the visible marker")
-	main_check.call("_on_lobby_state", {
+	lobby_check.call("_on_lobby_state", {
 		"status": "waiting",
 		"player_count": 2,
 		"players": [
@@ -486,7 +488,7 @@ func _ready() -> void:
 		"lobby state should populate removable AI players")
 	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
 		"remove-ai button should enable when there is a selected AI")
-	main_check.call("_on_lobby_presets_response", {
+	lobby_check.call("_on_lobby_presets_response", {
 		"maps": [{"id": "balanced_4p_20", "name": "balanced_4p_20", "biome": "grass", "recommended_players": 4}]
 	}, 200)
 	var seat_grid: GridContainer = main_check.get_node(lobby_create_col + "/SeatPanel/SeatGrid")
@@ -526,7 +528,7 @@ func _ready() -> void:
 	_assert_gte("Lobby 4P seat card has room for text", int(first_seat.custom_minimum_size.y), 150,
 		"4P seat cards should be tall enough that labels do not overlap")
 	main_check.set("_user_name", "Alice")
-	main_check.call("_on_lobby_seat_action_pressed", 0)
+	lobby_check.call("_on_lobby_seat_action_pressed", 0)
 	first_seat = seat_grid.get_child(0) as Panel
 	var first_occupant: Label = first_seat.get_node("SeatBox/SeatTopRow/SeatStatusBox/SeatOccupant") as Label
 	_assert_true("Lobby seat action shows occupant", first_occupant.text.contains("Alice"),
@@ -536,7 +538,7 @@ func _ready() -> void:
 		"AI replacement should expose a per-seat personality picker")
 	_assert_eq("Lobby AI personality option count", ai_personality_option.item_count, 3,
 		"per-seat AI personality picker should expose the three rules AI styles")
-	main_check.call("_on_lobby_presets_response", {
+	lobby_check.call("_on_lobby_presets_response", {
 		"maps": [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
 	}, 200)
 	_assert_eq("Lobby 2P map renders two seat cards", seat_grid.get_child_count(), 2,
@@ -602,6 +604,13 @@ func _ready() -> void:
 		"NetworkClient autoload not registered")
 	_assert_true("UserSettings autoload", _user_settings != null,
 		"UserSettings autoload not registered")
+	_assert_true("DialogManager autoload", DialogManager != null,
+		"DialogManager autoload not registered")
+	if DialogManager != null:
+		_assert_true("DialogManager.play method", DialogManager.has_method("play"),
+			"DialogManager must expose play() for global dialog API")
+		_assert_true("DialogManager.is_playing method", DialogManager.has_method("is_playing"),
+			"DialogManager must expose is_playing() for trigger dedupe")
 	if _network_client == null:
 		# Subsequent NetworkClient assertions would crash — short-circuit.
 		_fail("NetworkClient autoload missing; skipping method-shape assertions")
@@ -793,12 +802,12 @@ func _ready() -> void:
 	_assert_gte("Lobby AI commander selector lists unlocked choices", ai_commander_option.item_count, 3,
 		"AI commander selector should include auto plus unlocked commanders")
 	main_check.set("_game_id", 0)
-	main_check.call("_on_lobby_seat_ai_toggled", true, 1)
+	lobby_check.call("_on_lobby_seat_ai_toggled", true, 1)
 	ai_commander_option.select(1)
-	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
+	var ai_commanders: Dictionary = lobby_check.call("_selected_lobby_ai_commanders")
 	var first_ai_seat := -1
-	for seat_index in range(main_check.call("_selected_lobby_player_count")):
-		if bool(main_check.call("_lobby_ai_replacement_for_seat", seat_index)):
+	for seat_index in range(lobby_check.call("_selected_lobby_player_count")):
+		if bool(lobby_check.call("_lobby_ai_replacement_for_seat", seat_index)):
 			first_ai_seat = seat_index
 			break
 	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(first_ai_seat, "")), "yun",
@@ -812,7 +821,7 @@ func _ready() -> void:
 	}, 200)
 	_assert_true("Mainline commander select response updates status", commander_status.text.contains("安娜"),
 		"commander select response should show the applied commander in Chinese")
-	main_check.call("_on_audio_tracks_response", {
+	lobby_check.call("_on_audio_tracks_response", {
 		"tracks": [
 			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
 		],
@@ -950,7 +959,7 @@ func _ready() -> void:
 		"layout": ["P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
 		"initial_units": [],
 	}, 201)
-	var preset_options_after_save: Array = main_check.get("_preset_options")
+	var preset_options_after_save: Array = lobby_check.get("_preset_options")
 	_assert_true("Editor save adds custom lobby preset", _preset_options_contain(preset_options_after_save, "custom:saved_alpha"),
 		"saving an editor map should immediately expose custom:{id} in lobby presets")
 	editor_terrain_option.select(1)
@@ -1045,7 +1054,7 @@ func _ready() -> void:
 		"abandon should clear active mainline state")
 	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
 		"abandon should update status")
-	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
+	lobby_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
 	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
 	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
 		"team update response should show selected team in Chinese")

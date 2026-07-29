@@ -15,7 +15,6 @@
 ##   * :func:`on_prepare_response`        — GET /mainlines/{id}/prepare
 ##   * :func:`on_start_response`          — POST /mainlines/{id}/start
 ##   * :func:`on_auto_abandon_response`   — POST /mainlines/{id}/abandon (auto-retry path)
-##   * :func:`on_dialogue_response`       — dialogue JSON fetch
 ##   * :func:`on_advance_response`        — POST /mainlines/{id}/advance
 ##   * :func:`on_next_battle_response`    — POST /mainlines/{id}/next-battle (delegates to start)
 ##   * :func:`on_abandon_response`        — POST /mainlines/{id}/abandon (user path)
@@ -148,15 +147,6 @@ static func on_auto_abandon_response(
 		Callable(host, "_on_mainline_start_response"),
 		true,
 	)
-
-
-# ============================================================
-# GET /mainlines/dialogue?path=...
-# ============================================================
-
-
-static func on_dialogue_response(host: Node, _session: MainlineSession, body: Variant, _code: int = 0) -> void:
-	host.call("_play_dialogue_scenes", body)
 
 
 # ============================================================

@@ -81,9 +81,11 @@ func _test_lobby_bottom_bar_restores_to_bottom_right(main: Node) -> void:
 
 	main.call("_show_view", "lobby")
 	await get_tree().process_frame
-	main.call("_layout_lobby_in_room")
+	# P2:大厅布局已搬到 lobby_controller.gd(挂 $Lobby)
+	var lobby: Node = main.get_node("Lobby")
+	lobby.call("_layout_lobby_in_room")
 	await get_tree().process_frame
-	main.call("_show_lobby_choose")
+	lobby.call("_show_lobby_choose")
 	await get_tree().process_frame
 
 	_assert_eq("Lobby BottomBar anchor_left", bottom_bar.anchor_left, 1.0,
