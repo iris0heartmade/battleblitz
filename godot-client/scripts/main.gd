@@ -2996,31 +2996,31 @@ func _advance_dialog() -> void:
 	# 隐藏选项层
 	if _dialog_choice_container != null and is_instance_valid(_dialog_choice_container):
 		_dialog_choice_container.visible = false
-	# typewriter:full text 缓存,visible 渐进加
+	# Typewriter: cache the source text and write every step back into the label.
+	# The old callback only appended to _dialog_visible_text, leaving the UI blank
+	# until the tween completed (or forever if it was interrupted).
 	var full_text: String = str(entry.get("text", ""))
 	_dialog_full_text = full_text
 	_dialog_visible_text = ""
-	dialog_text.text = ""
+	dialog_text.text = full_text if full_text.is_empty() else full_text.left(1)
 	# kill 旧 tween
 	if _dialog_type_tween != null and _dialog_type_tween.is_running():
 		_dialog_type_tween.kill()
 	var per_char: float = 0.03
-	# 每 N 个字符加长
 	var n: int = full_text.length()
-	_dialog_type_tween = create_tween()
-	for i in n:
-		var ch: String = full_text.substr(i, 1)
-		_dialog_visible_text += ch
-		dialog_text.text = _dialog_visible_text
-	# 用 set_tween + interval 的简化:每 0.03s 显一字符
-	_dialog_type_tween.kill()
+	if n == 0:
+		_on_dialog_typing_done()
+		return
+	_dialog_visible_text = full_text.left(1)
 	_dialog_type_tween = create_tween()
 	_dialog_type_tween.set_trans(Tween.TRANS_LINEAR)
-	for i in n:
-		var ch2: String = full_text.substr(i, 1)
-		_dialog_type_tween.tween_callback(func(c=ch2): _dialog_visible_text += c).set_delay(float(i) * per_char)
+	for i in range(1, n):
+		var ch: String = full_text.substr(i, 1)
+		_dialog_type_tween.tween_callback(func(character := ch):
+			_dialog_visible_text += character
+			dialog_text.text = _dialog_visible_text
+		).set_delay(float(i) * per_char)
 	_dialog_type_tween.tween_callback(_on_dialog_typing_done).set_delay(float(n) * per_char + 0.05)
-	dialog_text.text = ""  # typewriter 在 callback 里推进
 
 
 func _on_dialog_typing_done() -> void:
