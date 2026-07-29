@@ -2881,6 +2881,7 @@ func _render_dialog_choice(entry: Dictionary) -> void:
 		dialog_name.remove_theme_color_override("font_color")
 	_set_dialog_portrait("")
 	dialog_portrait_panel.visible = false
+	_refresh_dialog_layout(false, question.length(), true)
 	dialog_text.bbcode_enabled = true
 	dialog_text.text = question
 	dialog_text.visible = false
@@ -2990,6 +2991,7 @@ func _advance_dialog() -> void:
 	elif dialog_name.has_theme_color_override("font_color"):
 		dialog_name.remove_theme_color_override("font_color")
 	_set_dialog_portrait(speaker)
+	_refresh_dialog_layout(dialog_portrait_panel.visible, str(entry.get("text", "")).length())
 	if dialog_continue_btn != null and is_instance_valid(dialog_continue_btn):
 		dialog_continue_btn.visible = true
 	dialog_text.bbcode_enabled = true
@@ -3026,6 +3028,27 @@ func _advance_dialog() -> void:
 func _on_dialog_typing_done() -> void:
 	# 打字结束 → show 最终 text
 	dialog_text.text = _dialog_full_text
+
+
+func _refresh_dialog_layout(has_portrait: bool, text_length: int, is_choice: bool = false) -> void:
+	# A narrator line should be a compact lower-third, while character dialogue
+	# needs room for a portrait and choices need room for their buttons. Containers
+	# cannot shrink their fixed-position parent panel by themselves.
+	if dialog_panel == null or dialog_body == null:
+		return
+	var height := 176.0
+	if is_choice:
+		height = 248.0
+	elif has_portrait:
+		height = 244.0
+	elif text_length > 42:
+		height = 206.0
+	dialog_panel.offset_top = -height - 20.0
+	dialog_panel.offset_bottom = -20.0
+	dialog_body.offset_top = 50.0
+	dialog_body.offset_bottom = -58.0
+	if dialog_portrait_panel != null and is_instance_valid(dialog_portrait_panel):
+		dialog_portrait_panel.custom_minimum_size = Vector2(92, 88) if has_portrait else Vector2.ZERO
 
 
 func _ensure_dialog_choice_container() -> void:

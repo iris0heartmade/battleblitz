@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -12,19 +12,6 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_heart_24.png" id="10_stat_heart"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_sword_24.png" id="11_stat_sword"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/stat_shield_24.png" id="12_stat_shield"]
-[ext_resource type="Texture2D" path="res://assets/ui/battle_hud_frame_v1.png" id="13_battle_frame"]
-[ext_resource type="Texture2D" path="res://assets/ui/battle_side_panel_translucent_v1.png" id="14_battle_side_frame"]
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_hud_top"]
-atlas = ExtResource("13_battle_frame")
-region = Rect2(0, 0, 1672, 180)
-filter_clip = true
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_panel_top"]
-atlas = ExtResource("14_battle_side_frame")
-region = Rect2(0, 36, 1024, 190)
-filter_clip = true
-
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 
@@ -1661,19 +1648,6 @@ offset_right = -12.0
 offset_bottom = 465.0
 mouse_filter = 0
 
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/InfoPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -156.0
-offset_top = 0.0
-offset_right = 156.0
-offset_bottom = 58.0
-texture = SubResource("AtlasTexture_panel_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.78)
-mouse_filter = 2
-
 [node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
 offset_left = 18.0
 offset_top = 10.0
@@ -1794,19 +1768,6 @@ offset_right = 204.0
 offset_bottom = 282.0
 mouse_filter = 2
 
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/ActionBubble"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -84.0
-offset_top = 0.0
-offset_right = 84.0
-offset_bottom = 31.0
-texture = SubResource("AtlasTexture_panel_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.7)
-mouse_filter = 2
-
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1852,19 +1813,6 @@ offset_top = -168.0
 offset_right = 285.0
 offset_bottom = 168.0
 mouse_filter = 0
-
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/AttackConfirmPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -250.0
-offset_top = 0.0
-offset_right = 250.0
-offset_bottom = 54.0
-texture = SubResource("AtlasTexture_hud_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.82)
-mouse_filter = 2
 
 [node name="Title" type="Label" parent="GameView/HUD/AttackConfirmPanel"]
 anchor_right = 1.0
@@ -1919,19 +1867,6 @@ offset_top = -270.0
 offset_right = 390.0
 offset_bottom = 270.0
 mouse_filter = 0
-
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/WarReportPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -350.0
-offset_top = 0.0
-offset_right = 350.0
-offset_bottom = 76.0
-texture = SubResource("AtlasTexture_hud_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.82)
-mouse_filter = 2
 
 [node name="AutoSaveToast" type="Panel" parent="GameView/HUD"]
 visible = false
@@ -2242,29 +2177,16 @@ anchor_top = 1.0
 anchor_right = 0.82
 anchor_bottom = 1.0
 offset_left = 0.0
-offset_top = -300.0
+offset_top = -196.0
 offset_right = 0.0
-offset_bottom = -24.0
+offset_bottom = -20.0
 mouse_filter = 0
-
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/DialogPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -450.0
-offset_top = 0.0
-offset_right = 450.0
-offset_bottom = 97.0
-texture = SubResource("AtlasTexture_hud_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.9)
-mouse_filter = 2
 
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
 offset_left = 24.0
-offset_top = 68.0
+offset_top = 14.0
 offset_right = -24.0
-offset_bottom = 96.0
+offset_bottom = 38.0
 text = "👤 指挥官 艾莉卡"
 theme_override_font_sizes/font_size = 20
 
@@ -2272,13 +2194,13 @@ theme_override_font_sizes/font_size = 20
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 102.0
+offset_top = 50.0
 offset_right = -24.0
 offset_bottom = -66.0
 theme_override_constants/separation = 14
 
 [node name="Portrait" type="Panel" parent="GameView/HUD/DialogPanel/DialogBody"]
-custom_minimum_size = Vector2(118, 116)
+custom_minimum_size = Vector2(92, 88)
 clip_contents = true
 
 [node name="PortraitLabel" type="Label" parent="GameView/HUD/DialogPanel/DialogBody/Portrait"]
@@ -2301,12 +2223,12 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -180.0
-offset_top = -66.0
-offset_right = -24.0
-offset_bottom = -18.0
+offset_left = -168.0
+offset_top = -50.0
+offset_right = -28.0
+offset_bottom = -14.0
 text = "继续 ▶"
-custom_minimum_size = Vector2(150, 48)
+custom_minimum_size = Vector2(140, 36)
 
 ; --- 教程气泡(浮在右下角)---
 [node name="TutorialBubble" type="Panel" parent="GameView/HUD"]
@@ -2364,19 +2286,6 @@ offset_top = -300.0
 offset_right = 450.0
 offset_bottom = 300.0
 mouse_filter = 0
-
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/BattleResultPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -400.0
-offset_top = 0.0
-offset_right = 400.0
-offset_bottom = 86.0
-texture = SubResource("AtlasTexture_hud_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.82)
-mouse_filter = 2
 
 [node name="Header" type="Label" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0
@@ -2454,19 +2363,6 @@ offset_top = -270.0
 offset_right = 360.0
 offset_bottom = 270.0
 visible = false
-
-[node name="ArtHeader" type="TextureRect" parent="GameView/HUD/RecruitPanel"]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -320.0
-offset_top = 0.0
-offset_right = 320.0
-offset_bottom = 69.0
-texture = SubResource("AtlasTexture_hud_top")
-expand_mode = 1
-stretch_mode = 5
-modulate = Color(1, 1, 1, 0.82)
-mouse_filter = 2
 
 [node name="Header" type="Label" parent="GameView/HUD/RecruitPanel"]
 anchor_right = 1.0
