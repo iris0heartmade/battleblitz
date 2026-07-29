@@ -56,8 +56,8 @@ func _ready() -> void:
 		else:
 			blue_units.append(mock_unit)
 	GameState.players = [
-		{"id": 1, "color": "red", "units": red_units},
-		{"id": 2, "color": "blue", "units": blue_units},
+		{"id": 1, "color": "red", "user_name": "云", "gold": 1000, "units": red_units},
+		{"id": 2, "color": "blue", "user_name": "边境守军", "gold": 800, "units": blue_units},
 	]
 	GameState.current_player_id = 1
 	GameState.local_player_id = 1
@@ -66,6 +66,7 @@ func _ready() -> void:
 		{"player_id": 2, "color": "blue", "commander_id": null, "meter": 0, "threshold": 20},
 	]
 	main._refresh_co_roster()
+	main._refresh_commander_section()
 	main.turn_badge_label.text = "回合 1"
 	main.phase_badge_label.text = "● 我方阶段"
 	main.current_player_label.text = "→ 云"

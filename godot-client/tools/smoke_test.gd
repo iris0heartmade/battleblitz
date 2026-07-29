@@ -670,8 +670,8 @@ func _ready() -> void:
 		"production inspection copy must not expose backend field names")
 	var inspect_card: Panel = main_check.get_node("GameView/HUD/InfoPanel")
 	var viewport_height: float = get_viewport().get_visible_rect().size.y
-	_assert_true("Inspect card is compact", inspect_card.size.x <= 460.0 and inspect_card.size.y <= viewport_height * 0.7,
-		"unit inspection may grow for readable stats but must remain a bounded tactical card")
+	_assert_true("Inspect card stays inside the right HUD wing", inspect_card.size.x <= 460.0 and inspect_card.size.y <= viewport_height * 0.84,
+		"unit inspection may use the full right wing but must stop above the bottom action rail")
 	_assert_true("Hero portrait is integrated with inspection",
 		main_check.hero_portrait_panel.get_parent() == inspect_card,
 		"hero identity and unit stats must share one visual card instead of opposite screen edges")

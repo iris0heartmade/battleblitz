@@ -89,6 +89,8 @@ var _recruit_mode_unit_id: int = -1
 # CreateFormPanel(自由模式专用)— 房间设置表单
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
+@onready var left_hud_wing: ColorRect = $GameView/HUD/LeftHudWing
+@onready var right_hud_wing: ColorRect = $GameView/HUD/RightHudWing
 @onready var commander_title: Label = $GameView/HUD/InfoPanel/CommanderTitle
 @onready var commander_name: RichTextLabel = $GameView/HUD/InfoPanel/CommanderName
 # M5.1 CO Roster — 顶部全玩家头像 + meter + 发动按钮
@@ -96,6 +98,7 @@ var _recruit_mode_unit_id: int = -1
 @onready var commander_co_bar: ProgressBar = $GameView/HUD/InfoPanel/CommanderCOBar
 @onready var commander_co_label: Label = $GameView/HUD/InfoPanel/CommanderCOBar/ValueLabel
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
+@onready var unit_info_subtitle: Label = $GameView/HUD/InfoPanel/UnitInfoSubtitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
 # T:#18 — 英雄立绘与单位详情使用同一张检视卡，避免视线横跨整屏。
@@ -490,7 +493,7 @@ func _ready() -> void:
 	# V2 第 4 轮:行动气泡 5 按钮
 	for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
 		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 16)
+			MenuTheme.apply_button_theme(btn, roundi(17 * _hud_density_scale()))
 	move_btn.pressed.connect(_on_move_pressed)
 	attack_btn.pressed.connect(_on_attack_pressed)
 	skill_btn.pressed.connect(_on_skill_pressed)
@@ -1376,6 +1379,8 @@ func _refresh_co_roster() -> void:
 	var states: Array = GameState.co_states if GameState != null else []
 	if states.is_empty():
 		return
+	var compact := states.size() > 2
+	var density := _hud_density_scale()
 	for c in states:
 		if not (c is Dictionary):
 			continue
@@ -1392,7 +1397,7 @@ func _refresh_co_roster() -> void:
 		var is_local: bool = pid == _player_id
 		# Panel 容器(单行:HBox)
 		var row := Panel.new()
-		row.custom_minimum_size = Vector2(270, 38)
+		row.custom_minimum_size = Vector2(115 if compact else 238, 38)
 		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		co_roster.add_child(row)
 		var row_inner := HBoxContainer.new()
@@ -1415,30 +1420,40 @@ func _refresh_co_roster() -> void:
 		if side_name == "":
 			side_name = "阵营"
 		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "未任命"
-		lbl.text = "%s · %s" % [side_name, commander_name_text]
-		lbl.custom_minimum_size = Vector2(112, 0)
+		lbl.text = side_name if compact else "%s · %s" % [side_name, commander_name_text]
+		lbl.custom_minimum_size = Vector2(40 if compact else 92, 0)
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_font_size_override("font_size", roundi((12 if compact else 14) * density))
 		row_inner.add_child(lbl)
 		# 3) ProgressBar(meter / threshold)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(72, 14)
+		bar.custom_minimum_size = Vector2(30 if compact else 48, 14)
 		bar.value = pct
 		bar.show_percentage = false
 		bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+		var bar_bg := StyleBoxFlat.new()
+		bar_bg.bg_color = Color(0.025, 0.05, 0.075, 0.96)
+		bar_bg.border_color = Color(0.31, 0.27, 0.18, 1.0)
+		bar_bg.set_border_width_all(1)
+		bar_bg.set_corner_radius_all(3)
+		var bar_fill := StyleBoxFlat.new()
+		bar_fill.bg_color = Config.player_color(color_name).lightened(0.12)
+		bar_fill.set_corner_radius_all(3)
+		bar.add_theme_stylebox_override("background", bar_bg)
+		bar.add_theme_stylebox_override("fill", bar_fill)
 		row_inner.add_child(bar)
 		# 4) 状态标签 / 发动按钮
 		if is_active:
 			var active_lbl := Label.new()
 			active_lbl.text = "⚡ 生效中"
 			active_lbl.add_theme_color_override("font_color", Color(0.96, 0.78, 0.18))
-			active_lbl.add_theme_font_size_override("font_size", 11)
+			active_lbl.add_theme_font_size_override("font_size", roundi(11 * density))
 			row_inner.add_child(active_lbl)
 		elif can_fire and is_local:
 			var btn := Button.new()
 			btn.text = "发动"
 			btn.custom_minimum_size = Vector2(36, 20)
-			btn.add_theme_font_size_override("font_size", 10)
+			btn.add_theme_font_size_override("font_size", roundi(10 * density))
 			btn.tooltip_text = "激活指挥官技(消耗全部能量)"
 			# 用 Callable.bind 把 pid 绑到 pressed 信号
 			btn.pressed.connect(_on_co_power_pressed.bind(pid))
@@ -1446,7 +1461,7 @@ func _refresh_co_roster() -> void:
 		else:
 			var meter_lbl := Label.new()
 			meter_lbl.text = "%d/%d" % [meter, threshold]
-			meter_lbl.add_theme_font_size_override("font_size", 12)
+			meter_lbl.add_theme_font_size_override("font_size", roundi((10 if compact else 12) * density))
 			row_inner.add_child(meter_lbl)
 
 
@@ -1514,7 +1529,7 @@ func _refresh_commander_section() -> void:
 		return
 	var cur_pid = GameState.current_player_id
 	if cur_pid == null:
-		commander_name.text = "—"
+		commander_name.text = "[color=#a89878]未任命 · 等待回合同步[/color]"
 		if commander_co_bar != null and is_instance_valid(commander_co_bar):
 			commander_co_bar.value = 0.0
 		if commander_co_label != null and is_instance_valid(commander_co_label):
@@ -3247,31 +3262,49 @@ func _apply_gba_theme() -> void:
 	sb_popup.content_margin_top = MenuTheme.PAD
 	sb_popup.content_margin_bottom = MenuTheme.PAD
 	war_report_panel.add_theme_stylebox_override("panel", sb_popup)
-	info_panel.add_theme_stylebox_override("panel", sb_popup)
+	# InfoPanel is content-only; RightHudWing supplies its background/frame.
+	info_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+
+
+func _hud_density_scale() -> float:
+	# The project uses a 1920x1080 logical canvas. Without compensation, a
+	# 1280-wide window shrinks 16 px copy to roughly 10.7 physical pixels.
+	var window_width := float(DisplayServer.window_get_size().x)
+	if window_width <= 0.0:
+		return 1.0
+	return clampf(1920.0 / window_width, 1.0, 1.4)
 
 
 func _apply_hud_theme() -> void:
+	var density := _hud_density_scale()
+	var body_density := minf(density, 1.25)
 	# Do not reserve a large opaque column before the player selects a unit.
 	# The tactical board remains the primary surface until inspection is needed.
 	if info_panel != null and is_instance_valid(info_panel):
 		info_panel.visible = false
+		# The right wing owns the textured background and ornamental border.
+		# Keep the content panel transparent so it cannot cover that artwork.
+		info_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	# Compact HUD plaques are scene-authored NinePatch assets. Do not append
 	# procedural ReferenceRects here: this method runs more than once and the
 	# duplicate lines obscure the production artwork.
-	var pill_size := 14
+	var pill_size := roundi(14 * density)
 	for lbl in [turn_badge_label, phase_badge_label, current_player_label, gold_label]:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_font_size_override("font_size", pill_size)
 			lbl.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
 	# V2 第 3 轮:InfoPanel 主题(当前指挥官 + 单位详情 + 玩家列表)
 	if commander_title != null and is_instance_valid(commander_title):
-		commander_title.add_theme_font_size_override("font_size", 16)
+		commander_title.add_theme_font_size_override("font_size", roundi(16 * density))
 		commander_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.add_theme_font_size_override("font_size", 14)
+		unit_info_title.add_theme_font_size_override("font_size", roundi(20 * density))
 		unit_info_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if unit_info_subtitle != null and is_instance_valid(unit_info_subtitle):
+		unit_info_subtitle.add_theme_font_size_override("font_size", roundi(14 * body_density))
+		unit_info_subtitle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	if commander_name != null and is_instance_valid(commander_name):
-		commander_name.add_theme_font_size_override("normal_font_size", 13)
+		commander_name.add_theme_font_size_override("normal_font_size", roundi(15 * body_density))
 		commander_name.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	if commander_co_bar != null and is_instance_valid(commander_co_bar):
 		var sb_bg := StyleBoxFlat.new()
@@ -3289,7 +3322,7 @@ func _apply_hud_theme() -> void:
 		commander_co_bar.add_theme_stylebox_override("background", sb_bg)
 		commander_co_bar.add_theme_stylebox_override("fill", sb_fg)
 	if players_list != null and is_instance_valid(players_list):
-		players_list.add_theme_font_size_override("normal_font_size", 13)
+		players_list.add_theme_font_size_override("normal_font_size", roundi(13 * body_density))
 		players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	# The compact portrait card starts hidden and is shown by unit selection for
 	# heroes only. Do not permanently disable it here: this theme pass also runs
@@ -3297,7 +3330,7 @@ func _apply_hud_theme() -> void:
 	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel) and _unit_info_portrait_tex == null:
 		hero_portrait_panel.visible = false
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.add_theme_font_size_override("normal_font_size", 15)
+		unit_info.add_theme_font_size_override("normal_font_size", roundi(16 * body_density))
 		unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
 		hero_portrait_caption.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
@@ -3315,6 +3348,28 @@ func _apply_hud_theme() -> void:
 		sb_bubble.content_margin_top = 6
 		sb_bubble.content_margin_bottom = 6
 		action_bubble.add_theme_stylebox_override("panel", sb_bubble)
+		for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
+			if btn != null and is_instance_valid(btn):
+				MenuTheme.apply_button_theme(btn, roundi(17 * density))
+				btn.custom_minimum_size.y = 48.0 * density
+				var focus_style := btn.get_theme_stylebox("normal").duplicate() as StyleBoxFlat
+				focus_style.border_color = Color("#ffe08a")
+				focus_style.set_border_width_all(3)
+				focus_style.shadow_color = Color(1.0, 0.82, 0.36, 0.5)
+				focus_style.shadow_size = 5
+				btn.add_theme_stylebox_override("focus", focus_style)
+		if cancel_btn != null and is_instance_valid(cancel_btn):
+			MenuTheme.apply_button_theme(cancel_btn, roundi(15 * density))
+			cancel_btn.custom_minimum_size.y = 42.0 * density
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		var heading: Label = left_hud_wing.get_node_or_null("Heading") as Label
+		var hint: Label = left_hud_wing.get_node_or_null("Hint") as Label
+		if heading != null:
+			heading.add_theme_font_size_override("font_size", roundi(18 * density))
+		if hint != null:
+			hint.add_theme_font_size_override("font_size", roundi(15 * density))
+	if action_title != null and is_instance_valid(action_title):
+		action_title.add_theme_font_size_override("font_size", roundi(17 * density))
 	# V2 第 5 轮:战报浮层主题(深绿底 + 烫金粗边 + Header/Close 烫金)
 	var sb_war := StyleBoxFlat.new()
 	sb_war.bg_color = MenuTheme.C_BG_PANEL
@@ -3511,6 +3566,8 @@ func _skill_cn(skill_id: String) -> String:
 		"double_strike":
 			return "连击"
 		"arcane_strike":
+			return "奥术冲击"
+		"arcane_blast":
 			return "奥术冲击"
 		_:
 			return skill_id
@@ -5614,7 +5671,7 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 	# The header occupies 42 px; the action list keeps 12 px side/bottom padding.
 	# Derive height from each visible button so the shorter cancel row never
 	# gets pushed into the ornamental bottom border.
-	var bubble_size := Vector2(176.0, 70.0 + actions_height + float(max(0, visible_actions - 1)) * 4.0)
+	var bubble_size := Vector2(300.0, 94.0 + actions_height + float(max(0, visible_actions - 1)) * 4.0)
 	action_bubble.size = bubble_size
 	var viewport_safe := Rect2(Vector2(14.0, 108.0), Vector2(vp_size.x - 28.0, vp_size.y - 196.0))
 	var safe_rect := viewport_safe
@@ -5631,6 +5688,19 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 	if board_screen.size.x > 0.0:
 		raw_candidates["left_gutter"] = Vector2(board_screen.position.x - bubble_size.x - 12.0, viewport_pos.y - bubble_size.y * 0.5)
 		raw_candidates["right_gutter"] = Vector2(board_screen.end.x + 12.0, viewport_pos.y - bubble_size.y * 0.5)
+	# On wide layouts the tactical menu belongs to the left HUD wing rather than
+	# floating over the map. This creates a stable reading path and preserves the
+	# selected unit and movement grid underneath.
+	if left_hud_wing != null and is_instance_valid(left_hud_wing) and left_hud_wing.size.x >= bubble_size.x + 40.0:
+		raw_candidates["left_gutter"] = Vector2(
+			left_hud_wing.position.x + left_hud_wing.size.x - bubble_size.x - 20.0,
+			left_hud_wing.position.y + 150.0
+		)
+	if right_hud_wing != null and is_instance_valid(right_hud_wing) and right_hud_wing.size.x >= bubble_size.x + 40.0:
+		raw_candidates["right_gutter"] = Vector2(
+			right_hud_wing.position.x + 20.0,
+			viewport_pos.y - bubble_size.y * 0.5
+		)
 	var best_direction := "right"
 	var pos: Vector2 = raw_candidates[best_direction]
 	var best_score := INF
@@ -5650,7 +5720,7 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 		elif direction == "above" or direction == "below":
 			score += 14.0
 		elif direction.ends_with("_gutter"):
-			score += 60.0
+			score -= 80.0
 		for other in _all_units_including_self():
 			var other_tile := Vector2i(int(other.get("x", 0)), int(other.get("y", 0)))
 			var other_screen: Vector2 = board.tile_to_screen(other_tile) if board != null and board.has_method("tile_to_screen") else Vector2.ZERO
@@ -5666,6 +5736,7 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 			pos = candidate_pos
 	action_bubble.position = pos
 	if action_pointer != null and is_instance_valid(action_pointer):
+		action_pointer.visible = not best_direction.ends_with("_gutter")
 		action_pointer.rotation = 0.0
 		action_pointer.scale = Vector2.ONE
 		match best_direction:
@@ -5681,10 +5752,20 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 			"right_gutter", "right":
 				action_pointer.position = Vector2(-12.0, bubble_size.y * 0.5 - 10.0)
 	action_bubble.visible = true
+	# Keyboard/gamepad users receive an explicit default action. The marker is
+	# deliberately non-color-only and remains readable when focus glow is subtle.
+	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
+		if button != null and is_instance_valid(button) and button.visible and not button.disabled:
+			button.text = "▶ %s" % button.text
+			button.grab_focus()
+			break
 
 
 func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 	var ud: Dictionary = GameState.get_unit(unit_id) if GameState != null else {}
+	attack_btn.text = "攻击"
+	wait_btn.text = "待命"
+	claim_btn.text = "占领"
 	var has_unit := not ud.is_empty()
 	var can_attack := has_unit and _compute_attack_targets(ud).size() > 0 and not bool(ud.get("has_acted", false))
 	var active_skill := _available_active_skill(ud) if has_unit and not bool(ud.get("has_acted", false)) else ""
@@ -6293,20 +6374,26 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	_set_unit_info_portrait(hero_id)
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_left = 184.0 if hero_id != "" and hero_portrait_panel.visible else 44.0
+		unit_info.offset_left = 172.0 if hero_id != "" and hero_portrait_panel.visible else 44.0
 	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
 		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
+		unit_info_title.text = name
+	if unit_info_subtitle != null and is_instance_valid(unit_info_subtitle):
+		var profession := _unit_type_cn(str(ud.get("unit_type", "unit")))
+		var rank := "英雄" if hero_id != "" else "部队"
+		unit_info_subtitle.text = "%s · %s Lv.%d · %s" % [profession, rank, lvl, "未行动" if can_act else "已行动"]
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
+	var compact_hud := DisplayServer.window_get_size().x <= 1366
+	var stat_gap := " · " if compact_hud else "       "
 	var lines: Array = [
-		"[color=#a89878]位置 (%d, %d)[/color]   %s" % [pos.x, pos.y, owner_str],
-		("[color=#f4e8c1]生命[/color] %d/%d      [color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
-		"[color=#c9a14a]攻击[/color] %-3d       [color=#c9a14a]防御[/color] %d" % [atk, def],
-		"[color=#c9a14a]魔攻[/color] %-3d       [color=#c9a14a]魔防[/color] %d" % [matk, mdef],
-		"[color=#a89878]移动[/color] %-3d       [color=#a89878]射程[/color] %d-%d" % [mov, range_min + 1, range_max],
+		"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
+		("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
+		"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
+		"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
+		"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
 		"[color=#a89878]士气[/color] %d/3" % morale,
 		"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
 	]
@@ -6318,7 +6405,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	# 1) 地形防御加成(单位所站格子的 TERRAIN_DEF_BONUS)
 	var tile_d: Dictionary = GameState.get_tile(int(pos.x), int(pos.y)) if GameState != null else {}
 	var terrain_v: Variant = tile_d.get("terrain", "")
-	var terrain_name: String = "" if terrain_v == null else str(terrain_v)
+	var terrain_name: String = "plain" if terrain_v == null or str(terrain_v) == "" else str(terrain_v)
 	if terrain_name != "":
 		var def_bonus: int = int(Config.TERRAIN_DEF_BONUS.get(terrain_name, 0))
 		# castle_floor / castle_wall 等 subtype 也走同一张表
@@ -6327,10 +6414,12 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		if subtype != "" and Config.TERRAIN_DEF_BONUS.has(subtype):
 			def_bonus = int(Config.TERRAIN_DEF_BONUS.get(subtype, 0))
 		var terrain_cn := _terrain_cn(terrain_name, subtype)
-		if def_bonus > 0:
-			buffs.append("[color=#7ec97e]🌲 %s[/color] +%d 防御" % [terrain_cn, def_bonus])
-		elif terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
-			buffs.append("[color=#a89878]🏰 %s (无地形加成,但可驻守/产兵)[/color]" % terrain_cn)
+		var move_cost_x2: int = int(Config.TERRAIN_MOVE_COST.get(terrain_name, 9999))
+		var move_cost_text := "不可通行" if move_cost_x2 >= 9999 else ("%.1f" % (float(move_cost_x2) / 2.0))
+		var bonus_color := "#7ec97e" if def_bonus > 0 else "#c8baa0"
+		buffs.append("[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d" % [bonus_color, terrain_cn, move_cost_text, def_bonus])
+		if terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
+			buffs.append("[color=#a89878]驻守设施 · 可占领或执行设施行动[/color]")
 	# 2) 士气加成(MORALE_ATK_PER_STAR / MORALE_DEF_PER_STAR)
 	if morale > 0:
 		var atk_pct: int = int(round(morale * Config.MORALE_ATK_PER_STAR * 100))
