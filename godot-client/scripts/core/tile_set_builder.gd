@@ -205,10 +205,10 @@ static func _build_fe8_atlas_source(ts: TileSet) -> TileSetAtlasSource:
 	var scaled_size := Vector2i(Config.FE8_ATLAS_SIZE.x * (TILE_SIZE.x / Config.FE8_TILE_SIZE.x),
 		Config.FE8_ATLAS_SIZE.y * (TILE_SIZE.y / Config.FE8_TILE_SIZE.y))
 	# 512 * (48 / 16) = 1536. In Godot 4, `Image.resize()` is in-place
-	# and returns void. Pass `0` for INTERPOLATION_NEAREST (the integer
-	# constant, which the static analyser can't see via `Image.`).
+	# and returns void. Use the named enum constant (same spelling as
+	# the other resize call further down in this file).
 	var src_dup: Image = img.duplicate()
-	src_dup.resize(scaled_size.x, scaled_size.y, 0)
+	src_dup.resize(scaled_size.x, scaled_size.y, Image.INTERPOLATE_NEAREST)
 	var tex := ImageTexture.create_from_image(src_dup)
 	var source := TileSetAtlasSource.new()
 	source.texture = tex

@@ -194,7 +194,9 @@ static func hover_soft_glow(sb: StyleBoxFlat) -> void:
 	sb.shadow_size = 6
 
 static func press_dim(sb: StyleBoxFlat) -> void:
-	pass
+	# Dim the background ~10% on press for tactile feedback. Mirrors
+	# the hover glow darkening but without the shadow halo.
+	sb.bg_color = sb.bg_color.darkened(0.1)
 
 ## 普通按钮,但用 section header 风格(小尺寸、淡背景)— 用于"返回/取消"。
 static func apply_secondary_button_theme(btn: Button, font_size: int = 14) -> void:
