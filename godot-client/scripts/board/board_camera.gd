@@ -3,12 +3,16 @@ class_name BoardCamera
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const _FIT_MARGIN := 16.0
-# Fit the board into the playable area and reserve the right-side info panel.
+const _UI_TOP_SAFE_PX := 112.0
+const _UI_BOTTOM_SAFE_PX := 16.0
+# The inspect card is opt-in. The normal battlefield must not reserve an
+# invisible sidebar, while a visible card gets a modest right-side safe area.
 const _UI_LEFT_FRACTION := 0.00
-const _UI_RIGHT_FRACTION := 0.45
+const _UI_RIGHT_FRACTION := 0.27
 
 var _metrics = null
 var _user_positioned: bool = false
+var _inspect_card_visible: bool = false
 
 
 func _ready() -> void:
@@ -50,6 +54,14 @@ func mark_user_positioned() -> void:
 	_user_positioned = true
 
 
+func set_inspect_card_visible(is_visible: bool) -> void:
+	if _inspect_card_visible == is_visible:
+		return
+	_inspect_card_visible = is_visible
+	if not _user_positioned:
+		_refresh_from_metrics(false)
+
+
 
 func _refresh_from_metrics(position_only: bool = false) -> void:
 	if _metrics == null:
@@ -66,14 +78,15 @@ func _refresh_from_metrics(position_only: bool = false) -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	# V2 第 3 轮:棋盘 fit 中央剩余空间(减去左 30% info panel + 右 22% HUD 留白)
-	var usable_w: float = viewport_size.x * (1.0 - _UI_LEFT_FRACTION - _UI_RIGHT_FRACTION)
-	var usable_h: float = viewport_size.y
+	var reserved_right: float = _UI_RIGHT_FRACTION if _inspect_card_visible else 0.0
+	var usable_w: float = viewport_size.x * (1.0 - _UI_LEFT_FRACTION - reserved_right)
+	var usable_h: float = max(1.0, viewport_size.y - _UI_TOP_SAFE_PX - _UI_BOTTOM_SAFE_PX)
 	# Board 实际可视区中心 = viewport 中心 + 偏移(因为棋盘偏向 viewport 右侧)
 	var ui_left_px: float = viewport_size.x * _UI_LEFT_FRACTION
 	var center_offset_x: float = (ui_left_px + usable_w * 0.5) - viewport_size.x * 0.5
+	var center_offset_y: float = (_UI_TOP_SAFE_PX + usable_h * 0.5) - viewport_size.y * 0.5
 	var board_center := _board_center_for(_metrics, board_rect)
-	position = Vector2(board_center.x - center_offset_x, board_center.y)
+	position = Vector2(board_center.x - center_offset_x, board_center.y - center_offset_y)
 
 	var zoom_x: float = max(0.01, (usable_w - _FIT_MARGIN) / board_rect.size.x)
 	var zoom_y: float = max(0.01, (usable_h - _FIT_MARGIN) / board_rect.size.y)

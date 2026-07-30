@@ -19,6 +19,9 @@ func _await_frames(n: int) -> void:
 
 
 func _ready() -> void:
+	NetworkClient.api_error.connect(func(method: String, path: String, error: String, code: int):
+		print("[mainline_flow] API_ERROR %s %s code=%d error=%s" % [method, path, code, error])
+	)
 	DirAccess.make_dir_recursive_absolute(_OUT_DIR)
 	await _await_frames(6)
 	var main_app: Node = get_tree().current_scene
@@ -52,6 +55,18 @@ func _ready() -> void:
 	var ml_title: Label = mainline_view.get_node_or_null("MLFrame/MLTitle")
 	var ml_list_container: VBoxContainer = mainline_view.get_node_or_null("MLFrame/MLListContainer")
 	var ml_commander_status: Label = mainline_view.get_node_or_null("MLFrame/CommanderStatus")
+	if ml_title == null or ml_title.text != "主线存档":
+		printerr("[mainline_flow] live /saves response did not complete: %s" % (ml_title.text if ml_title else "missing title"))
+		get_tree().quit(1)
+		return
+	if ml_list_container == null or ml_list_container.get_child_count() != 3:
+		printerr("[mainline_flow] live mainline entry did not render three slots")
+		get_tree().quit(1)
+		return
+	if ml_commander_status != null and ml_commander_status.is_visible_in_tree():
+		printerr("[mainline_flow] commander controls must stay hidden on save-slot entry")
+		get_tree().quit(1)
+		return
 	_save("03_ml_loaded.png")
 	# #16 — MLSlotsContainer 删了(三槽 UI 合并到 saves_view);null 防御
 	print("[mainline_flow] 3: after list_*, title=%s ml_list_children=%d commander_status=%s" % [

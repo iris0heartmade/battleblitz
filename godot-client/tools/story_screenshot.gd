@@ -7,11 +7,17 @@ const _OUT_PATH := "user://story_screenshot.png"
 func _ready() -> void:
 	for i in 3:
 		await RenderingServer.frame_post_draw
+	# Main performs asynchronous startup work and may restore its default view
+	# after this wrapper's first frames. Let that settle before forcing the
+	# battle/story state used by this visual regression capture.
+	await get_tree().create_timer(0.5).timeout
 	var root: Node = get_tree().current_scene
 	var main: Node = root
 	if root.name == "StoryScreenshot":
 		main = root.get_child(0) if root.get_child_count() > 0 else root
 	# Show game view.
+	if main.has_method("_show_view"):
+		main.call("_show_view", "game")
 	var game_view: Node = main.find_child("GameView", true, false)
 	if game_view != null:
 		game_view.visible = true

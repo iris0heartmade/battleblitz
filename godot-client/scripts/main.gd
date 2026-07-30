@@ -81,6 +81,7 @@ var _recruit_mode_unit_id: int = -1
 
 # HUD 是 CanvasLayer — 独立 transform 层,不受 GameView.visible 控制
 @onready var hud_layer: CanvasLayer = $GameView/HUD
+@onready var battle_backdrop_layer: CanvasLayer = $GameView/BattleBackdrop
 
 # M6.1 BGM player
 @onready var bgm_player: AudioStreamPlayer = $BGMPlayer
@@ -90,22 +91,28 @@ var _recruit_mode_unit_id: int = -1
 # CreateFormPanel(自由模式专用)— 房间设置表单
 # V2 第 3 轮:InfoPanel 是左侧 30% 信息区(单位详情 + 玩家列表)
 @onready var info_panel: Panel = $GameView/HUD/InfoPanel
+@onready var left_hud_wing: ColorRect = $GameView/HUD/LeftHudWing
+@onready var right_hud_wing: ColorRect = $GameView/HUD/RightHudWing
 @onready var commander_title: Label = $GameView/HUD/InfoPanel/CommanderTitle
 @onready var commander_name: RichTextLabel = $GameView/HUD/InfoPanel/CommanderName
 # M5.1 CO Roster — 顶部全玩家头像 + meter + 发动按钮
 @onready var co_roster: HBoxContainer = $GameView/HUD/CORoster
 @onready var commander_co_bar: ProgressBar = $GameView/HUD/InfoPanel/CommanderCOBar
+@onready var commander_co_label: Label = $GameView/HUD/InfoPanel/CommanderCOBar/ValueLabel
 @onready var unit_info_title: Label = $GameView/HUD/InfoPanel/UnitInfoTitle
+@onready var unit_info_subtitle: Label = $GameView/HUD/InfoPanel/UnitInfoSubtitle
 @onready var unit_info: RichTextLabel = $GameView/HUD/InfoPanel/UnitInfo
 @onready var players_list: RichTextLabel = $GameView/HUD/InfoPanel/PlayersList
-# T:#18 — 英雄立绘槽,挂载到 HUD 左下角(GoldPanel 上方),不再塞在 InfoPanel 里
-# 遮挡 "Lv.1" / 攻击射程等文字。TextureRect 由 _set_unit_info_portrait 程序化写入。
-@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel
+# T:#18 — 英雄立绘与单位详情使用同一张检视卡,避免视线横跨整屏。
+# TextureRect 由 _set_unit_info_portrait 程序化写入。
+@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel
+@onready var hero_portrait_caption: Label = $GameView/HUD/InfoPanel/UnitPortraitPanel/Caption
 @onready var turn_banner: ColorRect = $GameView/TurnBannerFrame
 @onready var turn_banner_label: Label = $GameView/TurnBannerFrame/TurnBannerLabel
 var _turn_banner_tween: Tween = null
 var _ai_pulse_tween: Tween = null
 var _auto_save_toast_tween: Tween = null
+var _unit_info_portrait_tex: TextureRect = null
 
 # V2 第 6 轮:设置 + 暂停面板
 @onready var settings_panel: Panel = $GameView/HUD/SettingsPanel
@@ -162,12 +169,14 @@ var _confirm_no_callback: Callable = Callable()
 
 # V2 第 4 轮:行动气泡(5 按钮)
 @onready var action_bubble: Panel = $GameView/HUD/ActionBubble
+@onready var action_title: Label = $GameView/HUD/ActionBubble/ActionTitle
 @onready var cancel_btn: Button = $GameView/HUD/ActionBubble/ActionList/CancelBtn
 @onready var move_btn: Button = $GameView/HUD/ActionBubble/ActionList/MoveBtn
 @onready var attack_btn: Button = $GameView/HUD/ActionBubble/ActionList/AttackBtn
 @onready var skill_btn: Button = $GameView/HUD/ActionBubble/ActionList/SkillBtn
 @onready var wait_btn: Button = $GameView/HUD/ActionBubble/ActionList/WaitBtn
 @onready var claim_btn: Button = $GameView/HUD/ActionBubble/ActionList/ClaimBtn
+@onready var action_pointer: Polygon2D = $GameView/HUD/ActionBubble/ActionPointer
 @onready var attack_confirm_panel: Panel = $GameView/HUD/AttackConfirmPanel
 @onready var attack_confirm_body: RichTextLabel = $GameView/HUD/AttackConfirmPanel/Body
 @onready var attack_confirm_btn: Button = $GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn
@@ -3486,6 +3495,9 @@ func _on_recruit_response(body: Variant, code: int = 0) -> void:
 func _refresh_unit_info(ud: Dictionary) -> void:
 	if unit_info == null or not is_instance_valid(unit_info):
 		return
+	if info_panel != null and is_instance_valid(info_panel):
+		info_panel.visible = true
+	_set_board_inspect_card_visible(true)
 	unit_info.bbcode_enabled = true
 	var name: String = _unit_cn_name(ud, "单位")
 	var lvl: int = int(ud.get("level", 1))
@@ -3508,7 +3520,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var cur_pid_v: Variant = GameState.current_player_id if GameState != null else null
 	var cur_pid: int = -1 if cur_pid_v == null else int(cur_pid_v)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	var can_act: bool = not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)) and is_mine
+	var can_act: bool = not bool(ud.get("has_acted", false)) and is_mine
 	var owner_str: String = ("敌方 %s" % _color_emoji(color_name)) if not is_mine else ("[color=#f0c75e]%s[/color] (你)" % _color_emoji(color_name))
 	# Bug fix: GDScript 的 str(null) 返回字面字符串 "<null>",跟空字符串
 	# 比较仍然不为空 → 之前会把没有 hero_id 的普通单位误判成英雄。
@@ -3516,8 +3528,16 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var hero_id_v: Variant = ud.get("hero_id", null)
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	_set_unit_info_portrait(ud)
+	if unit_info != null and is_instance_valid(unit_info):
+		unit_info.offset_left = 172.0 if hero_portrait_panel.visible else 44.0
+	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
+		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
-		unit_info_title.text = "✦ %s · 英雄 Lv.%d" % [name, lvl] if hero_id != "" else "⚔ %s · 等级 %d" % [name, lvl]
+		unit_info_title.text = name
+	if unit_info_subtitle != null and is_instance_valid(unit_info_subtitle):
+		var profession := _unit_type_cn(str(ud.get("unit_type", "unit")))
+		var rank := "英雄" if hero_id != "" else "部队"
+		unit_info_subtitle.text = "%s · %s Lv.%d · %s" % [profession, rank, lvl, "未行动" if can_act else "已行动"]
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
@@ -3537,7 +3557,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	# 1) 地形防御加成(单位所站格子的 TERRAIN_DEF_BONUS)
 	var tile_d: Dictionary = GameState.get_tile(int(pos.x), int(pos.y)) if GameState != null else {}
 	var terrain_v: Variant = tile_d.get("terrain", "")
-	var terrain_name: String = "" if terrain_v == null else str(terrain_v)
+	var terrain_name: String = "plain" if terrain_v == null or str(terrain_v) == "" else str(terrain_v)
 	if terrain_name != "":
 		var def_bonus: int = int(Config.TERRAIN_DEF_BONUS.get(terrain_name, 0))
 		# castle_floor / castle_wall 等 subtype 也走同一张表
@@ -3600,35 +3620,41 @@ func _unit_portrait_path_for(unit: Dictionary) -> String:
 
 
 func _set_unit_info_portrait(unit: Dictionary) -> void:
-	var _unit_info_portrait_tex: TextureRect = null  # 局部位,原属 dialog 块
-	# T:#18 — 英雄立绘改挂到 hero_portrait_panel(HUD 左下角独立槽位),
-	# 不再嵌进 info_panel。unit_info.offset_right 也不再需要为立绘腾空间,
-	# 还原默认 -12.0。
 	if hero_portrait_panel == null or not is_instance_valid(hero_portrait_panel):
 		return
 	if _unit_info_portrait_tex == null:
 		_unit_info_portrait_tex = TextureRect.new()
+		_unit_info_portrait_tex.name = "PortraitTexture"
 		_unit_info_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_unit_info_portrait_tex.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_unit_info_portrait_tex.offset_left = 12.0
+		_unit_info_portrait_tex.offset_top = 12.0
+		_unit_info_portrait_tex.offset_right = -12.0
+		_unit_info_portrait_tex.offset_bottom = -12.0
 		_unit_info_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		_unit_info_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hero_portrait_panel.add_child(_unit_info_portrait_tex)
+		hero_portrait_panel.move_child(_unit_info_portrait_tex, 0)
 	var portrait_path := _unit_portrait_path_for(unit)
 	if portrait_path == "":
+		_unit_info_portrait_tex.texture = null
 		_unit_info_portrait_tex.visible = false
 		hero_portrait_panel.visible = false
-		return
-	if not FileAccess.file_exists(portrait_path):
-		_unit_info_portrait_tex.visible = false
-		hero_portrait_panel.visible = false
+		if unit_info != null and is_instance_valid(unit_info):
+			unit_info.offset_left = 44.0
 		return
 	var tex := PortraitLoader.load(portrait_path)
 	_unit_info_portrait_tex.texture = tex
-	if tex != null:
-		# T:V6 — 立绘按比例缩放到面板大小(高度一致,宽度按 800:1400 自适应,原图比例不变)。
-		# STRETCH_KEEP_ASPECT_CENTERED 自动居中,clip_contents 截溢出。
-		_unit_info_portrait_tex.size = hero_portrait_panel.size
 	_unit_info_portrait_tex.visible = tex != null
 	hero_portrait_panel.visible = tex != null
+
+
+func _set_board_inspect_card_visible(is_visible: bool) -> void:
+	if board == null or not is_instance_valid(board):
+		return
+	var camera := board.get_node_or_null("BoardCamera")
+	if camera != null and camera.has_method("set_inspect_card_visible"):
+		camera.call("set_inspect_card_visible", is_visible)
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)

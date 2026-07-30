@@ -182,7 +182,16 @@ func _refresh_saves() -> void:
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))
 
 
-func _on_saves_response(body: Variant, _code: int = 0) -> void:
+func _on_saves_response(body: Variant, code: int = 0) -> void:
+	if code < 200 or code >= 300:
+		# A stalled or stopped backend used to leave this screen labelled
+		# "加载存档..." forever. Keep the empty-slot controls visible, but make
+		# the transport failure actionable instead of implying data is loading.
+		if save_status != null and is_instance_valid(save_status):
+			var detail := "无法连接后端" if code == 0 else "HTTP %d" % code
+			save_status.text = "存档读取失败（%s），可点击“刷新存档”重试" % detail
+		_update_status_row(0)
+		return
 	var parsed := _save_records_from_response(body)
 	_manual_slot_records = [{}, {}, {}]
 	_auto_record = {}

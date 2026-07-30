@@ -1,0 +1,122 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/mainline_campaign_panel.gd" id="1_script"]
+
+[node name="MainlineCampaignPanel" type="PanelContainer"]
+custom_minimum_size = Vector2(900, 560)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="ArchiveTitle" type="Label" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "主线档案"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 28
+
+[node name="Columns" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="SlotColumn" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+
+[node name="SlotsMargin" type="MarginContainer" parent="Layout/Columns/SlotColumn"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="Slots" type="VBoxContainer" parent="Layout/Columns/SlotColumn/SlotsMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="PreviewColumn" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PreviewMargin" type="MarginContainer" parent="Layout/Columns/PreviewColumn"]
+layout_mode = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 20
+
+[node name="PreviewLayout" type="VBoxContainer" parent="Layout/Columns/PreviewColumn/PreviewMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PreviewTitle" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "选择存档槽"
+theme_override_font_sizes/font_size = 23
+
+[node name="PreviewBody" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+text = "选择左侧档案以预览章节、队伍和下一战目标。"
+theme_override_font_sizes/font_size = 17
+
+[node name="IntelColumn" type="PanelContainer" parent="Layout/Columns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 2
+
+[node name="IntelMargin" type="MarginContainer" parent="Layout/Columns/IntelColumn"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="IntelLayout" type="VBoxContainer" parent="Layout/Columns/IntelColumn/IntelMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="IntelTitle" type="Label" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "出征情报"
+theme_override_font_sizes/font_size = 20
+
+[node name="IntelBody" type="Label" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+text = "选择档案后显示队伍与目标。"
+
+[node name="PrimaryAction" type="Button" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "开始新游戏"
+
+[node name="Footer" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="FooterSpacer" type="Control" parent="Layout/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BackButton" type="Button" parent="Layout/Footer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 46)
+layout_mode = 2
+text = "返回主菜单"

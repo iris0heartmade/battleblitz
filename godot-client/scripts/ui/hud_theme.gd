@@ -14,6 +14,7 @@ extends RefCounted
 ## 注意:不写 class_name —— headless 下跨文件 class_name 引用会撞 Parse Error。
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const BattleTheme = preload("res://scripts/ui/battle_theme.gd")
 
 static func apply_theme(host: Node, theme_name: String) -> void:
 	var bg_color: Color = Color(0.06, 0.13, 0.10)  # deep_gba 兜底
@@ -119,28 +120,15 @@ static func apply_gba(host: Node) -> void:
 	sb_popup.content_margin_top = MenuTheme.PAD
 	sb_popup.content_margin_bottom = MenuTheme.PAD
 	host.war_report_panel.add_theme_stylebox_override("panel", sb_popup)
-	host.info_panel.add_theme_stylebox_override("panel", sb_popup)
+	host.info_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 
 static func apply_hud(host: Node) -> void:
 	# Pills are ColorRect containers with ReferenceRect borders added
 	# in _ready. We only need to set font sizes / colors on inner Labels.
 	var pill_size := 14
-	# Add a gold ReferenceRect border around each pill ColorRect.
-	for p in [host.turn_badge, host.phase_badge, host.current_player_badge, host.gold_panel, host.ai_thinking_label]:
-		if p == null or not is_instance_valid(p):
-			continue
-		var border := ReferenceRect.new()
-		border.anchor_right = 1.0
-		border.anchor_bottom = 1.0
-		border.offset_left = 0
-		border.offset_top = 0
-		border.offset_right = 0
-		border.offset_bottom = 0
-		border.border_color = MenuTheme.C_GOLD
-		border.border_width = 2.0
-		border.editor_only = false
-		border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(border)
+	if host.info_panel != null and is_instance_valid(host.info_panel):
+		host.info_panel.visible = false
+		host.info_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	for lbl in [host.turn_badge_label, host.phase_badge_label, host.current_player_label, host.gold_label]:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_font_size_override("font_size", pill_size)
@@ -150,8 +138,11 @@ static func apply_hud(host: Node) -> void:
 		host.commander_title.add_theme_font_size_override("font_size", 16)
 		host.commander_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 	if host.unit_info_title != null and is_instance_valid(host.unit_info_title):
-		host.unit_info_title.add_theme_font_size_override("font_size", 14)
+		host.unit_info_title.add_theme_font_size_override("font_size", 20)
 		host.unit_info_title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
+	if host.unit_info_subtitle != null and is_instance_valid(host.unit_info_subtitle):
+		host.unit_info_subtitle.add_theme_font_size_override("font_size", 14)
+		host.unit_info_subtitle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	if host.commander_name != null and is_instance_valid(host.commander_name):
 		host.commander_name.add_theme_font_size_override("normal_font_size", 13)
 		host.commander_name.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
@@ -189,8 +180,10 @@ static func apply_hud(host: Node) -> void:
 		sb_portrait.content_margin_bottom = 0
 		host.hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	if host.unit_info != null and is_instance_valid(host.unit_info):
-		host.unit_info.add_theme_font_size_override("normal_font_size", 13)
+		host.unit_info.add_theme_font_size_override("normal_font_size", 16)
 		host.unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	if host.hero_portrait_caption != null and is_instance_valid(host.hero_portrait_caption):
+		host.hero_portrait_caption.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
 	# V2 第 4 轮:行动气泡主题(深绿底 + 烫金粗边)
 	if host.action_bubble != null and is_instance_valid(host.action_bubble):
 		var sb_bubble := StyleBoxFlat.new()
@@ -205,6 +198,19 @@ static func apply_hud(host: Node) -> void:
 		sb_bubble.content_margin_top = 6
 		sb_bubble.content_margin_bottom = 6
 		host.action_bubble.add_theme_stylebox_override("panel", sb_bubble)
+		for btn in [host.move_btn, host.attack_btn, host.skill_btn, host.wait_btn, host.claim_btn]:
+			if btn != null and is_instance_valid(btn):
+				MenuTheme.apply_button_theme(btn, 17)
+				btn.custom_minimum_size.y = 48.0
+	if host.left_hud_wing != null and is_instance_valid(host.left_hud_wing):
+		var heading: Label = host.left_hud_wing.get_node_or_null("Heading") as Label
+		var hint: Label = host.left_hud_wing.get_node_or_null("Hint") as Label
+		if heading != null:
+			heading.add_theme_font_size_override("font_size", 18)
+		if hint != null:
+			hint.add_theme_font_size_override("font_size", 15)
+	if host.action_title != null and is_instance_valid(host.action_title):
+		host.action_title.add_theme_font_size_override("font_size", 17)
 	# V2 第 5 轮:战报浮层主题(深绿底 + 烫金粗边 + Header/Close 烫金)
 	var sb_war := StyleBoxFlat.new()
 	sb_war.bg_color = MenuTheme.C_BG_PANEL
@@ -307,4 +313,5 @@ static func apply_hud(host: Node) -> void:
 	if host.battle_result_stats != null and is_instance_valid(host.battle_result_stats):
 		host.battle_result_stats.add_theme_font_size_override("normal_font_size", 14)
 		host.battle_result_stats.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+	BattleTheme.apply_floating_panel(host.info_panel)
 	# 大厅主/次按钮主题已随组件搬到 lobby_controller._ready()

@@ -204,6 +204,11 @@ func show_path_marks(path_tiles: Array, reachable_tiles: Array) -> void:
 		highlights.show_path(path_tiles)
 
 
+func show_selected_mark(tile: Vector2i) -> void:
+	if highlights != null:
+		highlights.show_selected(tile)
+
+
 # M4.2:进入攻击模式 — 红色 outline(Highlights.Mode.ATTACK)
 func show_attack_marks(range_tiles: Array) -> void:
 	if highlights == null:
@@ -553,12 +558,50 @@ func viewport_to_tile(pos: Vector2) -> Vector2i:
 	return ground_layer.local_to_map(local)
 
 
-func tile_to_viewport(tile: Vector2i) -> Vector2:
+func tile_to_screen(tile: Vector2i) -> Vector2:
 	if ground_layer == null:
 		return Vector2.ZERO
+	var world_pos: Vector2
 	if metrics == null:
-		return ground_layer.to_global(ground_layer.map_to_local(tile))
-	return ground_layer.to_global(metrics.cell_to_local(tile))
+		world_pos = ground_layer.to_global(ground_layer.map_to_local(tile))
+	else:
+		world_pos = ground_layer.to_global(metrics.cell_to_local(tile))
+	if board_camera != null and board_camera.enabled:
+		return board_camera.get_canvas_transform() * world_pos
+	return world_pos
+
+
+# Compatibility alias for older callers. The returned value is a CanvasLayer
+# screen coordinate, not an untransformed board-world position.
+func tile_to_viewport(tile: Vector2i) -> Vector2:
+	return tile_to_screen(tile)
+
+
+func screen_rect() -> Rect2:
+	var viewport := get_viewport()
+	var fallback := viewport.get_visible_rect() if viewport != null else Rect2()
+	if ground_layer == null or metrics == null or not metrics.has_method("bounds_rect"):
+		return fallback
+	var local_rect: Rect2 = metrics.bounds_rect()
+	if local_rect.size.x <= 0.0 or local_rect.size.y <= 0.0:
+		return fallback
+	var corners: Array[Vector2] = [
+		local_rect.position,
+		local_rect.position + Vector2(local_rect.size.x, 0.0),
+		local_rect.position + local_rect.size,
+		local_rect.position + Vector2(0.0, local_rect.size.y),
+	]
+	var min_point := Vector2(INF, INF)
+	var max_point := Vector2(-INF, -INF)
+	for local_point in corners:
+		var screen_point := ground_layer.to_global(local_point)
+		if board_camera != null and board_camera.enabled:
+			screen_point = board_camera.get_canvas_transform() * screen_point
+		min_point.x = min(min_point.x, screen_point.x)
+		min_point.y = min(min_point.y, screen_point.y)
+		max_point.x = max(max_point.x, screen_point.x)
+		max_point.y = max(max_point.y, screen_point.y)
+	return Rect2(min_point, max_point - min_point)
 
 
 func terrain_at(tile: Vector2i) -> String:

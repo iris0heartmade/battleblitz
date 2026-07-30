@@ -1,5 +1,13 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-07-30
+
+- 合并 `origin/feat/godot-mainline-fe-ui` 到 `refactor/extract-mainline-modules`,保留 UI 分支完整历史,同时延续本地 `main.gd` 模块化抽离成果。
+- 接入主线响应式 `CampaignPanel` / `PreparePanel` 场景、战斗 HUD 美术素材、`battle_theme.gd` / `mainline_theme.gd` / `mainline_*_panel.gd` 新 UI 组件。
+- 调和冲突点: `scenes/main.tscn` 采用 UI 分支的新场景结构并补回 `$Lobby` 的 `lobby_controller.gd` 挂载;`mainline_controller.gd` 保留存档优先渲染,英雄对话缓存切回 `DialogManager`;`main.gd` 保持对话/大厅/主题抽离,只补新增 HUD 节点引用与单位检视卡接线。
+- 单位检视卡合并两边能力: UI 分支的紧凑右侧卡片 + 本地通用兵种立绘路径共存;透明无边框立绘槽断言迁移到抽离后的 `hud_theme.gd`。
+- 验证: `python -m pytest game/tests/test_godot_unit_portrait_paths.py game/tests/test_save_resume_fixes.py game/tests/test_save_slot_independence.py` 16 passed;本机 PATH 未发现 `godot`,Godot headless 场景测试需在装有 Godot CLI 的环境补跑。
+
 ## 2026-07-29
 
 - 对话系统抽离为 `DialogManager` 全局 autoload:新增 `scripts/autoload/dialog_manager.gd`(498 行),挂在 root 层 CanvasLayer(layer=50)上,跨 menu / lobby / game view 都可见。从 `scripts/main.gd` 删除 6 个 `@onready` 引用、3 个常量、9 个状态变量、13 个函数(~220 行),同步从 `scenes/main.tscn` 删除 DialogPanel 子树 62 行(7 个节点)。新增 `scripts/core/portrait_loader.gd` 共享头像加载器。
