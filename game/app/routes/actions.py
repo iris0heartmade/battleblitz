@@ -21,7 +21,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.config import (
     COUNTER_DAMAGE_MULT,
     COUNTER_IMMUNE_SKILLS,
-    MAP_SIZE,
     SKILL_DOUBLE_STRIKE,
     TERRAIN_CASTLE,
     TERRAIN_DEF_BONUS,
@@ -43,7 +42,7 @@ from app.game_logic import (
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
-from app.log_format import fmt_attack, fmt_move, fmt_wait
+from app.log_format import fmt_attack, fmt_level_up, fmt_move, fmt_wait
 from app.schemas import (
     AttackForecastOut,
     AttackRequest,
@@ -169,6 +168,12 @@ async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coo
     return terrain, owners, occ
 
 
+def _pathfinder_size_for_grid(terrain: Dict[Coord, str]) -> int:
+    if not terrain:
+        return 0
+    return max(max(x, y) for x, y in terrain.keys()) + 1
+
+
 def _blocker_set(terrain: Dict[Coord, str]) -> Set[Coord]:
     """Tiles that block line of sight (forest/mountain/river block; castle does not)."""
     from app.config import TERRAIN_FOREST, TERRAIN_MOUNTAIN, TERRAIN_RIVER
@@ -207,11 +212,13 @@ async def move_unit(
     # the unit can keep walking while MP lasts.
     if unit.has_acted and not _get_unit(unit.unit_type).can_move_after_action:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该单位本回合已行动且无法继续移动")
-    if not (0 <= body.to_x < MAP_SIZE and 0 <= body.to_y < MAP_SIZE):
+    if body.to_x < 0 or body.to_y < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
 
     terrain, owners, occ = await _load_tile_grid(session, game_id)
     target = (body.to_x, body.to_y)
+    if target not in terrain:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标超出棋盘范围")
     movement_profile = resolve_movement_profile(unit)
 
     # Target must be empty (no unit on it)
@@ -223,7 +230,30 @@ async def move_unit(
     tile_terrain = terrain.get(target)
 
     # Pathfind with movement budget
-    blocked = {(x, y) for (x, y), u in occ.items() if u is not None and u != unit.id}
+    # T:#20 — 火纹风格:enemy 完全阻挡,ally 可穿过但不能结束在同一格
+    players_in_game = (
+        await session.execute(
+            select(Player).where(Player.game_id == game_id)
+        )
+    ).scalars().all()
+    ally_unit_ids: set[int] = set()
+    enemy_unit_ids: set[int] = set()
+    all_units = (
+        await session.execute(
+            select(Unit).where(Unit.player_id.in_([p.id for p in players_in_game]))
+        )
+    ).scalars().all()
+    for u in all_units:
+        if u.id == unit.id:
+            continue
+        if u.hp <= 0:
+            continue
+        if u.player_id == player.id:
+            ally_unit_ids.add(u.id)
+        else:
+            enemy_unit_ids.add(u.id)
+    blocked = {(x, y) for (x, y), uid in occ.items() if uid in enemy_unit_ids}
+    no_end = {(x, y) for (x, y), uid in occ.items() if uid in ally_unit_ids}
     path = pathfind(
         start=(unit.x, unit.y),
         goal=target,
@@ -232,7 +262,9 @@ async def move_unit(
         mov=unit.mp,
         viewer_owner_id=player.id,
         blocked_units=blocked,
+        no_end_units=no_end,
         movement_profile=movement_profile,
+        size=_pathfinder_size_for_grid(terrain),
     )
     if path is None or path[-1] != target:
         logger.info(f"move_unit: pathfinding FAILED (game {game_id}, unit {unit.id} at ({unit.x},{unit.y}) -> {target}, mp={unit.mp})")
@@ -302,6 +334,7 @@ async def move_unit(
         context={
             "from_x": path[0][0], "from_y": path[0][1],
             "to_x": target[0], "to_y": target[1],
+            "path": [{"x": x, "y": y} for x, y in path],
             "mp_cost": spent_mp, "mp_remaining": unit.mp,
             "castle_captured": castle_captured,
         },
@@ -517,10 +550,22 @@ async def attack(
     counter_dmg = 0
     defender_skills = set(target.skills or [])
     has_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    # Bug 反查(2026-07-22):玩家报告敌方剑士反击超距离。range check
+    # 代码读起来正确(swordsman min=0 max=1 → d=1 才允许),但还没复现。
+    # 加 debug 日志,玩家下次触发时把这段贴回来再深挖。
+    _t_d = manhattan((target.x, target.y), (attacker.x, attacker.y))
+    _t_min = unit_min_attack_range(target)
+    _t_max = unit_attack_range(target)
+    _t_can = can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    logger.info(
+        "attack: COUNTER-CHECK game=%s defender=%s(atk_range=%d-%d, immune=%s) vs attacker=%s, d=%d, passes=%s, is_kill=%s",
+        game_id, target.name, _t_min, _t_max, has_immunity,
+        attacker.name, _t_d, _t_can, is_kill,
+    )
     if (
         not is_kill
         and not has_immunity
-        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+        and _t_can
     ):
         # Defender's terrain bonus is the tile the defender is on
         counter_tile = (
@@ -572,10 +617,10 @@ async def attack(
     exp_gained = 0
     assist_ids: List[int] = []
     if is_kill:
-        award_exp(attacker, "kill")
+        level_result = award_exp(attacker, "kill")
         exp_gained = 10
     else:
-        award_exp(attacker, "hit")  # small xp on hit
+        level_result = award_exp(attacker, "hit")  # small xp on hit
         exp_gained = 5
 
     _log(session, game, player, "attack",
@@ -586,6 +631,9 @@ async def attack(
         _log(session, game, player, "death", f"{target.name} 被击杀了")
 
     # ── Immediately remove dead units (don't wait for end-of-turn) ──
+    if level_result:
+        _log(session, game, player, "level_up", fmt_level_up(attacker, level_result.new_level))
+
     # Units killed by the attack or killed by the counter-attack
     # are cleaned up so their tile is freed and they vanish from the board.
     dead_after_combat = [u for u in (target, attacker) if u.hp <= 0]

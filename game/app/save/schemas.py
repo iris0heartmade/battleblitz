@@ -223,6 +223,23 @@ class SuspendOut(BaseModel):
     saved_at: datetime
 
 
+# ============================================================
+# Discard suspend
+# ============================================================
+
+
+class DiscardSuspendOut(BaseModel):
+    """Response from ``DELETE /saves/suspend?user_name=...``.
+
+    ``cleared`` distinguishes "suspend existed and was removed" from
+    "no suspend existed" — the second is not an error (the operation
+    is idempotent) but the client may want to surface a different
+    toast for it.
+    """
+    ok: bool = True
+    cleared: bool
+
+
 __all__ = [
     "GameSaveSlotOut",
     "SuspendStateOut",
@@ -237,4 +254,5 @@ __all__ = [
     "PrepCompleteRequest",
     "SuspendRequest",
     "SuspendOut",
+    "DiscardSuspendOut",
 ]

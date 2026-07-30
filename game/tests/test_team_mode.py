@@ -236,6 +236,42 @@ async def test_update_player_seat_swaps_players_for_host(db_session, tmp_db_path
 
 
 @pytest.mark.asyncio
+async def test_add_ai_can_target_multiple_specific_open_seats(db_session, tmp_db_path):
+    """Per-seat lobby AI fill must not collapse to "next append" behavior."""
+    from app.models import Game, Player
+
+    game = Game(
+        name="target-ai-seats", status="waiting", map_seed=0,
+        map_preset="classic", current_player_index=0, phase="player",
+        capacity=4,
+    )
+    db_session.add(game)
+    await db_session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        host = await c.post(f"/games/{game.id}/join", json={
+            "user_name": "Host", "seat": 0,
+        })
+        assert host.status_code == 201, host.text
+
+        ai_one = await c.post(f"/games/{game.id}/add-ai", json={"seat": 2})
+        assert ai_one.status_code == 201, ai_one.text
+        ai_two = await c.post(f"/games/{game.id}/add-ai", json={
+            "seat": 1,
+            "personality": "aggressive",
+        })
+        assert ai_two.status_code == 201, ai_two.text
+
+    rows = (await db_session.execute(
+        select(Player).where(Player.game_id == game.id).order_by(Player.seat)
+    )).scalars().all()
+    ai_by_seat = {p.seat: p for p in rows if p.is_ai}
+    assert sorted(ai_by_seat) == [1, 2]
+    assert ai_by_seat[1].agent_personality == "aggressive"
+
+
+@pytest.mark.asyncio
 async def test_same_user_cannot_join_multiple_player_seats(db_session, tmp_db_path):
     from app.models import Game, Player
 
@@ -446,3 +482,43 @@ async def test_2v2_team_survives_until_all_member_factions_are_defeated(db_sessi
     assert ended is True
     assert game.status == "finished"
     assert game.win_reason == "rout"
+
+
+@pytest.mark.asyncio
+async def test_rules_ai_enemy_castle_targets_exclude_teammate_hq(db_session, tmp_db_path):
+    """Rules AI should pull toward enemy HQs, not a teammate's HQ."""
+    from app.config import TERRAIN_CASTLE
+    from app.models import Game, Player, Tile
+    from app.game_logic import _load_enemy_castles_xy
+
+    game = Game(
+        name="ai-team-hq-targeting", status="playing", map_seed=0,
+        map_preset="classic", current_player_index=0, phase="player",
+        win_condition="rout",
+    )
+    db_session.add(game)
+    await db_session.flush()
+
+    human_ally = Player(
+        game_id=game.id, user_name="human", color="red", seat=0,
+        team_id="team_a", is_alive=True, has_ended_turn=False,
+    )
+    ai_ally = Player(
+        game_id=game.id, user_name="ai-ally", color="green", seat=1,
+        team_id="team_a", is_ai=True, is_alive=True, has_ended_turn=False,
+    )
+    enemy = Player(
+        game_id=game.id, user_name="enemy", color="blue", seat=2,
+        team_id="team_b", is_ai=True, is_alive=True, has_ended_turn=False,
+    )
+    db_session.add_all([human_ally, ai_ally, enemy])
+    await db_session.flush()
+
+    db_session.add_all([
+        Tile(game_id=game.id, x=1, y=1, terrain=TERRAIN_CASTLE, owner_id=human_ally.id),
+        Tile(game_id=game.id, x=5, y=1, terrain=TERRAIN_CASTLE, owner_id=ai_ally.id),
+        Tile(game_id=game.id, x=9, y=9, terrain=TERRAIN_CASTLE, owner_id=enemy.id),
+    ])
+    await db_session.flush()
+
+    assert await _load_enemy_castles_xy(db_session, game, ai_ally) == [(9, 9)]

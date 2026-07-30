@@ -475,10 +475,12 @@ class LevelUpResult:
 def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     """Auto-level when EXP crosses `EXP_TO_LEVEL` (single level per call).
 
-    Each level: +5% to all base stats (HP, ATK, DEF); +2 bonus stat points
-    auto-allocated as +1 ATK, +1 DEF. MOV does not scale.
+    Each level grows HP plus the class's combat lane. Physical classes grow
+    ATK/DEF strongly and MATK/MDEF weakly; magic classes grow MATK/MDEF
+    strongly and ATK/DEF weakly. MOV does not scale.
     """
     if unit.level >= MAX_LEVEL:
+        unit.exp = 0
         return None
     if unit.exp < EXP_TO_LEVEL:
         return None
@@ -486,6 +488,14 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     unit.exp -= EXP_TO_LEVEL
     unit.level += 1
     factor = 1.0 + LEVEL_UP_STAT_BONUS  # 1.05
+    attack_kind = _attack_kind_of(unit)
+
+    def strong_growth(base: int) -> int:
+        return int(round(base * factor)) + 1
+
+    def weak_growth(base: int) -> int:
+        return base + 1
+
     campaign_base = dict(unit.campaign_base_stats or {})
     if campaign_base:
         # Hero battle Units hold naked campaign stats separately from their
@@ -495,27 +505,50 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
         old_base_hp = int(campaign_base.get("hp", unit.max_hp))
         old_base_atk = int(campaign_base.get("atk", unit.atk))
         old_base_def = int(campaign_base.get("def", unit.def_))
+        old_base_matk = int(campaign_base.get("matk", unit.matk))
+        old_base_mdef = int(campaign_base.get("mdef", unit.mdef))
         campaign_base["hp"] = int(round(old_base_hp * factor))
-        campaign_base["atk"] = int(round(old_base_atk * factor)) + 1
-        campaign_base["def"] = int(round(old_base_def * factor)) + 1
+        if attack_kind == "magic":
+            campaign_base["atk"] = weak_growth(old_base_atk)
+            campaign_base["matk"] = strong_growth(old_base_matk)
+            campaign_base["mdef"] = strong_growth(old_base_mdef)
+            campaign_base["def"] = weak_growth(old_base_def)
+        else:
+            campaign_base["atk"] = strong_growth(old_base_atk)
+            campaign_base["def"] = strong_growth(old_base_def)
+            campaign_base["matk"] = weak_growth(old_base_matk)
+            campaign_base["mdef"] = weak_growth(old_base_mdef)
         unit.max_hp += campaign_base["hp"] - old_base_hp
         unit.hp = min(unit.max_hp, unit.hp + campaign_base["hp"] - old_base_hp)
         unit.atk += campaign_base["atk"] - old_base_atk
         unit.def_ += campaign_base["def"] - old_base_def
+        unit.matk += campaign_base["matk"] - old_base_matk
+        unit.mdef += campaign_base["mdef"] - old_base_mdef
         unit.campaign_base_stats = campaign_base
     else:
         # Non-heroes and battles created before the snapshot migration retain
-        # the legacy effective-stat behaviour.
+        # the effective-stat behaviour, now split by class combat lane.
+        old_atk = unit.atk
+        old_def = unit.def_
+        old_matk = unit.matk
+        old_mdef = unit.mdef
         new_max_hp = int(round(unit.max_hp * factor))
         hp_gain = new_max_hp - unit.max_hp
         unit.max_hp = new_max_hp
         unit.hp = min(unit.max_hp, unit.hp + hp_gain)
-        unit.atk = int(round(unit.atk * factor))
-        unit.def_ = int(round(unit.def_ * factor))
+        if attack_kind == "magic":
+            unit.atk = weak_growth(old_atk)
+            unit.matk = strong_growth(old_matk)
+            unit.def_ = weak_growth(old_def)
+            unit.mdef = strong_growth(old_mdef)
+        else:
+            unit.atk = strong_growth(old_atk)
+            unit.matk = weak_growth(old_matk)
+            unit.def_ = strong_growth(old_def)
+            unit.mdef = weak_growth(old_mdef)
 
-        # Auto-allocate bonus points
-        unit.atk += 1
-        unit.def_ += 1
+    if unit.level >= MAX_LEVEL:
+        unit.exp = 0
 
     return LevelUpResult(
         new_level=unit.level,
@@ -524,11 +557,19 @@ def level_up_if_ready(unit: Unit) -> Optional[LevelUpResult]:
     )
 
 
-def award_exp(unit: Unit, kind: str) -> None:
-    """Award EXP. `kind` is one of: kill | assist | hit.
+def award_exp(unit: Unit, kind: str) -> Optional[LevelUpResult]:
+    """Award EXP and immediately apply a level-up if the threshold is crossed.
 
-    Kept for backward compatibility; only `kill` now also bumps morale.
+    `kind` is one of: kill | assist | hit.  Only `kill` also bumps morale.
     """
+    if unit.level >= MAX_LEVEL:
+        unit.exp = 0
+        if kind == "kill":
+            award_morale(unit)
+        elif kind not in {"assist", "hit"}:
+            raise ValueError(f"unknown exp kind: {kind!r}")
+        return None
+
     if kind == "kill":
         unit.exp += EXP_PER_KILL
         award_morale(unit)
@@ -538,6 +579,7 @@ def award_exp(unit: Unit, kind: str) -> None:
         unit.exp += max(1, EXP_PER_ASSIST // 2)
     else:
         raise ValueError(f"unknown exp kind: {kind!r}")
+    return level_up_if_ready(unit)
 
 
 def award_morale(unit: Unit) -> None:
@@ -592,6 +634,12 @@ async def cleanup_dead_units(
     if not dead:
         return []
     dead_ids = [u.id for u in dead]
+    game_id: Optional[int] = None
+    for player_id in {u.player_id for u in dead}:
+        owning_player = await session.get(Player, player_id)
+        if owning_player is not None:
+            game_id = owning_player.game_id
+            break
     from app.commanders.meter import on_death
     from sqlalchemy.orm.attributes import flag_modified
 
@@ -613,18 +661,14 @@ async def cleanup_dead_units(
         await cancel_claim_sessions_for_unit(session, u.id)
     for u in dead:
         await session.delete(u)
+    await session.flush()
     # P2.3 — re-evaluate the win condition after the dead are gone.
     # For "rout" mode this is the trigger: a team dropping to 0
     # units is the rout condition. Other modes (seize / reach /
     # defend) re-check here too so they always have a chance to
     # finish even if no other trigger fires.
-    # NOTE: Unit has no game_id column (only Player does), so we
-    # resolve the game via the unit's owning player.
-    if dead:
-        owning_player = await session.get(Player, dead[0].player_id)
-        game_id = owning_player.game_id if owning_player else None
-    else:
-        game_id = None
+    # NOTE: Unit has no game_id column (only Player does), so game_id
+    # is captured before the units enter SQLAlchemy's deleted state.
     game = await _resolve_game(session, game_id) if game_id is not None else None
     if evaluate_win and game is not None and game.status == "playing":
         await check_win_condition(session, game)
@@ -704,6 +748,7 @@ async def _alive_teams(session: AsyncSession, game: Game) -> list:
 
 
 async def _finish_game(
+    session: AsyncSession,
     game: Game,
     winner_team: Optional[str],
     win_reason: str,
@@ -717,6 +762,29 @@ async def _finish_game(
     # Stash the winning team on a transient attribute so the state
     # endpoint can include it without us adding yet another column.
     game._winner_team = winner_team
+    # T:#21 — 游戏胜利时清掉所有参与者的 suspend 存档(防御双重保险):
+    #   1. capture_suspend / _capture_disconnect_suspend 已经按
+    #      game.status != "playing" 拦掉新写入
+    #   2. 但旧对局遗留的脏 suspend 还可能在 saves view 显示 —
+    #      这里主动 clear 一遍,玩家 wins 后进入存档页只剩 3 槽 + 自动存档
+    try:
+        from app.models import Player as _Player
+        from app.save import SaveService as _SaveService
+        participants = (await session.execute(
+            select(_Player).where(_Player.game_id == game.id)
+        )).scalars().all()
+        svc = _SaveService(session)
+        for p in participants:
+            if p.is_ai or p.is_spectator:
+                continue
+            cleared = await svc.clear_suspend(p.user_name)
+            if cleared:
+                logger.info(
+                    "_finish_game: cleared stale suspend for user=%s game=%d",
+                    p.user_name, game.id,
+                )
+    except Exception as e:  # pragma: no cover
+        logger.warning(f"_finish_game: clear_suspend failed: {e}")
     # 07-21 F5A + M4.16+ fix:publish match_end (the canonical win event).
     # Original code used `loop.create_task(bus.publish(...))` from a
     # sync function, which silently no-op'd in many code paths and the
@@ -773,13 +841,13 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
 
     # --- UNIVERSAL rout — fires regardless of game.win_condition ---
     if len(alive) == 0:
-        await _finish_game(game, None, "draw")
+        await _finish_game(session, game, None, "draw")
         return True
     if len(alive) == 1:
         # In defend mode at the target turn, use "defend" as the
         # reason to preserve the original semantics; otherwise "rout".
         reason = "defend" if defend_winner_team is not None else "rout"
-        await _finish_game(game, alive[0], reason)
+        await _finish_game(session, game, alive[0], reason)
         return True
 
     # --- UNIVERSAL seize — handled in claim_tile when ownership flips;
@@ -798,7 +866,7 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
                 winner_player = (await session.execute(
                     _sel(Player).where(Player.id == winner_unit.player_id)
                 )).scalars().first()
-                await _finish_game(game, _team_of(winner_player), "reach")
+                await _finish_game(session, game, _team_of(winner_player), "reach")
                 return True
 
     return False
@@ -807,7 +875,7 @@ async def check_win_condition(session: AsyncSession, game: Game) -> bool:
 async def apply_end_of_turn(session: AsyncSession, game: Game) -> EndTurnResult:
     """Resolve end-of-turn effects.
 
-    - Auto-level any units that crossed EXP threshold.
+    - Catch up any units that crossed EXP threshold outside EXP award.
     - Delete dead units and free their tiles.
     - Mark players with no units as eliminated.
     - Check win condition.
@@ -1068,9 +1136,9 @@ async def check_pending_claims(
             if game.status == "playing":
                 alive = await _alive_teams(session, game)
                 if len(alive) == 0:
-                    await _finish_game(game, None, "draw")
+                    await _finish_game(session, game, None, "draw")
                 elif len(alive) == 1 and alive[0] == winner_team:
-                    await _finish_game(game, winner_team, "seize")
+                    await _finish_game(session, game, winner_team, "seize")
                 # else: team-mate still alive — keep playing, revenge
                 # chance open.
             if game.status == "finished":
@@ -1829,10 +1897,11 @@ def _ai_pick_move_target(
         when an enemy is within that radius of our castle.
     """
     # Don't move healers/archers into melee of multiple enemies
-    blocked = {
-        c for c, uid in snap.occ.items()
-        if uid is not None and uid != unit.id
-    }
+    # T:#20 — 火纹风格:enemy 完全阻挡,ally 可穿过但不能结束在同一格
+    ally_unit_ids = {u.id for u in snap.ally_units}
+    enemy_unit_ids = {u.id for u in snap.enemy_units}
+    blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+    no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
     reachable = bfs_reachable(
         start=(unit.x, unit.y),
         terrain=snap.terrain,
@@ -1840,6 +1909,7 @@ def _ai_pick_move_target(
         mov=unit.mp,
         viewer_owner_id=None,  # AI shouldn't be blocked from entering enemy castles
         blocked_units=blocked,
+        no_end_units=no_end,
         movement_profile=resolve_movement_profile(unit),
     )
     if not reachable:
@@ -2001,10 +2071,20 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
     counter_dmg = 0
     defender_skills = set(target.skills or [])
     has_counter_immunity = any(s in COUNTER_IMMUNE_SKILLS for s in defender_skills)
+    # Bug 反查(2026-07-22):玩家报告 AI 剑士反击超距离。range check 读起来对,加 debug。
+    _t_d = manhattan((target.x, target.y), (attacker.x, attacker.y))
+    _t_min = unit_min_attack_range(target)
+    _t_max = unit_attack_range(target)
+    _t_can = can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+    logger.info(
+        "ai_attack: COUNTER-CHECK defender=%s(atk_range=%d-%d, immune=%s) vs attacker=%s, d=%d, passes=%s, hp_after=%d",
+        target.name, _t_min, _t_max, has_counter_immunity,
+        attacker.name, _t_d, _t_can, target.hp,
+    )
     if (
         target.hp > 0
         and not has_counter_immunity
-        and can_attack_from_position(target, target.x, target.y, attacker.x, attacker.y)
+        and _t_can
     ):
         counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
         for h in counter_hits:
@@ -2047,6 +2127,18 @@ async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AI
             if not candidates:
                 continue
             target = max(candidates, key=lambda a: (a.max_hp - a.hp))
+            ctx = SkillContext(user=unit, target=target, ally_units=list(snap.ally_units))
+        elif sk.skill_id == "sing":
+            candidates = [
+                a for a in snap.ally_units
+                if a.id != unit.id
+                and a.hp > 0
+                and (a.has_acted or a.has_moved)
+                and max(abs(unit.x - a.x), abs(unit.y - a.y)) == 1
+            ]
+            if not candidates:
+                continue
+            target = max(candidates, key=lambda a: (a.level or 1, a.max_hp, a.id or 0))
             ctx = SkillContext(user=unit, target=target, ally_units=list(snap.ally_units))
         else:
             ctx = SkillContext(user=unit, ally_units=list(snap.ally_units))
@@ -2280,6 +2372,14 @@ async def _load_enemy_castles_xy(
     session: AsyncSession, game: Game, ai_player: Player,
 ) -> list:
     """All enemy HQ positions — for the castle_pull move bonus."""
+    players = (
+        await session.execute(select(Player).where(Player.game_id == game.id))
+    ).scalars().all()
+    my_team = _team_of(ai_player)
+    ally_player_ids = {
+        p.id for p in players
+        if p.id != ai_player.id and _team_of(p) == my_team
+    }
     rows = (await session.execute(
         select(Tile).where(
             Tile.game_id == game.id,
@@ -2287,7 +2387,9 @@ async def _load_enemy_castles_xy(
         )
     )).scalars().all()
     return [(t.x, t.y) for t in rows
-            if t.owner_id is not None and t.owner_id != ai_player.id]
+            if t.owner_id is not None
+            and t.owner_id != ai_player.id
+            and t.owner_id not in ally_player_ids]
 
 
 async def _load_active_claim_tile_set(
@@ -2351,14 +2453,16 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
         if _ai_should_flee(unit, profile):
             # Try to move toward our castle / away from enemies.
             from app.utils import bfs_reachable
-            blocked = {
-                c for c, uid in snap.occ.items()
-                if uid is not None and uid != unit.id
-            }
+            # T:#20 — 火纹风格:enemy 阻挡,ally 可穿过
+            ally_unit_ids = {u.id for u in snap.ally_units}
+            enemy_unit_ids = {u.id for u in snap.enemy_units}
+            blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+            no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
             reachable = bfs_reachable(
                 start=(unit.x, unit.y), terrain=snap.terrain,
                 owners=snap.owners, mov=unit.mp,
                 viewer_owner_id=None, blocked_units=blocked,
+                no_end_units=no_end,
                 movement_profile=resolve_movement_profile(unit),
             )
             if reachable:
@@ -2454,14 +2558,16 @@ async def ai_take_one_action(
     # 0. Flee?
     if _ai_should_flee(unit, profile):
         from app.utils import bfs_reachable
-        blocked = {
-            c for c, uid in snap.occ.items()
-            if uid is not None and uid != unit.id
-        }
+        # T:#20 — 火纹风格阻挡
+        ally_unit_ids = {u.id for u in snap.ally_units}
+        enemy_unit_ids = {u.id for u in snap.enemy_units}
+        blocked = {c for c, uid in snap.occ.items() if uid in enemy_unit_ids}
+        no_end = {c for c, uid in snap.occ.items() if uid in ally_unit_ids}
         reachable = bfs_reachable(
             start=(unit.x, unit.y), terrain=snap.terrain,
             owners=snap.owners, mov=unit.mp,
             viewer_owner_id=None, blocked_units=blocked,
+            no_end_units=no_end,
             movement_profile=resolve_movement_profile(unit),
         )
         if reachable:

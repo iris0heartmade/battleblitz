@@ -88,6 +88,7 @@ func _ready() -> void:
 		var sid: int = TileSetBuilder.source_id_for(String(terrain), "")
 		_assert_gte("fe8 source_id(%s,)" % terrain, sid, 0,
 			"missing FE8 source for %s" % terrain)
+	_assert_new_tileset_atlas_sources(ts)
 	_assert_tiles_fill_48px_regions(ts)
 	_assert_unit_sprite_preserves_aspect()
 
@@ -168,6 +169,8 @@ func _ready() -> void:
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_check = main_scene.instantiate()
 	add_child(main_check)
+	# P2:大厅逻辑已搬到 lobby_controller.gd(挂 $Lobby),断言改指控制器
+	var lobby_check = main_check.get_node("Lobby")
 	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
 	var lobby_create_col := "Lobby/LobbyFrame/LobbyDualCol/RightCol"
 	var lobby_map_panel := lobby_join_col + "/MapPreviewPanel"
@@ -201,9 +204,9 @@ func _ready() -> void:
 		"lobby hub should expose a team update action")
 	_assert_true("Lobby has CreateNameInput", main_check.get_node_or_null(lobby_create_col + "/CreateNameInput") != null,
 		"lobby hub should expose a room name input")
-	_assert_true("Lobby can render lobby map preview", main_check.has_method("_render_lobby_map_preview"),
+	_assert_true("Lobby can render lobby map preview", lobby_check.has_method("_render_lobby_map_preview"),
 		"lobby hub should expose a refresh path for map preview and faction summary")
-	_assert_true("Lobby can render lobby seat columns", main_check.has_method("_render_lobby_seat_columns"),
+	_assert_true("Lobby can render lobby seat columns", lobby_check.has_method("_render_lobby_seat_columns"),
 		"lobby hub should expose a refresh path for map-driven seat cards")
 	_assert_true("Lobby has LobbyCommanderOption", main_check.get_node_or_null(lobby_create_col + "/LobbyCommanderOption") != null,
 		"lobby hub should expose commander selection for room creation")
@@ -273,8 +276,59 @@ func _ready() -> void:
 		"save management should expose selectable saves")
 	_assert_true("SavesView has SaveDeleteBtn", main_check.get_node_or_null("SavesView/SaveFrame/SaveDeleteBtn") != null,
 		"save management should expose delete action")
+	# T:#16 — in_progress 视图存在性
+	_assert_true("Main has InProgressView", main_check.get_node_or_null("InProgressView") != null,
+		"in_progress view should be wired in main.tscn")
+	_assert_true("Main menu has InProgressButton", main_check.get_node_or_null("Menu/CenterContainer/FooterRow/InProgressButton") != null,
+		"in_progress view should be reachable from main menu")
+	_assert_true("InProgressView has IPFrame", main_check.get_node_or_null("InProgressView/IPFrame") != null,
+		"in_progress view should expose IPFrame container")
+	_assert_true("InProgressView has IPList", main_check.get_node_or_null("InProgressView/IPFrame/IPScroll/IPList") != null,
+		"in_progress view should expose a list container")
+	_assert_true("InProgressView has IPBackBtn", main_check.get_node_or_null("InProgressView/IPFrame/IPBackBtn") != null,
+		"in_progress view should expose a back button")
 	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
 		"attack flow should expose a confirm panel before POSTing")
+	var battle_top_art := main_check.get_node_or_null("GameView/HUD/TopStatusArt") as TextureRect
+	_assert_true("HUD top status art is wired", battle_top_art != null and battle_top_art.texture != null,
+		"the always-visible battle header must render its production art asset")
+	_assert_true("HUD top status art uses clean center rail",
+		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_status_rail_clean"),
+		"team meters need a center-safe rail without an overlapping emblem")
+	var compact_plaque_paths: Array[String] = [
+		"GameView/HUD/TopLeft/TurnBadge/OrnatePlaque",
+		"GameView/HUD/TopLeft/PhaseBadge/OrnatePlaque",
+		"GameView/HUD/TopRight/CurrentPlayerBadge/OrnatePlaque",
+		"GameView/HUD/TopRight/EndTurnButton/OrnatePlaque",
+		"GameView/HUD/BottomLeft/GoldPanel/OrnatePlaque",
+		"GameView/HUD/BottomRight/AIThinking/OrnatePlaque",
+		"GameView/HUD/BottomRight/WarReportButton/OrnatePlaque",
+	]
+	for plaque_path in compact_plaque_paths:
+		var plaque := main_check.get_node_or_null(plaque_path) as NinePatchRect
+		_assert_true("Compact HUD art wired: %s" % plaque_path,
+			plaque != null and plaque.texture != null and not plaque.draw_center,
+			"always-visible corner controls must keep their compact plaque art")
+	var ornate_panel_paths: Array[String] = [
+		"GameView/HUD/InfoPanel/OrnateFrame",
+		"GameView/HUD/ActionBubble/OrnateFrame",
+		"GameView/HUD/AttackConfirmPanel/OrnateFrame",
+		"GameView/HUD/WarReportPanel/OrnateFrame",
+		"SettingsPanel/OrnateFrame",
+		"GameView/HUD/PausePanel/OrnateFrame",
+		"GameView/HUD/DialogPanel/OrnateFrame",
+		"GameView/HUD/TutorialBubble/OrnateFrame",
+		"GameView/HUD/BattleResultPanel/OrnateFrame",
+	]
+	for ornate_path in ornate_panel_paths:
+		var ornate_frame := main_check.get_node_or_null(ornate_path) as NinePatchRect
+		_assert_true("Battle art wired: %s" % ornate_path,
+			ornate_frame != null and ornate_frame.texture != null and not ornate_frame.draw_center,
+			"battle panels must keep their non-blocking nine-slice ornament")
+	var battle_backdrop := main_check.get_node_or_null("GameView/BattleBackdrop/Background") as ColorRect
+	_assert_true("Battle backdrop is camera independent",
+		battle_backdrop != null and battle_backdrop.get_parent() is CanvasLayer and battle_backdrop.color.a >= 0.99,
+		"side gutters must use a fixed opaque CanvasLayer instead of the camera-transformed root background")
 	_assert_true("HUD has AttackConfirmButton", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel/ButtonRow/ConfirmBtn") != null,
 		"attack confirm panel should expose a confirm action")
 	_assert_true("BattleResult has MainlineNextBtn", main_check.get_node_or_null("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn") != null,
@@ -314,7 +368,31 @@ func _ready() -> void:
 	_assert_true("Main can build attack forecast info text", main_check.has_method("_build_attack_forecast_info_text"),
 		"attack forecast should render in the right-side information panel")
 	main_check.call("_show_view", "mainline")
-	main_check.call("_on_mainline_prepare_response", {
+	# P2 Batch A+B:提前定义 mainline_view 引用(批量 redirect 都需要它)
+	var mainline_view: Node = main_check.get_node("MainlineView")
+	# T:#16 — 章节 cleared 标注测试
+	mainline_view.call("_on_ml_list_response", [
+		{"id": "chapter_01_steel_rebellion", "title": "钢铁叛乱", "battle_count": 3, "synopsis": "测试"},
+		{"id": "chapter_02_eirika", "title": "圣剑之光", "battle_count": 5, "synopsis": "测试"},
+	], 200)
+	_assert_eq("Mainline list cache holds 2 entries", mainline_view._mainline_list_cache.size(), 2,
+		"mainline_controller should cache /mainlines response for cleared join")
+	# 模拟 cleared:chapter_01 通关(chapter_index == 2 == battle_count-1)
+	mainline_view.call("_on_ml_saves_for_cleared", {
+		"manual_slots": [
+			{"id": 1, "kind": "manual", "slot_index": 0, "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 2},
+		],
+		"auto_slot": {"id": 50, "kind": "auto", "slot_index": 0, "mainline_id": "chapter_02_eirika", "label": "chapter_02_eirika-结束", "chapter_index": 5},
+		"suspend": null,
+	}, 200)
+	_assert_true("Cleared set contains chapter_01", mainline_view._cleared_mainline_ids.has("chapter_01_steel_rebellion"),
+		"manual slot with chapter_index == battle_count-1 should mark mainline as cleared")
+	_assert_true("Cleared set contains chapter_02", mainline_view._cleared_mainline_ids.has("chapter_02_eirika"),
+		"auto slot with label ending '-结束' should mark mainline as cleared")
+	var ml_list_after: VBoxContainer = mainline_view.get_node("MLFrame/MLListContainer")
+	_assert_true("Chapter list renders cleared badge", ml_list_after.get_child_count() > 0 and ml_list_after.get_child(0).text.contains("已通关"),
+		"chapter card for cleared mainline should show '已通关' annotation")
+	mainline_view.call("_on_mainline_prepare_response", {
 		"battle_index": 0,
 		"total_battles": 2,
 		"inventory": {"gold": 320, "iron_sword": 1},
@@ -365,21 +443,21 @@ func _ready() -> void:
 	_assert_gte("Prepare equipment selector lists catalog", prep_equipment_select.item_count, 1,
 		"equipment selector should list warehouse items")
 	prep_hero_select.select(1)
-	main_check.call("_on_prepare_hero_selected", 1)
+	mainline_view.call("_on_prepare_hero_selected", 1)
 	_assert_true("Prepare hero selector changes sheet", prep_content.text.contains("Yun"),
 		"selecting another hero should update the hero paper sheet")
-	main_check.call("_on_prepare_shop_response", {
+	mainline_view.call("_on_prepare_shop_response", {
 		"mainline_id": "chapter_test",
 		"gold": 320,
 		"items": [{"item_id": "hero_crest", "name": "Hero Crest", "price": 100, "description": "Promote a hero"}],
 	}, 200)
-	main_check.call("_on_prepare_tab_pressed", "shop")
+	mainline_view.call("_on_prepare_tab_pressed", "shop")
 	var prep_shop_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepShopSelect")
 	_assert_gte("Prepare shop selector lists stock", prep_shop_select.item_count, 1,
 		"shop selector should list buyable stock")
 	_assert_true("Prepare shop renders item", prep_content.text.contains("Hero Crest"),
 		"shop tab should render post-battle shop stock")
-	main_check.call("_on_prepare_mercenary_response", {
+	mainline_view.call("_on_prepare_mercenary_response", {
 		"mainline_id": "chapter_test",
 		"balance": {
 			"allowed_unit_types": ["swordsman"],
@@ -388,7 +466,7 @@ func _ready() -> void:
 		"allocation": {"unit_type_upgrades": {"swordsman": {"atk": 1}}},
 		"mercenary_points": 2,
 	}, 200)
-	main_check.call("_on_prepare_tab_pressed", "mercenary")
+	mainline_view.call("_on_prepare_tab_pressed", "mercenary")
 	var prep_merc_unit_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercUnitSelect")
 	var prep_merc_stat_select: OptionButton = main_check.get_node("MainlineView/MLFrame/MLPrepSelectorRow/MLPrepMercStatSelect")
 	_assert_gte("Prepare mercenary unit selector lists types", prep_merc_unit_select.item_count, 1,
@@ -404,7 +482,25 @@ func _ready() -> void:
 		"battlefield hero units should render a visible hero badge")
 	hero_node.queue_free()
 	_setup_action_bubble_state(main_check)
-	main_check.call("_show_action_bubble", 10, Vector2(320, 240))
+	var action_board: Node = main_check.get_node("GameView/Board")
+	var source_screen: Vector2 = action_board.call("tile_to_screen", Vector2i(1, 1))
+	main_check.call("_show_action_bubble", 10, source_screen)
+	var board_screen_rect: Rect2 = action_board.call("screen_rect")
+	var action_bubble: Panel = main_check.get_node("GameView/HUD/ActionBubble")
+	_assert_true("Action menu remains inside viewport",
+		get_viewport().get_visible_rect().encloses(Rect2(action_bubble.position, action_bubble.size)),
+		"crowded edge formations may use a side HUD gutter, but must never leave the viewport")
+	_assert_true("Action menu never covers source unit",
+		not Rect2(action_bubble.position, action_bubble.size).intersects(Rect2(source_screen - Vector2(36, 36), Vector2(72, 72))),
+		"the selected unit must remain visible while choosing its action")
+	var action_title: Label = main_check.get_node("GameView/HUD/ActionBubble/ActionTitle")
+	_assert_true("Action menu identifies source unit", action_title.text.contains("治疗师"),
+		"context menus need a visible identity anchor in addition to their pointer")
+	await get_tree().process_frame
+	var action_list: VBoxContainer = main_check.get_node("GameView/HUD/ActionBubble/ActionList")
+	_assert_true("Action menu content clears ornate border",
+		action_list.position.y + action_list.size.y <= action_bubble.size.y - 12.0,
+		"dynamic action combinations must not push cancel text into the bottom frame")
 	_assert_action_button("Initial bubble keeps move", main_check, "MoveBtn", true,
 		"fresh unit should be offered movement")
 	_assert_action_button("Initial bubble hides attack without target", main_check, "AttackBtn", false,
@@ -416,6 +512,9 @@ func _ready() -> void:
 	main_check.call("_show_post_action_bubble", 10, "移动")
 	_assert_action_button("Post-move bubble keeps continue move", main_check, "MoveBtn", true,
 		"post-move menu should allow continued movement when MP remains")
+	var continued_reach: Dictionary = main_check.get("_move_reachable_set")
+	_assert_true("Post-move bubble rebuilds reachable cache", continued_reach.size() > 1,
+		"a visible continue-move command must retain destinations after immediate feedback clears the old cache")
 	var post_move_btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/MoveBtn")
 	_assert_true("Post-move bubble relabels move", post_move_btn.text.contains("继续"),
 		"post-move menu should distinguish continuing movement from initial movement")
@@ -423,20 +522,35 @@ func _ready() -> void:
 		"post-move menu should keep legal active skills")
 	_assert_action_button("Post-move bubble keeps claim", main_check, "ClaimBtn", true,
 		"post-move menu should keep legal claim")
+	var moved_unit: Dictionary = _game_state.get_unit(10)
+	moved_unit["has_moved"] = true
+	moved_unit["mp"] = 2
+	main_check.call("_handle_unit_click", 10, Vector2.ZERO)
+	_assert_action_button("Reselected moved unit keeps continue move", main_check, "MoveBtn", true,
+		"reselecting a unit with remaining MP must not collapse the menu to wait/cancel")
+	_assert_true("Reselected moved unit uses continue label", post_move_btn.text.contains("继续"),
+		"the reselected unit should retain post-move action context")
+	var reselected_reach: Dictionary = main_check.get("_move_reachable_set")
+	var within_remaining_mp := true
+	for path_cost in reselected_reach.values():
+		if int(path_cost) > 4:
+			within_remaining_mp = false
+	_assert_true("Continued movement respects remaining MP", within_remaining_mp,
+		"reachable preview must use remaining mp=2 rather than the unit's base mov=3")
 	main_check.call("_show_action_bubble", 11, Vector2(320, 240))
 	_assert_action_button("Attack-ready bubble shows attack", main_check, "AttackBtn", true,
 		"unit with an enemy in range should show attack")
 	var room_select: OptionButton = main_check.get_node(lobby_join_col + "/RoomSelectOption")
 	var room_list: RichTextLabel = main_check.get_node(lobby_join_col + "/RoomList")
-	main_check.call("_on_room_list_response", [
+	lobby_check.call("_on_room_list_response", [
 		{"id": 101, "name": "Alpha", "status": "waiting", "map_preset": "balanced_2p_15", "capacity": 2},
 		{"id": 202, "name": "Beta", "status": "waiting", "map_preset": "balanced_3p_15", "capacity": 3},
 	], 200)
 	room_select.select(1)
-	main_check.call("_on_room_selected", 1)
+	lobby_check.call("_on_room_selected", 1)
 	_assert_true("Lobby room selection marker moves", room_list.text.contains("> #202"),
 		"selecting a different room should move the visible marker")
-	main_check.call("_on_lobby_state", {
+	lobby_check.call("_on_lobby_state", {
 		"status": "waiting",
 		"player_count": 2,
 		"players": [
@@ -450,7 +564,7 @@ func _ready() -> void:
 		"lobby state should populate removable AI players")
 	_assert_true("Lobby remove AI enabled when AI present", not remove_ai_btn.disabled,
 		"remove-ai button should enable when there is a selected AI")
-	main_check.call("_on_lobby_presets_response", {
+	lobby_check.call("_on_lobby_presets_response", {
 		"maps": [{"id": "balanced_4p_20", "name": "balanced_4p_20", "biome": "grass", "recommended_players": 4}]
 	}, 200)
 	var seat_grid: GridContainer = main_check.get_node(lobby_create_col + "/SeatPanel/SeatGrid")
@@ -490,7 +604,7 @@ func _ready() -> void:
 	_assert_gte("Lobby 4P seat card has room for text", int(first_seat.custom_minimum_size.y), 150,
 		"4P seat cards should be tall enough that labels do not overlap")
 	main_check.set("_user_name", "Alice")
-	main_check.call("_on_lobby_seat_action_pressed", 0)
+	lobby_check.call("_on_lobby_seat_action_pressed", 0)
 	first_seat = seat_grid.get_child(0) as Panel
 	var first_occupant: Label = first_seat.get_node("SeatBox/SeatTopRow/SeatStatusBox/SeatOccupant") as Label
 	_assert_true("Lobby seat action shows occupant", first_occupant.text.contains("Alice"),
@@ -500,7 +614,7 @@ func _ready() -> void:
 		"AI replacement should expose a per-seat personality picker")
 	_assert_eq("Lobby AI personality option count", ai_personality_option.item_count, 3,
 		"per-seat AI personality picker should expose the three rules AI styles")
-	main_check.call("_on_lobby_presets_response", {
+	lobby_check.call("_on_lobby_presets_response", {
 		"maps": [{"id": "balanced_2p_15", "name": "balanced_2p_15", "biome": "grass", "recommended_players": 2}]
 	}, 200)
 	_assert_eq("Lobby 2P map renders two seat cards", seat_grid.get_child_count(), 2,
@@ -535,6 +649,75 @@ func _ready() -> void:
 	main_check.call("_unhandled_input", pan_press)
 	_assert_true("Main forwards left press to board panning", bool(game_board.get("_panning")),
 		"main click handling should not starve Board's left-drag panning state")
+	prev_tiles = _game_state.tiles
+	_game_state.tiles = [{"x": 3, "y": 4, "terrain": "plain", "subtype": ["连击"]}]
+	main_check.call("_refresh_unit_info", {
+		"id": 9001,
+		"name": "Knight",
+		"unit_type": "knight",
+		"level": 1,
+		"hp": 55,
+		"max_hp": 55,
+		"x": 3,
+		"y": 4,
+		"player_id": 1,
+		"color": "red",
+		"skills": ["double_strike"],
+	})
+	_game_state.tiles = prev_tiles
+	var info_text: String = str(main_check.get_node("GameView/HUD/InfoPanel/UnitInfo").text)
+	_assert_true("Unit info tolerates string subtype", info_text.length() > 0,
+		"clicking a unit must not crash when the tile subtype is a non-empty string")
+	_assert_true("Unit info hides backend hero id", not info_text.contains("Hero ID"),
+		"production inspection copy must not expose backend field names")
+	var inspect_card: Panel = main_check.get_node("GameView/HUD/InfoPanel")
+	var viewport_height: float = get_viewport().get_visible_rect().size.y
+	_assert_true("Inspect card stays inside the right HUD wing", inspect_card.size.x <= 460.0 and inspect_card.size.y <= viewport_height * 0.84,
+		"unit inspection may use the full right wing but must stop above the bottom action rail")
+	_assert_true("Hero portrait is integrated with inspection",
+		main_check.hero_portrait_panel.get_parent() == inspect_card,
+		"hero identity and unit stats must share one visual card instead of opposite screen edges")
+	var previous_co_states: Array = _game_state.co_states
+	_game_state.co_states = [{
+		"player_id": 1,
+		"color": "red",
+		"commander_id": null,
+		"meter": 0,
+		"threshold": 20,
+	}]
+	main_check.call("_refresh_co_roster")
+	await get_tree().process_frame
+	var roster_text := ""
+	for roster_label in main_check.get_node("GameView/HUD/CORoster").find_children("*", "Label", true, false):
+		roster_text += str((roster_label as Label).text)
+	_assert_true("CO roster localizes missing commander", roster_text.contains("未任命") and not roster_text.contains("<null>"),
+		"top status must replace nullable backend ids with player-facing copy")
+	_game_state.co_states = previous_co_states
+	main_check.call("_refresh_co_roster")
+	main_check.call("_set_unit_info_portrait", {"hero_id": "yun"})
+	var tactical_portrait := main_check.get("_unit_info_portrait_tex") as TextureRect
+	_assert_true("Hero selection shows compact portrait",
+		main_check.hero_portrait_panel.visible and tactical_portrait != null and tactical_portrait.visible,
+		"selecting a hero must reveal the compact tactical portrait card")
+	_assert_true("Hero portrait texture is loaded",
+		tactical_portrait != null and tactical_portrait.texture != null
+			and tactical_portrait.texture.resource_path.ends_with("portrait_yun.png"),
+		"the tactical card must load the selected hero's portrait resource")
+	_assert_true("Hero portrait stays inside compact card",
+		tactical_portrait != null and tactical_portrait.size.x <= main_check.hero_portrait_panel.size.x
+			and tactical_portrait.size.y <= main_check.hero_portrait_panel.size.y,
+		"portrait art must not recreate the removed full-height sidebar")
+	main_check.call("_set_unit_info_portrait", "")
+	_assert_true("Non-hero selection hides portrait", not main_check.hero_portrait_panel.visible,
+		"ordinary units must not leave stale hero art visible")
+	main_check.call("show_dialog", "旁白", "对话遮罩应阻止棋盘输入。")
+	_assert_true("Dialog overlay becomes visible", main_check.dialog_overlay.visible,
+		"opening dialogue should enable the input-blocking overlay")
+	_assert_eq("Dialog overlay blocks mouse input", main_check.dialog_overlay.mouse_filter, Control.MOUSE_FILTER_STOP,
+		"dialogue overlay must intercept pointer input before it reaches the board")
+	main_check.call("hide_dialog")
+	_assert_true("Dialog overlay hides with dialogue", not main_check.dialog_overlay.visible,
+		"closing dialogue should restore board interaction")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -547,6 +730,13 @@ func _ready() -> void:
 		"NetworkClient autoload not registered")
 	_assert_true("UserSettings autoload", _user_settings != null,
 		"UserSettings autoload not registered")
+	_assert_true("DialogManager autoload", DialogManager != null,
+		"DialogManager autoload not registered")
+	if DialogManager != null:
+		_assert_true("DialogManager.play method", DialogManager.has_method("play"),
+			"DialogManager must expose play() for global dialog API")
+		_assert_true("DialogManager.is_playing method", DialogManager.has_method("is_playing"),
+			"DialogManager must expose is_playing() for trigger dedupe")
 	if _network_client == null:
 		# Subsequent NetworkClient assertions would crash — short-circuit.
 		_fail("NetworkClient autoload missing; skipping method-shape assertions")
@@ -606,19 +796,40 @@ func _ready() -> void:
 	_assert_true("Resume button visible for filtered summary", resume_btn.visible,
 		"resume button should appear when a filtered playable save exists")
 
-	main_check.call("_on_saves_response", [
-		{"id": 88, "name": "Free Save", "status": "playing", "turn_number": 3, "map_seed": 77},
-		{"id": 99, "name": "mainline:chapter_01_steel_rebellion:battle_01", "status": "waiting", "turn_number": 1},
-	], 200)
+	# P2 + #16:saves 域已搬到 saves_controller;测试走 saves_view 回调
+	# #16 — 改用 /saves 新 schema(manual_slots/auto_slot/suspend),验证 3 槽卡片渲染
+	var saves_view: Node = main_check.get_node("SavesView")
+	saves_view.call("_on_saves_response", {
+		"manual_slots": [
+			{"id": 1, "kind": "manual", "slot_index": 0, "label": "第 3 章 - 手动", "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 2},
+			{"id": 2, "kind": "manual", "slot_index": 1, "label": "自由战 #42 - 手动", "mainline_id": "", "chapter_index": 0},
+		],
+		"auto_slot": {"id": 50, "kind": "auto", "slot_index": 0, "label": "chapter_01_steel_rebellion-结束", "mainline_id": "chapter_01_steel_rebellion", "chapter_index": 3},
+		"suspend": {"user_name": "Player", "game_id": 77, "mainline_id": "chapter_01_steel_rebellion", "battle_id": "battle_02", "suspend_point": "manual"},
+	}, 200)
+	# contract test:旧节点保留(visible=false)
 	var save_open_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveOpenList")
-	var save_ml_list: RichTextLabel = main_check.get_node("SavesView/SaveFrame/SaveMainlineList")
 	var save_select: OptionButton = main_check.get_node("SavesView/SaveFrame/SaveSelectOption")
-	_assert_true("Save manager renders open save", save_open_list.text.contains("Free Save"),
-		"open-mode saves should render in the open save list")
-	_assert_true("Save manager renders mainline save", save_ml_list.text.contains("chapter_01_steel_rebellion"),
-		"mainline saves should render in the mainline save list")
-	_assert_gte("Save manager populates select options", save_select.item_count, 2,
-		"save manager should populate operation selector")
+	_assert_true("Save manager exposes legacy SaveOpenList node", save_open_list != null,
+		"legacy SaveOpenList node should remain in tree for contract test")
+	_assert_true("Save manager exposes legacy SaveSelectOption node", save_select != null,
+		"legacy SaveSelectOption node should remain in tree for contract test")
+	# #16 — 新 3 槽卡片验证
+	var save_slots_container: VBoxContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveSlotsContainer")
+	var save_auto_row: PanelContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveAutoRow")
+	var save_suspend_row: PanelContainer = main_check.get_node_or_null("SavesView/SaveFrame/SaveSuspendRow")
+	_assert_true("SavesView has SaveSlotsContainer", save_slots_container != null,
+		"saves view should expose a slots container for the 3 manual cards")
+	_assert_true("SavesView has SaveAutoRow", save_auto_row != null,
+		"saves view should expose an auto-save row")
+	_assert_true("SavesView has SaveSuspendRow", save_suspend_row != null,
+		"saves view should expose a suspend row")
+	_assert_eq("SavesView renders 3 manual rows", save_slots_container.get_child_count() if save_slots_container else 0, 3,
+		"3 manual slot cards should always be rendered (空/手/自)")
+	_assert_true("Auto row renders auto-save label", save_auto_row.get_child_count() > 0 and save_auto_row.get_child(0) is HBoxContainer,
+		"auto row should contain an HBox with info + load button when present")
+	_assert_true("Suspend row renders suspend info", save_suspend_row.get_child_count() > 0,
+		"suspend row should render an HBox with game_id + actions")
 
 	var confirm_text: String = main_check.call("_build_attack_confirm_text", {
 		"name": "Knight", "unit_type": "knight", "x": 1, "y": 1, "hp": 10
@@ -682,7 +893,8 @@ func _ready() -> void:
 	_assert_true("Recruit response status includes remaining gold", main_status_label.text.contains("150"),
 		"recruit success status should include remaining gold")
 
-	main_check.call("_on_ml_list_response", [
+	# P2 Batch A:redirect _on_ml_list_response(已在上面定义 mainline_view)
+	mainline_view.call("_on_ml_list_response", [
 		{
 			"id": "chapter_01_steel_rebellion",
 			"title": "Steel Rebellion",
@@ -699,7 +911,8 @@ func _ready() -> void:
 			"mainline button should render backend battle_count")
 		_assert_true("Mainline list uses backend synopsis tooltip", ml_btn.tooltip_text == "Opening chapter",
 			"mainline button tooltip should use backend synopsis")
-	main_check.call("_on_commanders_response", {
+	# P2 Batch A:redirect commander response 到 mainline_view(组件 self)
+	mainline_view.call("_on_commanders_response", {
 		"user_name": "Alice",
 		"unlocked_commanders": ["yun", "anna"],
 		"mainline_commanders": {"chapter_01_steel_rebellion": "yun"},
@@ -714,19 +927,27 @@ func _ready() -> void:
 		"lobby commander selector should include none plus unlocked commanders")
 	_assert_gte("Lobby AI commander selector lists unlocked choices", ai_commander_option.item_count, 3,
 		"AI commander selector should include auto plus unlocked commanders")
+	main_check.set("_game_id", 0)
+	lobby_check.call("_on_lobby_seat_ai_toggled", true, 1)
 	ai_commander_option.select(1)
-	var ai_commanders: Dictionary = main_check.call("_selected_lobby_ai_commanders")
-	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(2, "")), "yun",
-		"room creation should map the selected AI commander to seat 2")
+	var ai_commanders: Dictionary = lobby_check.call("_selected_lobby_ai_commanders")
+	var first_ai_seat := -1
+	for seat_index in range(lobby_check.call("_selected_lobby_player_count")):
+		if bool(lobby_check.call("_lobby_ai_replacement_for_seat", seat_index)):
+			first_ai_seat = seat_index
+			break
+	_assert_eq("Lobby AI commander config targets first AI seat", str(ai_commanders.get(first_ai_seat, "")), "yun",
+		"room creation should map the selected AI commander to the first AI replacement seat")
 	_assert_true("Mainline commander response shows current choice", commander_status.text.contains("云"),
 		"commander response should show the selected commander in Chinese")
-	main_check.call("_on_select_mainline_commander_response", {
+	# P2 Batch A:redirect select commander response 到 mainline_view
+	mainline_view.call("_on_select_mainline_commander_response", {
 		"mainline_id": "chapter_01_steel_rebellion",
 		"commander_id": "anna",
 	}, 200)
 	_assert_true("Mainline commander select response updates status", commander_status.text.contains("安娜"),
 		"commander select response should show the applied commander in Chinese")
-	main_check.call("_on_audio_tracks_response", {
+	lobby_check.call("_on_audio_tracks_response", {
 		"tracks": [
 			{"track_id": "sample_battle_01", "title": "Sample Battle", "category": "battle"},
 		],
@@ -771,7 +992,7 @@ func _ready() -> void:
 		"editor width selector should expose common map sizes")
 	_assert_gte("Editor height selector lists sizes", editor_height_option.item_count, 4,
 		"editor height selector should expose common map sizes")
-	main_check.call("_on_editor_maps_response", [
+	editor_view.call("_on_editor_maps_response", [
 		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
 		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
 	], 200)
@@ -782,10 +1003,10 @@ func _ready() -> void:
 	_assert_true("Editor delete enables with saved map", not editor_delete_btn.disabled,
 		"delete should enable when a saved map is selected")
 	editor_map_select.select(1)
-	main_check.call("_on_editor_map_selected", 1)
-	_assert_eq("Editor selected map id updates", str(main_check.get("_selected_editor_map_id")), "map_beta",
+	editor_view.call("_on_editor_map_selected", 1)
+	_assert_eq("Editor selected map id updates", str(editor_view.get("_selected_editor_map_id")), "map_beta",
 		"selecting a saved map should store its id")
-	main_check.call("_on_editor_load_response", {
+	editor_view.call("_on_editor_load_response", {
 		"id": "map_beta",
 		"name": "Beta",
 		"size": {"width": 15, "height": 15},
@@ -793,18 +1014,18 @@ func _ready() -> void:
 		"layout": ["S".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
 		"initial_units": [],
 	}, 200)
-	var loaded_editor_map: Dictionary = main_check.get("_editor_map")
+	var loaded_editor_map: Dictionary = editor_view.get("_editor_map")
 	_assert_eq("Editor load response replaces current map", str(loaded_editor_map.get("id", "")), "map_beta",
 		"loading a saved map should replace the editor map")
-	main_check.call("_on_editor_delete_response", {}, 204)
-	_assert_eq("Editor delete clears selected map id", str(main_check.get("_selected_editor_map_id")), "",
+	editor_view.call("_on_editor_delete_response", {}, 204)
+	_assert_eq("Editor delete clears selected map id", str(editor_view.get("_selected_editor_map_id")), "",
 		"successful delete should clear the selected map id")
 	editor_mode_option.select(2)
 	editor_unit_option.select(1)
 	editor_unit_color_option.select(1)
 	editor_unit_level_option.select(2)
-	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
-	var unit_editor_map: Dictionary = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	var unit_editor_map: Dictionary = editor_view.get("_editor_map")
 	var editor_units: Array = unit_editor_map.get("initial_units", [])
 	_assert_eq("Editor unit mode places one unit", editor_units.size(), 1,
 		"unit mode should add an initial unit at the clicked tile")
@@ -815,8 +1036,8 @@ func _ready() -> void:
 	_assert_eq("Editor unit mode stores selected level", int((editor_units[0] as Dictionary).get("level", 0)), 3,
 		"unit placement should use the selected level")
 	editor_unit_tool_option.select(1)
-	main_check.call("_on_editor_tile_clicked", Vector2i(2, 2))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(2, 2))
+	unit_editor_map = editor_view.get("_editor_map")
 	editor_units = unit_editor_map.get("initial_units", [])
 	_assert_eq("Editor unit erase removes unit", editor_units.size(), 0,
 		"unit erase mode should remove the unit at the clicked tile")
@@ -824,8 +1045,8 @@ func _ready() -> void:
 	editor_mode_option.select(1)
 	editor_surface_option.select(1)
 	editor_surface_owner_option.select(2)
-	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = editor_view.get("_editor_map")
 	var surface_layout: Array = unit_editor_map.get("layout", [])
 	var tile_owners: Array = unit_editor_map.get("tile_owners", [])
 	_assert_true("Editor surface mode paints building", str(surface_layout[3])[3] == "v",
@@ -833,21 +1054,21 @@ func _ready() -> void:
 	_assert_eq("Editor surface mode stores owner", str((tile_owners[0] as Dictionary).get("color", "")), "blue",
 		"surface deployment should store the selected owner color")
 	editor_surface_owner_option.select(0)
-	main_check.call("_on_editor_tile_clicked", Vector2i(3, 3))
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_tile_clicked", Vector2i(3, 3))
+	unit_editor_map = editor_view.get("_editor_map")
 	tile_owners = unit_editor_map.get("tile_owners", [])
 	_assert_eq("Editor surface unowned clears owner", tile_owners.size(), 0,
 		"painting an unowned surface should remove ownership metadata")
 	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorBiomeOption")
 	editor_biome_option.select(1)
 	editor_apply_biome_btn.pressed.emit()
-	unit_editor_map = main_check.get("_editor_map")
+	unit_editor_map = editor_view.get("_editor_map")
 	_assert_eq("Editor biome apply updates map", str(unit_editor_map.get("biome", "")), "snow",
 		"one-click biome branch switching should update the editor map immediately")
 	editor_width_option.select(1)
 	editor_height_option.select(0)
-	main_check.call("_on_editor_resize_pressed")
-	unit_editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_resize_pressed")
+	unit_editor_map = editor_view.get("_editor_map")
 	var editor_size: Dictionary = unit_editor_map.get("size", {})
 	var resized_layout: Array = unit_editor_map.get("layout", [])
 	_assert_eq("Editor resize updates width", int(editor_size.get("width", 0)), 20,
@@ -856,7 +1077,7 @@ func _ready() -> void:
 		"resize should update the saved map height")
 	_assert_eq("Editor resize pads row width", str(resized_layout[0]).length(), 20,
 		"resize should pad layout rows to the selected width")
-	main_check.call("_on_editor_save_response", {
+	editor_view.call("_on_editor_save_response", {
 		"id": "saved_alpha",
 		"name": "Saved Alpha",
 		"size": {"width": 15, "height": 15},
@@ -864,13 +1085,13 @@ func _ready() -> void:
 		"layout": ["P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15), "P".repeat(15)],
 		"initial_units": [],
 	}, 201)
-	var preset_options_after_save: Array = main_check.get("_preset_options")
+	var preset_options_after_save: Array = lobby_check.get("_preset_options")
 	_assert_true("Editor save adds custom lobby preset", _preset_options_contain(preset_options_after_save, "custom:saved_alpha"),
 		"saving an editor map should immediately expose custom:{id} in lobby presets")
 	editor_terrain_option.select(1)
 	editor_mode_option.select(0)
-	main_check.call("_paint_editor_tile", Vector2i(1, 1))
-	var editor_map: Dictionary = main_check.get("_editor_map")
+	editor_view.call("_paint_editor_tile", Vector2i(1, 1))
+	var editor_map: Dictionary = editor_view.get("_editor_map")
 	var editor_layout: Array = editor_map.get("layout", [])
 	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
 		"painting with the forest brush should mutate the editor layout")
@@ -880,21 +1101,21 @@ func _ready() -> void:
 		"painting should push a history entry that can be undone")
 	_assert_true("Editor redo disabled before undo", editor_redo_btn.disabled,
 		"redo should stay disabled until an undo is performed")
-	main_check.call("_on_editor_undo_pressed")
-	editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_undo_pressed")
+	editor_map = editor_view.get("_editor_map")
 	editor_layout = editor_map.get("layout", [])
 	_assert_true("Editor undo restores terrain", str(editor_layout[1])[1] == "P",
 		"undo should restore the previous terrain at the painted tile")
 	_assert_true("Editor redo enables after undo", not editor_redo_btn.disabled,
 		"undo should make redo available")
-	main_check.call("_on_editor_redo_pressed")
-	editor_map = main_check.get("_editor_map")
+	editor_view.call("_on_editor_redo_pressed")
+	editor_map = editor_view.get("_editor_map")
 	editor_layout = editor_map.get("layout", [])
 	_assert_true("Editor redo reapplies terrain", str(editor_layout[1])[1] == "F",
 		"redo should reapply the terrain change")
 
 	main_check.set("_user_name", "Alice")
-	main_check.call("_on_mainline_start_response", {
+	mainline_view.call("_on_mainline_start_response", {
 		"game_id": 123,
 		"player_id": 456,
 		"mainline_id": "chapter_01_steel_rebellion",
@@ -911,7 +1132,7 @@ func _ready() -> void:
 	_assert_true("Mainline start status includes progress", main_status_label.text.contains("1/2"),
 		"mainline start should show battle progress")
 
-	main_check.call("_on_mainline_advance_response", {
+	mainline_view.call("_on_mainline_advance_response", {
 		"state": "dialogue",
 		"mainline_id": "chapter_01_steel_rebellion",
 		"battle_index": 1,
@@ -921,9 +1142,14 @@ func _ready() -> void:
 	_assert_true("Mainline advance status includes next progress", main_status_label.text.contains("2/2"),
 		"mainline advance should show the next battle progress")
 	var ml_next_btn: Button = main_check.get_node("GameView/HUD/BattleResultPanel/ResultBtnRow/MainlineNextBtn")
-	_assert_true("Mainline advance shows next battle button", ml_next_btn.visible,
-		"non-victory advance should reveal the next-battle button")
-	main_check.call("_on_mainline_next_battle_response", {
+	# Phase 3 (FE8 auto-advance): non-victory advance no longer reveals
+	# the MainlineNextBtn button — instead main.gd immediately calls
+	# ``NetworkClient.next_battle_mainline``.  The button stays hidden
+	# to match the FE8 chapter-advance invariant (server-driven flow,
+	# no UI gate).  See commit f96753b (refactor/extract-mainline-modules).
+	_assert_true("Mainline advance hides next battle button (FE8 auto-advance)", not ml_next_btn.visible,
+		"non-victory advance should hide the next-battle button — advance now auto-calls NetworkClient.next_battle_mainline")
+	mainline_view.call("_on_mainline_next_battle_response", {
 		"game_id": 321,
 		"player_id": 654,
 		"mainline_id": "chapter_01_steel_rebellion",
@@ -933,7 +1159,7 @@ func _ready() -> void:
 	}, 201)
 	_assert_eq("Mainline next stores game id", int(main_check.get("_game_id")), 321,
 		"next battle should store the spawned game id")
-	main_check.call("_on_mainline_advance_response", {
+	mainline_view.call("_on_mainline_advance_response", {
 		"state": "victory",
 		"mainline_id": "chapter_01_steel_rebellion",
 		"battle_index": 2,
@@ -945,7 +1171,7 @@ func _ready() -> void:
 	_assert_true("Mainline victory hides next battle button", not ml_next_btn.visible,
 		"mainline victory should hide the next-battle button")
 	main_check.set("_active_mainline_id", "chapter_01_steel_rebellion")
-	main_check.call("_on_mainline_abandon_response", {
+	mainline_view.call("_on_mainline_abandon_response", {
 		"ok": true,
 		"mainline_id": "chapter_01_steel_rebellion",
 		"abandoned_at": "2026-07-16T00:00:00Z",
@@ -954,7 +1180,7 @@ func _ready() -> void:
 		"abandon should clear active mainline state")
 	_assert_true("Mainline abandon status is shown", main_status_label.text.contains("放弃"),
 		"abandon should update status")
-	main_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
+	lobby_check.call("_on_lobby_team_response", {"ok": true, "player_id": 1, "team": "red"}, 200)
 	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
 	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
 		"team update response should show selected team in Chinese")
@@ -1011,8 +1237,11 @@ func _test_one_map(map_id: String) -> void:
 	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
 		"board camera should be present")
 	var viewport_size := board.get_viewport().get_visible_rect().size
-	var usable_w: float = viewport_size.x * 0.55
-	var usable_h: float = viewport_size.y
+	# The compact inspect card is opt-in.  A fresh board must fit against the
+	# whole viewport; selecting a unit then reserves a small right-side area.
+	var usable_w: float = viewport_size.x
+	# The top status rail owns 112 px and the bottom HUD keeps 16 px clear.
+	var usable_h: float = viewport_size.y - 128.0
 	var board_pixel_w: float = float(w * MAP_METRICS_SCRIPT.TILE_SIZE.x)
 	var board_pixel_h: float = float(h * MAP_METRICS_SCRIPT.TILE_SIZE.y)
 	var expected_fit_zoom: float = min(
@@ -1020,7 +1249,14 @@ func _test_one_map(map_id: String) -> void:
 		(usable_h - 16.0) / board_pixel_h
 	)
 	_assert_eq("%s camera zoom matches viewport fit" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(expected_fit_zoom, 0.001),
-		"board camera should derive fit zoom from the active viewport and reserved HUD width")
+		"board camera should fit the full battlefield when no inspect card is open")
+	board.board_camera.set_inspect_card_visible(true)
+	var inspect_expected_zoom: float = min(
+		(viewport_size.x * 0.73 - 16.0) / board_pixel_w,
+		(usable_h - 16.0) / board_pixel_h
+	)
+	_assert_eq("%s camera zoom reserves inspect card" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(inspect_expected_zoom, 0.001),
+		"board camera should reserve only the compact inspect-card width")
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()
@@ -1226,12 +1462,68 @@ func _assert_tiles_fill_48px_regions(ts: TileSet) -> void:
 			"terrain texture must cover a 48px cell")
 		_assert_gte("tile image height(%s)" % terrain, img.get_height(), 48,
 			"terrain texture must cover a 48px cell")
-		var bottom_right: Color = img.get_pixel(47, 47)
-		_assert_true("tile fills bottom-right(%s)" % terrain, bottom_right.a > 0.05,
-			"48px tile region should not leave transparent padding")
+		var atlas_coord: Vector2i = TileSetBuilder.atlas_coord_for(String(terrain), biome)
+		if atlas_coord != Vector2i(-1, -1):
+			var tile_has_pixels := _atlas_tile_has_visible_pixels(img, atlas_coord)
+			_assert_true("atlas tile has visible pixels(%s)" % terrain, tile_has_pixels,
+				"configured atlas tile should contain visible art in its 48px cell")
+		else:
+			var bottom_right: Color = img.get_pixel(47, 47)
+			_assert_true("tile fills bottom-right(%s)" % terrain, bottom_right.a > 0.05,
+				"48px tile region should not leave transparent padding")
 		var center: Color = img.get_pixel(24, 24)
 		_assert_true("tile avoids debug fill(%s)" % terrain, not _is_debug_magenta(center),
 			"missing tile assets should fall back to real terrain art, not debug color")
+
+
+func _atlas_tile_has_visible_pixels(img: Image, atlas_coord: Vector2i) -> bool:
+	var x0 := atlas_coord.x * MAP_METRICS_SCRIPT.TILE_SIZE.x
+	var y0 := atlas_coord.y * MAP_METRICS_SCRIPT.TILE_SIZE.y
+	for y in range(y0, min(y0 + MAP_METRICS_SCRIPT.TILE_SIZE.y, img.get_height())):
+		for x in range(x0, min(x0 + MAP_METRICS_SCRIPT.TILE_SIZE.x, img.get_width())):
+			if img.get_pixel(x, y).a > 0.05:
+				return true
+	return false
+
+
+func _assert_new_tileset_atlas_sources(ts: TileSet) -> void:
+	var checks := {
+		"plain|": {
+			"path": "res://assets/tilesets/base_terrain_roads.png",
+			"coord": Vector2i(0, 0),
+		},
+		"road|": {
+			"path": "res://assets/tilesets/base_terrain_roads.png",
+			"coord": Vector2i(0, 1),
+		},
+		"village|": {
+			"path": "res://assets/tilesets/village_castle_mountains.png",
+			"coord": Vector2i(0, 0),
+		},
+		"forest|grass": {
+			"path": "res://assets/tilesets/trees_mountains.png",
+			"coord": Vector2i(0, 0),
+		},
+	}
+	for key in checks.keys():
+		var parts := String(key).split("|", false)
+		var terrain := String(parts[0])
+		var biome := String(parts[1]) if parts.size() > 1 else ""
+		var sid: int = TileSetBuilder.source_id_for(terrain, biome)
+		_assert_gte("atlas source id(%s)" % key, sid, 0,
+			"terrain should resolve to the committed atlas sheet")
+		if sid < 0:
+			continue
+		var source: TileSetSource = ts.get_source(sid)
+		if not (source is TileSetAtlasSource):
+			_fail("atlas source for %s is not TileSetAtlasSource" % key)
+			continue
+		var atlas_source: TileSetAtlasSource = source
+		_assert_eq("atlas source path(%s)" % key, atlas_source.resource_name, str(checks[key]["path"]),
+			"terrain should keep a stable atlas source path for resource replacement")
+		var coords: Array = TileSetBuilder.atlas_coords_for(terrain, biome)
+		_assert_true("atlas coord pool(%s)" % key, coords.has(checks[key]["coord"]),
+			"terrain should include the documented tile inside the new atlas sheet")
 
 
 func _assert_unit_sprite_preserves_aspect() -> void:

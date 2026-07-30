@@ -168,9 +168,19 @@ INCOME_PER_TURN: Final[Dict[str, int]] = {
 RECRUIT_COST: Final[Dict[str, int]] = {
     "swordsman": 200,
     "archer":    250,
-    "knight":    400,
+    "warrior":   260,
+    "lancer":    280,
     "warlock":   300,
     "healer":    350,
+    "knight":    400,
+    "falcon_knight": 450,
+    "dragon_rider": 500,
+    "berserker": 500,
+    "blade_master": 650,
+    "sniper":    650,
+    "saint":     650,
+    "paladin":   700,
+    "sage":      700,
 }
 
 # Relative spawn weight for procedural map generation (excluding castle).
@@ -650,7 +660,7 @@ CRIT_MULTIPLIER: Final[float] = 1.5
 EXP_PER_KILL: Final[int] = 10
 EXP_PER_ASSIST: Final[int] = 5   # if a teammate landed the killing blow
 EXP_TO_LEVEL: Final[int] = 60    # every 60 EXP triggers level-up (faster pacing)
-MAX_LEVEL: Final[int] = 10
+MAX_LEVEL: Final[int] = 20
 LEVEL_UP_STAT_BONUS: Final[float] = 0.05   # +5% to all base stats on level up
 LEVEL_UP_BONUS_POINTS: Final[int] = 2      # manual stat points per level (auto for now)
 

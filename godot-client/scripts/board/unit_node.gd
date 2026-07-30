@@ -27,8 +27,10 @@ const _SPRITE_DIR := "res://assets/classic/"
 const _HERO_SPRITE_DIR := "res://assets/heroes/"
 # 镜像 game/app/web/assets/classic/ 7 类 sprite
 const _KNOWN_TYPES := [
-	"archer", "healer", "heavy_armor", "knight",
-	"swordsman", "warlock",
+	"archer", "berserker", "blade_master", "dragon_rider",
+	"falcon_knight", "healer", "heavy_armor", "knight",
+	"lancer", "paladin", "sage", "saint", "sniper",
+	"swordsman", "warlock", "warrior",
 ]
 # 英雄单位 — 用 hero 立绘(anna.png / yun.png)替代 base class sprite。
 # 后续可在 .import 注册更多(用 `find_hero_sprite_path` 字典扩展)。
@@ -88,6 +90,7 @@ var _team_id: Variant = null
 
 func _clear_children() -> void:
 	for child in get_children():
+		remove_child(child)
 		child.queue_free()
 
 
@@ -283,17 +286,24 @@ func _refresh() -> void:
 		return
 	# HP bar
 	var hp: int = int(unit_data.get("hp", 0))
-	var max_hp: int = max(1, int(unit_data.get("max_hp", 1)))
-	var pct: float = clamp(float(hp) / float(max_hp), 0.0, 1.0)
-	var bar_w: float = 42.0 - 2.0
-	_hp_bar.size.x = bar_w * pct
-	if pct > 0.5:
-		_hp_bar.color = _COL_HP_GREEN
-	elif pct > 0.25:
-		_hp_bar.color = _COL_HP_YELLOW
+	var raw_max_hp: int = int(unit_data.get("max_hp", 1))
+	var hp_known := hp >= 0 and raw_max_hp > 0
+	if not hp_known:
+		_hp_bar.visible = false
+		_hp_bar_bg.visible = false
 	else:
-		_hp_bar.color = _COL_HP_RED
-	_hp_bar_bg.visible = hp < max_hp
+		_hp_bar.visible = true
+		var max_hp: int = max(1, raw_max_hp)
+		var pct: float = clamp(float(hp) / float(max_hp), 0.0, 1.0)
+		var bar_w: float = 42.0 - 2.0
+		_hp_bar.size.x = bar_w * pct
+		if pct > 0.5:
+			_hp_bar.color = _COL_HP_GREEN
+		elif pct > 0.25:
+			_hp_bar.color = _COL_HP_YELLOW
+		else:
+			_hp_bar.color = _COL_HP_RED
+		_hp_bar_bg.visible = hp < max_hp
 	# MP badge(mage/healer/skill 单位有,显示百分比)
 	var mp: int = int(unit_data.get("mp", 0))
 	var max_mp: int = int(unit_data.get("max_mp", 0))

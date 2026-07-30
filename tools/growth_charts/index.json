@@ -1,0 +1,172 @@
+[
+  {
+    "kind": "class",
+    "type_id": "archer",
+    "label_cn": "弓箭手",
+    "label_en": "Archer",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\archer.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "dragon_rider",
+    "label_cn": "飞龙骑士",
+    "label_en": "Dragon Rider",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\dragon_rider.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "falcon_knight",
+    "label_cn": "天马骑士",
+    "label_en": "Falcon Knight",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\falcon_knight.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "healer",
+    "label_cn": "治疗师",
+    "label_en": "Healer",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\healer.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "knight",
+    "label_cn": "骑士",
+    "label_en": "Knight",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\knight.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "lancer",
+    "label_cn": "枪兵",
+    "label_en": "Lancer",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\lancer.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "swordsman",
+    "label_cn": "剑士",
+    "label_en": "Swordsman",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\swordsman.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "warlock",
+    "label_cn": "术士",
+    "label_en": "Warlock",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\warlock.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "warrior",
+    "label_cn": "斧战士",
+    "label_en": "Warrior",
+    "tier": 1,
+    "output": "tools\\growth_charts\\classes\\warrior.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "berserker",
+    "label_cn": "狂战士",
+    "label_en": "Berserker",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\berserker.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "blade_master",
+    "label_cn": "剑圣",
+    "label_en": "Blade Master",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\blade_master.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "paladin",
+    "label_cn": "圣骑士",
+    "label_en": "Paladin",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\paladin.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "sage",
+    "label_cn": "贤者",
+    "label_en": "Sage",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\sage.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "saint",
+    "label_cn": "圣者",
+    "label_en": "Saint",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\saint.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "class",
+    "type_id": "sniper",
+    "label_cn": "狙击手",
+    "label_en": "Sniper",
+    "tier": 2,
+    "output": "tools\\growth_charts\\classes\\sniper.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "hero",
+    "hero_id": "anna",
+    "label_cn": "安娜",
+    "label_en": "Anna",
+    "base_class_id": "healer",
+    "output": "tools\\growth_charts\\heroes\\anna.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  },
+  {
+    "kind": "hero",
+    "hero_id": "yun",
+    "label_cn": "云",
+    "label_en": "Yun",
+    "base_class_id": "warlock",
+    "output": "tools\\growth_charts\\heroes\\yun.png",
+    "policy": "battle_lane",
+    "max_level": 20
+  }
+]

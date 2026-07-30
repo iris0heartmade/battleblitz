@@ -21,6 +21,7 @@ from app.config import (
 )
 from app.classes.units.skills.base import SkillContext
 from app.classes.units.skills.heal import HealSkill
+from app.classes.units.skills.sing import SingSkill
 from app.game_logic import (
     _type_multiplier,
     apply_damage,
@@ -398,6 +399,69 @@ class TestHeal:
         a.player_id = 99  # different from h.player_id=1
         a.max_hp = 50
         ctx = SkillContext(user=h, target=a)
+        assert self._skill.can_use(ctx) is False
+
+
+@pytest.mark.unit
+class TestSing:
+    _skill = SingSkill()
+
+    def test_refreshes_adjacent_acted_ally(self):
+        """SingSkill.execute() gives an adjacent acted ally another action."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        bard = _stub_unit("bard", skills=["sing"], x=0, y=0)
+        ally = _stub_unit("swordsman", x=1, y=0)
+        ally.player_id = bard.player_id
+        ally.has_acted = True
+        ally.has_moved = True
+        ally.mp = 0
+        ctx = SkillContext(user=bard, target=ally)
+        session = AsyncMock()
+
+        result = asyncio.run(self._skill.execute(session, ctx))
+
+        assert result.affected_units == [ally.id]
+        assert ally.has_acted is False
+        assert ally.has_moved is False
+        assert ally.mp == 5
+        assert bard.has_acted is True
+        assert bard.mp == 0
+
+    def test_can_use_adjacent_acted_same_player(self):
+        bard = _stub_unit("bard", skills=["sing"], x=0, y=0)
+        ally = _stub_unit("swordsman", x=1, y=0)
+        ally.player_id = bard.player_id
+        ally.has_acted = True
+        ctx = SkillContext(user=bard, target=ally)
+
+        assert self._skill.can_use(ctx) is True
+
+    def test_cannot_use_on_unacted_ally(self):
+        bard = _stub_unit("bard", skills=["sing"], x=0, y=0)
+        ally = _stub_unit("swordsman", x=1, y=0)
+        ally.player_id = bard.player_id
+        ctx = SkillContext(user=bard, target=ally)
+
+        assert self._skill.can_use(ctx) is False
+
+    def test_cannot_use_on_enemy(self):
+        bard = _stub_unit("bard", skills=["sing"], x=0, y=0)
+        enemy = _stub_unit("swordsman", x=1, y=0)
+        enemy.player_id = 99
+        enemy.has_acted = True
+        ctx = SkillContext(user=bard, target=enemy)
+
+        assert self._skill.can_use(ctx) is False
+
+    def test_cannot_use_when_not_adjacent(self):
+        bard = _stub_unit("bard", skills=["sing"], x=0, y=0)
+        ally = _stub_unit("swordsman", x=2, y=0)
+        ally.player_id = bard.player_id
+        ally.has_acted = True
+        ctx = SkillContext(user=bard, target=ally)
+
         assert self._skill.can_use(ctx) is False
 
 

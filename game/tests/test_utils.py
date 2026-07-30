@@ -199,6 +199,27 @@ class TestBfsReachable:
         # But we can still pass over its neighbours
         assert (7, 7) in reachable
 
+    def test_ally_no_end_passable_but_not_endable(self):
+        # T:#20 — 火纹风格:同 team 占用格可穿过(不阻挡 BFS),但不能结束在同一格。
+        g = _plain_grid()
+        no_end = {(6, 7)}  # ally 占用
+        reachable = bfs_reachable((5, 7), g, _owners_empty(), mov=10,
+                                  viewer_owner_id=None, no_end_units=no_end)
+        # no_end 格既不在 reachable(不能结束)也不阻挡 BFS(可以路过)
+        # 走到 (7,7) 必须经过 (6,7),所以 (6,7) 在 dist 里但不在 reachable
+        assert (6, 7) not in reachable
+        assert (7, 7) in reachable  # 穿过 ally 后能到 (7,7)
+
+    def test_enemy_blocked_full_block(self):
+        # T:#20 — 敌方占用格:该格不进 reachable,只能绕路(如果周围可走)。
+        g = _plain_grid()
+        blocked = {(6, 7)}
+        reachable = bfs_reachable((5, 7), g, _owners_empty(), mov=10,
+                                  viewer_owner_id=None, blocked_units=blocked)
+        assert (6, 7) not in reachable  # 敌方格不能结束
+        # 周围格子可绕路(BFS 不是隔离墙),(7,7) 通过 (6,6)→(7,6) 仍可达
+        assert (7, 7) in reachable
+
 
 # ============================================================
 # pathfind

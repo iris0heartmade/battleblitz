@@ -44,3 +44,32 @@ var hover_tile: Vector2i = Vector2i(-1, -1):
 # M2 will populate these via MapLogic.compute_reachable + pathfind.
 var reachable_tiles: Array = []                 # Array[Vector2i]
 var current_path: Array = []                    # Array[Vector2i]
+
+
+# --- Board-click lock for modal interactions (dialogs, confirm prompts) ---
+# 嵌套可重入 — N 个 lock() 必须 N 个 unlock() 才解锁
+var _lock_count: int = 0
+signal lock_changed(locked: bool)
+
+func lock() -> void:
+	_lock_count += 1
+	if _lock_count == 1:
+		lock_changed.emit(true)
+
+
+func unlock() -> void:
+	_lock_count = max(0, _lock_count - 1)
+	if _lock_count == 0:
+		lock_changed.emit(false)
+
+
+func set_locked(value: bool) -> void:
+	if value:
+		lock()
+	elif _lock_count > 0:
+		while _lock_count > 0:
+			unlock()
+
+
+func is_input_locked() -> bool:
+	return _lock_count > 0

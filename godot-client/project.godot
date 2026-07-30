@@ -24,6 +24,7 @@ GameState="*res://scripts/autoload/game_state.gd"
 InputState="*res://scripts/autoload/input_state.gd"
 NetworkClient="*res://scripts/autoload/network_client.gd"
 AudioManager="*res://scripts/autoload/audio_manager.gd"
+DialogManager="*res://scripts/autoload/dialog_manager.gd"
 
 [display]
 

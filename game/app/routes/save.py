@@ -30,6 +30,7 @@ from app.save import SaveService
 from app.save.models import GameSaveSlot, SaveSlotKind, SuspendPoint, SuspendState
 from app.save.schemas import (
     AutoSaveCheckpointOut,
+    DiscardSuspendOut,
     GameSaveSlotOut,
     LoadSuspendOut,
     LoadSuspendRequest,
@@ -396,6 +397,32 @@ async def capture_suspend(
         game_state={},  # populated on resume from /games/{id}/state
     )
     return SuspendOut(ok=True, saved_at=datetime.now(timezone.utc))
+
+
+# ============================================================
+# DELETE /saves/suspend — drop the mid-battle interrupt slot
+# ============================================================
+
+
+@router.delete("/saves/suspend", response_model=DiscardSuspendOut)
+async def discard_suspend(
+    user_name: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+) -> DiscardSuspendOut:
+    """Drop the user's mid-battle suspend slot.
+
+    Idempotent — returns ``cleared=False`` if no suspend existed.
+    Paired with the pause-panel "中断退出" flow that *writes* the
+    slot: this endpoint lets the FE offer an "放弃中断存档"
+    confirmation when the user wants to enter a fresh lobby without
+    resuming the suspended game.  ``SaveService.clear_suspend`` is
+    already implemented; this route is the missing wire-up.
+    """
+    await _load_profile(session, user_name)
+    svc = SaveService(session)
+    cleared = await svc.clear_suspend(user_name)
+    logger.info("discard_suspend: user=%s cleared=%s", user_name, cleared)
+    return DiscardSuspendOut(ok=True, cleared=cleared)
 
 
 # ============================================================

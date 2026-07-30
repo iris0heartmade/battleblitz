@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -41,6 +41,7 @@ from app.game_logic import (
 )
 from app.mainline.spawn_overrides import apply_spawn_overrides
 from app.classes.units import get_or_none as _get_unit_or_none
+from app.modes import apply_spawn_generic_to_unit
 from app.battle_config import UnknownBattleTrackError, expand_battle_config
 from app.commanders.effects import bake_passive_into_units, can_fire_co_power
 from app.commanders.actions import can_player_fire_now
@@ -423,6 +424,57 @@ def _apply_hero_overrides(
         )
 
 
+def _apply_hq_commander_spawns(
+    initial_units: List[Dict[str, Any]],
+    real_players: List["Player"],
+    castle_xy: Dict[int, Tuple[int, int]],
+    hero_overrides: Optional[List[Dict]],
+) -> tuple[List[Dict[str, Any]], List[Dict]]:
+    """Replace each player's HQ spawn with their commander body.
+
+    This is currently used by free mode, but it deliberately depends only on
+    players + seat-to-HQ mapping so mainline can reuse it later.
+    """
+    resolved = [dict(unit) for unit in initial_units]
+    resolved_hero_overrides = list(hero_overrides or [])
+
+    for player in real_players:
+        if player.seat not in castle_xy:
+            continue
+        hq_x, hq_y = castle_xy[player.seat]
+        commander_id = player.commander_id
+        unit_type = "dragon_rider"
+        if commander_id:
+            hero = _get_hero_or_none(commander_id)
+            if hero is None:
+                logger.warning(
+                    "HQ commander spawn skipped unknown commander=%r player=%d",
+                    commander_id, player.id,
+                )
+                continue
+            unit_type = hero.base_class_id
+            resolved_hero_overrides.append({
+                "color": player.color,
+                "x": hq_x,
+                "y": hq_y,
+                "hero_id": commander_id,
+                "name": hero.display_cn,
+            })
+
+        resolved = [
+            unit for unit in resolved
+            if (int(unit.get("x", -1)), int(unit.get("y", -1))) != (hq_x, hq_y)
+        ]
+        resolved.append({
+            "x": hq_x,
+            "y": hq_y,
+            "type": unit_type,
+            "color": player.color,
+        })
+
+    return resolved, resolved_hero_overrides
+
+
 async def _start_battle_internal(
     session: AsyncSession,
     game: Game,
@@ -432,6 +484,8 @@ async def _start_battle_internal(
     map_seed: Optional[int] = None,
     hero_overrides: Optional[List[Dict]] = None,
     spawn_overrides: Optional[Dict] = None,
+    hq_commander_spawns: bool = False,
+    start_level: int = 1,
 ) -> None:
     """Generate tiles, spawn units, mark castles + tile occupancy.
 
@@ -548,6 +602,14 @@ async def _start_battle_internal(
 
     # P2.6 — Data-driven spawn: units come from map's initial_units, NOT from a roster.
     # Each entry has {x, y, type, color, level} and is matched to a player by color.
+    if hq_commander_spawns:
+        result.initial_units, hero_overrides = _apply_hq_commander_spawns(
+            list(result.initial_units),
+            real_players,
+            castle_xy,
+            hero_overrides,
+        )
+
     color_to_player = {p.color: p for p in real_players if p.color}
     units: List[Unit] = []
     existing_count_by_player: Dict[int, int] = {}
@@ -587,6 +649,18 @@ async def _start_battle_internal(
             has_acted=False, has_moved=False,
             skills=list(uc.default_skills),
         ))
+        # Phase 2 §6.5.3 — Generic units go through spawn_generic_stats
+        # so chapter / free-mode multipliers and Boss-autolevel rates apply.
+        # Skip when the caller passed an explicit hp override (test fixtures).
+        # Phase 2 step 3 — `start_level` is the *mode-level* starting level
+        # (mainline=1, free=10).  When ``u["level"]`` is set explicitly that
+        # wins (allows per-unit override like "this boss spawns at L20").
+        if u.get("hp") is None:
+            apply_spawn_generic_to_unit(
+                units[-1],
+                unit_type,
+                start_level=int(u.get("level") or start_level),
+            )
     if units:
         session.add_all(units)
     await session.flush()
@@ -746,6 +820,12 @@ async def create_game(
     # `_effective_max_players` clamps to [MIN_PLAYERS, MAX_PLAYERS] and
     # falls back to the global cap when the preset doesn't declare one.
     capacity = _effective_max_players(body.map_preset)
+    # Phase 2 step 3 — stash spawn mode in battle_config so ``start_game``
+    # can derive the mode-level start_level.  Stored under a reserved key
+    # ``_mode`` (underscore prefix deters collisions with user-supplied
+    # battle_config keys).
+    battle_config = dict(battle_config or {})
+    battle_config["_mode"] = body.mode
     game = Game(
         name=body.name,
         status="waiting",
@@ -1229,6 +1309,11 @@ async def start_game(
         )
 
     battle_config = game.battle_config or {}
+    # Phase 2 step 3 — derive start_level from spawn mode.
+    # "mainline" → L1, "free" → L10.  Unknown / absent mode falls back to L1
+    # (back-compat with any pre-feature games already in the DB).
+    stored_mode = str(battle_config.get("_mode", "mainline"))
+    mode_start_level = 10 if stored_mode == "free" else 1
     host_commander = battle_config.get("commander")
     ai_commanders = battle_config.get("ai_commanders") or {}
     seat_commanders = battle_config.get("seat_commanders") or {}
@@ -1250,7 +1335,13 @@ async def start_game(
                 "last_start_turn": -1,
             }
 
-    await _start_battle_internal(session, game, players)
+    await _start_battle_internal(
+        session,
+        game,
+        players,
+        start_level=mode_start_level,
+        hq_commander_spawns=(stored_mode == "free"),
+    )
 
     # P0.4 — collect income for the first player at game start so turn 1
     # income is granted based on initial building ownership.
@@ -1513,14 +1604,22 @@ async def add_ai_player(
     players = (
         await session.execute(select(Player).where(Player.game_id == game_id))
     ).scalars().all()
-    if len([p for p in players if not p.is_spectator]) >= game.capacity:
+    real_players = [p for p in players if not p.is_spectator]
+    if len(real_players) >= game.capacity:
         raise HTTPException(status.HTTP_409_CONFLICT, "房间已满")
-    used_colors = [p.color for p in players]
-    color = _next_color(used_colors)
+    used_real_seats = {p.seat for p in real_players}
     # P2.4 — AI seats must ONLY consider real players; spectator
     # seats live in [MAX_PLAYERS..], separate from the castable
     # range, so an add_ai call must not "jump past" them.
-    seat = max((p.seat for p in players if not p.is_spectator), default=-1) + 1
+    if body.seat is not None:
+        if body.seat >= game.capacity:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "座位不存在")
+        if body.seat in used_real_seats:
+            raise HTTPException(status.HTTP_409_CONFLICT, "座位已被占用")
+        seat = body.seat
+    else:
+        seat = next((s for s in range(game.capacity) if s not in used_real_seats), len(real_players))
+    color = _color_for_seat(seat)
     # Generate a unique AI name
     ai_count = sum(1 for p in players if p.is_ai)
     backend_tag = body.agent_kind  # "rules" or "llm"

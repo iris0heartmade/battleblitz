@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 class_name Board
 ## Board coordinates the tile layers, static unit presenters, highlight
 ## overlay, and camera behavior for the current map.
@@ -83,8 +83,16 @@ func _on_units_changed(units_data: Array) -> void:
 			var new_pos: Vector2 = metrics.cell_to_local(new_cell)
 			var prev_pos: Vector2 = existing.position  # 截图前一帧位置
 			if prev_pos != new_pos:
+				var optimistic_target: Variant = existing.get_meta("optimistic_target_cell") if existing.has_meta("optimistic_target_cell") else null
+				if optimistic_target != null and Vector2i(optimistic_target) == new_cell:
+					var optimistic_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+					if optimistic_tween != null and optimistic_tween.is_running():
+						optimistic_tween.kill()
+					existing.position = new_pos
+					existing.remove_meta("optimistic_target_cell")
+					continue
 				# 位置变化 — 用 Tween 0.32s 插值(FLIP 等价)
-				var old_tween: Tween = existing.get_meta("move_tween", null)
+				var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
 				if old_tween != null and old_tween.is_running():
 					old_tween.kill()
 				var t: Tween = create_tween()
@@ -196,6 +204,11 @@ func show_path_marks(path_tiles: Array, reachable_tiles: Array) -> void:
 		highlights.show_path(path_tiles)
 
 
+func show_selected_mark(tile: Vector2i) -> void:
+	if highlights != null:
+		highlights.show_selected(tile)
+
+
 # M4.2:进入攻击模式 — 红色 outline(Highlights.Mode.ATTACK)
 func show_attack_marks(range_tiles: Array) -> void:
 	if highlights == null:
@@ -247,6 +260,78 @@ func spawn_floating_text_at_cell(cell: Vector2i, text: String, color_hex: String
 # 缩放(Zoom) + 拖拽(Pan) — 鼠标滚轮缩放,左键拖拽
 # ============================================================
 
+func preview_unit_move(unit_id: int, to_cell: Vector2i, duration_sec: float = 0.28) -> void:
+	if metrics == null:
+		return
+	var existing: Node2D = _unit_nodes_by_id.get(unit_id) as Node2D
+	if existing == null or not is_instance_valid(existing):
+		return
+	var new_pos: Vector2 = metrics.cell_to_local(to_cell)
+	var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+	if old_tween != null and old_tween.is_running():
+		old_tween.kill()
+	if existing.position == new_pos:
+		return
+	var start_pos: Vector2 = existing.position
+	existing.position = start_pos.lerp(new_pos, 0.08)
+	if duration_sec <= 0.0:
+		existing.position = new_pos
+		return
+	var t: Tween = create_tween()
+	existing.set_meta("move_tween", t)
+	t.set_trans(Tween.TRANS_CUBIC)
+	t.set_ease(Tween.EASE_OUT)
+	t.tween_property(existing, "position", new_pos, duration_sec)
+
+
+func preview_unit_path(unit_id: int, path_cells: Array, max_total_sec: float = 0.45) -> void:
+	if path_cells.is_empty():
+		return
+	var expanded_path: Array = _expand_to_orthogonal_path(path_cells)
+	if expanded_path.size() <= 2:
+		preview_unit_move(unit_id, Vector2i(expanded_path[-1]), min(max_total_sec, 0.28))
+		return
+	if metrics == null:
+		return
+	var existing: Node2D = _unit_nodes_by_id.get(unit_id) as Node2D
+	if existing == null or not is_instance_valid(existing):
+		return
+	var old_tween: Tween = existing.get_meta("move_tween") if existing.has_meta("move_tween") else null
+	if old_tween != null and old_tween.is_running():
+		old_tween.kill()
+	existing.position = metrics.cell_to_local(Vector2i(expanded_path[0]))
+	var steps: Array = expanded_path.slice(1)
+	var step_sec: float = min(0.10, max_total_sec / float(max(1, steps.size())))
+	var t: Tween = create_tween()
+	existing.set_meta("move_tween", t)
+	existing.set_meta("optimistic_target_cell", Vector2i(expanded_path[-1]))
+	t.set_trans(Tween.TRANS_LINEAR)
+	t.set_ease(Tween.EASE_IN_OUT)
+	for cell in steps:
+		t.tween_property(existing, "position", metrics.cell_to_local(Vector2i(cell)), step_sec)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(existing) and existing.has_meta("optimistic_target_cell"):
+			existing.remove_meta("optimistic_target_cell")
+	)
+
+
+func _expand_to_orthogonal_path(path_cells: Array) -> Array:
+	var out: Array = []
+	for raw_cell in path_cells:
+		var cell := Vector2i(raw_cell)
+		if out.is_empty():
+			out.append(cell)
+			continue
+		var cur := Vector2i(out[-1])
+		while cur.x != cell.x:
+			cur.x += 1 if cell.x > cur.x else -1
+			out.append(cur)
+		while cur.y != cell.y:
+			cur.y += 1 if cell.y > cur.y else -1
+			out.append(cur)
+	return out
+
+
 const ZOOM_MIN: float = 0.4
 const ZOOM_MAX: float = 3.0
 const ZOOM_STEP: float = 0.15
@@ -277,7 +362,7 @@ func _handle_camera_input(event: InputEvent) -> void:
 			_zoom_at_point(mb.global_position, -ZOOM_STEP)
 			get_viewport().set_input_as_handled()
 			return
-		if mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.button_index == MOUSE_BUTTON_LEFT or mb.button_index == MOUSE_BUTTON_MIDDLE:
 			if mb.pressed:
 				_press_start_mouse = mb.global_position
 				_pan_start_mouse = mb.global_position
@@ -444,7 +529,10 @@ func load_map(map_json: Dictionary) -> Dictionary:
 	_rebuild_units(initial_units)
 	highlights.reset(metrics)
 	if board_camera != null:
-		board_camera.apply_metrics(metrics)
+		if board_camera.has_method("apply_new_map_metrics"):
+			board_camera.apply_new_map_metrics(metrics)
+		else:
+			board_camera.apply_metrics(metrics)
 	map_loaded.emit(map_size.x, map_size.y, map_biome)
 	return result
 
@@ -470,12 +558,50 @@ func viewport_to_tile(pos: Vector2) -> Vector2i:
 	return ground_layer.local_to_map(local)
 
 
-func tile_to_viewport(tile: Vector2i) -> Vector2:
+func tile_to_screen(tile: Vector2i) -> Vector2:
 	if ground_layer == null:
 		return Vector2.ZERO
+	var world_pos: Vector2
 	if metrics == null:
-		return ground_layer.to_global(ground_layer.map_to_local(tile))
-	return ground_layer.to_global(metrics.cell_to_local(tile))
+		world_pos = ground_layer.to_global(ground_layer.map_to_local(tile))
+	else:
+		world_pos = ground_layer.to_global(metrics.cell_to_local(tile))
+	if board_camera != null and board_camera.enabled:
+		return board_camera.get_canvas_transform() * world_pos
+	return world_pos
+
+
+# Compatibility alias for older callers. The returned value is a CanvasLayer
+# screen coordinate, not an untransformed board-world position.
+func tile_to_viewport(tile: Vector2i) -> Vector2:
+	return tile_to_screen(tile)
+
+
+func screen_rect() -> Rect2:
+	var viewport := get_viewport()
+	var fallback := viewport.get_visible_rect() if viewport != null else Rect2()
+	if ground_layer == null or metrics == null or not metrics.has_method("bounds_rect"):
+		return fallback
+	var local_rect: Rect2 = metrics.bounds_rect()
+	if local_rect.size.x <= 0.0 or local_rect.size.y <= 0.0:
+		return fallback
+	var corners: Array[Vector2] = [
+		local_rect.position,
+		local_rect.position + Vector2(local_rect.size.x, 0.0),
+		local_rect.position + local_rect.size,
+		local_rect.position + Vector2(0.0, local_rect.size.y),
+	]
+	var min_point := Vector2(INF, INF)
+	var max_point := Vector2(-INF, -INF)
+	for local_point in corners:
+		var screen_point := ground_layer.to_global(local_point)
+		if board_camera != null and board_camera.enabled:
+			screen_point = board_camera.get_canvas_transform() * screen_point
+		min_point.x = min(min_point.x, screen_point.x)
+		min_point.y = min(min_point.y, screen_point.y)
+		max_point.x = max(max_point.x, screen_point.x)
+		max_point.y = max(max_point.y, screen_point.y)
+	return Rect2(min_point, max_point - min_point)
 
 
 func terrain_at(tile: Vector2i) -> String:

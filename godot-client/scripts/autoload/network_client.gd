@@ -403,9 +403,9 @@ func action_move(game_id: int, player_id: int, unit_id: int, to_x: int, to_y: in
 		{"player_id": player_id, "unit_id": unit_id, "to_x": to_x, "to_y": to_y})
 
 
-func action_attack(game_id: int, player_id: int, attacker_id: int, target_id: int) -> void:
+func action_attack(game_id: int, player_id: int, attacker_id: int, target_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/attack",
-		{"player_id": player_id, "attacker_id": attacker_id, "target_id": target_id})
+		{"player_id": player_id, "attacker_id": attacker_id, "target_id": target_id}, callback)
 
 
 func action_skill(game_id: int, player_id: int, unit_id: int, skill: String, target_id: int = -1) -> void:
@@ -420,9 +420,9 @@ func action_wait(game_id: int, player_id: int, unit_id: int) -> void:
 		{"player_id": player_id, "unit_id": unit_id})
 
 
-func action_claim(game_id: int, player_id: int, unit_id: int) -> void:
+func action_claim(game_id: int, player_id: int, unit_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/claim",
-		{"player_id": player_id, "unit_id": unit_id})
+		{"player_id": player_id, "unit_id": unit_id}, callback)
 
 
 func action_recruit(game_id: int, player_id: int, tile_x: int, tile_y: int, unit_type: String, callback: Callable = Callable()) -> void:
@@ -435,9 +435,9 @@ func action_end_turn(game_id: int, player_id: int) -> void:
 		{"player_id": player_id})
 
 
-func action_co_power(game_id: int, player_id: int) -> void:
+func action_co_power(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/co-power",
-		{"player_id": player_id})
+		{"player_id": player_id}, callback)
 
 
 # ============================================================
@@ -475,12 +475,13 @@ func delete_game(game_id: int, callback: Callable = Callable()) -> void:
 	request("DELETE", _ACTIONS_GAME_BASE.format({"id": game_id}), {}, callback)
 
 
-func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable(), seat_commanders: Dictionary = {}) -> void:
+func create_game(room_name: String, map_preset: String, map_biome: String, win_condition: String, commander_id: String = "", bgm_track_id: String = "", ai_commanders: Dictionary = {}, callback: Callable = Callable(), seat_commanders: Dictionary = {}, mode: String = "free") -> void:
 	var body := {
 		"name": room_name,
 		"map_preset": map_preset,
 		"map_biome": map_biome,
 		"win_condition": win_condition,
+		"mode": mode,
 	}
 	var battle_config := {}
 	if commander_id != "":
@@ -523,12 +524,15 @@ func forecast_attack(game_id: int, player_id: int, attacker_id: int, target_id: 
 	request("GET", path, {}, callback)
 
 
-func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable()) -> void:
-	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", {
+func add_ai_player(game_id: int, difficulty: String = "normal", agent_kind: String = "rules", personality: String = "balanced", callback: Callable = Callable(), seat: int = -1) -> void:
+	var body := {
 		"difficulty": difficulty,
 		"agent_kind": agent_kind,
 		"personality": personality,
-	}, callback)
+	}
+	if seat >= 0:
+		body["seat"] = seat
+	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/add-ai", body, callback)
 
 
 func remove_player(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
@@ -724,6 +728,13 @@ func capture_suspend(game_id: int, user_name: String, callback: Callable = Calla
 	request("POST", "/games/%d/suspend" % game_id, {
 		"user_name": user_name,
 	}, callback)
+
+
+func discard_suspend(user_name: String, callback: Callable = Callable()) -> void:
+	# Wire format mirrors GET /saves?user_name=... — query-style, no body.
+	# Returns {"ok": True, "cleared": bool}; "cleared" is False when no
+	# suspend existed (the call is idempotent — see DiscardSuspendOut).
+	request("DELETE", "/saves/suspend?user_name=%s" % user_name.uri_encode(), {}, callback)
 
 
 # T:94 — 拉战斗 BGM 列表

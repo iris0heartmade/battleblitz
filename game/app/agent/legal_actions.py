@@ -119,7 +119,20 @@ def _legal_actions_for_unit(
 
     # 2. Move — enumerate reachable tiles
     if unit.mp > 0:
-        blocked = {pos for pos, uid in occupied.items() if uid != unit.id}
+        # T:#20 — 火纹风格阻挡:
+        #   - enemy 棋子:既不能穿过也不能结束(完全阻挡)
+        #   - ally 棋子:能穿过(不阻挡),但不能在同一格结束(避免重叠)
+        # 之前:任何棋子(含 ally)都完全阻挡,fire emblem 风格崩坏
+        ally_unit_ids = {u.id for u in ally_units}
+        enemy_unit_ids = {u.id for u in enemy_units}
+        blocked = {
+            pos for pos, uid in occupied.items()
+            if uid in enemy_unit_ids
+        }
+        no_end = {
+            pos for pos, uid in occupied.items()
+            if uid in ally_unit_ids
+        }
         reachable = bfs_reachable(
             start=(unit.x, unit.y),
             terrain=terrain,
@@ -217,6 +230,20 @@ def _legal_actions_for_unit(
                     action_id=f"skill_heal_{unit.id}_{a.id}",
                     kind="skill", unit_id=unit.id,
                     params={"skill": "heal", "target_id": a.id},
+                    description=sk.describe(_SkillCtx(user=unit, target=a)),
+                ))
+        elif sk.skill_id == "sing":
+            for a in ally_units:
+                if a.id == unit.id or a.hp <= 0:
+                    continue
+                ctx = _SkillCtx(user=unit, target=a, ally_units=ally_units)
+                if sk.can_use(ctx):
+                    targets.append(a)
+            for a in targets:
+                actions.append(LegalAction(
+                    action_id=f"skill_sing_{unit.id}_{a.id}",
+                    kind="skill", unit_id=unit.id,
+                    params={"skill": "sing", "target_id": a.id},
                     description=sk.describe(_SkillCtx(user=unit, target=a)),
                 ))
 

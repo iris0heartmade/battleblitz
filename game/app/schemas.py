@@ -7,7 +7,7 @@ without touching the DB layer.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -66,6 +66,10 @@ class CreateGameRequest(BaseModel):
     # which the surviving team wins.
     defend_turns: int = 10
     battle_config: Optional[BattleConfig] = None
+    # Phase 2 双轨制 — game mode.  "mainline" → units spawn at L1
+    # (default, FE8 L10 calibrated baseline), "free" → units spawn at L10
+    # (Boss-autolevel boosted).  Mode is persisted in game.battle_config.
+    mode: Literal["mainline", "free"] = "mainline"
 
 
 class JoinGameRequest(BaseModel):
@@ -128,6 +132,7 @@ class RejoinGameResponse(BaseModel):
 class AddAIRequest(BaseModel):
     """Body of POST /games/{id}/add-ai. AI name auto-generated if missing."""
     difficulty: str = Field(default="normal", pattern="^(easy|normal|hard)$")
+    seat: Optional[int] = Field(default=None, ge=0)
     # "rules" (built-in) or "llm" (LLMAgent). Defaults to "rules" to keep
     # existing behaviour; set to "llm" to opt in to LLM-driven opponent.
     agent_kind: str = Field(default="rules", pattern="^(rules|llm)$")

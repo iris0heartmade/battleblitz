@@ -114,12 +114,13 @@ async def test_fire_co_power_rejects_completely_absent_body(commander_client):
 @pytest.mark.integration
 async def test_free_mode_battle_config_commander_spawns_on_host(commander_client):
     from sqlalchemy import select
-    from app.models import Player
+    from app.models import Player, Tile, Unit
 
     c, sessions = commander_client
     created = await c.post("/games", json={
         "name": "free commander",
         "map_preset": "balanced_2p_15",
+        "mode": "free",
         "battle_config": {"commander": "anna"},
     })
     assert created.status_code == 201, created.text
@@ -144,6 +145,126 @@ async def test_free_mode_battle_config_commander_spawns_on_host(commander_client
         assert host.co_state["commander_id"] == "anna"
         assert host.co_state["threshold"] == 18
         assert guest.commander_id is None
+        host_hq = await session.scalar(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.owner_id == host.id,
+                Tile.terrain == "castle",
+            )
+        )
+        assert host_hq is not None
+        hq_unit = await session.scalar(
+            select(Unit).where(
+                Unit.player_id == host.id,
+                Unit.x == host_hq.x,
+                Unit.y == host_hq.y,
+            )
+        )
+        assert hq_unit is not None
+        assert hq_unit.unit_type == "healer"
+        assert hq_unit.hero_id == "anna"
+
+
+@pytest.mark.integration
+async def test_free_mode_empty_commander_spawns_dragon_rider_on_hq(commander_client):
+    from sqlalchemy import select
+    from app.models import Player, Tile, Unit
+
+    c, sessions = commander_client
+    created = await c.post("/games", json={
+        "name": "free empty commander",
+        "map_preset": "balanced_2p_15",
+        "mode": "free",
+    })
+    assert created.status_code == 201, created.text
+    game_id = created.json()["id"]
+
+    joined_host = await c.post(f"/games/{game_id}/join", json={"user_name": "host"})
+    assert joined_host.status_code == 201, joined_host.text
+    joined_guest = await c.post(f"/games/{game_id}/join", json={"user_name": "guest"})
+    assert joined_guest.status_code == 201, joined_guest.text
+
+    started = await c.post(f"/games/{game_id}/start")
+    assert started.status_code == 200, started.text
+
+    async with sessions() as session:
+        host = await session.scalar(
+            select(Player).where(Player.game_id == game_id, Player.seat == 0)
+        )
+        host_hq = await session.scalar(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.owner_id == host.id,
+                Tile.terrain == "castle",
+            )
+        )
+        assert host_hq is not None
+        hq_unit = await session.scalar(
+            select(Unit).where(
+                Unit.player_id == host.id,
+                Unit.x == host_hq.x,
+                Unit.y == host_hq.y,
+            )
+        )
+        assert hq_unit is not None
+        assert hq_unit.unit_type == "dragon_rider"
+        assert hq_unit.hero_id is None
+
+
+@pytest.mark.integration
+async def test_free_mode_seat_commanders_spawn_on_human_and_ai_hqs(commander_client):
+    from sqlalchemy import select
+    from app.models import Player, Tile, Unit
+
+    c, sessions = commander_client
+    created = await c.post("/games", json={
+        "name": "free seat commanders",
+        "map_preset": "balanced_2p_15",
+        "mode": "free",
+        "battle_config": {"seat_commanders": {"0": "yun", "1": "anna"}},
+    })
+    assert created.status_code == 201, created.text
+    game_id = created.json()["id"]
+
+    joined_host = await c.post(f"/games/{game_id}/join", json={"user_name": "host"})
+    assert joined_host.status_code == 201, joined_host.text
+    ai = await c.post(f"/games/{game_id}/add-ai", json={})
+    assert ai.status_code == 201, ai.text
+
+    started = await c.post(f"/games/{game_id}/start")
+    assert started.status_code == 200, started.text
+
+    async with sessions() as session:
+        players = (await session.scalars(
+            select(Player).where(Player.game_id == game_id)
+        )).all()
+        by_seat = {p.seat: p for p in players}
+        assert by_seat[0].commander_id == "yun"
+        assert by_seat[1].commander_id == "anna"
+
+        for seat, expected_type, expected_hero in [
+            (0, "warlock", "yun"),
+            (1, "healer", "anna"),
+        ]:
+            player = by_seat[seat]
+            hq = await session.scalar(
+                select(Tile).where(
+                    Tile.game_id == game_id,
+                    Tile.owner_id == player.id,
+                    Tile.terrain == "castle",
+                )
+            )
+            assert hq is not None
+            hq_unit = await session.scalar(
+                select(Unit).where(
+                    Unit.player_id == player.id,
+                    Unit.x == hq.x,
+                    Unit.y == hq.y,
+                )
+            )
+            assert hq_unit is not None
+            assert hq_unit.unit_type == expected_type
+            assert hq_unit.hero_id == expected_hero
 
 
 def test_profile_has_prebattle_commander_selection_field():
