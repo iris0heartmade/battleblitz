@@ -93,3 +93,6 @@ ref/
 !ref/*.md
 godot-client/godot-ref/
 .git-rewrite/
+
+# ===== Local worktrees =====
+.worktrees/
