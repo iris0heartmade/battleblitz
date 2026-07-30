@@ -30,6 +30,8 @@ static func unit_type_cn(unit_type: String) -> String:
 			return "术士"
 		"healer":
 			return "治疗师"
+		"bard":
+			return "吟游诗人"
 		"lancer":
 			return "枪骑兵"
 		"warrior":
@@ -64,6 +66,8 @@ static func skill_cn(skill_id: String) -> String:
 			return "连击"
 		"arcane_strike":
 			return "奥术冲击"
+		"sing":
+			return "吟诗"
 		_:
 			return skill_id
 

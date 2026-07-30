@@ -694,7 +694,7 @@ func _ready() -> void:
 		"top status must replace nullable backend ids with player-facing copy")
 	_game_state.co_states = previous_co_states
 	main_check.call("_refresh_co_roster")
-	main_check.call("_set_unit_info_portrait", "yun")
+	main_check.call("_set_unit_info_portrait", {"hero_id": "yun"})
 	var tactical_portrait := main_check.get("_unit_info_portrait_tex") as TextureRect
 	_assert_true("Hero selection shows compact portrait",
 		main_check.hero_portrait_panel.visible and tactical_portrait != null and tactical_portrait.visible,

@@ -546,8 +546,38 @@ def test_godot_portrait_uses_native_size_inside_target_panel():
     # T:V6 — 立绘改 STRETCH_KEEP_ASPECT_CENTERED 缩放到 panel 大小(用户要求
     # 高度一致、宽度按比例自适应、原图比例不变)
     assert "STRETCH_KEEP_ASPECT_CENTERED" in source
-    assert "_unit_info_portrait_tex.size = hero_portrait_panel.size" in source
+    assert '_unit_info_portrait_tex.set_deferred("size", hero_portrait_panel.size)' in source
     assert "unit_info.offset_right = -108" not in source
+
+
+def test_godot_battle_hud_keeps_mainline_fe_ui_layout_rules():
+    source = _read(MAIN_GD)
+    show_view = source[source.index("func _show_view("):source.index("func _reset_board_cameras()", source.index("func _show_view("))]
+    show_hud = source[source.index("func _show_hud("):source.index("func _start_state_polling()", source.index("func _show_hud("))]
+    bubble = source[source.index("func _show_action_bubble("):source.index("func _refresh_action_bubble_buttons(", source.index("func _show_action_bubble("))]
+    roster = source[source.index("func _refresh_co_roster("):source.index("func _rewrite_players_list()", source.index("func _refresh_co_roster("))]
+    info = source[source.index("func _refresh_unit_info("):source.index("func _unit_portrait_path_for(", source.index("func _refresh_unit_info("))]
+
+    assert "backdrop.color = Color(0.018, 0.035, 0.055, 1.0)" in show_view
+    assert "backdrop.color = Color.TRANSPARENT" not in show_view
+    assert "battle_backdrop_layer.visible = true" in show_hud
+    assert "battle_backdrop_layer.visible = false" in show_hud
+
+    assert "left_gutter" in bubble
+    assert "right_gutter" in bubble
+    assert "_all_units_including_self()" in bubble
+    assert "action_pointer.visible" in bubble
+    assert '"%s · 行动"' in bubble
+
+    assert "var compact := states.size() > 2" in roster
+    assert "_team_cn(color_name)" in roster
+    assert "func _team_cn(team: String) -> String:" in source
+    assert '"未任命"' in roster
+    assert '"%s:%s"' not in roster
+
+    assert "Hero ID" not in info
+    assert 'var compact_hud := DisplayServer.window_get_size().x <= 1366' in info
+    assert "移动消耗" in info
 
 
 def test_legacy_web_attack_targets_use_manhattan_range_only():
@@ -557,3 +587,14 @@ def test_legacy_web_attack_targets_use_manhattan_range_only():
     body = source[start:end]
     assert "manhattan(fromX, fromY, toX, toY)" in body
     assert "clientHasLineOfSight" not in body
+
+
+def test_godot_youko_sing_skill_is_wired():
+    source = _read(MAIN_GD)
+    labels = _read(ROOT / "godot-client" / "scripts" / "ui" / "cn_labels.gd")
+
+    assert 'skills.has("sing")' in source
+    assert "func _sing_targets(ud: Dictionary) -> Dictionary:" in source
+    assert '_pending_skill_id = "sing"' in source
+    assert '"bard":' in labels
+    assert '"sing":' in labels

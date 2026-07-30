@@ -2,6 +2,12 @@
 
 ## 2026-07-30
 
+- Added hero `youko` / 洋子 as a T1 special Bard (`bard`) with the active skill `sing` / 吟诗, Godot skill targeting, and hero assets (`youko.png`, `portrait_youko.png`, `crest_youko.png`). Bard is intentionally excluded from ordinary barracks recruitment.
+
+- 修复主线开战前对白被跳过/不可见: `DialogManager` 播放时重新显示对话面板,主线 start 响应改为先等待 `pre_battle_dialogue_url` 播放完成,再进入棋盘并连接战斗。
+- 修正 `entry_flow_e2e.gd` 的合并后入口调用: 主线改走 `MainlineView` 存档槽控制器,大厅改走 `$Lobby` 控制器,并在失败后停止误报 PASS。
+- 修复 `main.gd` 模块化重构合并 `origin/feat/godot-mainline-fe-ui` 后的战斗 UI 回退: 恢复战斗专用背景层显隐、棋盘外深色 HUD 边界、行动气泡侧翼/避让定位、CO 顶栏中文化与紧凑排版、单位检视卡正式文案和地形移动消耗信息; 保留本地通用单位立绘路径与 `PortraitLoader` 加载逻辑。
+- 新增 `test_godot_battle_hud_keeps_mainline_fe_ui_layout_rules` 防止旧版透明背景、贴单位气泡、`RED:<null>`/`Hero ID` 调试字段再次回流; 同步 `smoke_test.gd` 与 `portrait_check_screenshot.gd` 的立绘调用参数。
 - 合并 `origin/feat/godot-mainline-fe-ui` 到 `refactor/extract-mainline-modules`,保留 UI 分支完整历史,同时延续本地 `main.gd` 模块化抽离成果。
 - 接入主线响应式 `CampaignPanel` / `PreparePanel` 场景、战斗 HUD 美术素材、`battle_theme.gd` / `mainline_theme.gd` / `mainline_*_panel.gd` 新 UI 组件。
 - 调和冲突点: `scenes/main.tscn` 采用 UI 分支的新场景结构并补回 `$Lobby` 的 `lobby_controller.gd` 挂载;`mainline_controller.gd` 保留存档优先渲染,英雄对话缓存切回 `DialogManager`;`main.gd` 保持对话/大厅/主题抽离,只补新增 HUD 节点引用与单位检视卡接线。

@@ -1709,10 +1709,19 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 	UserSettings.set_value("session.v1.mainline_player_id", _main._player_id)
 	var battle_index: int = int(body.get("battle_index", 0)) + 1
 	var total_battles: int = int(body.get("total_battles", 1))
-	_main._update_status("主线战斗 %d/%d 已创建,进入棋盘..." % [battle_index, total_battles])
+	_main._update_status("主线战斗 %d/%d 已创建,准备播放开场对白..." % [battle_index, total_battles])
 	var dialogue_path := str(body.get("pre_battle_dialogue_url", ""))
 	if dialogue_path != "":
-		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_dialogue_response"))
+		NetworkClient.fetch_mainline_dialogue(dialogue_path, Callable(self, "_on_mainline_prebattle_dialogue_response"))
+		return
+	_enter_started_mainline_game()
+
+
+func _enter_started_mainline_game() -> void:
+	if _main._game_id <= 0 or _main._player_id <= 0:
+		_main._update_status("Mainline start failed: missing game or player id")
+		_main._show_view("mainline")
+		return
 	_main._show_view("game")
 	if _main.battle_mainline_next_btn != null and is_instance_valid(_main.battle_mainline_next_btn):
 		_main.battle_mainline_next_btn.visible = false
@@ -1740,6 +1749,14 @@ func _on_mainline_auto_abandon_response(body: Variant, code: int, mainline_id: S
 
 
 # ── _on_mainline_dialogue_response ────────────────────────────────────────
+
+func _on_mainline_prebattle_dialogue_response(body: Variant, code: int = 0) -> void:
+	if code >= 200 and code < 300:
+		await DialogManager.play(body)
+	else:
+		_main._update_status("Pre-battle dialogue failed to load; entering battle.")
+	_enter_started_mainline_game()
+
 
 func _on_mainline_dialogue_response(body: Variant, _code: int = 0) -> void:
 	DialogManager.play(body)

@@ -24,7 +24,7 @@ func _ready() -> void:
 	await _await_frames(3)
 	# Use the production path; never force visibility, otherwise this screenshot
 	# hides regressions where unit selection no longer enables the portrait card.
-	main._set_unit_info_portrait("yun")
+	main._set_unit_info_portrait({"hero_id": "yun"})
 	await _await_frames(3)
 	if main.hero_portrait_panel == null or not main.hero_portrait_panel.visible:
 		printerr("[portrait_check] production portrait panel stayed hidden")

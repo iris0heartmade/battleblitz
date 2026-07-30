@@ -355,6 +355,8 @@ func _advance() -> void:
 			_dialog_completed.emit()
 		return
 	_active = true
+	if _root != null:
+		_root.visible = true
 	var entry: Dictionary = _queue.pop_front()
 	var kind: int = int(entry.get("kind", KIND_TYPE))
 	if kind == KIND_CHOICE:
