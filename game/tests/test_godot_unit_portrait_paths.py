@@ -24,3 +24,10 @@ def test_selected_unit_portrait_panel_is_transparent_and_borderless():
     assert "sb_portrait.border_width_right = 0" in source
     assert "sb_portrait.border_width_top = 0" in source
     assert "sb_portrait.border_width_bottom = 0" in source
+
+
+def test_youko_hero_assets_exist_for_web_and_godot():
+    expected = ("youko.png", "portrait_youko.png", "crest_youko.png")
+    for asset_name in expected:
+        assert (ROOT / "game" / "app" / "web" / "assets" / "heroes" / asset_name).exists()
+        assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()

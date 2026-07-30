@@ -2128,6 +2128,18 @@ async def _ai_use_skill(session: AsyncSession, game: Game, unit: Unit, snap: _AI
                 continue
             target = max(candidates, key=lambda a: (a.max_hp - a.hp))
             ctx = SkillContext(user=unit, target=target, ally_units=list(snap.ally_units))
+        elif sk.skill_id == "sing":
+            candidates = [
+                a for a in snap.ally_units
+                if a.id != unit.id
+                and a.hp > 0
+                and (a.has_acted or a.has_moved)
+                and max(abs(unit.x - a.x), abs(unit.y - a.y)) == 1
+            ]
+            if not candidates:
+                continue
+            target = max(candidates, key=lambda a: (a.level or 1, a.max_hp, a.id or 0))
+            ctx = SkillContext(user=unit, target=target, ally_units=list(snap.ally_units))
         else:
             ctx = SkillContext(user=unit, ally_units=list(snap.ally_units))
 

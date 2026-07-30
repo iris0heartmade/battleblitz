@@ -232,6 +232,20 @@ def _legal_actions_for_unit(
                     params={"skill": "heal", "target_id": a.id},
                     description=sk.describe(_SkillCtx(user=unit, target=a)),
                 ))
+        elif sk.skill_id == "sing":
+            for a in ally_units:
+                if a.id == unit.id or a.hp <= 0:
+                    continue
+                ctx = _SkillCtx(user=unit, target=a, ally_units=ally_units)
+                if sk.can_use(ctx):
+                    targets.append(a)
+            for a in targets:
+                actions.append(LegalAction(
+                    action_id=f"skill_sing_{unit.id}_{a.id}",
+                    kind="skill", unit_id=unit.id,
+                    params={"skill": "sing", "target_id": a.id},
+                    description=sk.describe(_SkillCtx(user=unit, target=a)),
+                ))
 
     return actions
 
