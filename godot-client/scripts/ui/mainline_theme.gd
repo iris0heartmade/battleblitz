@@ -124,7 +124,16 @@ static func apply_row(button: Button, selected: bool = false) -> void:
 	button.add_theme_stylebox_override("hover", SkinAssets.row_style("hover"))
 	button.add_theme_stylebox_override("pressed", SkinAssets.row_style("selected"))
 	button.add_theme_stylebox_override("disabled", SkinAssets.row_style("disabled"))
-	button.add_theme_stylebox_override("focus", SkinAssets.row_style("hover"))
+	# selected 态叠 2px 金边焦点框,避免"只改色"反馈
+	if selected:
+		var focus_ring := StyleBoxFlat.new()
+		focus_ring.bg_color = Color(0, 0, 0, 0)
+		focus_ring.border_color = C_GOLD_BRIGHT
+		focus_ring.set_border_width_all(2)
+		focus_ring.set_corner_radius_all(2)
+		button.add_theme_stylebox_override("focus", focus_ring)
+	else:
+		button.add_theme_stylebox_override("focus", SkinAssets.row_style("hover"))
 
 
 static func apply_option(option: OptionButton) -> void:
