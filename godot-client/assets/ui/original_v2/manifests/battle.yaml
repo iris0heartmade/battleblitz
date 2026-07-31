@@ -1,0 +1,54 @@
+collection: battle
+title: Border Command Archive
+generator:
+  mode: built-in image_gen
+  workflow: "#00ff00 chroma key, official remove_chroma_key.py, alpha crop, exact-size resample"
+  generated_on: 2026-07-31
+art_direction:
+  palette: "ink-navy woven textile, smoke-black oxidized steel, matte aged brass, dark-red square seal"
+  motifs: "broken battlement notches, angular marching routes, map-coordinate ticks, rivets, flagpole rope knots"
+  composition: "asymmetric, low ornament density, quiet central content zones"
+  exclusions: "characters, text, logos, badges, heraldry, royal crests, central gemstones, scrollwork, circular instruments, existing game UI"
+assets:
+  - id: top_battle_status_bar
+    source: ../sources/battle/top_battle_status_bar_chroma.png
+    output: ../battle/top_battle_status_bar.png
+    size: [1200, 112]
+    safe_area: [150, 18, 850, 76]
+    use: "top battle status and phase values"
+  - id: battle_sidebar_drawer
+    source: ../sources/battle/battle_sidebar_drawer_chroma.png
+    output: ../battle/battle_sidebar_drawer.png
+    size: [384, 720]
+    safe_area: [72, 72, 230, 560]
+    use: "battle sidebar or drawer list"
+  - id: action_menu_panel
+    source: ../sources/battle/action_menu_panel_chroma.png
+    output: ../battle/action_menu_panel.png
+    size: [320, 420]
+    safe_area: [54, 54, 205, 285]
+    use: "stacked action menu"
+  - id: dialogue_panel
+    source: ../sources/battle/dialogue_panel_chroma.png
+    output: ../battle/dialogue_panel.png
+    size: [1200, 300]
+    safe_area: [115, 70, 930, 155]
+    use: "multiline battle dialogue"
+  - id: nameplate
+    source: ../sources/battle/nameplate_chroma.png
+    output: ../battle/nameplate.png
+    size: [260, 64]
+    safe_area: [42, 18, 170, 28]
+    use: "single speaker name label"
+  - id: compact_status_plate
+    source: ../sources/battle/compact_status_plate_chroma.png
+    output: ../battle/compact_status_plate.png
+    size: [240, 80]
+    safe_area: [48, 20, 142, 38]
+    use: "compact status values"
+  - id: chapter_result_title
+    source: ../sources/battle/chapter_result_title_chroma.png
+    output: ../battle/chapter_result_title.png
+    size: [900, 180]
+    safe_area: [145, 48, 555, 78]
+    use: "chapter opening or victory/defeat title"

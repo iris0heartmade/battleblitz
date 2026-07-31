@@ -1,0 +1,150 @@
+schema_version: 1
+collection: base
+date: "2026-07-31"
+tool: "OpenAI built-in image_gen (image_gen.imagegen)"
+clean_room_brief: "BattleBlitz frontier military council archive"
+common_negative_prompt: >-
+  characters, people, creatures, weapons, text, letters, numbers, logos, badges,
+  emblems, heraldry, royal crests, crowns, central gemstones, scrollwork, floral
+  filigree, circular dials, round instrument panels, existing game UI, commercial
+  game references, company names, artist styles, excessive ornament, perspective,
+  cast shadows, contact shadows, reflections, watermarks, multiple assets
+assets:
+  - id: primary_page_frame_9slice
+    source: "godot-client/assets/ui/original_v2/sources/base/primary_page_frame_chroma.png"
+    output: "godot-client/assets/ui/original_v2/base/primary_page_frame_9slice.png"
+    final_prompt: >-
+      Create one original primary page 9-slice frame for a frontier military council
+      archive, perfectly front-on and orthographic, on a perfectly flat solid #00ff00
+      chroma-key background. Use a wide rectangular frame with a very large clean
+      #00ff00 center opening, square corners, smoke-black oxidized steel rails, inset
+      matte aged-brass strips, sparse rivets, a subtle upper-left battlement notch,
+      a short lower-right angular marching-route engraving, map-coordinate ticks
+      without numbers, one flagpole rope-knot hardware detail, ink-navy accents, and
+      one small dark-red square sealing tab without a symbol. Keep rail runs straight
+      and uniform for slicing, asymmetric and low in ornament, with crisp edges,
+      generous padding, no perspective, lighting variation, or shadow.
+    negative_prompt: "See common_negative_prompt; also avoid cropped edges, dirty center content, green in the frame, and nonuniform slice rails."
+    processing:
+      - "Removed chroma key with official remove_chroma_key.py using --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill."
+      - "Resampled to 1024x768 RGBA with Lanczos."
+    validation: "RGBA; transparent corners [0,0,0,0]; transparent 78.8%; partial alpha 2.9%; subject coverage 21.2%."
+
+  - id: secondary_panel_frame_9slice
+    source: "godot-client/assets/ui/original_v2/sources/base/secondary_panel_frame_chroma.png"
+    output: "godot-client/assets/ui/original_v2/base/secondary_panel_frame_9slice.png"
+    final_prompt: >-
+      Create one original secondary panel 9-slice frame for a frontier military
+      council archive, perfectly front-on and orthographic, on uniform solid #00ff00.
+      Use thin smoke-black oxidized-steel rails, narrow ink-navy woven insets, sparse
+      matte old-brass corner clamps and rivets, one off-center dark-red square sealing
+      tab without a symbol, one subtle battlement-notch interruption, and one short
+      angular marching-route line on the opposite rail. Keep a large completely empty
+      #00ff00 center, straight slice-safe runs, low ornament density, crisp edges,
+      generous padding, no gradients, perspective, reflections, or shadows.
+    negative_prompt: "See common_negative_prompt; also avoid green in the frame, cluttered center content, and bevel-heavy fantasy styling."
+    processing:
+      - "Removed chroma key with official remove_chroma_key.py using --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill."
+      - "Resampled to 1024x768 RGBA with Lanczos."
+    validation: "RGBA; transparent corners [0,0,0,0]; transparent 84.6%; partial alpha 2.6%; subject coverage 15.4%."
+
+  - id: ink_navy_weave_tile
+    source: "godot-client/assets/ui/original_v2/sources/base/ink_navy_weave_tile_source.png"
+    output: "godot-client/assets/ui/original_v2/base/ink_navy_weave_tile.png"
+    final_prompt: >-
+      Create one perfectly seamless square ink-navy woven textile texture tile,
+      full bleed and orthographic, with very fine tight plain-weave fibers, subtle
+      irregular thread wear, restrained low contrast, uniform scale, no focal point,
+      border, directional light, folds, wrinkles, vignette, objects, or transparency.
+      Opposite edges must connect seamlessly and the texture must remain quiet behind
+      UI content.
+    negative_prompt: "See common_negative_prompt; also avoid seams, borders, frames, folds, stains, large scratches, highlights, gradients, green, and transparency."
+    processing:
+      - "Full-bleed material source has no removable background; chroma removal was not applicable."
+      - "Center-cropped, Lanczos-resampled, and mirrored in four quadrants to guarantee exact opposite-edge continuity; normalized to 512x512 RGBA with alpha 255."
+    validation: "RGBA 512x512; alpha 255; maximum left/right and top/bottom edge difference 0."
+
+  - id: warm_gray_archive_paper_tile
+    source: "godot-client/assets/ui/original_v2/sources/base/warm_gray_archive_paper_tile_source.png"
+    output: "godot-client/assets/ui/original_v2/base/warm_gray_archive_paper_tile.png"
+    final_prompt: >-
+      Create one perfectly seamless square warm-gray archival paper texture tile,
+      full bleed and orthographic, with warm gray-beige fibrous dossier paper, subtle
+      pulp fibers, faint tiny-scale age mottling, matte low contrast, uniform scale,
+      no focal point, border, directional light, writing, stamps, ruled lines, torn
+      edges, stains, burns, vignette, objects, or transparency. Opposite edges must
+      connect seamlessly.
+    negative_prompt: "See common_negative_prompt; also avoid maps, seals, large speckles, gradients, green, and transparency."
+    processing:
+      - "Full-bleed material source has no removable background; chroma removal was not applicable."
+      - "Center-cropped, Lanczos-resampled, and mirrored in four quadrants to guarantee exact opposite-edge continuity; normalized to 512x512 RGBA with alpha 255."
+    validation: "RGBA 512x512; alpha 255; maximum left/right and top/bottom edge difference 0."
+
+  - id: smoke_black_steel_tile
+    source: "godot-client/assets/ui/original_v2/sources/base/smoke_black_steel_tile_source.png"
+    output: "godot-client/assets/ui/original_v2/base/smoke_black_steel_tile.png"
+    final_prompt: >-
+      Create one perfectly seamless square smoke-black oxidized steel texture tile,
+      full bleed and orthographic, matte and low contrast, with extremely subtle fine
+      oxidation bloom and sparse micro-pitting, faint cool blue-gray variation,
+      uniform scale, no fabricated seams, rivets, plates, scratches crossing the tile,
+      orange rust, holes, highlights, gradients, vignette, objects, or transparency.
+      Opposite edges must connect seamlessly.
+    negative_prompt: "See common_negative_prompt; also avoid borders, decorative motifs, green, directional lighting, and transparency."
+    processing:
+      - "Full-bleed material source has no removable background; chroma removal was not applicable."
+      - "Center-cropped, Lanczos-resampled, and mirrored in four quadrants to guarantee exact opposite-edge continuity; normalized to 512x512 RGBA with alpha 255."
+    validation: "RGBA 512x512; alpha 255; maximum left/right and top/bottom edge difference 0."
+
+  - id: character_summary_card
+    source: "godot-client/assets/ui/original_v2/sources/base/character_summary_card_chroma.png"
+    output: "godot-client/assets/ui/original_v2/base/character_summary_card.png"
+    final_prompt: >-
+      Create one original empty character summary card frame at exact 4:5 portrait
+      proportion for a frontier military council archive, perfectly front-on on flat
+      #00ff00. Use smoke-black oxidized steel and ink-navy woven rails, matte aged-brass
+      reinforcement at only two asymmetric corners, sparse rivets, an upper-left
+      battlement notch, right-rail coordinate ticks without numbers, a short lower-left
+      angular route incision, and one dark-red square sealing tab without a symbol.
+      Keep the interior completely clean and #00ff00, the silhouette crisp, rail runs
+      slice-safe, decoration sparse, and omit all shadows and perspective.
+    negative_prompt: "See common_negative_prompt; also avoid faces, bodies, portraits, silhouettes, items, green in the frame, and interior content."
+    processing:
+      - "Removed chroma key with official remove_chroma_key.py using --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill."
+      - "Resampled to exact 512x640 RGBA with Lanczos."
+    validation: "RGBA 512x640; transparent corners [0,0,0,0]; transparent 79.5%; partial alpha 4.0%; subject coverage 20.5%."
+
+  - id: item_value_summary_card
+    source: "godot-client/assets/ui/original_v2/sources/base/item_value_summary_card_chroma.png"
+    output: "godot-client/assets/ui/original_v2/base/item_value_summary_card.png"
+    final_prompt: >-
+      Create one original empty horizontal item and numeric summary card frame at exact
+      32:15 proportion for a frontier military council archive, perfectly front-on on
+      flat #00ff00. Use thin smoke-black oxidized-steel rails, ink-navy woven inset
+      segments, sparse matte aged-brass corner fasteners, an upper-rail battlement
+      notch, a short right-rail angular marching-route incision, lower-left coordinate
+      ticks without numbers, and one dark-red square sealing tab without a symbol.
+      Keep the interior completely clean and #00ff00, edges crisp, rails slice-safe,
+      decoration sparse, and omit all shadows and perspective.
+    negative_prompt: "See common_negative_prompt; also avoid items, coins, values, green in the frame, and interior content."
+    processing:
+      - "Removed chroma key with official remove_chroma_key.py using --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill."
+      - "Resampled to exact 512x240 RGBA with Lanczos."
+    validation: "RGBA 512x240; transparent corners [0,0,0,0]; transparent 81.0%; partial alpha 6.8%; subject coverage 19.0%."
+
+  - id: modal_overlay_tile
+    source: "godot-client/assets/ui/original_v2/sources/base/modal_overlay_tile_source.png"
+    output: "godot-client/assets/ui/original_v2/base/modal_overlay_tile.png"
+    final_prompt: >-
+      Create one perfectly seamless square very dark ink-and-smoke overlay texture,
+      full bleed and orthographic, near-black ink navy and smoke charcoal with an
+      extremely faint fine woven grain, very low contrast and uniform density, no
+      border, focal point, directional lighting, gradients, highlights, vignette,
+      objects, motifs, stains, paper edges, or baked transparency. Opposite edges must
+      connect seamlessly; the source will become a semi-transparent modal backdrop.
+    negative_prompt: "See common_negative_prompt; also avoid frames, panels, green, visible hot spots, and high-contrast grain."
+    processing:
+      - "Full-bleed material source has no removable background; chroma removal was not applicable."
+      - "Center-cropped, Lanczos-resampled, and mirrored in four quadrants to guarantee exact opposite-edge continuity."
+      - "Normalized to 512x512 RGBA with uniform alpha 170 for a dark semi-transparent modal overlay."
+    validation: "RGBA 512x512; alpha exactly 170; maximum left/right and top/bottom edge difference 0."

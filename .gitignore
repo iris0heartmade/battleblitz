@@ -94,5 +94,8 @@ ref/
 godot-client/godot-ref/
 .git-rewrite/
 
+# ===========参考i=========
+docs/参考/fe_image
+
 # ===== Local worktrees =====
 .worktrees/

@@ -1,0 +1,19 @@
+schema_version: 1
+collection: battleblitz_original_ui_v2
+art_direction: frontier_war_council_archive
+reference_policy:
+  clean_room: true
+  commercial_screenshots_in_generation_inputs: false
+  commercial_names_in_prompts: false
+  runtime_text_baked_into_images: false
+workstream_manifests:
+  - manifests/base.yaml
+  - manifests/controls.yaml
+  - manifests/battle.yaml
+approval:
+  status: pending_generation_and_review
+  required_reviews:
+    - alpha_and_edge_validation
+    - ninepatch_safe_area_validation
+    - perceptual_similarity_review
+    - three_resolution_runtime_review

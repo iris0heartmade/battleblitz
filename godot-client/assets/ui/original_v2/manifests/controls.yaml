@@ -1,0 +1,73 @@
+schema_version: 1
+collection: controls
+art_direction: "Frontier council archive: ink-navy weave, smoke-black oxidized steel, matte aged brass, restrained dark-red square seals; asymmetric construction and low ornament density."
+generator: "built-in image_gen"
+background_removal:
+  tool: "$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py"
+  key_color: "#00ff00"
+  method: "soft matte, explicit key, despill; white canvas rim on title_nameplates received a second official key-removal pass"
+postprocess: "No resampling. Button and function-icon canvases were symmetrically cropped by 2 px to make cell widths integral; alpha values <= 12 were normalized to zero."
+shared_prompt: |-
+  Use case: ui-mockup. Asset type: production game UI sprite sheet.
+  Create the requested empty UI controls on a perfectly flat solid #00ff00 chroma-key background. The background and equal-cell gutters must be uniform, with no shadows, gradients, texture, reflections, floor plane, or lighting variation. Use crisp hand-painted raster UI assets in orthographic front view. Keep every item centered and isolated in equal-width cells with generous green padding and no overlaps. Use ink-navy woven insets, smoke-black oxidized steel, matte aged brass, restrained dark-red square seals, sparse rivets, battlement notches, marching-route angular cuts, and coordinate ticks. Keep construction asymmetric and ornament density low. Do not use #00ff00 in any subject. No characters, text, letters, numerals, logos, badges, heraldry, crowns, central jewels, scrollwork, circular dials, cast shadows, or reflections.
+assets:
+  - id: button_states
+    source: "../sources/controls/button_states_chroma.png"
+    output: "../controls/button_states.png"
+    grid: {columns: 5, rows: 1, cell_width: 426, cell_height: 738}
+    order: [neutral, hover, pressed, disabled, selected]
+    prompt: "One horizontal five-cell sheet of the exact same wide rectangular button frame. Preserve silhouette, scale, and alignment across states. State differences use material brightness and edge compression; only selected has a restrained dark-red square seal accent. Empty center, no text."
+  - id: tab_states
+    source: "../sources/controls/tab_states_chroma.png"
+    output: "../controls/tab_states.png"
+    grid: {columns: 4, rows: 1, cell_width: 543, cell_height: 724}
+    order: [inactive, hover, active, disabled]
+    prompt: "One horizontal four-cell sheet of the exact same page tab. Preserve silhouette and alignment; use a brass lower edge and an active-only dark-red square seal accent. Empty, no text."
+  - id: list_row_states
+    source: "../sources/controls/list_row_states_chroma.png"
+    output: "../controls/list_row_states.png"
+    grid: {columns: 4, rows: 1, cell_width: 543, cell_height: 724}
+    order: [neutral, hover, selected, disabled]
+    prompt: "One horizontal four-cell sheet of the exact same long shallow empty list-row frame. Preserve geometry across states; selected alone receives a small dark-red square seal tab."
+  - id: title_nameplates
+    source: "../sources/controls/title_nameplates_chroma.png"
+    output: "../controls/title_nameplates.png"
+    grid: {columns: 2, rows: 1, cell_width: 887, cell_height: 887}
+    order: [wide, narrow]
+    prompt: "One horizontal two-cell sheet: a wide empty title nameplate and a narrow empty title nameplate with equal height and visual weight. Use an asymmetric brass cap, tiny red square sealing tab, battlement cuts, and coordinate ticks."
+  - id: section_divider
+    source: "../sources/controls/section_divider_chroma.png"
+    output: "../controls/section_divider.png"
+    grid: {columns: 2, rows: 1, cell_width: 1086, cell_height: 724}
+    order: [section_title_bar, divider_line]
+    prompt: "One horizontal two-cell sheet: an empty shallow section-title bar and an ultra-thin divider line with one subtle offset break."
+  - id: status_frames
+    source: "../sources/controls/status_frames_chroma.png"
+    output: "../controls/status_frames.png"
+    grid: {columns: 3, rows: 1, cell_width: 724, cell_height: 724}
+    order: [focus, error, success]
+    prompt: "One horizontal three-cell sheet of the exact same empty rectangular outline frame. Focus uses brass edge light, error uses dark-red edge tabs, success uses muted desaturated teal-blue edge tabs, never green. Keep the interior chroma-key empty."
+  - id: input_hint_capsules
+    source: "../sources/controls/input_hint_capsules_chroma.png"
+    output: "../controls/input_hint_capsules.png"
+    grid: {columns: 3, rows: 1, cell_width: 724, cell_height: 724}
+    order: [short, medium, long]
+    prompt: "One horizontal three-cell sheet of empty input-hint backplates: short, medium, and long. Equal height, clipped square-ended capsule silhouettes, never pill-rounded."
+  - id: bar_components
+    source: "../sources/controls/bar_components_chroma.png"
+    output: "../controls/bar_components.png"
+    grid: {columns: 4, rows: 1, cell_width: 543, cell_height: 724}
+    order: [trough, ink_blue_fill, old_brass_fill, oxblood_health_fill]
+    prompt: "One horizontal four-cell sheet: an empty long bar trough followed by three opaque inset fill masks in ink-blue, muted old-brass, and dark oxblood red. Identical outer dimensions, clipped asymmetric ends, no glow."
+  - id: scrollbar_components
+    source: "../sources/controls/scrollbar_components_chroma.png"
+    output: "../controls/scrollbar_components.png"
+    grid: {columns: 4, rows: 1, cell_width: 543, cell_height: 724}
+    order: [track, thumb, up_button, down_button]
+    prompt: "One horizontal four-cell sheet: tall narrow scrollbar track, tall narrow movable thumb, square up-chevron button, and square down-chevron button. Only the simple chevrons are permitted symbols."
+  - id: function_icons
+    source: "../sources/controls/function_icons_chroma.png"
+    output: "../controls/function_icons.png"
+    grid: {columns: 7, rows: 1, cell_width: 310, cell_height: 724}
+    order: [equipment, troops, shop, save, back, confirm, warning]
+    prompt: "One horizontal seven-cell sheet of original generic minimal utility pictograms: crossed non-weapon tools; three plain helmet-like head-and-shoulder silhouettes without insignia; supply crate with exchange ticks and no currency; abstract archive drawer with downward tab, not a floppy disk; angular left arrow; angular check; hollow warning triangle with vertical bar and square dot. No backing medallions, circles, flags, crests, weapons, currency signs, faces, or faction marks."
