@@ -567,6 +567,16 @@ func _ready() -> void:
 
 enum View { MENU, CONNECTING, GAME }
 
+# P2+: 当前是哪个 view? 兜底 reset 用作关闭条件(避免误清游戏内 transform)。
+var _current_view: String = "menu"
+
+# P2+: 帧末兜底 reset 调度锁,避免 call_deferred 重入。
+var _viewport_safety_reset_pending: bool = false
+
+# P2+: 兜底 reset 自愈计数器。若一帧 reset 不够(回调又把相机开了),再排下一帧。
+# 8 次硬上限防止 tween/WS 重连风暴拖死引擎。
+var _post_frame_retry_count: int = 0
+
 # UI Redesign Round 1 临时:BB_SCREENSHOT_MENU=1 时 _ready 后截 menu view。
 # Round 1 完成后会清理。
 func _maybe_screenshot_menu() -> void:
@@ -644,25 +654,124 @@ func _show_view(name: String) -> void:
 	# P2 修复:BoardCamera 在 apply_metrics() 时 enabled=true,会接管整个 viewport 的
 	# canvas_transform(zoom + 平移),连带 Menu 等 Control 一起缩放平移。切到不显示棋盘的
 	# view 必须禁用它并归位 canvas,否则从 game / 地图编辑器返回主菜单后整屏右偏放大。
+	# P2+:
+	# 1) 不只是 disable,还得先 reset zoom/position + 关闭 position_smoothing,
+	#    否则 CO 技震动 / 拖拽缩放留下的 tween 残值会让主菜单被相机拖飞一帧。
+	# 2) 不只处理"已知"的两个 BoardCamera,扫整棵 scene tree 把所有 Camera2D
+	#    一并 neutralize,防未来的 Editor/UI 相机漏网。
+	# 3) 把 HUD/Backdrop 的 CanvasLayer.transform 也归零,确保 CanvasLayer 不残留
+	#    任何外层 transform。
+	# 4) 帧末再 reset 一次(call_deferred),接住同帧内 tween/回调又把相机设回去的
+	#    残余路径(典型:state poll 回调里 board._on_state_updated 触发刷新)。
 	if name != "game" and name != "editor":
 		_reset_board_cameras()
+	_current_view = name
 
 
 func _reset_board_cameras() -> void:
-	_disable_board_camera(board)
+	# (1) 把"已知"BoardCamera 拉回中性态再 disable。
+	_disable_board_camera(board, true)
 	if editor_view != null and is_instance_valid(editor_view):
-		_disable_board_camera(editor_view.get_node_or_null("EditorBoard"))
+		_disable_board_camera(editor_view.get_node_or_null("EditorBoard"), true)
+	# (2) 兜底:扫整棵树把所有 Camera2D 归位(防未知相机漏网)。
+	_disable_all_cameras_in_tree(get_tree().root, true)
+	# (3) viewport.canvas_transform 直接置 IDENTITY。已 disabled 的 Camera2D
+	#	下一帧不会被纳入相机计算,这一行可以持久。
 	var vp := get_viewport()
 	if vp != null:
 		vp.canvas_transform = Transform2D.IDENTITY
+	# (4) 兜底:CanvasLayer.transform 也归零。HUD / BattleBackdrop 一般不写
+	#	这一项,但万一一并清掉。
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.transform = Transform2D.IDENTITY
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.transform = Transform2D.IDENTITY
+	# (5) 帧末兜底 reset:同帧内任何残留 tween/回调又把 Camera2D 属性改回去,
+	#	call_deferred 在帧末再跑一次,接住它。新一轮切 view 时把 retry 数归零。
+	if is_inside_tree() and not _viewport_safety_reset_pending:
+		_post_frame_retry_count = 0
+		_viewport_safety_reset_pending = true
+		call_deferred("_post_frame_viewport_reset")
 
 
-func _disable_board_camera(b: Node) -> void:
+# P2+: 帧末兜底 reset。同帧内 _tween_killed_too_early / state_updated 回调可能
+# 又设了 camera 属性,call_deferred 排在帧末再跑一次,确保下一帧渲染时 canvas_transform
+# 绝对是干净的。仅当当前不在 game/editor view 才生效。
+# 持续自愈:reset 完再扫一次,若仍有相机被重新 enable(典型:tween 残值、state_updated
+# 回调、WS reconnect handler),再 call_deferred 一次,直到整棵树清净为止。
+func _post_frame_viewport_reset() -> void:
+	_viewport_safety_reset_pending = false
+	if not is_inside_tree():
+		return
+	if _current_view == "game" or _current_view == "editor":
+		return
+	_disable_board_camera(board, true)
+	if editor_view != null and is_instance_valid(editor_view):
+		_disable_board_camera(editor_view.get_node_or_null("EditorBoard"), true)
+	_disable_all_cameras_in_tree(get_tree().root, true)
+	var vp := get_viewport()
+	if vp != null:
+		vp.canvas_transform = Transform2D.IDENTITY
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.transform = Transform2D.IDENTITY
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.transform = Transform2D.IDENTITY
+	# 自愈检查:仍有一个 enabled 的 Camera2D(viewport canvas_transform 不为 IDENTITY 的话
+	# 多半是这个原因),再 call_deferred 一次。设上限 8 防极端死循环。
+	if _any_camera_still_enabled() and _post_frame_retry_count < 8:
+		_post_frame_retry_count += 1
+		_viewport_safety_reset_pending = true
+		call_deferred("_post_frame_viewport_reset")
+
+
+func _any_camera_still_enabled() -> bool:
+	# 已知两个 BoardCamera + 整棵树兜底扫描
+	if board != null and is_instance_valid(board):
+		var cam := board.get_node_or_null("BoardCamera")
+		if cam != null and is_instance_valid(cam) and (cam is Camera2D) and (cam as Camera2D).enabled:
+			return true
+	if editor_view != null and is_instance_valid(editor_view):
+		var eboard = editor_view.get_node_or_null("EditorBoard")
+		if eboard != null and is_instance_valid(eboard):
+			var ecam := eboard.get_node_or_null("BoardCamera")
+			if ecam != null and is_instance_valid(ecam) and (ecam is Camera2D) and (ecam as Camera2D).enabled:
+				return true
+	# 兜底:整棵树里只要还有 enabled 的 Camera2D 也算
+	var cams: Array = get_tree().root.find_children("*", "Camera2D", true, false)
+	for cam in cams:
+		if cam != null and is_instance_valid(cam) and (cam is Camera2D) and (cam as Camera2D).enabled:
+			return true
+	return false
+
+
+func _disable_board_camera(b: Node, neutralize: bool = true) -> void:
 	if b == null or not is_instance_valid(b):
 		return
 	var cam := b.get_node_or_null("BoardCamera")
-	if cam != null and is_instance_valid(cam):
-		cam.enabled = false
+	_neutralize_camera(cam, neutralize)
+
+
+func _disable_all_cameras_in_tree(root: Node, neutralize: bool = true) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	# find_children 找出所有 Camera2D 子节点(不会包含 disabled 节点外的特例)
+	var cams := root.find_children("*", "Camera2D", true, false)
+	for cam in cams:
+		_neutralize_camera(cam, neutralize)
+
+
+# P2+: 单个 Camera2D 的"拉回中性 + 关 smoothing + disable"。
+# neutralize=false 时只 disable,不动 zoom/position(正常切回游戏视图时用)。
+func _neutralize_camera(cam: Node, neutralize: bool) -> void:
+	if cam == null or not is_instance_valid(cam) or not (cam is Camera2D):
+		return
+	if neutralize:
+		# 关 smoothing:tween 残值会让位置/zoom "漂一帧",瞬切 UI 必须瞬时归零。
+		cam.set("position_smoothing_enabled", false)
+		cam.set("zoom_smoothing_enabled", false)
+		cam.set("zoom", Vector2(1.0, 1.0))
+		cam.set("position", Vector2.ZERO)
+	cam.set("enabled", false)
 
 
 # HUD (CanvasLayer) 显隐控制 — CanvasLayer 不受父 Control.visible 影响
@@ -2737,14 +2846,23 @@ func _on_battle_detail_pressed() -> void:
 
 
 func _on_battle_back_menu_pressed() -> void:
+	# P2+ bug:这条路径之前只 hide_battle_result 然后 _show_view("menu"),
+	# 漏掉 _reset_game_state_for_main_menu 的副作用清理(action bubble / recruit /
+	# move-attack-skill mode / state poll) → 玩家返回主菜单时如果上次操作
+	# 留了 selection 高亮或 tween,会污染整屏视觉。现与 pause→menu 一致:
+	# 先做完整状态清理,再切 view。
 	hide_battle_result()
+	_reset_game_state_for_main_menu()
 	_show_view("menu")
 
 
 # M4.16+:战斗结束 → 返回联机大厅。复用 _on_lobby_pressed,但先清 game 状态
 # 否则 _lobby_commanders_fetched / _game_id 可能残留导致 lobby 加载错位。
+# P2+:先把整套 game 状态清掉(关 WS / action 模式 / GameState / Board 高亮 /
+# 浮层 / tween),再清 lobby 专属字段,最后 _on_lobby_pressed。
 func _on_battle_back_lobby_pressed() -> void:
 	hide_battle_result()
+	_reset_game_state_for_main_menu()
 	_game_id = 0
 	_player_id = 0
 	_selected_mainline_id = ""

@@ -1,5 +1,15 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-07-31
+
+- 修复棋盘 ↔ 主菜单的「瞬切错位」bug(游戏胜利 / 失败 / 中断 退出再回主菜单时,主菜单会被 BoardCamera 的 zoom/position/smoothing 残值拉飞一帧):
+  - `main.gd` 重写 `_reset_board_cameras`: 先强制把每个 `Camera2D` 的 `zoom = (1,1)`、`position = (0,0)`、关掉 `position_smoothing_enabled` 与 `zoom_smoothing_enabled`,再 `enabled = false`,最后 `viewport.canvas_transform = IDENTITY`。
+  - 新增 `_disable_all_cameras_in_tree`: 用 `find_children("Camera2D")` 兜底扫整棵树,防未来新增 Editor/UI 相机漏网。
+  - 新增 `_post_frame_viewport_reset`(`call_deferred`): 帧末再 reset 一次,接住同帧内残留 tween / state_updated 回调又把 camera 设回去的情况。仅当 `_current_view != "game" / "editor"` 时生效,正常游戏视图不受影响。
+  - 新增 `_current_view` 跟踪当前 view 状态,作为 _show_view 内 `_reset_board_cameras` 的开关依据。
+  - `HUD` / `BattleBackdrop` 的 `CanvasLayer.transform` 同步归零,兜底 CanvasLayer 上的 transform 残值。
+  - 同步修复两条之前漏掉 `_reset_game_state_for_main_menu` 的返回路径:`_on_battle_back_menu_pressed`(战报 → 主菜单)与 `_on_battle_back_lobby_pressed`(战报 → 大厅),补全 action bubble / recruit / move-attack-skill mode / GameState / Board 高亮 / WS / tween 清理,与 pause → 主菜单行为一致。
+
 ## 2026-07-30
 
 - Added hero `youko` / 洋子 as a T1 special Bard (`bard`) with the active skill `sing` / 吟诗, Godot skill targeting, and hero assets (`youko.png`, `portrait_youko.png`, `crest_youko.png`). Bard is intentionally excluded from ordinary barracks recruitment.
