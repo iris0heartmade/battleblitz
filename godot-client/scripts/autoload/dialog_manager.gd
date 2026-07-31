@@ -81,18 +81,40 @@ func _ready() -> void:
 	if _continue_btn != null:
 		_continue_btn.pressed.connect(_on_continue_pressed)
 	_clamp_dialog_width()
-	get_viewport().size_changed.connect(_clamp_dialog_width)
+	var win: Window = get_window()
+	if win != null:
+		win.size_changed.connect(_clamp_dialog_width)
 
 
-## 让对话框宽度符合规范 min(viewport × 0.78, 1050),避免 1920 拉到 1200+ / 1280 顶到边缘。
+## 让对话框宽度符合规范 min(physical_window × 0.78, 1050)。
+## headless 下 DisplayServer.window_get_size() 返回 (0,0),从 OS.get_cmdline_args() 拿 --resolution
+## 或 fallback 到环境变量 BB_REVIEW_RES / 默认 1920。
+func _physical_window_size() -> Vector2i:
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for i in args.size():
+		if args[i] == "--resolution" and i + 1 < args.size():
+			var parts: PackedStringArray = args[i + 1].split("x")
+			if parts.size() == 2:
+				return Vector2i(int(parts[0]), int(parts[1]))
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "":
+		var parts2: PackedStringArray = env.split("x")
+		if parts2.size() == 2:
+			return Vector2i(int(parts2[0]), int(parts2[1]))
+	var sz: Vector2i = DisplayServer.window_get_size()
+	if sz.x > 0:
+		return sz
+	return Vector2i(1920, 1080)
+
+
 func _clamp_dialog_width() -> void:
 	if _root == null:
 		return
-	var vp := get_viewport().get_visible_rect().size
-	var w: float = minf(vp.x * 0.78, 1050.0)
+	var sz: Vector2i = _physical_window_size()
+	var w: float = minf(float(sz.x) * 0.78, 1050.0)
 	_root.offset_left = -w * 0.5
 	_root.offset_right = w * 0.5
-	_root.offset_top = -minf(vp.y * 0.4, 320.0)
+	_root.offset_top = -minf(float(sz.y) * 0.4, 320.0)
 	_root.offset_bottom = -30.0
 
 

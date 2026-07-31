@@ -537,10 +537,11 @@ func _ready() -> void:
 		await _maybe_screenshot_menu()
 	elif OS.get_environment("BB_SCREENSHOT_VIEWS") != "":
 		await _maybe_screenshot_views()
-	# 响应式 P0 #3:viewport 宽度 ≤ 1366 时折叠左翼并加大字号密度。
+	# 响应式 P0 #3:窗口宽度 ≤ 1366 时折叠左翼并加大字号密度。
 	_update_hud_layout_for_viewport()
-	if get_viewport() != null:
-		get_viewport().size_changed.connect(_update_hud_layout_for_viewport)
+	var win: Window = get_window()
+	if win != null:
+		win.size_changed.connect(_update_hud_layout_for_viewport)
 	if quit_sec > 0.0:
 		await get_tree().create_timer(quit_sec).timeout
 		_update_status("测试自动流程结束,退出")
@@ -2114,10 +2115,32 @@ func _update_status(text: String) -> void:
 	status_label.text = text
 
 
-## 响应式布局:viewport 宽 ≤ 1366 时折叠左翼 + 半透明右翼 + 触发 hud_theme 的字号补偿分支。
+## 响应式布局:物理窗口宽 ≤ 1366 时折叠左翼 + 半透明右翼 + 触发 hud_theme 的字号补偿分支。
+## 关键:Godot 4 canvas_items stretch 下 get_visible_rect 永远返回 1920,DisplayServer.window_get_size
+## 在 headless 下返回 (0,0)。可靠来源是 OS.get_cmdline_args() 里的 --resolution 参数。
+func _physical_window_width() -> int:
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for i in args.size():
+		if args[i] == "--resolution" and i + 1 < args.size():
+			var parts: PackedStringArray = args[i + 1].split("x")
+			if parts.size() == 2:
+				return int(parts[0])
+	# fallback:BB_REVIEW_RES 环境变量(截图工具专用)
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "":
+		var parts2: PackedStringArray = env.split("x")
+		if parts2.size() == 2:
+			return int(parts2[0])
+	# 终极 fallback:DisplayServer 窗口尺寸(非 headless 时有效)
+	var sz: Vector2i = DisplayServer.window_get_size()
+	if sz.x > 0:
+		return sz.x
+	return 1920  # 默认
+
+
 func _update_hud_layout_for_viewport() -> void:
-	var vp: Rect2 = get_viewport().get_visible_rect()
-	var small: bool = vp.size.x <= 1366.0
+	var window_width: int = _physical_window_width()
+	var small: bool = window_width > 0 and window_width <= 1366
 	if left_hud_wing != null and is_instance_valid(left_hud_wing):
 		left_hud_wing.visible = not small
 	if right_hud_wing != null and is_instance_valid(right_hud_wing):
@@ -3181,15 +3204,17 @@ func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 		can_attack = false
 		can_skill = false
 		can_claim = false
-	_set_action_button(move_btn, can_move, "已行动" if not can_move else "")
-	_set_action_button(attack_btn, can_attack, "无目标" if not can_attack else "")
-	_set_action_button(skill_btn, can_skill, "MP 不足" if not can_skill else "")
-	_set_action_button(wait_btn, has_unit, "" if has_unit else "无可占领")
-	_set_action_button(claim_btn, can_claim, "无目标" if not can_claim else "")
+	# 先重置 base text(清除上一轮的 " · 原因" 后缀),再调 _set_action_button 追加新原因
+	# 修复第二轮 P1:之前先 _set_action_button 再 reassign text 会覆盖原因后缀。
 	if skill_btn != null and is_instance_valid(skill_btn):
 		skill_btn.text = _skill_cn(active_skill) if active_skill != "" else "技能"
 	if claim_btn != null and is_instance_valid(claim_btn):
 		claim_btn.text = "占领"
+	_set_action_button(move_btn, can_move, "已行动" if not can_move else "")
+	_set_action_button(attack_btn, can_attack, "无目标" if not can_attack else "")
+	_set_action_button(skill_btn, can_skill, "MP 不足" if not can_skill else "")
+	_set_action_button(wait_btn, has_unit, "")
+	_set_action_button(claim_btn, can_claim, "无目标" if not can_claim else "")
 
 
 func _set_action_button(btn: Button, can_show: bool, reason: String = "") -> void:

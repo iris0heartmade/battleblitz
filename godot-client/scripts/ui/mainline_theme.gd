@@ -104,7 +104,7 @@ static func apply_tab(button: Button) -> void:
 	button.add_theme_color_override("font_color", C_TEXT_DIM)
 	button.add_theme_color_override("font_hover_color", C_GOLD_BRIGHT)
 	button.add_theme_color_override("font_pressed_color", C_TEXT)
-	button.add_theme_color_override("font_disabled_color", C_INK)
+	button.add_theme_color_override("font_disabled_color", C_GOLD_BRIGHT)  # 当前页签在 disabled 态仍亮金,避免被看成空白
 	# 当前页签在面板里被 disabled(见 set_active_tab),因此 disabled 态复用 active 纹理。
 	button.add_theme_stylebox_override("normal", SkinAssets.tab_style("inactive"))
 	button.add_theme_stylebox_override("hover", SkinAssets.tab_style("hover"))

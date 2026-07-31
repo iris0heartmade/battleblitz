@@ -2473,6 +2473,7 @@ mouse_filter = 0
 
 [node name="PausePanel" type="Panel" parent="GameView/HUD"]
 visible = false
+z_index = 76
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -2690,6 +2691,7 @@ custom_minimum_size = Vector2(120, 45)
 ; --- 战斗结算面板(中央浮层)---
 [node name="BattleResultPanel" type="Panel" parent="GameView/HUD"]
 visible = false
+z_index = 76
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5

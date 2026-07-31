@@ -43,7 +43,12 @@ func select_slot(slot_index: int) -> void:
 	var record: Dictionary = _records[slot_index] if slot_index < _records.size() else {}
 	var occupied := not record.is_empty()
 	_preview_title.text = str(record.get("title", "新游戏")) if occupied else "空白档案"
-	_preview_body.text = str(record.get("summary", "从第一章开始新的主线旅程。"))
+	# Preview body 用 record 字段拼出可填充中栏的元数据块,避免 parchment 大面积空白。
+	var summary: String = str(record.get("summary", "从第一章开始新的主线旅程。"))
+	var chapter: String = str(record.get("chapter", "第 ? 章"))
+	var heroes_line: String = str(record.get("heroes_line", "队伍英雄: 待任命"))
+	var next_mission: String = str(record.get("next_mission", "下一战: 待定"))
+	_preview_body.text = "%s\n\n• %s\n• %s\n• %s" % [summary, chapter, heroes_line, next_mission]
 	_intel_body.text = str(record.get("intel", "选择此档案后，可查看队伍与下一战的出征情报。"))
 	_primary_action.text = "继续该档案" if occupied else "开始新游戏"
 	_refresh_slot_selection()
@@ -57,6 +62,10 @@ func _refresh_slot_selection() -> void:
 			continue
 		MainlineTheme.apply_row(card, index == _selected_slot)
 		card.focus_mode = Control.FOCUS_ALL  # 让 2px 金边 focus ring 在键盘聚焦时可见
+		# 静态截图也需要看到 focus 反馈,所以 grab_focus 当前选中槽位。
+		# (运行时这会跟随点击/键盘移动自然切换 focus,不引入新交互。)
+		if index == _selected_slot:
+			card.grab_focus()
 
 
 func _activate_selected_slot() -> void:
@@ -70,6 +79,7 @@ func _make_slot_card(index: int, record: Dictionary) -> Button:
 	var occupied := not record.is_empty()
 	var card := Button.new()
 	card.custom_minimum_size = Vector2(0, 94)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL  # 修复 CJK 折行:卡片拉满 SlotColumn
 	card.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var title := str(record.get("title", "空槽")) if occupied else "空槽"

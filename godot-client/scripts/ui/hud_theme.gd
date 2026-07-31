@@ -127,8 +127,24 @@ static func apply_hud(host: Node) -> void:
 	# Pills are ColorRect containers with ReferenceRect borders added
 	# in _ready. We only need to set font sizes / colors on inner Labels.
 	var pill_size: int = 14
-	var vp: Viewport = host.get_viewport() if host != null else null
-	if vp != null and vp.get_visible_rect().size.x <= 1366.0:
+	# 物理窗口宽度断点 — 优先从 --resolution 拿(headless 唯一可靠来源),
+	# 否则 DisplayServer.window_get_size()(非 headless 时与窗口一致)。
+	var win_w: int = 0
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for i in args.size():
+		if args[i] == "--resolution" and i + 1 < args.size():
+			var parts: PackedStringArray = args[i + 1].split("x")
+			if parts.size() == 2:
+				win_w = int(parts[0])
+	if win_w == 0:
+		var env: String = OS.get_environment("BB_REVIEW_RES")
+		if env != "":
+			var parts2: PackedStringArray = env.split("x")
+			if parts2.size() == 2:
+				win_w = int(parts2[0])
+	if win_w == 0:
+		win_w = DisplayServer.window_get_size().x
+	if win_w > 0 and win_w <= 1366:
 		pill_size = 20  # 1.4x 字号补偿,1280 下保证正文物理字号可读
 	if host.info_panel != null and is_instance_valid(host.info_panel):
 		# InfoPanel 常驻右翼;样式由 battle_theme.apply_floating_panel 唯一接管。
@@ -148,7 +164,7 @@ static func apply_hud(host: Node) -> void:
 		host.unit_info_subtitle.add_theme_font_size_override("font_size", 14)
 		host.unit_info_subtitle.add_theme_color_override("font_color", MenuTheme.C_TEXT_DIM)
 	if host.commander_name != null and is_instance_valid(host.commander_name):
-		host.commander_name.add_theme_font_size_override("normal_font_size", 13)
+		host.commander_name.add_theme_font_size_override("normal_font_size", 18 if pill_size >= 20 else 13)
 		host.commander_name.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	if host.commander_co_bar != null and is_instance_valid(host.commander_co_bar):
 		var sb_bg := StyleBoxFlat.new()
@@ -166,7 +182,7 @@ static func apply_hud(host: Node) -> void:
 		host.commander_co_bar.add_theme_stylebox_override("background", sb_bg)
 		host.commander_co_bar.add_theme_stylebox_override("fill", sb_fg)
 	if host.players_list != null and is_instance_valid(host.players_list):
-		host.players_list.add_theme_font_size_override("normal_font_size", 13)
+		host.players_list.add_theme_font_size_override("normal_font_size", 18 if pill_size >= 20 else 13)
 		host.players_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	# T:V3 — 英雄立绘槽主题用 MenuTheme.apply_panel_theme + token(替代手写 StyleBoxFlat)
 	if host.hero_portrait_panel != null and is_instance_valid(host.hero_portrait_panel):
@@ -184,7 +200,7 @@ static func apply_hud(host: Node) -> void:
 		sb_portrait.content_margin_bottom = 0
 		host.hero_portrait_panel.add_theme_stylebox_override("panel", sb_portrait)
 	if host.unit_info != null and is_instance_valid(host.unit_info):
-		host.unit_info.add_theme_font_size_override("normal_font_size", 16)
+		host.unit_info.add_theme_font_size_override("normal_font_size", 22 if pill_size >= 20 else 16)
 		host.unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 	if host.hero_portrait_caption != null and is_instance_valid(host.hero_portrait_caption):
 		host.hero_portrait_caption.add_theme_color_override("font_color", MenuTheme.C_TEXT_WARM)
