@@ -8,18 +8,14 @@ const MAP_PATH := "res://../game/maps/balanced_2p_15.json"
 
 
 func _ready() -> void:
-	# 从 --resolution 派生 BB_REVIEW_RES,响应式断点 API 共享同一来源。
-	var res: Vector2i = Vector2i(1280, 720)
-	var args: PackedStringArray = OS.get_cmdline_args()
-	for i in args.size():
-		if args[i] == "--resolution" and i + 1 < args.size():
-			var parts: PackedStringArray = args[i + 1].split("x")
-			if parts.size() == 2:
-				res = Vector2i(int(parts[0]), int(parts[1]))
+	# 关键:Godot 4 启动时 --resolution 已被消费,OS.get_cmdline_args() 只返回剩余参数。
+	# 直接读 get_viewport().size — 它已经被 --resolution 设置过了。
+	var res: Vector2i = get_viewport().size
+	if res.x <= 0 or res.y <= 0:
+		res = Vector2i(1280, 720)
 	OS.set_environment("BB_REVIEW_RES", "%dx%d" % [res.x, res.y])
-	get_viewport().size = res
-	DisplayServer.window_set_size(res)
 	_review_size = res
+	print("[ui-review] res=", res, " viewport=", get_viewport().size)
 	await _frames(6)
 	var main := get_node("Main")
 	main._game_id = 1
@@ -34,11 +30,31 @@ func _ready() -> void:
 	prepare.visible = false
 	await _frames(4)
 
-	# 1) 主线存档(空槽 + 已有档混合)
+	# 1) 主线存档(空槽 + 已有档混合)— record 字段喂 PreviewColumn 多行内容
 	var slots: Array[Dictionary] = [
-		{"title": "钢铁起义", "summary": "第 1 章 · 继续当前主线进度", "intel": "章节：钢铁起义\n进度：第 1 章\n选择继续以进入战前整备。"},
+		{
+			"title": "钢铁起义", "summary": "第 1 章 · 继续当前主线进度",
+			"chapter": "第 1 章 · 边境风云",
+			"progress": "进度: 32% (3/9 战)",
+			"heroes_line": "队伍英雄: 云 / 安娜 / 卢克",
+			"enemy_preview": "敌人预览: 边境守军 ×4 + 骑士 ×2",
+			"next_mission": "下一战: 攻占北隘口",
+			"recommend": "推荐等级: Lv.3~5",
+			"save_time": "保存: 2026-07-31 22:14",
+			"intel": "章节：钢铁起义\n进度：第 1 章\n选择继续以进入战前整备。",
+		},
 		{},
-		{"title": "测试章节 2：双场残血战", "summary": "第 2 章 · 继续当前主线进度", "intel": "章节：测试章节 2\n进度：第 2 章\n选择继续以进入战前整备。"},
+		{
+			"title": "测试章节 2：双场残血战", "summary": "第 2 章 · 继续当前主线进度",
+			"chapter": "第 2 章 · 双场残血",
+			"progress": "进度: 78% (7/9 战)",
+			"heroes_line": "队伍英雄: 云 / 安娜 / 卢克 + 雇佣 2",
+			"enemy_preview": "敌人预览: 暗影骑士团 ×6 + 弓手 ×3",
+			"next_mission": "下一战: 决战堡垒",
+			"recommend": "推荐等级: Lv.7~9",
+			"save_time": "保存: 2026-07-31 23:02",
+			"intel": "章节：测试章节 2\n进度：第 2 章\n选择继续以进入战前整备。",
+		},
 	]
 	campaign.set_slots(slots)
 	campaign.select_slot(0)

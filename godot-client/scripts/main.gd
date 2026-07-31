@@ -143,7 +143,7 @@ var _unit_info_portrait_tex: TextureRect = null
 # T:4 RecruitPanel — 真 modal(替换 status 凑合)
 @onready var recruit_panel: Panel = $GameView/HUD/RecruitPanel
 @onready var recruit_status_label: Label = $GameView/HUD/RecruitPanel/RecruitStatusLabel
-@onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitList
+@onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitScroll/RecruitList
 @onready var recruit_close_btn: Button = $GameView/HUD/RecruitPanel/CloseBtn
 var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var tutorial_bubble: Panel = $GameView/HUD/TutorialBubble
