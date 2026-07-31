@@ -19,6 +19,7 @@ func _ready() -> void:
 	OS.set_environment("BB_REVIEW_RES", "%dx%d" % [res.x, res.y])
 	get_viewport().size = res
 	DisplayServer.window_set_size(res)
+	_review_size = res
 	await _frames(6)
 	var main := get_node("Main")
 	main._game_id = 1
@@ -195,12 +196,18 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
+var _review_size: Vector2i = Vector2i(1280, 720)
+
+
 func _save(name: String) -> void:
 	var img: Image = get_viewport().get_texture().get_image()
 	if img == null:
 		print("  WARN: %s viewport image null" % name)
 		return
-	var size_str := "%dx%d" % [img.get_width(), img.get_height()]
+	# 输出 dir 用 _review_size(从 BB_REVIEW_RES / --resolution 解析)而非 image 实际像素:
+	# Godot 4 canvas_items stretch 下 headless 不会缩放到 --resolution,image 永远是 1920,
+	# 但用户期望按"启动分辨率"分组文件。
+	var size_str := "%dx%d" % [_review_size.x, _review_size.y]
 	var dir := "res://.refactor_shots/ui_%s/" % size_str
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	var err := img.save_png(dir + name)
