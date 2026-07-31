@@ -293,7 +293,7 @@ func _ready() -> void:
 	_assert_true("HUD top status art is wired", battle_top_art != null and battle_top_art.texture != null,
 		"the always-visible battle header must render its production art asset")
 	_assert_true("HUD top status art uses clean center rail",
-		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_status_rail_clean"),
+		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_battle_status_bar"),
 		"team meters need a center-safe rail without an overlapping emblem")
 	var compact_plaque_paths: Array[String] = [
 		"GameView/HUD/TopLeft/TurnBadge/OrnatePlaque",
@@ -707,16 +707,16 @@ func _ready() -> void:
 		tactical_portrait != null and tactical_portrait.size.x <= main_check.hero_portrait_panel.size.x
 			and tactical_portrait.size.y <= main_check.hero_portrait_panel.size.y,
 		"portrait art must not recreate the removed full-height sidebar")
-	main_check.call("_set_unit_info_portrait", "")
+	main_check.call("_set_unit_info_portrait", {})
 	_assert_true("Non-hero selection hides portrait", not main_check.hero_portrait_panel.visible,
 		"ordinary units must not leave stale hero art visible")
-	main_check.call("show_dialog", "旁白", "对话遮罩应阻止棋盘输入。")
-	_assert_true("Dialog overlay becomes visible", main_check.dialog_overlay.visible,
+	DialogManager.show_dialog({"speaker": "旁白", "text": "对话遮罩应阻止棋盘输入。"})
+	_assert_true("Dialog overlay becomes visible", DialogManager._root != null and DialogManager._root.visible,
 		"opening dialogue should enable the input-blocking overlay")
-	_assert_eq("Dialog overlay blocks mouse input", main_check.dialog_overlay.mouse_filter, Control.MOUSE_FILTER_STOP,
+	_assert_eq("Dialog overlay blocks mouse input", DialogManager._root.mouse_filter, Control.MOUSE_FILTER_STOP,
 		"dialogue overlay must intercept pointer input before it reaches the board")
-	main_check.call("hide_dialog")
-	_assert_true("Dialog overlay hides with dialogue", not main_check.dialog_overlay.visible,
+	DialogManager.hide_dialog()
+	_assert_true("Dialog overlay hides with dialogue", DialogManager._root == null or not DialogManager._root.visible,
 		"closing dialogue should restore board interaction")
 	main_check.queue_free()
 
@@ -1420,9 +1420,11 @@ func _setup_action_bubble_state(main_check: Node) -> void:
 	board.set("tile_lookup", lookup)
 
 
-func _assert_action_button(label: String, main_check: Node, button_name: String, expected_visible: bool, msg: String) -> void:
+func _assert_action_button(label: String, main_check: Node, button_name: String, expected_active: bool, msg: String) -> void:
 	var btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/" + button_name)
-	_assert_eq(label, btn.visible, expected_visible, msg)
+	# 不可用按钮现在以 disabled + modulate.a=0.4 显示,而非隐藏 — 契约改为检查激活态
+	var active: bool = not btn.disabled and btn.modulate.a >= 0.9
+	_assert_eq(label, active, expected_active, msg)
 
 
 func _map_path_for_id(map_id: String) -> String:

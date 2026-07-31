@@ -1635,6 +1635,9 @@ func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
 	var context := _ACTION_CONTEXT_POST_MOVE if action_name == "移动" else _ACTION_CONTEXT_POST_ACTION
+	if context == _ACTION_CONTEXT_POST_MOVE:
+		# 移动后立即用剩余移动力重建可达缓存,保证可见的"继续移动"始终可用。
+		_move_reachable_set = _compute_reachable_tiles_full(ud) if _can_continue_move(ud) else {}
 	_show_action_bubble(unit_id, marker_pos, context)
 	_update_status("已%s,请选择后续指令" % ("移动" if action_name == "移动" else "行动"))
 
@@ -2419,9 +2422,12 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	_selected_unit_id = unit_id
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
-	_show_action_bubble(unit_id, marker_pos, _ACTION_CONTEXT_INITIAL)
+	# 已移动但仍有剩余移动力的单位:重选后保持 POST_MOVE 语境(继续移动),不塌缩为 wait/cancel。
+	var moved_with_mp: bool = bool(ud.get("has_moved", false)) and _can_continue_move(ud)
+	var context: String = _ACTION_CONTEXT_POST_MOVE if moved_with_mp else _ACTION_CONTEXT_INITIAL
+	_show_action_bubble(unit_id, marker_pos, context)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
+	if is_mine and not bool(ud.get("has_acted", false)):
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
 		_move_reachable_set = reach_dict
@@ -2436,7 +2442,8 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
 func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
-	var mp: int = int(unit_data.get("mov", int(unit_data.get("move_points", int(unit_data.get("mp", 5))))))
+	# 优先用剩余移动力 mp;已移动单位(mp < mov)必须按剩余 MP 预览可达格。
+	var mp: int = int(unit_data.get("mp", int(unit_data.get("mov", int(unit_data.get("move_points", 5))))))
 	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
@@ -2877,6 +2884,8 @@ func _on_battle_back_lobby_pressed() -> void:
 
 func _apply_gba_theme() -> void:
 	HudTheme.apply_gba(self)
+	# 设置/暂停/战报/结算面板底色由 apply_theme 唯一接管,启动即应用默认主题。
+	HudTheme.apply_theme(self, "deep_gba")
 
 
 func _hud_density_scale() -> float:
@@ -3149,22 +3158,29 @@ func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 		can_attack = false
 		can_skill = false
 		can_claim = false
-	_set_action_button(move_btn, can_move)
-	_set_action_button(attack_btn, can_attack)
-	_set_action_button(skill_btn, can_skill)
-	_set_action_button(wait_btn, has_unit)
-	_set_action_button(claim_btn, can_claim)
+	_set_action_button(move_btn, can_move, "已行动" if not can_move else "")
+	_set_action_button(attack_btn, can_attack, "无目标" if not can_attack else "")
+	_set_action_button(skill_btn, can_skill, "MP 不足" if not can_skill else "")
+	_set_action_button(wait_btn, has_unit, "" if has_unit else "无可占领")
+	_set_action_button(claim_btn, can_claim, "无目标" if not can_claim else "")
 	if skill_btn != null and is_instance_valid(skill_btn):
 		skill_btn.text = _skill_cn(active_skill) if active_skill != "" else "技能"
 	if claim_btn != null and is_instance_valid(claim_btn):
 		claim_btn.text = "占领"
 
 
-func _set_action_button(btn: Button, can_show: bool) -> void:
+func _set_action_button(btn: Button, can_show: bool, reason: String = "") -> void:
 	if btn == null or not is_instance_valid(btn):
 		return
-	btn.visible = can_show
 	btn.disabled = not can_show
+	btn.modulate.a = 0.4 if not can_show else 1.0
+	# 不可用时追加原因,可用时去掉之前留下的原因后缀
+	if not can_show and reason != "":
+		var base_text: String = btn.text.split(" · ", true, 1)[0] if " · " in btn.text else btn.text
+		btn.text = "%s · %s" % [base_text, reason]
+	else:
+		if " · " in btn.text:
+			btn.text = btn.text.split(" · ", true, 1)[0]
 
 
 func _can_initial_move(ud: Dictionary) -> bool:
