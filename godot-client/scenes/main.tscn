@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -15,6 +15,11 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/panel_frame_9slice_384_v1.png" id="13_battle_panel_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/top_status_rail_clean_1000x96_v2.png" id="14_battle_status_rail"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/compact_hud_plaque_180x72_v1.png" id="15_battle_compact_plaque"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/top_battle_status_bar.png" id="17_skin_top_bar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/compact_status_plate.png" id="18_skin_compact_plate"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/secondary_panel_frame_9slice.png" id="19_skin_secondary_frame"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer.png" id="20_skin_sidebar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/chapter_result_title.png" id="21_skin_result_title"]
 [ext_resource type="Script" path="res://scripts/ui/lobby_controller.gd" id="16_lobby"]
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1210,6 +1215,7 @@ offset_right = -36.0
 offset_bottom = -36.0
 
 [node name="MLFrame" type="Panel" parent="MainlineView"]
+visible = false
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -1324,6 +1330,7 @@ text = "商店"
 text = "存档"
 
 [node name="MLPrepSelectorRow" type="HBoxContainer" parent="MainlineView/MLFrame"]
+visible = false
 anchor_right = 1.0
 offset_left = 531.0
 offset_top = 252.0
@@ -1531,13 +1538,13 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 40
-patch_margin_top = 40
-patch_margin_right = 40
-patch_margin_bottom = 40
+texture = ExtResource("20_skin_sidebar")
+patch_margin_left = 72
+patch_margin_top = 72
+patch_margin_right = 82
+patch_margin_bottom = 88
 draw_center = false
-modulate = Color(1, 1, 1, 0.34)
+modulate = Color(1, 1, 1, 0.92)
 mouse_filter = 2
 
 [node name="Heading" type="Label" parent="GameView/HUD/LeftHudWing"]
@@ -1573,13 +1580,13 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 40
-patch_margin_top = 40
-patch_margin_right = 40
-patch_margin_bottom = 40
+texture = ExtResource("20_skin_sidebar")
+patch_margin_left = 72
+patch_margin_top = 72
+patch_margin_right = 82
+patch_margin_bottom = 88
 draw_center = false
-modulate = Color(1, 1, 1, 0.82)
+modulate = Color(1, 1, 1, 0.92)
 mouse_filter = 2
 
 ; 战斗顶部常驻装饰底板。先绘制，回合、阵营状态和操作按钮随后覆盖在上方。
@@ -1591,7 +1598,7 @@ offset_top = 34.0
 offset_right = 500.0
 offset_bottom = 109.0
 mouse_filter = 2
-texture = ExtResource("14_battle_status_rail")
+texture = ExtResource("17_skin_top_bar")
 expand_mode = 1
 stretch_mode = 5
 modulate = Color(1, 1, 1, 0.96)
@@ -1617,11 +1624,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 [node name="Label" type="Label" parent="GameView/HUD/TopLeft/TurnBadge"]
@@ -1643,11 +1650,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 [node name="Label" type="Label" parent="GameView/HUD/TopLeft/PhaseBadge"]
@@ -1680,11 +1687,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 [node name="Label" type="Label" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
@@ -1707,11 +1714,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 ; --- 左下:金币 + CO meter ---
@@ -1735,11 +1742,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 [node name="GoldLabel" type="Label" parent="GameView/HUD/BottomLeft/GoldPanel"]
@@ -1774,11 +1781,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 32
-patch_margin_top = 32
-patch_margin_right = 32
-patch_margin_bottom = 32
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 40
+patch_margin_top = 40
+patch_margin_right = 40
+patch_margin_bottom = 40
 draw_center = false
 
 ; --- 顶部中央:CO Roster — 全玩家头像 + meter + 发动按钮 ---
@@ -1819,11 +1826,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 [node name="Label" type="Label" parent="GameView/HUD/BottomRight/AIThinking"]
@@ -1845,11 +1852,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("15_battle_compact_plaque")
-patch_margin_left = 18
-patch_margin_top = 14
-patch_margin_right = 18
-patch_margin_bottom = 14
+texture = ExtResource("18_skin_compact_plate")
+patch_margin_left = 48
+patch_margin_top = 20
+patch_margin_right = 50
+patch_margin_bottom = 22
 draw_center = false
 
 ; --- 选中单位检视卡 ---
@@ -1865,18 +1872,17 @@ offset_bottom = -96.0
 mouse_filter = 0
 
 [node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/InfoPanel"]
-visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 40
-patch_margin_top = 40
-patch_margin_right = 40
-patch_margin_bottom = 40
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="CommanderTitle" type="Label" parent="GameView/HUD/InfoPanel"]
@@ -2005,11 +2011,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 20
-patch_margin_top = 20
-patch_margin_right = 20
-patch_margin_bottom = 20
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 40
+patch_margin_top = 40
+patch_margin_right = 40
+patch_margin_bottom = 40
 draw_center = false
 
 [node name="Caption" type="Label" parent="GameView/HUD/InfoPanel/UnitPortraitPanel"]
@@ -2081,12 +2087,13 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+visible = false
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 28
-patch_margin_top = 28
-patch_margin_right = 28
-patch_margin_bottom = 28
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="ActionList" type="VBoxContainer" parent="GameView/HUD/ActionBubble"]
@@ -2142,11 +2149,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="Title" type="Label" parent="GameView/HUD/AttackConfirmPanel"]
@@ -2210,11 +2217,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="AutoSaveToast" type="Panel" parent="GameView/HUD"]
@@ -2323,11 +2330,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="Header" type="Label" parent="GameView/HUD/SettingsPanel"]
@@ -2482,11 +2489,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="Header" type="Label" parent="GameView/HUD/PausePanel"]
@@ -2566,11 +2573,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="CharacterName" type="Label" parent="GameView/HUD/DialogPanel"]
@@ -2641,11 +2648,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 56
-patch_margin_top = 56
-patch_margin_right = 56
-patch_margin_bottom = 56
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
 draw_center = false
 
 [node name="Header" type="Label" parent="GameView/HUD/TutorialBubble"]
@@ -2699,11 +2706,26 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("13_battle_panel_frame")
-patch_margin_left = 64
-patch_margin_top = 64
-patch_margin_right = 64
-patch_margin_bottom = 64
+texture = ExtResource("19_skin_secondary_frame")
+patch_margin_left = 52
+patch_margin_top = 52
+patch_margin_right = 52
+patch_margin_bottom = 52
+draw_center = false
+
+[node name="ResultTitlePlate" type="NinePatchRect" parent="GameView/HUD/BattleResultPanel"]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -380.0
+offset_top = 6.0
+offset_right = 380.0
+offset_bottom = 122.0
+mouse_filter = 2
+texture = ExtResource("21_skin_result_title")
+patch_margin_left = 145
+patch_margin_top = 48
+patch_margin_right = 200
+patch_margin_bottom = 54
 draw_center = false
 
 [node name="Header" type="Label" parent="GameView/HUD/BattleResultPanel"]
