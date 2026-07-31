@@ -26,6 +26,7 @@ extends CanvasLayer
 
 const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const SkinAssets = preload("res://scripts/ui/skin_assets.gd")
 
 # --- 公共信号 ---
 signal scene_advanced(scene_index: int)
@@ -79,6 +80,25 @@ func _ready() -> void:
 	_build_subtree()
 	if _continue_btn != null:
 		_continue_btn.pressed.connect(_on_continue_pressed)
+	_clamp_dialog_width()
+	get_viewport().size_changed.connect(_clamp_dialog_width)
+
+
+## 让对话框宽度符合规范 min(viewport × 0.78, 1050),避免 1920 拉到 1200+ / 1280 顶到边缘。
+func _clamp_dialog_width() -> void:
+	if _root == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var w: float = minf(vp.x * 0.78, 1050.0)
+	_root.offset_left = -w * 0.5
+	_root.offset_right = w * 0.5
+	_root.offset_top = -minf(vp.y * 0.4, 320.0)
+	_root.offset_bottom = -30.0
+
+
+## 取得场景里的 DialogOverlay 兄弟节点(.tscn:2542),负责压暗棋盘。
+func _overlay() -> ColorRect:
+	return get_tree().root.get_node_or_null("Main/GameView/HUD/DialogOverlay") as ColorRect
 
 
 ## 程序构建 UI 子树 — 镜像原 scenes/main.tscn 2098–2155 的 anchor/offset/text
@@ -99,22 +119,24 @@ func _build_subtree() -> void:
 
 	_name_label = Label.new()
 	_name_label.name = "CharacterName"
-	_name_label.offset_left = 24.0
-	_name_label.offset_top = 18.0
-	_name_label.offset_right = -24.0
-	_name_label.offset_bottom = 54.0
+	# 让开 dialogue_panel 顶部钢轨(safe_area y≈70),姓名牌压在内容区上沿。
+	_name_label.offset_left = 132.0
+	_name_label.offset_top = 58.0
+	_name_label.offset_right = -520.0
+	_name_label.offset_bottom = 102.0
 	_name_label.text = "👤 指挥官 艾莉卡"
-	_name_label.add_theme_font_size_override("font_size", 27)
+	_name_label.add_theme_font_size_override("font_size", 24)
+	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_root.add_child(_name_label)
 
 	var body := HBoxContainer.new()
 	body.name = "DialogBody"
 	body.anchor_right = 1.0
 	body.anchor_bottom = 1.0
-	body.offset_left = 24.0
-	body.offset_top = 66.0
-	body.offset_right = -24.0
-	body.offset_bottom = -84.0
+	body.offset_left = 128.0
+	body.offset_top = 118.0
+	body.offset_right = -128.0
+	body.offset_bottom = -88.0
 	body.add_theme_constant_override("separation", 24)
 	_root.add_child(body)
 
@@ -156,12 +178,12 @@ func _build_subtree() -> void:
 	_continue_btn.anchor_top = 1.0
 	_continue_btn.anchor_right = 1.0
 	_continue_btn.anchor_bottom = 1.0
-	_continue_btn.offset_left = -180.0
-	_continue_btn.offset_top = -66.0
-	_continue_btn.offset_right = -24.0
-	_continue_btn.offset_bottom = -18.0
+	_continue_btn.offset_left = -190.0
+	_continue_btn.offset_top = -126.0
+	_continue_btn.offset_right = -32.0
+	_continue_btn.offset_bottom = -84.0
 	_continue_btn.text = "继续 ▶"
-	_continue_btn.custom_minimum_size = Vector2(150, 48)
+	_continue_btn.custom_minimum_size = Vector2(150, 42)
 	_root.add_child(_continue_btn)
 
 	# 主题(GBA 火纹风 — 原 main._apply_hud_theme 给了 dialog_panel,
@@ -185,17 +207,16 @@ func _build_subtree() -> void:
 
 
 func _apply_self_theme() -> void:
-	# 风格与原 main._apply_hud_theme 末尾对 DialogPanel 的处理一致
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = MenuTheme.C_BG_PANEL
-	sb.border_color = MenuTheme.C_GOLD
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(3)
-	sb.content_margin_left = MenuTheme.PAD
-	sb.content_margin_right = MenuTheme.PAD
-	sb.content_margin_top = MenuTheme.PAD
-	sb.content_margin_bottom = MenuTheme.PAD
-	_root.add_theme_stylebox_override("panel", sb)
+	# 对话面板使用 original_v2 dialogue_panel;姓名牌用 nameplate。
+	_root.add_theme_stylebox_override("panel", SkinAssets.battle_dialogue_style())
+	if _name_label != null:
+		_name_label.add_theme_stylebox_override("normal", SkinAssets.battle_nameplate_style())
+	if _continue_btn != null:
+		_continue_btn.add_theme_stylebox_override("normal", SkinAssets.button_style("normal"))
+		_continue_btn.add_theme_stylebox_override("hover", SkinAssets.button_style("hover"))
+		_continue_btn.add_theme_stylebox_override("pressed", SkinAssets.button_style("pressed"))
+		_continue_btn.add_theme_stylebox_override("disabled", SkinAssets.button_style("disabled"))
+		_continue_btn.add_theme_stylebox_override("focus", SkinAssets.button_style("hover"))
 
 
 # ============================================================
@@ -222,6 +243,7 @@ func play(scenes: Variant, context: Dictionary = {}) -> Dictionary:
 
 ## fire-and-forget 单场景
 func show_dialog(scene: Dictionary) -> void:
+	_enforce_dialog_mask(true)
 	_enqueue_scene(scene)
 	if not _active:
 		_start()
@@ -236,12 +258,20 @@ func hide_dialog() -> void:
 	_unlock_board()
 	if _root != null:
 		_root.visible = false
+	_enforce_dialog_mask(false)
 	# 唤醒可能挂着的 awaiter(用空 choice_value 兜底)
 	_choice_value = ""
 	if _playing_depth > 0:
 		_playing_depth = 0
 		_dialog_completed.emit()
 	dialogue_aborted.emit()
+
+
+## 控制 DialogOverlay 节点可见性 — 修复响应式 P0:三个模态框缺少遮罩。
+func _enforce_dialog_mask(visible_flag: bool) -> void:
+	var overlay: ColorRect = _overlay()
+	if overlay != null and is_instance_valid(overlay):
+		overlay.visible = visible_flag
 
 
 ## 硬重置(包含 heroes 缓存)

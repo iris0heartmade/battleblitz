@@ -150,6 +150,7 @@ var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
 @onready var battle_result_panel: Panel = $GameView/HUD/BattleResultPanel
+@onready var battle_result_overlay: ColorRect = $GameView/HUD/BattleResultOverlay
 @onready var battle_result_winner: RichTextLabel = $GameView/HUD/BattleResultPanel/WinnerBanner
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
@@ -2834,11 +2835,15 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
 	battle_result_panel.visible = true
+	if battle_result_overlay != null and is_instance_valid(battle_result_overlay):
+		battle_result_overlay.visible = true
 
 
 func hide_battle_result() -> void:
 	if battle_result_panel != null and is_instance_valid(battle_result_panel):
 		battle_result_panel.visible = false
+	if battle_result_overlay != null and is_instance_valid(battle_result_overlay):
+		battle_result_overlay.visible = false
 
 
 func _on_tutorial_got_it_pressed() -> void:

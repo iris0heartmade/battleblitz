@@ -2465,9 +2465,10 @@ custom_minimum_size = Vector2(180, 54)
 ; --- 暂停面板(全屏半透蒙层 + 中央浮层) ---
 [node name="PauseOverlay" type="ColorRect" parent="GameView/HUD"]
 visible = false
+z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.7)
+color = Color(0.01, 0.03, 0.05, 0.38)
 mouse_filter = 0
 
 [node name="PausePanel" type="Panel" parent="GameView/HUD"]
@@ -2789,6 +2790,15 @@ custom_minimum_size = Vector2(210, 54)
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "返回主菜单"
 custom_minimum_size = Vector2(210, 54)
+
+; 战斗结算遮罩 — 修复响应式 P0 #2:BattleResultPanel 缺对应半透遮罩。
+[node name="BattleResultOverlay" type="ColorRect" parent="GameView/HUD"]
+visible = false
+z_index = 75
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.01, 0.03, 0.05, 0.38)
+mouse_filter = 0
 
 ; ============================================================
 ; T:4 RecruitPanel — 点击空佣兵站(我方 owner + 无单位)时显示
