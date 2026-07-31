@@ -149,7 +149,9 @@ func _build_subtree() -> void:
 	_portrait_label.name = "PortraitLabel"
 	_portrait_label.anchor_right = 1.0
 	_portrait_label.anchor_bottom = 1.0
-	_portrait_label.text = "👤"
+	# 留空 — 真实立绘由 _load_portrait_for(speaker) 在 _start() 时按 hero_id 加载到 _portrait_tex。
+	# 原 emoji 占位在无中文字体时渲染成蓝色人形剪影,改为空字符串避免误导。
+	_portrait_label.text = ""
 	_portrait_label.horizontal_alignment = 1
 	_portrait_label.vertical_alignment = 1
 	_portrait_label.add_theme_font_size_override("font_size", 96)
