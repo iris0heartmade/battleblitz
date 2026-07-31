@@ -128,15 +128,8 @@ func _ready() -> void:
 		MenuTheme.apply_panel_theme(ml_right_placeholder, MenuTheme.C_BG_PANEL)
 	if ml_rp_hint != null and is_instance_valid(ml_rp_hint):
 		ml_rp_hint.add_theme_color_override("font_color", MenuTheme.C_PLACEHOLDER)
-	# T:V4 — 主操作分组:
-	# - ✅ 准备好了 + 选定指挥官 走 PRIMARY(金底烫金亮边)— 关键确认操作
-	# - 放弃主线 走 SECONDARY(蓝底)— 默认次要按钮
-	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
-		MenuTheme.apply_primary_button_theme(ml_prep_complete_btn, MenuTheme.FS_BTN)
-	if ml_apply_commander_btn != null and is_instance_valid(ml_apply_commander_btn):
-		MenuTheme.apply_primary_button_theme(ml_apply_commander_btn, MenuTheme.FS_BODY_SM)
-	if ml_abandon_btn != null and is_instance_valid(ml_abandon_btn):
-		MenuTheme.apply_secondary_button_theme(ml_abandon_btn, MenuTheme.FS_BODY_SM)
+	# 旧 MLFrame 按钮的 MenuTheme 主题已在 P0 修复中移除(MLFrame.visible=false):
+	# 现在按钮主题统一由 _apply_mainline_visual_theme() 内的 MainlineTheme.apply_* 唯一接管。
 	_apply_mainline_visual_theme()
 
 
@@ -192,9 +185,10 @@ func _on_responsive_prepare_action(action: String) -> void:
 # Keep the campaign presentation in this controller.  The mainline module was
 # split from main.gd, so styling it there silently stopped affecting this view.
 func _apply_mainline_visual_theme() -> void:
-	MainlineTheme.apply_frame(ml_frame, ml_border, ml_title, ml_prep_summary, ml_prep_content)
-	MainlineTheme.apply_section_panel(ml_prep_focus_card, MainlineTheme.C_GOLD)
-	MainlineTheme.apply_section_panel(ml_right_placeholder, MainlineTheme.C_GOLD)
+	# legacy MLFrame compatibility shim disabled — see Task 4 of P0 fixup plan.
+	# MainlineTheme.apply_frame(ml_frame, ml_border, ml_title, ml_prep_summary, ml_prep_content)
+	MainlineTheme.apply_section_panel(ml_prep_focus_card, "paper")
+	MainlineTheme.apply_section_panel(ml_right_placeholder, "navy")
 	for tab in [
 		ml_prep_heroes_tab_btn, ml_prep_roster_tab_btn, ml_prep_equipment_tab_btn,
 		ml_prep_mercenary_tab_btn, ml_prep_shop_tab_btn, ml_prep_saves_tab_btn,
@@ -353,7 +347,7 @@ func _build_slot_row(slot_index: int, rec: Dictionary) -> Control:
 	var row := PanelContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.custom_minimum_size = Vector2(0, 96)
-	MainlineTheme.apply_section_panel(row, MainlineTheme.C_GOLD)
+	MainlineTheme.apply_section_panel(row, "navy")
 	var box := HBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", MenuTheme.GAP_M)
@@ -1019,7 +1013,7 @@ func _render_prepare_focus_card(tab: String) -> void:
 	var portrait_frame := Panel.new()
 	portrait_frame.custom_minimum_size = Vector2(176, 0)
 	portrait_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	MainlineTheme.apply_section_panel(portrait_frame, MainlineTheme.C_GOLD)
+	MainlineTheme.apply_section_panel(portrait_frame, "paper")
 	row.add_child(portrait_frame)
 	var portrait := TextureRect.new()
 	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
