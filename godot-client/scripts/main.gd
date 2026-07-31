@@ -537,6 +537,10 @@ func _ready() -> void:
 		await _maybe_screenshot_menu()
 	elif OS.get_environment("BB_SCREENSHOT_VIEWS") != "":
 		await _maybe_screenshot_views()
+	# 响应式 P0 #3:viewport 宽度 ≤ 1366 时折叠左翼并加大字号密度。
+	_update_hud_layout_for_viewport()
+	if get_viewport() != null:
+		get_viewport().size_changed.connect(_update_hud_layout_for_viewport)
 	if quit_sec > 0.0:
 		await get_tree().create_timer(quit_sec).timeout
 		_update_status("测试自动流程结束,退出")
@@ -2108,6 +2112,20 @@ func _on_raw_ws_message(_msg: Dictionary) -> void:
 
 func _update_status(text: String) -> void:
 	status_label.text = text
+
+
+## 响应式布局:viewport 宽 ≤ 1366 时折叠左翼 + 半透明右翼 + 触发 hud_theme 的字号补偿分支。
+func _update_hud_layout_for_viewport() -> void:
+	var vp: Rect2 = get_viewport().get_visible_rect()
+	var small: bool = vp.size.x <= 1366.0
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		left_hud_wing.visible = not small
+	if right_hud_wing != null and is_instance_valid(right_hud_wing):
+		right_hud_wing.modulate.a = 0.86 if small else 1.0
+		right_hud_wing.custom_minimum_size.x = 280.0 if small else 400.0
+	# 重灌字号密度补偿(由 hud_theme.gd:apply_hud 的分支决定)
+	if HudTheme != null:
+		HudTheme.apply_hud(self)
 
 
 # ============================================================
