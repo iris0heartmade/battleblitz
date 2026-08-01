@@ -1524,11 +1524,10 @@ mouse_filter = 2
 ; 宽屏战场采用明确的三栏结构。翼板只组织 HUD，不拦截棋盘输入。
 [node name="LeftHudWing" type="ColorRect" parent="GameView/HUD"]
 anchor_right = 0.19
-anchor_bottom = 1.0
 offset_left = 12.0
 offset_top = 154.0
 offset_right = -12.0
-offset_bottom = -12.0
+offset_bottom = 520.0
 color = Color(0.025, 0.065, 0.09, 0.76)
 mouse_filter = 2
 
@@ -1566,11 +1565,10 @@ theme_override_font_sizes/font_size = 15
 [node name="RightHudWing" type="ColorRect" parent="GameView/HUD"]
 anchor_left = 0.755
 anchor_right = 1.0
-anchor_bottom = 1.0
 offset_left = 12.0
 offset_top = 154.0
 offset_right = -12.0
-offset_bottom = -12.0
+offset_bottom = 720.0
 color = Color(0.025, 0.065, 0.09, 0.76)
 mouse_filter = 2
 
@@ -1864,11 +1862,10 @@ draw_center = false
 [node name="InfoPanel" type="Panel" parent="GameView/HUD"]
 anchor_left = 0.755
 anchor_right = 1.0
-anchor_bottom = 1.0
 offset_left = 12.0
 offset_top = 154.0
 offset_right = -12.0
-offset_bottom = -96.0
+offset_bottom = 704.0
 mouse_filter = 0
 
 [node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/InfoPanel"]
@@ -1924,7 +1921,6 @@ text = "统御 0 / 20"
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
-theme_override_font_sizes/font_size = 13
 
 [node name="CommanderDivider" type="ReferenceRect" parent="GameView/HUD/InfoPanel"]
 anchor_right = 1.0
@@ -2469,7 +2465,7 @@ z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.01, 0.03, 0.05, 0.38)
-mouse_filter = 0
+mouse_filter = 2
 
 [node name="PausePanel" type="Panel" parent="GameView/HUD"]
 visible = false
@@ -2478,10 +2474,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -270.0
-offset_top = -240.0
-offset_right = 270.0
-offset_bottom = 240.0
+offset_left = -250.0
+offset_top = -218.0
+offset_right = 250.0
+offset_bottom = 218.0
 mouse_filter = 0
 
 [node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/PausePanel"]
@@ -2511,10 +2507,10 @@ theme_override_font_sizes/font_size = 36
 [node name="PauseList" type="VBoxContainer" parent="GameView/HUD/PausePanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 64.0
-offset_top = 88.0
-offset_right = -64.0
-offset_bottom = -48.0
+offset_left = 58.0
+offset_top = 76.0
+offset_right = -58.0
+offset_bottom = -36.0
 theme_override_constants/separation = 12
 alignment = 1
 
@@ -2696,10 +2692,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -450.0
-offset_top = -300.0
-offset_right = 450.0
-offset_bottom = 300.0
+offset_left = -420.0
+offset_top = -270.0
+offset_right = 420.0
+offset_bottom = 270.0
 mouse_filter = 0
 
 [node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/BattleResultPanel"]
@@ -2719,10 +2715,10 @@ draw_center = false
 [node name="ResultTitlePlate" type="NinePatchRect" parent="GameView/HUD/BattleResultPanel"]
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -380.0
+offset_left = -350.0
 offset_top = 6.0
-offset_right = 380.0
-offset_bottom = 122.0
+offset_right = 350.0
+offset_bottom = 108.0
 mouse_filter = 2
 texture = ExtResource("21_skin_result_title")
 patch_margin_left = 145
@@ -2744,9 +2740,9 @@ theme_override_font_sizes/font_size = 33
 [node name="WinnerBanner" type="RichTextLabel" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0
 offset_left = 24.0
-offset_top = 96.0
+offset_top = 88.0
 offset_right = -24.0
-offset_bottom = 150.0
+offset_bottom = 138.0
 bbcode_enabled = true
 text = "🎉 学长 获胜!"
 horizontal_alignment = 1
@@ -2757,10 +2753,10 @@ scroll_active = false
 [node name="StatsList" type="RichTextLabel" parent="GameView/HUD/BattleResultPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 36.0
-offset_top = 174.0
-offset_right = -36.0
-offset_bottom = -96.0
+offset_left = 72.0
+offset_top = 152.0
+offset_right = -72.0
+offset_bottom = -90.0
 bbcode_enabled = true
 text = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n[color=#f4e8c1]击杀:[/color] [color=#f0c75e]5[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]2[/color]\n[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]3[/color]   [color=#f4e8c1]指挥官技峰值:[/color] [color=#c9a14a]87/100[/color]\n[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]18[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]4[/color]\n\n[color=#a89878]胜利原因: 击溃所有敌人[/color]"
 
@@ -2769,29 +2765,29 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -337.5
-offset_top = -78.0
-offset_right = 337.5
-offset_bottom = -18.0
+offset_left = -330.0
+offset_top = -72.0
+offset_right = 330.0
+offset_bottom = -14.0
 alignment = 1
 theme_override_constants/separation = 24
 
 [node name="DetailBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "📜 详细战报"
-custom_minimum_size = Vector2(210, 54)
+custom_minimum_size = Vector2(190, 54)
 
 [node name="MainlineNextBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 visible = false
 text = "▶ 下一战"
-custom_minimum_size = Vector2(210, 54)
+custom_minimum_size = Vector2(190, 54)
 
 [node name="BackLobbyBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "返回联机大厅"
-custom_minimum_size = Vector2(210, 54)
+custom_minimum_size = Vector2(190, 54)
 
 [node name="BackMenuBtn" type="Button" parent="GameView/HUD/BattleResultPanel/ResultBtnRow"]
 text = "返回主菜单"
-custom_minimum_size = Vector2(210, 54)
+custom_minimum_size = Vector2(190, 54)
 
 ; 战斗结算遮罩 — 修复响应式 P0 #2:BattleResultPanel 缺对应半透遮罩。
 [node name="BattleResultOverlay" type="ColorRect" parent="GameView/HUD"]

@@ -690,7 +690,7 @@ func _ready() -> void:
 	var roster_text := ""
 	for roster_label in main_check.get_node("GameView/HUD/CORoster").find_children("*", "Label", true, false):
 		roster_text += str((roster_label as Label).text)
-	_assert_true("CO roster localizes missing commander", roster_text.contains("未任命") and not roster_text.contains("<null>"),
+	_assert_true("CO roster localizes missing commander", roster_text.contains("待命") and not roster_text.contains("<null>"),
 		"top status must replace nullable backend ids with player-facing copy")
 	_game_state.co_states = previous_co_states
 	main_check.call("_refresh_co_roster")
@@ -715,9 +715,22 @@ func _ready() -> void:
 		"opening dialogue should enable the input-blocking overlay")
 	_assert_eq("Dialog overlay blocks mouse input", DialogManager._root.mouse_filter, Control.MOUSE_FILTER_STOP,
 		"dialogue overlay must intercept pointer input before it reaches the board")
-	DialogManager.hide_dialog()
-	_assert_true("Dialog overlay hides with dialogue", DialogManager._root == null or not DialogManager._root.visible,
-		"closing dialogue should restore board interaction")
+	var dialogue_pause_event := InputEventAction.new()
+	dialogue_pause_event.action = "pause"
+	dialogue_pause_event.pressed = true
+	main_check.call("_unhandled_input", dialogue_pause_event)
+	_assert_true("Pause waits for active dialogue",
+		not main_check.get_node("GameView/HUD/PausePanel").visible and not get_tree().paused,
+		"Esc during dialogue must not open an unreachable pause panel below DialogManager")
+	_assert_true("Dialogue pause guard explains next action",
+		str(main_check.get_node("StatusLabel").text).contains("完成当前对话"),
+		"the player should be told to finish the dialogue before pausing")
+	DialogManager.call("_advance")
+	_assert_true("Dialogue overlay hides after normal completion",
+		DialogManager._root == null or not DialogManager._root.visible,
+		"finishing the last dialogue entry must restore board interaction")
+	_assert_true("Dialogue normal completion releases playback state", not DialogManager.is_playing(),
+		"finishing the last dialogue entry must release the dialogue input lock")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -1184,6 +1197,43 @@ func _ready() -> void:
 	var lobby_status: Label = main_check.get_node("Lobby/LobbyFrame/LobbyInfoBar/LobbyStatus")
 	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
 		"team update response should show selected team in Chinese")
+
+	main_check.call("_toggle_pause")
+	var pause_overlay_check := main_check.get_node("GameView/HUD/PauseOverlay") as ColorRect
+	var pause_panel_check := main_check.get_node("GameView/HUD/PausePanel") as Panel
+	var pause_resume_check := main_check.get_node("GameView/HUD/PausePanel/PauseList/ResumeBtn") as Button
+	_assert_true("Pause freezes the scene tree", get_tree().paused,
+		"opening pause must prevent the battlefield from accepting gameplay input")
+	_assert_eq("Pause dimmer does not starve menu input", pause_overlay_check.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"the dimmer is visual-only while the paused tree blocks the battlefield")
+	_assert_true("Pause menu remains visible above dimmer", pause_panel_check.visible and pause_panel_check.z_index > pause_overlay_check.z_index,
+		"pause controls must stay above the blackout layer")
+	pause_resume_check.pressed.emit()
+	_assert_true("Pause resume button restores input", not get_tree().paused and not pause_panel_check.visible,
+		"resume must close the modal and unpause the scene tree")
+
+	var prepare_scene: PackedScene = load("res://scenes/ui/mainline_prepare_panel.tscn")
+	var prepare_check := prepare_scene.instantiate()
+	add_child(prepare_check)
+	await get_tree().process_frame
+	var requested_actions: Array[String] = []
+	prepare_check.action_requested.connect(func(action: String) -> void: requested_actions.append(action))
+	for action_case in [
+		["StartAction", "start"],
+		["CompleteAction", "complete"],
+		["AbandonAction", "abandon"],
+	]:
+		var action_button := prepare_check.find_child(str(action_case[0]), true, false) as Button
+		_assert_true("Prepare %s button exists" % str(action_case[0]), action_button != null,
+			"responsive prepare actions must remain addressable after art layers are applied")
+		if action_button != null:
+			action_button.pressed.emit()
+			_assert_true("Prepare %s emits action" % str(action_case[0]), requested_actions.has(str(action_case[1])),
+				"responsive action buttons must emit their controller-facing action")
+	var prepare_status := prepare_check.find_child("ActionStatus", true, false) as Label
+	_assert_true("Prepare action feedback is visible", prepare_status != null and not prepare_status.text.is_empty(),
+		"a clicked prepare action must provide feedback inside the visible panel")
+	prepare_check.queue_free()
 
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])

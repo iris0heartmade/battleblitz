@@ -17,9 +17,11 @@ theme_override_constants/separation = 16
 
 [node name="ArchiveTitle" type="Label" parent="Layout"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 text = "主线档案"
 horizontal_alignment = 1
+vertical_alignment = 1
 theme_override_font_sizes/font_size = 28
 
 [node name="Columns" type="HBoxContainer" parent="Layout"]
@@ -29,7 +31,7 @@ theme_override_constants/separation = 16
 
 [node name="SlotColumn" type="PanelContainer" parent="Layout/Columns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 0)
+custom_minimum_size = Vector2(330, 0)
 layout_mode = 2
 
 [node name="SlotsMargin" type="MarginContainer" parent="Layout/Columns/SlotColumn"]
@@ -64,19 +66,58 @@ theme_override_constants/separation = 12
 unique_name_in_owner = true
 layout_mode = 2
 text = "选择存档槽"
-theme_override_font_sizes/font_size = 23
+theme_override_font_sizes/font_size = 28
+
+[node name="PreviewHint" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "← 在左侧选档 · 右下「进入战役」开始"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.7, 0.65, 0.5, 1)
 
 [node name="PreviewBody" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 154)
+layout_mode = 2
+autowrap_mode = 2
+text = "选择左侧档案以预览章节、队伍和下一战目标。"
+theme_override_font_sizes/font_size = 18
+
+[node name="BriefingPanel" type="PanelContainer" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 210)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BriefingMargin" type="MarginContainer" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout/BriefingPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="BriefingLayout" type="VBoxContainer" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout/BriefingPanel/BriefingMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BriefingTitle" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout/BriefingPanel/BriefingMargin/BriefingLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "下一战简报"
+theme_override_font_sizes/font_size = 18
+
+[node name="BriefingBody" type="Label" parent="Layout/Columns/PreviewColumn/PreviewMargin/PreviewLayout/BriefingPanel/BriefingMargin/BriefingLayout"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 2
-text = "选择左侧档案以预览章节、队伍和下一战目标。"
-theme_override_font_sizes/font_size = 17
+text = "选择档案后显示下一战目标、敌方态势与整备建议。"
+theme_override_font_sizes/font_size = 16
 
 [node name="IntelColumn" type="PanelContainer" parent="Layout/Columns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(230, 0)
+custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
 
 [node name="IntelMargin" type="MarginContainer" parent="Layout/Columns/IntelColumn"]
@@ -93,7 +134,7 @@ theme_override_constants/separation = 12
 [node name="IntelTitle" type="Label" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "出征情报"
+text = "行动指引"
 theme_override_font_sizes/font_size = 20
 
 [node name="IntelBody" type="Label" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
@@ -103,19 +144,36 @@ size_flags_vertical = 3
 autowrap_mode = 2
 text = "选择档案后显示队伍与目标。"
 
-[node name="PrimaryAction" type="Button" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
+[node name="IntelStatus" type="Label" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "开始新游戏"
+autowrap_mode = 2
+text = "◆ 选择一个档案"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 15
 
-[node name="Footer" type="HBoxContainer" parent="Layout"]
+[node name="PrimaryAction" type="Button" parent="Layout/Columns/IntelColumn/IntelMargin/IntelLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 76)
+layout_mode = 2
+text = "▶  进入战役"
+theme_override_font_sizes/font_size = 22
+
+[node name="FooterSafe" type="MarginContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 20
+
+[node name="Footer" type="HBoxContainer" parent="Layout/FooterSafe"]
 layout_mode = 2
 
-[node name="FooterSpacer" type="Control" parent="Layout/Footer"]
+[node name="FooterSpacer" type="Control" parent="Layout/FooterSafe/Footer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="BackButton" type="Button" parent="Layout/Footer"]
+[node name="BackButton" type="Button" parent="Layout/FooterSafe/Footer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 46)
 layout_mode = 2

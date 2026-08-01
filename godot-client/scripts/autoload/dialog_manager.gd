@@ -111,11 +111,47 @@ func _clamp_dialog_width() -> void:
 	if _root == null:
 		return
 	var sz: Vector2i = _physical_window_size()
-	var w: float = minf(float(sz.x) * 0.78, 1050.0)
+	var w: float = minf(float(sz.x) * 0.74, 1040.0)
+	var h: float = clampf(float(sz.y) * 0.29, 208.0, 282.0)
 	_root.offset_left = -w * 0.5
 	_root.offset_right = w * 0.5
-	_root.offset_top = -minf(float(sz.y) * 0.4, 320.0)
-	_root.offset_bottom = -30.0
+	_root.offset_top = -h - 22.0
+	_root.offset_bottom = -22.0
+	_apply_responsive_layout(sz)
+
+
+func _apply_responsive_layout(sz: Vector2i) -> void:
+	if _name_label == null:
+		return
+	var compact := sz.x <= 1366 or sz.y <= 768
+	var density: float = clampf(1920.0 / float(maxi(sz.x, 1)), 1.0, 1.5)
+	var inset := 62.0 if compact else 92.0
+	var name_top := 30.0 if compact else 38.0
+	_name_label.offset_left = inset
+	_name_label.offset_top = name_top
+	_name_label.offset_right = -inset
+	_name_label.offset_bottom = name_top + 34.0
+	_name_label.add_theme_font_size_override("font_size", roundi(22.0 * density))
+
+	var body := _root.get_node_or_null("DialogBody") as HBoxContainer
+	if body != null:
+		body.offset_left = inset
+		body.offset_top = name_top + 42.0
+		body.offset_right = -inset
+		body.offset_bottom = -62.0
+		body.add_theme_constant_override("separation", 16 if compact else 22)
+	if _portrait_panel != null:
+		_portrait_panel.custom_minimum_size = Vector2(102.0 if compact else 138.0, 0.0)
+	if _text != null:
+		_text.add_theme_font_size_override("normal_font_size", roundi(20.0 * density))
+		_text.add_theme_constant_override("line_separation", 4)
+	if _continue_btn != null:
+		_continue_btn.offset_left = -174.0 if compact else -190.0
+		_continue_btn.offset_top = -56.0
+		_continue_btn.offset_right = -26.0
+		_continue_btn.offset_bottom = -16.0
+		_continue_btn.add_theme_font_size_override("font_size", roundi(17.0 * density))
+		_continue_btn.custom_minimum_size.y = 48.0 if compact else 42.0
 
 
 ## 取得场景里的 DialogOverlay 兄弟节点(.tscn:2542),负责压暗棋盘。
@@ -164,7 +200,9 @@ func _build_subtree() -> void:
 
 	_portrait_panel = Panel.new()
 	_portrait_panel.name = "Portrait"
-	_portrait_panel.custom_minimum_size = Vector2(180, 165)
+	_portrait_panel.custom_minimum_size = Vector2(138, 0)
+	_portrait_panel.clip_contents = true
+	_portrait_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(_portrait_panel)
 
 	_portrait_label = Label.new()
@@ -184,7 +222,9 @@ func _build_subtree() -> void:
 	_portrait_tex.name = "PortraitTex"
 	_portrait_tex.anchor_right = 1.0
 	_portrait_tex.anchor_bottom = 1.0
+	_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_portrait_tex.visible = false
 	_portrait_panel.add_child(_portrait_tex)
 
@@ -193,6 +233,7 @@ func _build_subtree() -> void:
 	_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text.bbcode_enabled = true
 	_text.text = "「这片土地饱受战火蹂躏,我们必须夺回城堡!」"
+	_text.add_theme_font_size_override("normal_font_size", 20)
 	_text.scroll_active = false
 	body.add_child(_text)
 
@@ -403,6 +444,10 @@ func _advance() -> void:
 		_active = false
 		if _root != null:
 			_root.visible = false
+		# Normal completion must clear the same board-blocking mask as an
+		# explicit abort. Otherwise the dialogue disappears but the battlefield
+		# remains dimmed and cannot receive pointer input.
+		_enforce_dialog_mask(false)
 		_playing_depth = max(0, _playing_depth - 1)
 		if _playing_depth == 0:
 			_unlock_board()

@@ -380,8 +380,10 @@ func _ready() -> void:
 
 	# V2 第 4 轮:行动气泡 5 按钮
 	for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 16)
+		# Style is owned by HudTheme/BattleTheme. This loop only wires signals;
+		# applying MenuTheme here used to erase the image-backed battle skin.
+		if btn == null or not is_instance_valid(btn):
+			continue
 	move_btn.pressed.connect(_on_move_pressed)
 	attack_btn.pressed.connect(_on_attack_pressed)
 	skill_btn.pressed.connect(_on_skill_pressed)
@@ -1428,11 +1430,12 @@ func _refresh_co_roster() -> void:
 		var side_name := _team_cn(color_name)
 		if side_name == "":
 			side_name = "阵营"
-		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "未任命"
+		# Keep the compact top roster legible at 1280px without clipping the team name.
+		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "待命"
 		lbl.text = side_name if compact else "%s · %s" % [side_name, commander_name_text]
 		lbl.custom_minimum_size = Vector2(40 if compact else 92, 0)
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", roundi((12 if compact else 14) * density))
+		lbl.add_theme_font_size_override("font_size", roundi((14 if compact else 15) * density))
 		row_inner.add_child(lbl)
 		# 3) ProgressBar(meter / threshold)
 		var bar := ProgressBar.new()
@@ -1456,13 +1459,13 @@ func _refresh_co_roster() -> void:
 			var active_lbl := Label.new()
 			active_lbl.text = "⚡ 生效中"
 			active_lbl.add_theme_color_override("font_color", Color(0.96, 0.78, 0.18))
-			active_lbl.add_theme_font_size_override("font_size", roundi(11 * density))
+			active_lbl.add_theme_font_size_override("font_size", roundi(13 * density))
 			row_inner.add_child(active_lbl)
 		elif can_fire and is_local:
 			var btn := Button.new()
 			btn.text = "发动"
 			btn.custom_minimum_size = Vector2(36, 20)
-			btn.add_theme_font_size_override("font_size", roundi(10 * density))
+			btn.add_theme_font_size_override("font_size", roundi(13 * density))
 			btn.tooltip_text = "激活指挥官技(消耗全部能量)"
 			# 用 Callable.bind 把 pid 绑到 pressed 信号
 			btn.pressed.connect(_on_co_power_pressed.bind(pid))
@@ -1470,7 +1473,7 @@ func _refresh_co_roster() -> void:
 		else:
 			var meter_lbl := Label.new()
 			meter_lbl.text = "%d/%d" % [meter, threshold]
-			meter_lbl.add_theme_font_size_override("font_size", roundi((10 if compact else 12) * density))
+			meter_lbl.add_theme_font_size_override("font_size", roundi((13 if compact else 14) * density))
 			row_inner.add_child(meter_lbl)
 
 
@@ -2141,11 +2144,87 @@ func _physical_window_width() -> int:
 func _update_hud_layout_for_viewport() -> void:
 	var window_width: int = _physical_window_width()
 	var small: bool = window_width > 0 and window_width <= 1366
+	var top_status_art := hud_layer.get_node_or_null("TopStatusArt") as Control
+	var top_left := turn_badge.get_parent() as Control
+	var top_right := current_player_badge.get_parent() as Control
+	var bottom_left := gold_panel.get_parent() as Control
+	var bottom_right := war_report_button.get_parent() as Control
 	if left_hud_wing != null and is_instance_valid(left_hud_wing):
-		left_hud_wing.visible = not small
+		# Compact mode is still a real three-column layout: a narrow instruction
+		# card, the board, and the inspector. Hiding the left wing made the board
+		# look accidentally offset inside a large empty gutter.
+		left_hud_wing.visible = true
+		left_hud_wing.anchor_right = 0.22 if small else 0.215
+		left_hud_wing.offset_left = 18.0 if small else 24.0
+		left_hud_wing.offset_top = 150.0
+		left_hud_wing.offset_right = -18.0
+		left_hud_wing.offset_bottom = 470.0 if small else 600.0
 	if right_hud_wing != null and is_instance_valid(right_hud_wing):
-		right_hud_wing.modulate.a = 0.86 if small else 1.0
-		right_hud_wing.custom_minimum_size.x = 280.0 if small else 400.0
+		right_hud_wing.anchor_left = 0.755
+		right_hud_wing.modulate.a = 0.94 if small else 1.0
+		right_hud_wing.custom_minimum_size.x = 0.0
+		right_hud_wing.offset_left = 8.0 if small else 12.0
+		right_hud_wing.offset_right = -12.0
+		right_hud_wing.offset_bottom = 720.0 if small else 736.0
+	if info_panel != null and is_instance_valid(info_panel):
+		info_panel.anchor_left = 0.755
+		info_panel.offset_left = 8.0 if small else 12.0
+		info_panel.offset_right = -12.0
+		info_panel.offset_bottom = 704.0 if small else 720.0
+	# The top rail has three independent groups. Give the corner groups enough
+	# width so a four-character Chinese action never collapses under the frame.
+	if top_status_art != null:
+		top_status_art.offset_left = -520.0
+		top_status_art.offset_right = 520.0
+	if top_left != null:
+		top_left.offset_left = -500.0
+		top_left.offset_right = -250.0
+	if top_right != null:
+		top_right.offset_left = 250.0
+		top_right.offset_right = 500.0
+	turn_badge.custom_minimum_size = Vector2(80.0, 46.0 if small else 42.0)
+	phase_badge.custom_minimum_size = Vector2(130.0, 46.0 if small else 42.0)
+	current_player_badge.custom_minimum_size = Vector2(100.0, 46.0 if small else 42.0)
+	end_turn_button.custom_minimum_size = Vector2(140.0, 54.0 if small else 46.0)
+	# Button styleboxes already provide the battle skin. The legacy child plate
+	# narrowed the text-safe area to only 22 logical pixels and hid the label.
+	var end_legacy_plate := end_turn_button.get_node_or_null("OrnatePlaque") as CanvasItem
+	if end_legacy_plate != null:
+		end_legacy_plate.visible = false
+	var report_legacy_plate := war_report_button.get_node_or_null("OrnatePlaque") as CanvasItem
+	if report_legacy_plate != null:
+		report_legacy_plate.visible = false
+	gold_panel.custom_minimum_size = Vector2(160.0 if small else 145.0, 54.0 if small else 46.0)
+	war_report_button.custom_minimum_size = Vector2(160.0 if small else 150.0, 54.0 if small else 46.0)
+	if bottom_left != null:
+		bottom_left.offset_top = -92.0 if small else -84.0
+	if bottom_right != null:
+		bottom_right.offset_top = -92.0 if small else -84.0
+	# Compact inspector uses the frame's actual safe area rather than the
+	# desktop 44 px inset, recovering enough width for two-column stats.
+	if small and info_panel != null:
+		for node in [commander_title, commander_name, commander_co_bar, unit_info_title, unit_info_subtitle, unit_info]:
+			if node != null and is_instance_valid(node):
+				node.offset_left = 32.0
+				node.offset_right = -32.0
+		commander_title.offset_top = 58.0
+		commander_title.offset_bottom = 84.0
+		commander_name.offset_top = 88.0
+		commander_name.offset_bottom = 114.0
+		commander_co_bar.offset_top = 120.0
+		commander_co_bar.offset_bottom = 144.0
+		var divider := info_panel.get_node_or_null("CommanderDivider") as Control
+		if divider != null:
+			divider.offset_left = 32.0
+			divider.offset_right = -32.0
+			divider.offset_top = 152.0
+			divider.offset_bottom = 154.0
+		unit_info_title.offset_top = 160.0
+		unit_info_title.offset_bottom = 186.0
+		unit_info_subtitle.offset_top = 188.0
+		unit_info_subtitle.offset_bottom = 212.0
+		unit_info.offset_top = 220.0
+		unit_info.offset_bottom = -34.0
 	# 重灌字号密度补偿(由 hud_theme.gd:apply_hud 的分支决定)
 	if HudTheme != null:
 		HudTheme.apply_hud(self)
@@ -2168,6 +2247,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
 	if event.is_action_pressed("pause"):
+		# Dialogue lives on a higher CanvasLayer and owns input while active.
+		# Opening pause below it creates a visible dimmer whose buttons cannot be
+		# reached, so Esc becomes an explicit "finish dialogue first" response.
+		if DialogManager != null and DialogManager.is_playing():
+			_update_status("请先完成当前对话")
+			get_viewport().set_input_as_handled()
+			return
 		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
 		if settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible:
 			_hide_settings_panel()
@@ -2575,6 +2661,10 @@ func _toggle_pause() -> void:
 	if open:
 		pause_overlay.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 		pause_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+		# The tree is paused below, so the dimmer is visual-only. Letting it
+		# consume GUI input can starve the higher pause menu on some layouts.
+		pause_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pause_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		pause_overlay.visible = true
 		pause_panel.visible = true
 		# 暂停时关闭行动气泡 + 战报面板
@@ -2860,19 +2950,27 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 		return
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false
+	if battle_back_lobby_btn != null and is_instance_valid(battle_back_lobby_btn):
+		var has_lobby_return := _active_mainline_id == ""
+		battle_back_lobby_btn.disabled = not has_lobby_return
+		battle_back_lobby_btn.text = "返回联机大厅" if has_lobby_return else "联机大厅（主线不可用）"
+		battle_back_lobby_btn.tooltip_text = "" if has_lobby_return else "当前是主线战斗，没有可返回的联机房间"
 	var color_godot: String = _color_name_to_godot(winner_color)
 	battle_result_winner.bbcode_enabled = true
 	battle_result_winner.text = "🎉 [color=%s][b]%s[/b][/color] 获胜!" % [color_godot, winner_name]
 	var detail_lines: Array = (stats.get("detail_lines", []) as Array)
 	var detail_text: String = ""
 	if detail_lines.size() > 0:
-		detail_text = "\n\n[color=#c9a14a]📜 最近战报[/color]\n" + "\n".join(detail_lines)
-	var stats_text: String = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n" \
-		+ "[color=#f4e8c1]击杀:[/color] [color=#f0c75e]%d[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]%d[/color]\n" % [int(stats.get("kills", 0)), int(stats.get("deaths", 0))] \
-		+ "[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]%d[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]%d/100[/color]\n" % [int(stats.get("captures", 0)), int(stats.get("co_peak", 0))] \
-		+ "[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]%d[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]%d[/color]\n\n" % [int(stats.get("turns", 0)), int(stats.get("skills", 0))] \
-		+ "[color=#a89878]胜利原因: %s[/color]" % str(stats.get("reason", "—")) \
-		+ detail_text
+		detail_text = "\n[color=#a89878]详细行动记录可在「详细战报」中查看[/color]"
+	var stats_text: String = "[center][color=#c9a14a][font_size=22]战役成果[/font_size][/color]\n\n" \
+		+ "[table=3][cell][center][color=#f4e8c1]击溃[/color]\n[font_size=30][color=#f0c75e]%d[/color][/font_size][/center][/cell]" % int(stats.get("kills", 0)) \
+		+ "[cell][center][color=#f4e8c1]战损[/color]\n[font_size=30][color=#c63a3a]%d[/color][/font_size][/center][/cell]" % int(stats.get("deaths", 0)) \
+		+ "[cell][center][color=#f4e8c1]据点[/color]\n[font_size=30][color=#f0c75e]%d[/color][/font_size][/center][/cell]" % int(stats.get("captures", 0)) \
+		+ "[cell][center][color=#f4e8c1]回合[/color]\n[color=#f0c75e]%d[/color][/center][/cell]" % int(stats.get("turns", 0)) \
+		+ "[cell][center][color=#f4e8c1]技能[/color]\n[color=#f0c75e]%d[/color][/center][/cell]" % int(stats.get("skills", 0)) \
+		+ "[cell][center][color=#f4e8c1]统御峰值[/color]\n[color=#c9a14a]%d/100[/color][/center][/cell][/table]\n\n" % int(stats.get("co_peak", 0)) \
+		+ "[color=#a89878]胜利原因  ·  %s[/color]" % str(stats.get("reason", "—")) \
+		+ detail_text + "[/center]"
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
 	battle_result_panel.visible = true
@@ -2932,13 +3030,16 @@ func _apply_gba_theme() -> void:
 	HudTheme.apply_gba(self)
 	# 设置/暂停/战报/结算面板底色由 apply_theme 唯一接管,启动即应用默认主题。
 	HudTheme.apply_theme(self, "deep_gba")
+	# apply_theme intentionally owns generic settings surfaces. Re-apply the
+	# battle layer last so it remains the final owner of image-backed HUD parts.
+	HudTheme.apply_hud(self)
 
 
 func _hud_density_scale() -> float:
-	var window_width := float(DisplayServer.window_get_size().x)
+	var window_width := float(_physical_window_width())
 	if window_width <= 0.0:
 		return 1.0
-	return clampf(1920.0 / window_width, 1.0, 1.4)
+	return clampf(1920.0 / window_width, 1.0, 1.5)
 
 
 func _apply_hud_theme() -> void:
@@ -3893,9 +3994,10 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	# 显式判断 Variant 类型后再 stringify。
 	var hero_id_v: Variant = ud.get("hero_id", null)
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
+	var compact_hud := _physical_window_width() <= 1366
 	_set_unit_info_portrait(ud)
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_left = 172.0 if hero_portrait_panel.visible else 44.0
+		unit_info.offset_left = (126.0 if compact_hud else 172.0) if hero_portrait_panel.visible else 44.0
 	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
 		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
@@ -3907,17 +4009,26 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
-	var compact_hud := DisplayServer.window_get_size().x <= 1366
 	var stat_gap := " · " if compact_hud else "       "
-	var lines: Array = [
-		"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
-		("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
-		"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
-		"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
-		"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
-		"[color=#a89878]士气[/color] %d/3" % morale,
-		"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
-	]
+	var lines: Array = []
+	if compact_hud:
+		lines = [
+			"[color=#a89878](%d,%d)[/color] %s" % [pos.x, pos.y, owner_str],
+			("[color=#f4e8c1]HP[/color] %d/%d%s[color=#5fa8e8]MP[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]HP[/color] %d/%d" % [hp, max_hp]),
+			"[color=#c9a14a]攻[/color]%d [color=#c9a14a]防[/color]%d%s[color=#c9a14a]魔[/color]%d [color=#c9a14a]魔防[/color]%d" % [atk, def, stat_gap, matk, mdef],
+			"[color=#a89878]移[/color]%d [color=#a89878]射[/color]%d-%d%s[color=#a89878]士[/color]%d/3" % [mov, range_min + 1, range_max, stat_gap, morale],
+			"[color=#a89878]技[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
+		]
+	else:
+		lines = [
+			"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
+			("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
+			"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
+			"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
+			"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
+			"[color=#a89878]士气[/color] %d/3" % morale,
+			"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
+		]
 
 	# ── 战斗加成 / Buffs 区段(P2.6+ 用户要的逐条列出) ──
 	# 每条描述一个 buff 来源:地形 / 士气 / 指挥官 / 装备 / 技能 /
@@ -3938,7 +4049,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		var move_cost_x2: int = int(Config.TERRAIN_MOVE_COST.get(terrain_name, 9999))
 		var move_cost_text := "不可通行" if move_cost_x2 >= 9999 else ("%.1f" % (float(move_cost_x2) / 2.0))
 		var bonus_color := "#7ec97e" if def_bonus > 0 else "#c8baa0"
-		buffs.append("[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d" % [bonus_color, terrain_cn, move_cost_text, def_bonus])
+		buffs.append(("[color=%s]▦ %s[/color] 消耗%s/防御%+d" if compact_hud else "[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d") % [bonus_color, terrain_cn, move_cost_text, def_bonus])
 		if terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
 			buffs.append("[color=#a89878]驻守设施 · 可占领或执行设施行动[/color]")
 	# 2) 士气加成(MORALE_ATK_PER_STAR / MORALE_DEF_PER_STAR)

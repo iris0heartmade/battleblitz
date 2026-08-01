@@ -15,6 +15,9 @@ const C_RUBY: Color = Color("#9b3142")
 const C_RUBY_DARK: Color = Color("#5b1725")
 const C_TEXT: Color = Color("#fff0cb")
 const C_TEXT_DIM: Color = Color("#b6a783")
+const C_PARCHMENT_INK: Color = Color("#35291d")
+const C_PARCHMENT_DIM: Color = Color("#665642")
+const C_PARCHMENT_ACCENT: Color = Color("#8a5a18")
 # 旧 MLFrame 兼容路径使用的填色/边线,统一进 C_* 常量(UI V3 验证标准 #2)
 const C_OPTION_FILL: Color = Color("#0e1c31")
 const C_FRAME_INK: Color = Color("#0a1628cc")
@@ -196,7 +199,21 @@ static func apply_title_plate(label: Control, wide: bool = true) -> void:
 	label.add_theme_stylebox_override("normal", SkinAssets.title_plate_style(wide))
 	label.add_theme_font_size_override("font_size", 26)
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
+	label.add_theme_color_override("font_outline_color", Color("#111723"))
+	label.add_theme_constant_override("outline_size", 4)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+# 页面标题使用独立排版，不与金属横梁纹理争夺同一垂直空间。
+# 横梁仍由页面一级框提供，标题只承担信息层级。
+static func apply_page_heading(label: Label) -> void:
+	label.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	label.add_theme_font_size_override("font_size", 27)
+	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
+	label.add_theme_color_override("font_outline_color", Color("#111723"))
+	label.add_theme_constant_override("outline_size", 3)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 
 # 分节标题条。
@@ -204,12 +221,74 @@ static func apply_section_title(label: Label) -> void:
 	label.add_theme_stylebox_override("normal", SkinAssets.section_title_bar_style())
 	label.add_theme_font_size_override("font_size", 18)
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
+	label.add_theme_color_override("font_outline_color", Color("#111723"))
+	label.add_theme_constant_override("outline_size", 2)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+
+# 羊皮纸区域不能复用深色面板的浅色正文，否则在纹理高光处对比度不足。
+static func apply_paper_text(label: Label, heading: bool = false) -> void:
+	label.add_theme_color_override("font_color", C_PARCHMENT_ACCENT if heading else C_PARCHMENT_INK)
+	if heading:
+		label.add_theme_font_size_override("font_size", 22)
 
 
 # 角色摘要卡:4:5 立框,透明中心。用于英雄页的专注卡。
 static func apply_character_card(panel: Control) -> void:
 	panel.add_theme_stylebox_override("panel", _card_style(SkinAssets.character_summary_card(), SkinAssets.CARD_CHAR_PATCH))
+
+
+# 战前整备的立绘锚点只有约 100px 宽，不能复用 48px 的角色摘要卡切片。
+# 保留同一套原创边框纹理，但缩小九宫格切片并让立绘占据主体面积。
+static func apply_portrait_anchor(panel: Control) -> void:
+	var sb := StyleBoxTexture.new()
+	sb.texture = SkinAssets.character_summary_card()
+	var patch := 18
+	sb.texture_margin_left = patch
+	sb.texture_margin_top = patch
+	sb.texture_margin_right = patch
+	sb.texture_margin_bottom = patch
+	sb.content_margin_left = 7
+	sb.content_margin_top = 7
+	sb.content_margin_right = 7
+	sb.content_margin_bottom = 7
+	panel.add_theme_stylebox_override("panel", sb)
+
+
+# 槽位卡:Panel 底板(墨蓝+ 内描边)+ 选中态 2px 金边。空槽和已占据同尺寸,
+# 只是内容文字变灰 — 让玩家立刻能感知"位置一样,内容不同"。
+static func apply_slot_card_panel(panel: Control, occupied: bool, selected: bool = false) -> void:
+	var fill := C_PANEL_LIGHT if occupied else C_PANEL
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = fill
+	sb.border_color = C_GOLD if occupied else C_FRAME_BORDER
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 2
+	sb.content_margin_top = 2
+	sb.content_margin_right = 2
+	sb.content_margin_bottom = 2
+	panel.add_theme_stylebox_override("panel", sb)
+	# 选中态:在 hit_button 上加 2px 金边焦点框;Panel 本身加暗红封签强调底色。
+	if selected:
+		var sb_sel := StyleBoxFlat.new()
+		sb_sel.bg_color = C_RUBY_DARK
+		sb_sel.border_color = C_GOLD_BRIGHT
+		sb_sel.set_border_width_all(2)
+		sb_sel.set_corner_radius_all(6)
+		panel.add_theme_stylebox_override("panel", sb_sel)
+		var hit := panel.get_meta("hit_button") as Button
+		if hit != null:
+			var focus_ring := StyleBoxFlat.new()
+			focus_ring.bg_color = Color(0, 0, 0, 0)
+			focus_ring.border_color = C_GOLD_BRIGHT
+			focus_ring.set_border_width_all(2)
+			focus_ring.set_corner_radius_all(8)
+			hit.add_theme_stylebox_override("focus", focus_ring)
+	else:
+		var hit := panel.get_meta("hit_button") as Button
+		if hit != null:
+			hit.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
 # 物品/数值摘要卡:32:15 横框。

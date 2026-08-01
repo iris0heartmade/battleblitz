@@ -182,6 +182,11 @@ func _on_responsive_prepare_action(action: String) -> void:
 			_on_ml_abandon_pressed()
 
 
+func _set_prepare_action_status(message: String, is_error: bool = false) -> void:
+	if prepare_panel != null and is_instance_valid(prepare_panel) and prepare_panel.has_method("set_action_status"):
+		prepare_panel.call("set_action_status", message, is_error)
+
+
 # Keep the campaign presentation in this controller.  The mainline module was
 # split from main.gd, so styling it there silently stopped affecting this view.
 func _apply_mainline_visual_theme() -> void:
@@ -439,8 +444,61 @@ func _on_slot_continue_pressed(slot_index: int) -> void:
 func _on_slot_new_game_pressed(slot_index: int) -> void:
 	_active_slot_index = slot_index
 	_main._selected_mainline_id = _DEFAULT_MAINLINE_ID
-	_main._update_status("槽 %d: 创建新游戏..." % (slot_index + 1))
-	NetworkClient.start_mainline(_DEFAULT_MAINLINE_ID, _main._user_name, false, [], Callable(self, "_on_slot_new_start_response").bind(slot_index), true)
+	# 1) 立即给玩家反馈:按"已载入最小整备数据"渲染 PreparePanel,然后切到 PreparePanel。
+	#    之前只发 HTTP 请求等后端,无后端时 10 秒超时后才回 mainline view,
+	#    玩家感觉"按了无反应"。现在按下立即进入后续界面。
+	_main._mainline_prepare_payload = _build_minimal_prepare_payload()
+	_set_node_visible(campaign_panel, false)
+	_set_node_visible(prepare_panel, true)
+	_main._mainline_prepare_tab = "heroes"
+	_render_responsive_prepare_panel()
+	_update_prepare_tab_buttons()
+	# CampaignPanel 的主操作按钮已被 disable + "创建中..." 文字,这里恢复成"开始新战役"。
+	# 之后玩家从 PreparePanel 退回 CampaignPanel 时按钮还是可用态。
+	if campaign_panel != null and is_instance_valid(campaign_panel) and campaign_panel.has_method("finish_primary_action"):
+		var occ: bool = slot_index < _manual_slot_records.size() and not _manual_slot_records[slot_index].is_empty()
+		campaign_panel.call("finish_primary_action", "▶  进入战役" if occ else "▶  开始新战役")
+	_main._update_status("槽 %d: 新游戏已创建,正在同步后端整备数据..." % (slot_index + 1))
+	# 2) 后端可用时拉真整备数据覆盖 mock payload,玩家点"开始战斗"才真正发 start_mainline。
+	if not NetworkClient.ws_connected:
+		# 无后端:玩家可在 PreparePanel 看默认 3 英雄 + 4 佣兵 + 金币 1000
+		_main._update_status("槽 %d: 离线模式(后端未连接),使用默认整备数据" % (slot_index + 1))
+		return
+	NetworkClient.get_mainline_prepare(_DEFAULT_MAINLINE_ID, _main._user_name, Callable(self, "_on_mainline_prepare_response").bind(_DEFAULT_MAINLINE_ID))
+
+
+# 离线 / 后端未启动时给玩家一个最小可玩的整备数据,确保点空槽"开始新游戏"立刻能进入 PreparePanel。
+# 后端响应来了之后会被 _on_mainline_prepare_payload 替换。
+func _build_minimal_prepare_payload() -> Dictionary:
+	var default_heroes: Array = [
+		{
+			"hero_id": "yun", "name": "云", "level": 1,
+			"base_stats": {"hp": 53, "atk": 20, "def_": 11, "matk": 29, "mdef_": 13},
+			"equipment": {"weapon": "", "armor": "", "accessory": ""},
+		},
+		{
+			"hero_id": "anna", "name": "安娜", "level": 1,
+			"base_stats": {"hp": 47, "atk": 16, "def_": 14, "matk": 18, "mdef_": 16},
+			"equipment": {"weapon": "", "armor": "", "accessory": ""},
+		},
+		{
+			"hero_id": "luke", "name": "卢克", "level": 1,
+			"base_stats": {"hp": 55, "atk": 18, "def_": 12, "matk": 10, "mdef_": 10},
+			"equipment": {"weapon": "", "armor": "", "accessory": ""},
+		},
+	]
+	return {
+		"inventory": {"gold": 1000},
+		"heroes": default_heroes,
+		"roster_units": [
+			{"unit_type": "swordsman", "name": "剑士", "cost": 200},
+			{"unit_type": "archer", "name": "弓手", "cost": 250},
+			{"unit_type": "knight", "name": "骑士", "cost": 400},
+			{"unit_type": "warlock", "name": "术士", "cost": 350},
+		],
+		"battle_index": 0,
+		"total_battles": 9,
+	}
 
 
 func _on_slot_load_response(body: Variant, code: int, record: Dictionary) -> void:
@@ -789,9 +847,11 @@ func _on_prepare_tab_pressed(tab: String) -> void:
 func _on_prepare_start_pressed() -> void:
 	if _main._selected_mainline_id == "":
 		_main._update_status("请先选择主线章节")
+		_set_prepare_action_status("请先选择主线章节。", true)
 		return
 	if _main._mainline_prepare_payload.is_empty():
 		_main._update_status("请先载入战前整备")
+		_set_prepare_action_status("整备数据尚未载入，正在重试...", true)
 		NetworkClient.get_mainline_prepare(_main._selected_mainline_id, _main._user_name, Callable(self, "_on_mainline_prepare_response").bind(_main._selected_mainline_id))
 		return
 	_main._update_status("主线: 创建战斗...")
@@ -805,6 +865,7 @@ func _on_prepare_start_pressed() -> void:
 func _on_prepare_complete_pressed() -> void:
 	if _main._selected_mainline_id == "":
 		_main._update_status("请先选择主线章节")
+		_set_prepare_action_status("请先选择主线章节。", true)
 		return
 	if ml_prep_complete_btn != null and is_instance_valid(ml_prep_complete_btn):
 		ml_prep_complete_btn.disabled = true
@@ -829,6 +890,7 @@ func _on_prepare_complete_response(body: Variant, code: int) -> void:
 		if body is Dictionary and body.has("detail"):
 			msg = "准备完毕写自动存档失败: %s" % str(body.get("detail"))
 		_main._update_status(msg)
+		_set_prepare_action_status(msg, true)
 		return
 	# P2:显示自动存档 toast
 	if body is Dictionary:
@@ -836,6 +898,7 @@ func _on_prepare_complete_response(body: Variant, code: int) -> void:
 		if auto_save is Dictionary and auto_save.has("label"):
 			_main._show_auto_save_toast("💾 自动存档完毕 ✓  %s" % str(auto_save.get("label", "")), 1800.0)
 	_main._update_status("✅ 准备完成,自动存档已写,可以开始战斗")
+	_set_prepare_action_status("准备完成，自动存档已写入，可以开始战斗。")
 
 
 
@@ -1851,6 +1914,7 @@ func _on_ml_abandon_pressed() -> void:
 		mainline_id = str(UserSettings.get_value("session.v1.mainline_id", ""))
 	if mainline_id == "":
 		_main._update_status("没有活跃主线可放弃")
+		_set_prepare_action_status("当前没有可放弃的活跃主线。", true)
 		return
 	_main._update_status("正在放弃主线 %s..." % mainline_id)
 	NetworkClient.abandon_mainline(mainline_id, _main._user_name, Callable(self, "_on_mainline_abandon_response"))

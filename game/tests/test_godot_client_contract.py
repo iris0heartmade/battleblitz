@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 NETWORK_CLIENT = ROOT / "godot-client" / "scripts" / "autoload" / "network_client.gd"
 MAIN_GD = ROOT / "godot-client" / "scripts" / "main.gd"
+LOBBY_GD = ROOT / "godot-client" / "scripts" / "ui" / "lobby_controller.gd"
 BOARD_GD = ROOT / "godot-client" / "scripts" / "board" / "board.gd"
 UNIT_NODE_GD = ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd"
 PROJECT_GODOT = ROOT / "godot-client" / "project.godot"
@@ -47,13 +48,13 @@ def test_godot_network_client_exposes_hero_backend_endpoints():
 
 def test_godot_free_lobby_create_sends_free_mode_to_backend():
     network = _read(NETWORK_CLIENT)
-    main = _read(MAIN_GD)
+    lobby = _read(LOBBY_GD)
     assert '"mode": mode' in network
     assert 'mode: String = "free"' in network
-    assert 'Callable(self, "_on_lobby_create_response"),\n\t\t_selected_lobby_seat_commanders(),\n\t\t"free"' in main
-    ai_start = main.index("func _selected_lobby_ai_commanders() -> Dictionary:")
-    ai_end = main.index("func _setup_lobby_win_condition_options", ai_start)
-    ai_body = main[ai_start:ai_end]
+    assert 'Callable(self, "_on_lobby_create_response"),\n\t\t_selected_lobby_seat_commanders(),\n\t\t"free"' in lobby
+    ai_start = lobby.index("func _selected_lobby_ai_commanders() -> Dictionary:")
+    ai_end = lobby.index("func _setup_lobby_win_condition_options", ai_start)
+    ai_body = lobby[ai_start:ai_end]
     assert "return {2: commander_id}" not in ai_body
     assert "for seat_index in range(_selected_lobby_player_count()):" in ai_body
     assert "_lobby_ai_replacement_for_seat(seat_index)" in ai_body
@@ -91,15 +92,16 @@ def test_godot_hero_portrait_renders_in_bottom_left_not_info_panel():
     # 1) .tscn 里有 HeroPortraitPanel,挂在 GameView/HUD 下(不在 BottomLeft HBox 里)
     assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in main_tscn
     assert "HeroPortraitPanel" in main_tscn
-    # 2) 锚定到左上(TurnBadge 下方、GoldPanel 上方),offset_left=28
+    # 2) 锚定到左下角(GoldPanel 上方):anchor_top=1.0 且 offset_top 为负(向上收)
     hp_idx = main_tscn.index('[node name="HeroPortraitPanel"')
     hp_end = main_tscn.index("\n\n", hp_idx)
     hp_block = main_tscn[hp_idx:hp_end]
-    assert "anchor_top = 0.0" in hp_block
-    assert "anchor_bottom = 0.0" in hp_block
-    assert "offset_left = 28.0" in hp_block
-    # 3) main.gd @onready var 指向新路径
-    assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/HeroPortraitPanel" in main_src
+    assert "anchor_top = 1.0" in hp_block
+    assert "anchor_bottom = 1.0" in hp_block
+    assert "offset_left = 16.0" in hp_block
+    assert "offset_top = -278.0" in hp_block
+    # 3) main.gd @onready var 指向实际槽位(merge 后统一走 InfoPanel/UnitPortraitPanel)
+    assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel" in main_src
     # 4) _set_unit_info_portrait 把 TextureRect 挂到 hero_portrait_panel(不再挂 info_panel)
     func_idx = main_src.index("func _set_unit_info_portrait(")
     func_end = main_src.index("\n\n", func_idx)
@@ -184,21 +186,24 @@ def test_godot_lobby_commander_fetch_forwards_to_mainline_controller():
     # T:#16 — commanders 拉取统一收口在 mainline_controller._on_commanders_response,
     # 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
     # 联机大厅 _enter_lobby_view 调 get_unlocked_commanders 时,回调必须
-    # 转发到 mainline_view,不能挂到 self(main.gd 根本没有 _on_commanders_response,
-    # 否则 lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander)。
+    # 转发到 mainline_view,不能挂到 self(lobby_controller.gd / main.gd 都没有
+    # _on_commanders_response,否则 lobby_commander_option 永远只剩"不选择指挥官"一项,
+    # 创房时所有座位都拿不到 host commander)。
     main_src = _read(MAIN_GD)
+    lobby_src = _read(LOBBY_GD)
     mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
     # 1) mainline_controller 仍是 commander 拉取的唯一所有者
     assert "func _on_commanders_response(" in mainline_src
-    # 2) main.gd 不应有这个方法(避免重入 / 误用)
+    # 2) main.gd / lobby_controller.gd 不应有这个方法(避免重入 / 误用)
     assert "func _on_commanders_response(" not in main_src
+    assert "func _on_commanders_response(" not in lobby_src
     # 3) _enter_lobby_view 里调用 get_unlocked_commanders 时,callback 必须是
-    #    Callable(mainline_view, "_on_commanders_response"),不能是 self
-    lobby_start = main_src.index("func _enter_lobby_view(")
-    lobby_end = main_src.index("\n\n", lobby_start)
-    lobby_body = main_src[lobby_start:lobby_end]
+    #    Callable(_main.mainline_view, "_on_commanders_response"),不能是 self
+    lobby_start = lobby_src.index("func _enter_lobby_view(")
+    lobby_end = lobby_src.index("\n\n", lobby_start)
+    lobby_body = lobby_src[lobby_start:lobby_end]
     assert "NetworkClient.get_unlocked_commanders" in lobby_body
-    assert 'Callable(mainline_view, "_on_commanders_response")' in lobby_body
+    assert 'Callable(_main.mainline_view, "_on_commanders_response")' in lobby_body
     assert 'Callable(self, "_on_commanders_response")' not in lobby_body
 
 
@@ -278,7 +283,8 @@ def test_godot_claim_remains_available_after_moving_onto_enemy_hq():
     source = _read(MAIN_GD)
     assert "context != _ACTION_CONTEXT_POST_ACTION" not in source
     assert "var can_claim := has_unit and _can_claim_here(ud)" in source
-    assert "NetworkClient.action_claim(_game_id, _player_id, _selected_unit_id)" in source
+    # _on_claim_pressed 里的 action_claim 已是多行调用,首行后换行续参
+    assert "NetworkClient.action_claim(\n\t\t_game_id, _player_id, _selected_unit_id," in source
 
 
 def test_godot_game_over_stops_refreshing_and_polling():
@@ -343,7 +349,7 @@ def test_godot_team_badge_color_comes_from_team_not_player_color():
 
 
 def test_godot_lobby_ai_replacement_renders_ai_state_not_waiting_player():
-    source = _read(MAIN_GD)
+    source = _read(LOBBY_GD)
     start = source.index("func _build_lobby_seat_card(")
     end = source.index("func _lobby_team_index_for_seat(", start)
     body = source[start:end]
@@ -358,7 +364,7 @@ def test_godot_lobby_ai_replacement_renders_ai_state_not_waiting_player():
 
 
 def test_godot_lobby_ai_replacement_is_per_seat_not_global():
-    source = _read(MAIN_GD)
+    source = _read(LOBBY_GD)
     toggle_start = source.index("func _on_lobby_seat_ai_toggled(")
     toggle_end = source.index("func _request_add_ai_for_seat(", toggle_start)
     toggle_body = source[toggle_start:toggle_end]
@@ -366,36 +372,36 @@ def test_godot_lobby_ai_replacement_is_per_seat_not_global():
     clear_end = source.index("func _on_lobby_seat_update_response(", clear_start)
     clear_body = source[clear_start:clear_end]
 
-    assert "_clear_player_from_other_seats(_user_name, seat_index)" in toggle_body
+    assert "_clear_player_from_other_seats(_main._user_name, seat_index)" in toggle_body
     assert "for i in range(_lobby_seat_ai_replacements.size()):" not in toggle_body
     assert "_lobby_seat_ai_replacements[i] = false" not in clear_body
 
 
 def test_godot_lobby_add_ai_passes_target_seat_and_auto_start_skips_room_page():
-    main = _read(MAIN_GD)
+    lobby = _read(LOBBY_GD)
     network = _read(NETWORK_CLIENT)
 
-    request_start = main.index("func _request_add_ai_for_seat(")
-    request_end = main.index("func _on_lobby_seat_ai_remove_response(", request_start)
-    request_body = main[request_start:request_end]
+    request_start = lobby.index("func _request_add_ai_for_seat(")
+    request_end = lobby.index("func _on_lobby_seat_ai_remove_response(", request_start)
+    request_body = lobby[request_start:request_end]
     assert 'Callable(self, "_on_lobby_seat_ai_add_response").bind(seat_index),' in request_body
     assert "seat_index)" in request_body
 
-    pipeline_start = main.index("func _continue_lobby_ai_creation(")
-    pipeline_end = main.index("func _on_lobby_configured_ai_added(", pipeline_start)
-    pipeline_body = main[pipeline_start:pipeline_end]
+    pipeline_start = lobby.index("func _continue_lobby_ai_creation(")
+    pipeline_end = lobby.index("func _on_lobby_configured_ai_added(", pipeline_start)
+    pipeline_body = lobby[pipeline_start:pipeline_end]
     assert 'Callable(self, "_on_lobby_configured_ai_added").bind(seat_index),' in pipeline_body
     assert "seat_index\n\t)" in pipeline_body
 
-    configured_start = main.index("func _on_lobby_configured_ai_added(")
-    configured_end = main.index("func _on_lobby_configured_ai_seated(", configured_start)
-    configured_body = main[configured_start:configured_end]
+    configured_start = lobby.index("func _on_lobby_configured_ai_added(")
+    configured_end = lobby.index("func _on_lobby_configured_ai_seated(", configured_start)
+    configured_body = lobby[configured_start:configured_end]
     assert "NetworkClient.update_player_seat" not in configured_body
 
-    join_start = main.index("func _on_lobby_join_response(")
-    join_end = main.index("func _auto_add_ai_after_lobby_create(", join_start)
-    join_body = main[join_start:join_end]
-    pending_line = "if _entry_flow == \"lobby_create\" and _game_id > 0 and _pending_lobby_start_after_create:"
+    join_start = lobby.index("func _on_lobby_join_response(")
+    join_end = lobby.index("func _auto_add_ai_after_lobby_create(", join_start)
+    join_body = lobby[join_start:join_end]
+    pending_line = "if _main._entry_flow == \"lobby_create\" and _main._game_id > 0 and _pending_lobby_start_after_create:"
     assert pending_line in join_body
     assert join_body.index(pending_line) < join_body.index("_show_lobby_in_room()")
 
@@ -404,7 +410,7 @@ def test_godot_lobby_add_ai_passes_target_seat_and_auto_start_skips_room_page():
 
 
 def test_godot_lobby_start_requires_all_map_seats_configured():
-    source = _read(MAIN_GD)
+    source = _read(LOBBY_GD)
 
     assert "func _configured_lobby_create_participant_count() -> int:" in source
     assert "func _refresh_lobby_create_start_gate() -> void:" in source
@@ -425,7 +431,7 @@ def test_godot_lobby_start_requires_all_map_seats_configured():
 
 
 def test_godot_lobby_four_player_seat_cards_have_room_for_commander_text():
-    source = _read(MAIN_GD)
+    source = _read(LOBBY_GD)
     start = source.index("func _build_lobby_seat_card(")
     end = source.index("func _lobby_team_index_for_seat(", start)
     body = source[start:end]
@@ -514,7 +520,7 @@ def test_godot_lobby_seat_invariant_one_player_one_seat():
     # 同一 AI 占位最多出现在 1 个座位(避免 toggle AI 后多槽同 AI)。
     # _on_lobby_seat_action_pressed 入座前必须先清掉其它座位里的 _user_name;
     # _on_lobby_seat_ai_toggled ON 之前必须先清掉其它 AI 占位。
-    src = _read(MAIN_GD)
+    src = _read(LOBBY_GD)
     func_idx = src.index("func _on_lobby_seat_action_pressed(")
     func_end = src.index("\n\n", func_idx)
     body = src[func_idx:func_end]
@@ -530,7 +536,7 @@ def test_godot_lobby_seat_invariant_one_player_one_seat():
 
 
 def test_godot_lobby_start_success_enters_game_without_connecting_view():
-    source = _read(MAIN_GD)
+    source = _read(LOBBY_GD)
     start = source.index("func _on_lobby_start_response(")
     end = source.index("func _on_lobby_back_pressed(", start)
     body = source[start:end]

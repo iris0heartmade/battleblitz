@@ -20,9 +20,11 @@ theme_override_constants/separation = 12
 
 [node name="CouncilTitle" type="Label" parent="Layout"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "战前整备"
 horizontal_alignment = 1
+vertical_alignment = 1
 theme_override_font_sizes/font_size = 27
 
 [node name="Tabs" type="HBoxContainer" parent="Layout"]
@@ -93,6 +95,12 @@ layout_mode = 2
 text = "选择英雄"
 theme_override_font_sizes/font_size = 22
 
+[node name="ContentKicker" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "英雄档案 · 当前配置"
+theme_override_font_sizes/font_size = 14
+
 [node name="EquipmentIconRow" type="HBoxContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
 unique_name_in_owner = true
 visible = false
@@ -135,13 +143,62 @@ visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 
-[node name="ContentBody" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+[node name="HeroHeaderRow" type="HBoxContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="HeroPortraitFrame" type="PanelContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/HeroHeaderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(118, 142)
+layout_mode = 2
+
+[node name="HeroPortrait" type="TextureRect" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/HeroHeaderRow/HeroPortraitFrame"]
+unique_name_in_owner = true
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="ContentBody" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/HeroHeaderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 2
+text = "在左侧选择英雄。装备页只显示装备槽和背包，不会与其他页面共用选择器。"
+theme_override_font_sizes/font_size = 18
+
+[node name="ContentInsightPanel" type="PanelContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 132)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="InsightMargin" type="MarginContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="InsightLayout" type="VBoxContainer" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="InsightTitle" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin/InsightLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "整备检查"
+theme_override_font_sizes/font_size = 18
+
+[node name="InsightBody" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin/InsightLayout"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 2
-text = "在左侧选择英雄。装备页只显示装备槽和背包，不会与其他页面共用选择器。"
-theme_override_font_sizes/font_size = 17
+text = "选择英雄后显示状态核对与下一步操作。"
+theme_override_font_sizes/font_size = 16
 
 [node name="MissionPanel" type="PanelContainer" parent="Layout/Columns"]
 unique_name_in_owner = true
@@ -172,40 +229,65 @@ size_flags_vertical = 3
 autowrap_mode = 2
 text = "胜利条件、敌方预览、地图缩略与指挥官信息将在此显示。"
 
-[node name="ActionBar" type="HBoxContainer" parent="Layout"]
+[node name="MissionChecklist" type="Label" parent="Layout/Columns/MissionPanel/MissionMargin/MissionLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+autowrap_mode = 2
+text = "出征核对\n◆ 阅读胜利条件\n◆ 检查英雄与装备\n◆ 完成整备后开始战斗"
+theme_override_font_sizes/font_size = 15
+
+[node name="ActionStatus" type="Label" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 24)
+mouse_filter = 2
+text = ""
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.86, 0.72, 0.36, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="ActionSafe" type="MarginContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 24
+
+[node name="ActionBar" type="HBoxContainer" parent="Layout/ActionSafe"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="BackAction" type="Button" parent="Layout/ActionBar"]
+[node name="BackAction" type="Button" parent="Layout/ActionSafe/ActionBar"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(160, 46)
 text = "返回章节"
 
-[node name="ActionSpacer" type="Control" parent="Layout/ActionBar"]
+[node name="ActionSpacer" type="Control" parent="Layout/ActionSafe/ActionBar"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RefreshAction" type="Button" parent="Layout/ActionBar"]
+[node name="RefreshAction" type="Button" parent="Layout/ActionSafe/ActionBar"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 custom_minimum_size = Vector2(150, 46)
 text = "刷新整备"
 
-[node name="StartAction" type="Button" parent="Layout/ActionBar"]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(170, 46)
-text = "开始战斗"
-
-[node name="CompleteAction" type="Button" parent="Layout/ActionBar"]
+[node name="CompleteAction" type="Button" parent="Layout/ActionSafe/ActionBar"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(150, 46)
 text = "完成整备"
 
-[node name="AbandonAction" type="Button" parent="Layout/ActionBar"]
+[node name="StartAction" type="Button" parent="Layout/ActionSafe/ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(210, 52)
+text = "开始战斗"
+
+[node name="AbandonAction" type="Button" parent="Layout/ActionSafe/ActionBar"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(150, 46)

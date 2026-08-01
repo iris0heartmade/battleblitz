@@ -8,11 +8,26 @@ const MAP_PATH := "res://../game/maps/balanced_2p_15.json"
 
 
 func _ready() -> void:
-	# 关键:Godot 4 启动时 --resolution 已被消费,OS.get_cmdline_args() 只返回剩余参数。
-	# 直接读 get_viewport().size — 它已经被 --resolution 设置过了。
-	var res: Vector2i = get_viewport().size
-	if res.x <= 0 or res.y <= 0:
-		res = Vector2i(1280, 720)
+	# 1) 默认 1920×1080 — 这是用户期望的"完整桌面分辨率"。
+	var res: Vector2i = Vector2i(1920, 1080)
+	# 优先:BB_REVIEW_RES 环境变量(截图 wrapper 注入,可被 split("x") 解析)
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "" and env.contains("x"):
+		var parts: PackedStringArray = env.split("x")
+		if parts.size() == 2:
+			res = Vector2i(int(parts[0]), int(parts[1]))
+	# 其次:--resolution WxH(可能分两个 token "--resolution" "WxH",也可能 "--resolution=WxH")
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for arg in args:
+		if arg.begins_with("--resolution"):
+			var value: String = arg.substr("--resolution".length()).lstrip("=")
+			if value.contains("x"):
+				var parts2: PackedStringArray = value.split("x")
+				if parts2.size() == 2:
+					res = Vector2i(int(parts2[0]), int(parts2[1]))
+	# 2) 强制 root viewport 尺寸 = 目标分辨率(默认窗口对 1920×1080 太小)
+	get_viewport().size = res
+	DisplayServer.window_set_size(res)
 	OS.set_environment("BB_REVIEW_RES", "%dx%d" % [res.x, res.y])
 	_review_size = res
 	print("[ui-review] res=", res, " viewport=", get_viewport().size)
@@ -26,8 +41,11 @@ func _ready() -> void:
 	var mainline_view: Node = main.get_node("MainlineView")
 	var campaign: Node = mainline_view.get_node("CampaignPanel")
 	var prepare: Node = mainline_view.get_node("PreparePanel")
+	# 显式同时把"另一个 panel"整体及其所有 CanvasItem 后代隐藏。
+	# 否则 PreparePanel 的 ActionBar 会作为"绘制残留"出现在 CampaignPanel 截图里。
 	campaign.visible = true
 	prepare.visible = false
+	_hide_prepare_action_bar(prepare)
 	await _frames(4)
 
 	# 1) 主线存档(空槽 + 已有档混合)— record 字段喂 PreviewColumn 多行内容
@@ -66,9 +84,35 @@ func _ready() -> void:
 	await _frames(4)
 	_save("mainline_chapter_detail.png")
 
+	# 2.5) 空槽按下"开始新游戏"后切到 PreparePanel(controller mock payload)
+	#     用 slot_index=1(空槽)模拟玩家点开始新游戏按钮的完整视觉流程。
+	campaign.select_slot(1)
+	# 模拟 controller._on_slot_new_game_pressed 行为(无后端 fallback 路径):
+	mainline_view.visible = true
+	campaign.visible = false
+	prepare.visible = true
+	_show_prepare_action_bar(prepare)
+	# Mock 整备数据(对应 _build_minimal_prepare_payload)
+	var offline_heroes: Array[Dictionary] = [
+		{"hero_id": "yun", "name": "云", "level": 1, "hp": "53", "equipment_summary": "未装备"},
+		{"hero_id": "anna", "name": "安娜", "level": 1, "hp": "47", "equipment_summary": "未装备"},
+		{"hero_id": "luke", "name": "卢克", "level": 1, "hp": "55", "equipment_summary": "未装备"},
+	]
+	prepare.set_heroes(offline_heroes)
+	prepare.set_active_tab("heroes")
+	prepare.set_mission("钢铁起义 · 战役情报", "当前战役：第 1/9 战\n胜利条件：击败敌军或夺取敌方据点。\n推荐：先确认英雄装备与可部署部队。\n奖励：完成战斗后获得金币与成长经验。\n可部署部队：4\n\n⚠ 离线模式 · 后端未连接 · 使用默认整备数据")
+	prepare.show_content("云 · 术士", "等级 1\n生命 53  攻击 20  防御 11\n速度 14  魔攻 29  魔防 13\n技能：奥术爆裂\n\n✦ 武器: 未装备\n✦ 防具: 未装备\n✦ 饰品: 未装备")
+	prepare.set_choices("", [])
+	# 恢复 CampaignPanel 按钮文字(模拟 controller finish_primary_action)
+	if campaign.has_method("finish_primary_action"):
+		campaign.call("finish_primary_action", "▶  开始新战役")
+	await _frames(4)
+	_save("mainline_new_game_after.png")
+
 	# 3) 英雄页(战前整备英雄摘要)
 	campaign.visible = false
 	prepare.visible = true
+	_show_prepare_action_bar(prepare)
 	var heroes: Array[Dictionary] = [
 		{"hero_id": "yun", "name": "云", "level": 3, "hp": "53", "equipment_summary": "橡木法杖"},
 		{"hero_id": "anna", "name": "安娜", "level": 2, "hp": "47", "equipment_summary": "守卫圆盾"},
@@ -181,6 +225,7 @@ func _ready() -> void:
 
 	# 8) 对话框(DialogManager 全屏阻断遮罩)
 	main._hide_action_bubble()
+	DialogManager.register_hero_speaker("云", "res://assets/heroes/portrait_yun.png")
 	DialogManager.show_dialog({
 		"speaker": "云", "text": "「这片土地饱受战火蹂躏,我们必须夺回城堡!」",
 	})
@@ -234,3 +279,25 @@ func _frames(count: int) -> void:
 	for _i in count:
 		await get_tree().process_frame
 		RenderingServer.force_draw()
+
+
+# PreparePanel 的底部 ActionBar 单独显隐,不影响它的其它 children。
+# propagate_call 会把所有 CanvasItem 改 false → 切回去时容易把 panel 内容也藏掉。
+const _PREPARE_BAR_BUTTONS: Array[String] = [
+	"BackAction", "RefreshAction", "StartAction", "CompleteAction", "AbandonAction",
+]
+
+
+func _hide_prepare_action_bar(prepare: Node) -> void:
+	for name in _PREPARE_BAR_BUTTONS:
+		var btn := prepare.find_child(name, true, false)
+		if btn != null:
+			btn.visible = false
+
+
+func _show_prepare_action_bar(prepare: Node) -> void:
+	for name in _PREPARE_BAR_BUTTONS:
+		var btn := prepare.find_child(name, true, false)
+		if btn != null:
+			# 刷新是诊断动作，生产场景默认隐藏；评审截图也不能让它抢主操作权重。
+			btn.visible = name != "RefreshAction"

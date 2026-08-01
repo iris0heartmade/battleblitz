@@ -10,10 +10,27 @@ workstream_manifests:
   - manifests/base.yaml
   - manifests/controls.yaml
   - manifests/battle.yaml
+integration:
+  status: wired_for_runtime
+  wired_at: "2026-07-31"
+  entry_point: "godot-client/scripts/ui/skin_assets.gd"
+  consumers:
+    - "godot-client/scripts/ui/mainline_theme.gd"
+    - "godot-client/scripts/ui/battle_theme.gd"
+    - "godot-client/scripts/ui/hud_theme.gd"
+    - "godot-client/scripts/autoload/dialog_manager.gd"
+    - "godot-client/scenes/main.tscn"
+    - "godot-client/scenes/ui/mainline_campaign_panel.tscn"
+    - "godot-client/scenes/ui/mainline_prepare_panel.tscn"
+  patch_geometry_recorded_in: "README.md#runtime-integration"
 approval:
-  status: pending_generation_and_review
+  status: pending_human_visual_review
   required_reviews:
     - alpha_and_edge_validation
     - ninepatch_safe_area_validation
     - perceptual_similarity_review
     - three_resolution_runtime_review
+  notes: >
+    Assets are wired into the runtime but none is marked approved until a human
+    completes the visual review at 1280x720 / 1600x900 / 1920x1080 and the
+    perceptual similarity gate. Do not treat wired assets as final-approved.
