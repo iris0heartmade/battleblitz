@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .meter import DEATH_PENALTY, UNIT_DESTROY_SCORES, on_death, on_kill
+from .meter import consume_power_stars, record_morale_star
 from .passive import CommanderPassive
 from .power import CommanderPower
 from .state import COState
@@ -16,13 +16,11 @@ __all__ = [
     "CommanderPassive",
     "CommanderPower",
     "COState",
-    "DEATH_PENALTY",
-    "UNIT_DESTROY_SCORES",
-    "on_death",
-    "on_kill",
     "bake_passive_into_units",
     "can_fire_co_power",
+    "consume_power_stars",
     "expire_power",
     "fire_co_power",
     "on_player_turn_start",
+    "record_morale_star",
 ]
