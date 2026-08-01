@@ -75,7 +75,7 @@ class Yun(BaseHero):
     is_commander = True
     commander_passive = YunCommanderPassive(id="yun_passive", atk_pct=0.10, range_delta=1)
     commander_power = YunCommanderPower(id="yun_power", atk_pct=0.30, heal_pct=0.50)
-    power_threshold = 22
+    power_threshold = 18
 
     # ── Dialog binding ─────────────────────────────────────────
     # Scene files reference the speaker as "云" (display_cn), so
