@@ -1392,9 +1392,10 @@ func _refresh_co_roster() -> void:
 		var color_name: String = "" if color_v == null else str(color_v)
 		var commander_v: Variant = c.get("commander_id", null)
 		var commander_id: String = "" if commander_v == null else str(commander_v)
-		var meter: int = int(c.get("meter", 0))
+		var stars: int = int(c.get("stars_earned_total", 0))
 		var threshold: int = max(1, int(c.get("threshold", 100)))
-		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
+		var power_cost: int = int(c.get("power_cost", 6))
+		var pct: float = clamp(float(stars) / float(threshold) * 100.0, 0.0, 100.0)
 		var is_active: bool = bool(c.get("is_power_active", false))
 		var can_fire: bool = bool(c.get("can_fire", false))
 		var is_local: bool = pid == _player_id
@@ -1433,7 +1434,7 @@ func _refresh_co_roster() -> void:
 		bar.custom_minimum_size = Vector2(30 if compact else 48, 14)
 		bar.value = pct
 		bar.show_percentage = false
-		bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+		bar.tooltip_text = "指挥官士气星: %d / %d(放 power 消耗 %d 颗)" % [stars, threshold, power_cost]
 		var bar_bg := StyleBoxFlat.new()
 		bar_bg.bg_color = Color(0.025, 0.05, 0.075, 0.96)
 		bar_bg.border_color = Color(0.31, 0.27, 0.18, 1.0)
@@ -1457,13 +1458,13 @@ func _refresh_co_roster() -> void:
 			btn.text = "发动"
 			btn.custom_minimum_size = Vector2(36, 20)
 			btn.add_theme_font_size_override("font_size", roundi(10 * density))
-			btn.tooltip_text = "激活指挥官技(消耗全部能量)"
+			btn.tooltip_text = "激活指挥官技(消耗 %d 颗士气星)" % power_cost
 			# 用 Callable.bind 把 pid 绑到 pressed 信号
 			btn.pressed.connect(_on_co_power_pressed.bind(pid))
 			row_inner.add_child(btn)
 		else:
 			var meter_lbl := Label.new()
-			meter_lbl.text = "%d/%d" % [meter, threshold]
+			meter_lbl.text = "%d/%d" % [stars, threshold]
 			meter_lbl.add_theme_font_size_override("font_size", roundi((10 if compact else 12) * density))
 			row_inner.add_child(meter_lbl)
 
@@ -1541,18 +1542,21 @@ func _refresh_commander_section() -> void:
 	commander_name.text = "%s [color=%s][b]%s[/b][/color]  ·  %d 单位 · 💰 %d" % [
 		emoji, color_godot, name, units, gold
 	]
-	# CO meter from co_states array
-	var meter: int = 0
+	# CO 进度 from co_states array
+	# 新机制:进度 = stars_earned_total / threshold(累计士气星 / 累计上限)
+	var stars: int = 0
 	var threshold: int = 100
+	var power_cost: int = 6
 	for c in GameState.co_states:
 		if c is Dictionary and int(c.get("player_id", -1)) == (int(cur_pid) if cur_pid != null else -1):
-			meter = int(c.get("meter", 0))
+			stars = int(c.get("stars_earned_total", 0))
 			threshold = max(1, int(c.get("threshold", 100)))
+			power_cost = int(c.get("power_cost", 6))
 			break
-	var pct: float = float(meter) / float(threshold) * 100.0
+	var pct: float = float(stars) / float(threshold) * 100.0
 	if commander_co_bar != null and is_instance_valid(commander_co_bar):
 		commander_co_bar.value = pct
-		commander_co_bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+		commander_co_bar.tooltip_text = "指挥官士气星: %d / %d(消耗 %d 颗放 power)" % [stars, threshold, power_cost]
 
 
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
@@ -3928,11 +3932,17 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		var def_pct: int = int(round(morale * Config.MORALE_DEF_PER_STAR * 100))
 		buffs.append("[color=#fad855]⭐ 士气 %d[/color] → +%d%% 攻击 +%d%% 防御" % [morale, atk_pct, def_pct])
 	# 3) 玩家指挥官统御 Power 是否启动(仅自己单位)
-	if is_mine:
-		var my_player: Dictionary = GameState.get_player(_player_id) if GameState != null else {}
-		var co_state_d: Dictionary = my_player.get("co_state", {}) if my_player is Dictionary else {}
-		if co_state_d is Dictionary and co_state_d.get("is_power_active", false):
-			var co_id: String = str(co_state_d.get("commander_id", ""))
+	# 修 Bug:之前读 GameState.players[].co_state,这个字段不在 PlayerOut schema
+	# 里,通常拿到空 dict。改为读顶层 GameState.co_states[] 找本玩家。
+	if is_mine and GameState != null:
+		var is_power_active: bool = false
+		var co_id: String = ""
+		for co_entry in GameState.co_states:
+			if co_entry is Dictionary and int(co_entry.get("player_id", -1)) == _player_id:
+				is_power_active = bool(co_entry.get("is_power_active", false))
+				co_id = str(co_entry.get("commander_id", "") or "")
+				break
+		if is_power_active:
 			var co_name_cn := _commander_cn(co_id) if co_id != "" else "指挥官"
 			buffs.append("[color=#f2666b]🔥 %s 统御 Power 启动中[/color] → 全军 buff" % co_name_cn)
 	# 4) 转职加成(高等级 → 转职后等级加成)

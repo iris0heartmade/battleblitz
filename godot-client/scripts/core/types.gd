@@ -108,7 +108,8 @@ static func claim_progress(claim: Dictionary) -> float:
 # ============================================================
 const PLAYER_CO_STATE_KEYS := [
 	"player_id", "seat", "color", "commander_id",
-	"meter", "threshold", "is_power_active", "can_fire",
+	"stars_earned_total", "threshold", "power_cost",
+	"meter", "is_power_active", "can_fire",
 ]
 
 
