@@ -150,7 +150,7 @@ async def fire_co_power_endpoint(
         elif (player.co_state or {}).get("is_power_active"):
             detail = "power already active"
         else:
-            detail = "meter not full or commander has no power"
+            detail = "insufficient morale stars or commander has no power"
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
     fire_co_power(player)
     await session.commit()

@@ -61,9 +61,10 @@ def can_fire_co_power(player) -> bool:
     if commander_id is None:
         return False
     co = player.co_state or {}
+    # 新机制:stars_earned_total 累计达到 power_cost 即可放
     return (
         not co.get("is_power_active", False)
-        and co.get("meter", 0) >= co.get("threshold", 20)
+        and co.get("stars_earned_total", 0) >= co.get("power_cost", 6)
         and get_commander_power(commander_id) is not None
     )
 
@@ -75,8 +76,8 @@ def fire_co_power(player):
         co = player.co_state or {}
         if co.get("is_power_active"):
             raise ValueError("power already active")
-        if co.get("meter", 0) < co.get("threshold", 20):
-            raise ValueError("meter not full")
+        if co.get("stars_earned_total", 0) < co.get("power_cost", 6):
+            raise ValueError("insufficient stars")
         raise ValueError("commander has no power")
 
     power = get_commander_power(player.commander_id)
@@ -106,8 +107,11 @@ def fire_co_power(player):
             unit.mp = min(unit.mov, unit.mp + extra_mov)
 
     co = dict(player.co_state or {})
+    # 新机制:扣 power_cost 颗星(默认 6),放 power 后剩余继续累计
+    from app.commanders.meter import consume_power_stars
+    consume_power_stars(player)
+    co = dict(player.co_state or {})  # consume 已改 in-place,重读保证最新
     co["is_power_active"] = True
-    co["meter"] = 0
     co["_power_baselines"] = baselines
     player.co_state = co
 
@@ -136,12 +140,14 @@ def expire_power(player):
 
 
 def on_player_turn_start(player, game_turn_number: int):
-    co = dict(player.co_state or {})
+    # 用 _ensure_co_state 把 co_state 字段补齐(含 stars_earned_total 等)
+    from app.commanders.meter import _ensure_co_state
+    co = dict(_ensure_co_state(player))  # 强制新建 dict(避免与旧引用同一对象)
     last = co.get("last_start_turn", -1)
     if last != -1 and game_turn_number > last:
         if co.get("is_power_active"):
             expire_power(player)
-            co = dict(player.co_state or {})
-        co["meter"] = 0
+            co = dict(_ensure_co_state(player))
+        # 新机制:每回合不重置 stars_earned_total(累计型,放 power 才扣)
     co["last_start_turn"] = game_turn_number
     player.co_state = co
