@@ -3427,11 +3427,48 @@ func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -
 	var tx := int(target_info.get("x", 0))
 	var ty := int(target_info.get("y", 0))
 	var dist: int = abs(ax - tx) + abs(ay - ty)
-	var hp_text: String = ""
-	if target_info.has("hp"):
-		hp_text = " · 生命 %d" % int(target_info.get("hp", 0))
-	return "[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]\n距离 %d%s\n确认后将提交攻击指令。" % [
-		attacker_name, target_name, dist, hp_text
+
+	# 双方基础信息(取自 GameState 已有字段,后端无需扩 schema)
+	var attacker_lv := int(attacker.get("level", 1))
+	var target_lv := int(target_info.get("level", 1))
+	var attacker_morale := int(attacker.get("morale", 0))
+	var target_morale := int(target_info.get("morale", 0))
+	var attacker_hp := int(attacker.get("hp", 0))
+	var attacker_max_hp := int(attacker.get("max_hp", attacker_hp))
+	if attacker_max_hp <= 0:
+		attacker_max_hp = max(1, attacker_hp)
+	var target_hp := int(target_info.get("hp", 0))
+	var target_max_hp := int(target_info.get("max_hp", target_hp))
+	if target_max_hp <= 0:
+		target_max_hp = max(1, target_hp)
+	var attacker_atk := int(attacker.get("atk", 0))
+	var attacker_matk := int(attacker.get("matk", 0))
+	var target_def := int(target_info.get("def_", 0))
+	var target_mdef := int(target_info.get("mdef", 0))
+	var atk_min := int(attacker.get("min_attack_range", 0))
+	var atk_range := int(attacker.get("attack_range", 1))
+	var in_range := dist > atk_min and dist <= atk_range
+
+	var attacker_stars := "★".repeat(max(0, attacker_morale)) + "☆".repeat(max(0, 3 - attacker_morale))
+	var target_stars := "★".repeat(max(0, target_morale)) + "☆".repeat(max(0, 3 - target_morale))
+
+	var attacker_card := "[color=#f4e8c1][b]⚔ 攻击方[/b][/color]\n[b]%s[/b] · Lv.%d · %s\n[color=#c9a14a]攻 %d[/color] · [color=#c9a14a]魔攻 %d[/color]\n[color=#5fa8e8]生命 %d/%d[/color]" % [
+		attacker_name, attacker_lv, attacker_stars,
+		attacker_atk, attacker_matk, attacker_hp, attacker_max_hp,
+	]
+	var target_card := "[color=#f4e8c1][b]🛡 目标[/b][/color]\n[b]%s[/b] · Lv.%d · %s\n[color=#c9a14a]防 %d[/color] · [color=#c9a14a]魔防 %d[/color]\n[color=#5fa8e8]生命 %d/%d[/color]" % [
+		target_name, target_lv, target_stars,
+		target_def, target_mdef, target_hp, target_max_hp,
+	]
+
+	var range_text: String
+	if in_range:
+		range_text = "距离 %d · 攻击范围 %d < d ≤ %d" % [dist, atk_min, atk_range]
+	else:
+		range_text = "[color=#c63a3a]距离 %d 超出攻击范围(需 %d < d ≤ %d)[/color]" % [dist, atk_min, atk_range]
+
+	return "%s\n\n%s\n\n%s\n\n[color=#a89878]等待战斗预测…[/color]" % [
+		attacker_card, target_card, range_text
 	]
 
 
@@ -3489,8 +3526,16 @@ func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary
 			attacker_max_hp,
 			"  可能被击倒" if counter_will_kill else "",
 		])
+	elif is_kill:
+		lines.append("目标已被击杀,无反击")
 	else:
-		lines.append("目标无法反击")
+		# COUNTER_IMMUNE_SKILLS 暂为空,只能因距离过远无法反击
+		var ax := int(attacker.get("x", 0))
+		var ay := int(attacker.get("y", 0))
+		var tx := int(target_info.get("x", 0))
+		var ty := int(target_info.get("y", 0))
+		var dist: int = abs(ax - tx) + abs(ay - ty)
+		lines.append("目标无法反击(距离 %d,超出反击范围)" % dist)
 	lines.append("地形防御: +%d" % def_bonus)
 	return "\n".join(lines)
 
