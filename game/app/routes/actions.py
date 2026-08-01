@@ -593,17 +593,15 @@ async def attack(
             f"（×{COUNTER_DAMAGE_MULT}）",
         )
 
-    # Award commander meter to the unit that actually dealt the killing
-    # blow.  A counter-kill belongs to the defender, not the player whose
-    # action happened to open this combat exchange.
-    from app.commanders.meter import on_kill
-    if is_kill and player.commander_id is not None:
-        on_kill(player, target.unit_type)
-        flag_modified(player, "co_state")
-    elif attacker.hp <= 0:
+    # 新机制:CO 累积槽的星只通过 award_exp → award_morale(player) → record_morale_star
+    # 单链路增加(不分玩家/AI 路径)。原 on_kill hook(在 599 行)已删除,避免与
+    # award_exp 路径双倍加星。反击击杀的星单独处理:attacker 被反击致死时,
+    # award_exp 走的是 "hit" 路径不会加星,这里直接给 target 的 owner 加 1。
+    if attacker.hp <= 0 and not is_kill:
         counter_player = await session.get(Player, target.player_id)
         if counter_player is not None and counter_player.commander_id is not None:
-            on_kill(counter_player, attacker.unit_type)
+            from app.commanders.meter import record_morale_star
+            record_morale_star(counter_player, 1)
             flag_modified(counter_player, "co_state")
 
     # Mark attacker as having acted.
@@ -617,7 +615,7 @@ async def attack(
     exp_gained = 0
     assist_ids: List[int] = []
     if is_kill:
-        level_result = award_exp(attacker, "kill")
+        level_result = award_exp(attacker, "kill", player=player)
         exp_gained = 10
     else:
         level_result = award_exp(attacker, "hit")  # small xp on hit
