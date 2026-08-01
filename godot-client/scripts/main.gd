@@ -2948,6 +2948,10 @@ func hide_tutorial() -> void:
 func show_battle_result(winner_name: String, winner_color: String, stats: Dictionary) -> void:
 	if battle_result_panel == null or not is_instance_valid(battle_result_panel):
 		return
+	# Battle result is the terminal modal for a match. It must never compete
+	# with an unfinished dialogue panel or inherit its board-blocking mask.
+	if DialogManager != null:
+		DialogManager.hide_dialog()
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false
 	if battle_back_lobby_btn != null and is_instance_valid(battle_back_lobby_btn):

@@ -281,7 +281,7 @@ func _apply_theme() -> void:
 	MainlineTheme.apply_section_panel(%PreviewColumn, "paper")
 	MainlineTheme.apply_section_panel(%IntelColumn, "navy")
 	MainlineTheme.apply_item_card(%BriefingPanel)
-	MainlineTheme.apply_title_plate(%ArchiveTitle)
+	MainlineTheme.apply_page_heading(%ArchiveTitle)
 	MainlineTheme.apply_paper_text(_preview_title, true)
 	MainlineTheme.apply_paper_text(_preview_body)
 	MainlineTheme.apply_paper_text(_briefing_body)
