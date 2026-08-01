@@ -5,7 +5,8 @@ def test_yun_compiled_profile_includes_commander_metadata():
     yun = get("yun")
 
     assert yun.is_commander is True
-    assert yun.power_threshold == 22
+    # 新机制阈值(全队累计士气星上限)
+    assert yun.power_threshold == 18
     assert yun.commander_passive is not None
     assert yun.commander_passive.atk_pct == 0.10
     assert yun.commander_passive.range_delta == 1
@@ -18,7 +19,8 @@ def test_anna_compiled_profile_includes_commander_metadata():
     anna = get("anna")
 
     assert anna.is_commander is True
-    assert anna.power_threshold == 18
+    # 新机制阈值(全队累计士气星上限)
+    assert anna.power_threshold == 14
     assert anna.commander_passive is not None
     assert anna.commander_passive.def_pct == 0.15
     assert anna.commander_passive.mdef_pct == 0.10

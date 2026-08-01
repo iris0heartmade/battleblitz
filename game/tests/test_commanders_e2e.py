@@ -1,12 +1,10 @@
 """Commander smoke tests through the real FastAPI and SQLite boundaries."""
-
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.classes.units import get as get_unit_class
 from app.classes.heroes import get as get_hero
-from app.commanders.meter import UNIT_DESTROY_SCORES
 from app.database import AsyncSessionLocal
 from app.models import Game, Player, Unit
 from app.progression.models import PlayerProfile
@@ -29,7 +27,10 @@ async def _profile(client, name, commanders=("yun",)):
 
 @pytest.mark.integration
 async def test_mainline_commander_http_db_lifecycle(client):
-    """Selection, spawn, combat meter, state, empty-body fire and expiry."""
+    """Selection, spawn, combat star, state, fire, expiry。
+
+    新机制:杀敌 +1 星,放 power 扣 6 颗,下回合 expire 但 stars 累计不重置。
+    """
     name = "commander-e2e"
     await _profile(client, name)
     selected = await client.post(
@@ -50,7 +51,9 @@ async def test_mainline_commander_http_db_lifecycle(client):
             select(Unit).where(Unit.player_id == player_id).order_by(Unit.id)
         )).all()
         assert player.commander_id == "yun"
-        assert player.co_state["threshold"] == 22
+        # 新机制:threshold = 18(yun)
+        assert player.co_state["threshold"] == 18
+        assert player.co_state["power_cost"] == 6
         assert units
         yun_unit = next(unit for unit in units if unit.unit_type == "warlock")
         passive_atk = round(get_hero("yun").atk_override * 1.10)
@@ -60,13 +63,19 @@ async def test_mainline_commander_http_db_lifecycle(client):
             Player.game_id == game_id, Player.is_ai.is_(True)
         ))
         enemy.commander_id = "anna"
-        enemy.co_state = {"commander_id": "anna", "meter": 0, "threshold": 18}
+        enemy.co_state = {
+            "commander_id": "anna",
+            "stars_earned_total": 0,
+            "threshold": 14,
+            "power_cost": 6,
+        }
         target = await session.scalar(select(Unit).where(Unit.player_id == enemy.id))
         yun_unit.x, yun_unit.y, yun_unit.has_acted = 0, 0, False
         target.x, target.y, target.hp = 1, 0, 1
         await session.commit()
         attacker_id, target_id = yun_unit.id, target.id
-        target_score = UNIT_DESTROY_SCORES.get(target.unit_type, 2)
+        # 新机制:每次击杀 +1 星(固定)
+        target_score = 1
         enemy_id = enemy.id
 
     attacked = await client.post(f"/games/{game_id}/attack", json={
@@ -76,9 +85,12 @@ async def test_mainline_commander_http_db_lifecycle(client):
     async with AsyncSessionLocal() as session:
         player = await session.get(Player, player_id)
         enemy = await session.get(Player, enemy_id)
-        assert player.co_state["meter"] == target_score
-        assert enemy.co_state["meter"] == 2
-        player.co_state = {**player.co_state, "meter": 22}
+        # 攻击方 +1 星(新机制:每次击杀固定 +1,不再按 unit_type 计分)
+        assert player.co_state["stars_earned_total"] == target_score
+        # 旧 on_death +2 路径已删除,enemy 不再加星(除非反击击杀 attacker)
+        assert enemy.co_state["stars_earned_total"] == 0
+        # 准备好可以放的阈值
+        player.co_state = {**player.co_state, "stars_earned_total": 18}
         await session.commit()
 
     state = await client.get(f"/games/{game_id}/state")
@@ -92,7 +104,8 @@ async def test_mainline_commander_http_db_lifecycle(client):
     async with AsyncSessionLocal() as fresh_session:
         player = await fresh_session.get(Player, player_id)
         assert player.co_state["is_power_active"] is True
-        assert player.co_state["meter"] == 0
+        # 放 power 后:18 - 6 = 12
+        assert player.co_state["stars_earned_total"] == 12
         powered = await fresh_session.get(Unit, attacker_id)
         assert powered.atk > passive_atk
         player.co_state = {**player.co_state, "last_start_turn": 0}
@@ -112,6 +125,8 @@ async def test_mainline_commander_http_db_lifecycle(client):
         player = await check.get(Player, player_id)
         unit = await check.get(Unit, attacker_id)
         assert player.co_state["is_power_active"] is False
+        # 新机制:turn start 不重置 stars,仍是 12
+        assert player.co_state["stars_earned_total"] == 12
         assert unit.atk == passive_atk
 
 

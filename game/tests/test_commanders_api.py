@@ -143,7 +143,8 @@ async def test_free_mode_battle_config_commander_spawns_on_host(commander_client
         )
         assert host.commander_id == "anna"
         assert host.co_state["commander_id"] == "anna"
-        assert host.co_state["threshold"] == 18
+        # 新机制:anna 阈值 14
+        assert host.co_state["threshold"] == 14
         assert guest.commander_id is None
         host_hq = await session.scalar(
             select(Tile).where(
@@ -309,7 +310,9 @@ async def test_prebattle_selection_is_isolated_consumed_and_locked(commander_cli
     async with sessions() as session:
         spawned = await session.get(Player, started.json()["player_id"])
         assert spawned.commander_id == "yun"
-        spawned.co_state = {**spawned.co_state, "meter": 22, "threshold": 22}
+        # 新机制:yun 阈值 18,power_cost 6;stars_earned_total=18 可放
+        spawned.co_state = {**spawned.co_state, "stars_earned_total": 18,
+                            "threshold": 18, "power_cost": 6}
         unit = await session.scalar(select(Unit).where(Unit.player_id == spawned.id).order_by(Unit.id))
         atk_before = unit.atk
         await session.commit()
@@ -357,7 +360,9 @@ async def test_concurrent_co_power_requests_only_fire_once(commander_client):
     )).json()
     async with sessions() as session:
         player = await session.get(Player, started["player_id"])
-        player.co_state = {**player.co_state, "meter": 22, "threshold": 22}
+        # 新机制:yun stars_earned_total=18 / threshold=18 / power_cost=6
+        player.co_state = {**player.co_state, "stars_earned_total": 18,
+                           "threshold": 18, "power_cost": 6}
         await session.commit()
 
     url = f"/games/{started['game_id']}/co-power"
