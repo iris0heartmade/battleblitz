@@ -66,7 +66,7 @@ colors to the actual joined players and applies `Tile.owner_id`.
 
 ---
 
-## First-run setup
+## First-run setup and asset refresh
 
 Tile pixel art lives in `../game/app/web/assets/tiles/`. Sync it once into
 the Godot project before opening the editor:
@@ -79,14 +79,32 @@ Then open
 `D:\PyCharm Community Edition 2024.3.3\PycharmProjects\Godot_v4.7-stable_win64\Godot_v4.7-stable_win64.exe`,
 choose `Import`, and point it at `godot-client/`.
 
+The generated UI artwork under `assets/ui/` is runtime source material and is
+committed to Git. Godot's `.godot/` directory is only a machine-local import
+cache and must not be committed.
+
+After pulling a commit that adds or changes PNG assets, close every running
+Godot editor/game process and run one editor import pass before launching the
+client:
+
+```bash
+"<godot_exe>" --headless --editor --path godot-client --quit
+"<godot_exe>" --path godot-client
+```
+
+If a screen falls back to plain dark panels and thin borders while the PNG
+files exist under `assets/ui/`, treat it as a stale import cache first. Repeat
+the import pass above from the repository root; do not add `.godot/imported`
+or `*.ctex` files to Git.
+
 ---
 
 ## Headless sanity check
 
-Import assets without opening the editor:
+Import assets and rebuild the editor resource cache without opening the editor:
 
 ```bash
-"<godot_exe>" --headless --path godot-client --import --quit
+"<godot_exe>" --headless --editor --path godot-client --quit
 ```
 
 Run the smoke test:
