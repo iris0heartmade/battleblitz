@@ -45,6 +45,6 @@ class Anna(BaseHero):
     is_commander = True
     commander_passive = AnnaCommanderPassive(id="anna_passive", def_pct=0.15, mdef_pct=0.10)
     commander_power = AnnaCommanderPower(id="anna_power", def_pct=0.30, mdef_pct=0.30, heal_pct=0.80)
-    power_threshold = 18
+    power_threshold = 14
 
     dialogue_name = "安娜"

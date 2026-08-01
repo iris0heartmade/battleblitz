@@ -297,8 +297,14 @@ class PlayerCOStateOut(APIModel):
     seat: int
     color: str
     commander_id: Optional[str] = None
-    meter: int = 0
+    # 新机制:全队累计获得的士气星(含已消耗)
+    stars_earned_total: int = 0
+    # 累计上限(达此值后 record_morale_star 停止增加)
     threshold: int = 20
+    # 每次 power 扣减的固定星数
+    power_cost: int = 6
+    # 旧字段(过渡期保留,后续可弃用)
+    meter: int = 0
     is_power_active: bool = False
     can_fire: bool = False
 

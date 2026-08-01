@@ -13,3 +13,5 @@ class CommanderPower:
     range_delta: int = 0
     heal_pct: float = 0.0
     extra_mov: int = 0
+    # 固定消耗:激活 power 时从 stars_earned_total 扣减的星数。默认 6。
+    cost: int = 6

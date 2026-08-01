@@ -1329,8 +1329,13 @@ async def start_game(
             player.commander_id = commander_id
             player.co_state = {
                 "commander_id": commander_id,
-                "meter": 0,
+                # 累计上限来自 hero 注册表(anna=14, yun=18, 默认 20)
                 "threshold": get_power_threshold(commander_id),
+                # 新机制字段
+                "stars_earned_total": 0,
+                "power_cost": 6,
+                # 旧字段(过渡期保留)
+                "meter": 0,
                 "is_power_active": False,
                 "last_start_turn": -1,
             }
@@ -1838,8 +1843,12 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 seat=p.seat,
                 color=p.color,
                 commander_id=p.commander_id,
-                meter=(p.co_state or {}).get("meter", 0),
+                # 新机制字段
+                stars_earned_total=(p.co_state or {}).get("stars_earned_total", 0),
                 threshold=(p.co_state or {}).get("threshold", 20),
+                power_cost=(p.co_state or {}).get("power_cost", 6),
+                # 旧字段(过渡期保留)
+                meter=(p.co_state or {}).get("meter", 0),
                 is_power_active=(p.co_state or {}).get("is_power_active", False),
                 can_fire=(
                     can_player_fire_now(p, game, players)
