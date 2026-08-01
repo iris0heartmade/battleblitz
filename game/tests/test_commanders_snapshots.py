@@ -18,8 +18,10 @@ YUN_EXPECTED = {
         "atk_pct": 0.30, "def_pct": 0.0, "matk_pct": 0.0,
         "mdef_pct": 0.0, "heal_pct": 0.50, "extra_mov": 0,
         "range_delta": 0,
+        "cost": 6,  # CommanderPower 新增 cost 字段,默认 6
     },
-    "power_threshold": 22,
+    # 新机制:全队累计士气星上限
+    "power_threshold": 18,
 }
 
 ANNA_EXPECTED = {
@@ -35,8 +37,9 @@ ANNA_EXPECTED = {
         "atk_pct": 0.0, "def_pct": 0.30, "matk_pct": 0.0,
         "mdef_pct": 0.30, "heal_pct": 0.80, "extra_mov": 0,
         "range_delta": 0,
+        "cost": 6,
     },
-    "power_threshold": 18,
+    "power_threshold": 14,
 }
 
 

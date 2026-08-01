@@ -16,13 +16,16 @@ def test_player_co_state_out_fields_and_defaults():
         commander_id="yun",
     )
 
+    # 新机制字段都进 model_dump
     assert state.model_dump() == {
         "player_id": 1,
         "seat": 0,
         "color": "red",
         "commander_id": "yun",
-        "meter": 0,
+        "stars_earned_total": 0,
         "threshold": 20,
+        "power_cost": 6,
+        "meter": 0,
         "is_power_active": False,
         "can_fire": False,
     }
@@ -49,9 +52,12 @@ async def test_state_endpoint_exposes_ordered_public_co_states(client):
             )
         ).scalars().all()
         players[0].commander_id = "yun"
+        # 新机制:co_state 含 stars_earned_total / power_cost
         players[0].co_state = {
+            "stars_earned_total": 12,
+            "threshold": 18,
+            "power_cost": 6,
             "meter": 22,
-            "threshold": 22,
             "is_power_active": False,
             "_power_baselines": {"99": {"atk": 10}},
         }
@@ -70,8 +76,10 @@ async def test_state_endpoint_exposes_ordered_public_co_states(client):
         "seat": 0,
         "color": "red",
         "commander_id": "yun",
+        "stars_earned_total": 12,
+        "threshold": 18,
+        "power_cost": 6,
         "meter": 22,
-        "threshold": 22,
         "is_power_active": False,
         "can_fire": False,
     }
@@ -80,8 +88,10 @@ async def test_state_endpoint_exposes_ordered_public_co_states(client):
         "seat": 1,
         "color": "blue",
         "commander_id": "anna",
-        "meter": 0,
+        "stars_earned_total": 0,
         "threshold": 20,
+        "power_cost": 6,
+        "meter": 0,
         "is_power_active": True,
         "can_fire": False,
     }

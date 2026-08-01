@@ -74,7 +74,8 @@ async def test_timeout_round_wrap_runs_commander_lifecycle(db_session, monkeypat
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 0, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 0,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": True, "last_start_turn": 1,
                  "_power_baselines": {}})
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,
@@ -133,11 +134,13 @@ async def test_power_expires_only_at_owners_next_round_start(db_session, monkeyp
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 0, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 0,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": True, "last_start_turn": 1,
                  "_power_baselines": {}})
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,
-                  commander_id="anna", co_state={"meter": 0, "threshold": 18,
+                  commander_id="anna", co_state={"stars_earned_total": 0,
+                  "threshold": 14, "power_cost": 6,
                   "is_power_active": True, "last_start_turn": 1,
                   "_power_baselines": {}})
     db_session.add_all([red, blue])
@@ -163,7 +166,8 @@ async def test_first_turn_fire_expires_at_next_round_after_real_spawn(db_session
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 22, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 18,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": False, "last_start_turn": -1},
                  has_ended_turn=False, is_alive=True)
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,

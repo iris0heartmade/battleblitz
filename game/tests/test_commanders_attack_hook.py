@@ -1,4 +1,8 @@
-"""Integration regressions for commander meter scoring in real combat paths."""
+"""Integration regressions for commander star accrual in real combat paths.
+
+新机制:每次击杀 +1 颗星(recorded by award_morale → record_morale_star)。
+旧机制下的"杀不同 unit_type 给不同分"+"死亡 +2"路径已删除。
+"""
 import pytest
 from sqlalchemy import select
 
@@ -15,12 +19,12 @@ async def _combat(db_session, *, attacker_hp=20, target_hp=5):
     attacker_player = Player(
         game_id=game.id, user_name="attacker", color="red", seat=0,
         commander_id="yun",
-        co_state={"meter": 0, "threshold": 20},
+        co_state={"stars_earned_total": 0, "threshold": 18, "power_cost": 6},
     )
     defender_player = Player(
         game_id=game.id, user_name="defender", color="blue", seat=1,
         commander_id="anna",
-        co_state={"meter": 0, "threshold": 20},
+        co_state={"stars_earned_total": 0, "threshold": 14, "power_cost": 6},
     )
     db_session.add_all([attacker_player, defender_player])
     await db_session.flush()
@@ -52,23 +56,31 @@ def _hit(damage):
 
 
 @pytest.mark.asyncio
-async def test_attack_kill_scores_killer_and_casualty_once(db_session, monkeypatch):
+async def test_attack_kill_grants_one_star_to_killer(db_session, monkeypatch):
+    """主攻击杀:kill +1 星(不依赖 unit_type)。"""
     game, killer, casualty, attacker, target = await _combat(db_session)
     monkeypatch.setattr("app.routes.actions.attack_with_double_strike", lambda *a, **k: [_hit(5)])
 
     await attack(game.id, AttackRequest(
-        player_id=killer.id, attacker_id=attacker.id, target_id=target.id,
+        player_id=killer.id, attacker_id=attacker.id, target_id=target_id(target),
     ), db_session)
     killer_id, casualty_id = killer.id, casualty.id
     await db_session.commit()
     db_session.expire_all()
 
-    assert (await db_session.get(Player, killer_id)).co_state["meter"] == 3
-    assert (await db_session.get(Player, casualty_id)).co_state["meter"] == 2
+    # 攻击方 +1 星(无论 target 类型)
+    assert (await db_session.get(Player, killer_id)).co_state["stars_earned_total"] == 1
+    # 旧 on_death +2 路径已删除:casualty 现在不减星
+    assert (await db_session.get(Player, casualty_id)).co_state["stars_earned_total"] == 0
+
+
+def target_id(target):
+    return target.id
 
 
 @pytest.mark.asyncio
-async def test_counter_kill_scores_counterattacker_without_duplicate_death(db_session, monkeypatch):
+async def test_counter_kill_grants_star_to_counterattacker(db_session, monkeypatch):
+    """反击击杀:counter_player +1 星(attacker 自己不会加,因为走的是 "hit" 路径)。"""
     game, casualty, killer, attacker, target = await _combat(
         db_session, attacker_hp=3, target_hp=20,
     )
@@ -83,12 +95,15 @@ async def test_counter_kill_scores_counterattacker_without_duplicate_death(db_se
         player_id=casualty.id, attacker_id=attacker.id, target_id=target.id,
     ), db_session)
 
-    assert killer.co_state["meter"] == 2  # swordsman kill
-    assert casualty.co_state["meter"] == 2  # one death, no kill credit
+    # counter_player(killer = target 的 owner) +1 星
+    assert killer.co_state["stars_earned_total"] == 1
+    # casualty 没杀,不会加星
+    assert casualty.co_state["stars_earned_total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_bulk_cleanup_scores_each_unique_dead_unit_once(db_session):
+async def test_bulk_cleanup_does_not_grant_stars(db_session):
+    """新机制:cleanup_dead_units 死亡路径不加分(死亡本身不进入累积槽)。"""
     game, _other, casualty, first, second = await _combat(db_session)
     game.status = "finished"
     first.player_id = casualty.id
@@ -97,7 +112,8 @@ async def test_bulk_cleanup_scores_each_unique_dead_unit_once(db_session):
     await cleanup_dead_units(db_session, [first, second, first])
     await db_session.flush()
 
-    assert casualty.co_state["meter"] == 4
+    # 死亡不再给 +2:casualty.co_state["stars_earned_total"] 仍是 0
+    assert casualty.co_state["stars_earned_total"] == 0
     remaining = (await db_session.execute(
         select(Unit.id).where(Unit.id.in_([first.id, second.id]))
     )).all()
@@ -105,21 +121,8 @@ async def test_bulk_cleanup_scores_each_unique_dead_unit_once(db_session):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_same_orm_unit_twice_before_flush_scores_death_once(db_session):
-    game, _other, casualty, dead, _alive = await _combat(db_session)
-    game.status = "finished"
-    dead.player_id = casualty.id
-    dead.hp = 0
-
-    assert await cleanup_dead_units(db_session, [dead]) == [dead.id]
-    assert await cleanup_dead_units(db_session, [dead]) == []
-
-    assert casualty.co_state["meter"] == 2
-    assert list(db_session.deleted).count(dead) == 1
-
-
-@pytest.mark.asyncio
-async def test_attack_without_commander_does_not_accumulate_meter(db_session, monkeypatch):
+async def test_attack_without_commander_does_not_accumulate_stars(db_session, monkeypatch):
+    """无指挥官玩家击杀不累加星(与 record_morale_star 行为一致)。"""
     game, attacker_player, defender_player, attacker, target = await _combat(db_session)
     attacker_player.commander_id = None
     defender_player.commander_id = None
@@ -129,5 +132,5 @@ async def test_attack_without_commander_does_not_accumulate_meter(db_session, mo
         player_id=attacker_player.id, attacker_id=attacker.id, target_id=target.id,
     ), db_session)
 
-    assert attacker_player.co_state["meter"] == 0
-    assert defender_player.co_state["meter"] == 0
+    assert attacker_player.co_state["stars_earned_total"] == 0
+    assert defender_player.co_state["stars_earned_total"] == 0
