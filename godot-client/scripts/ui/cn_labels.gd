@@ -52,6 +52,8 @@ static func unit_type_cn(unit_type: String) -> String:
 			return "贤者"
 		"saint":
 			return "圣者"
+		"yuanying":
+			return "鸢影"
 		_:
 			return unit_type
 
@@ -121,6 +123,7 @@ static func commander_cn(co_id: String) -> String:
 	match co_id:
 		"anna": return "安娜"
 		"yun": return "云"
+		"yuanying": return "鸢影"
 		"boss": return "Boss"
 		_:
 			return co_id
@@ -133,6 +136,8 @@ static func commander_label(commander_id: String) -> String:
 			return "云"
 		"anna":
 			return "安娜"
+		"yuanying":
+			return "鸢影"
 		_:
 			return commander_id
 

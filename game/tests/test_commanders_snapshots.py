@@ -18,7 +18,10 @@ YUN_EXPECTED = {
         "atk_pct": 0.30, "def_pct": 0.0, "matk_pct": 0.0,
         "mdef_pct": 0.0, "heal_pct": 0.50, "extra_mov": 0,
         "range_delta": 0,
-        "cost": 6,  # CommanderPower 新增 cost 字段,默认 6
+        "cost": 6,
+        # CommanderPower 新增沉默领域字段(yun 不用,默认 0)
+        "silence_radius": 0,
+        "silence_duration_turns": 0,
     },
     # 新机制:全队累计士气星上限
     "power_threshold": 18,
@@ -38,6 +41,9 @@ ANNA_EXPECTED = {
         "mdef_pct": 0.30, "heal_pct": 0.80, "extra_mov": 0,
         "range_delta": 0,
         "cost": 6,
+        # 沉默领域字段(anna 不用)
+        "silence_radius": 0,
+        "silence_duration_turns": 0,
     },
     "power_threshold": 14,
 }
