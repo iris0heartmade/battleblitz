@@ -167,6 +167,58 @@ async def test_free_mode_battle_config_commander_spawns_on_host(commander_client
 
 
 @pytest.mark.integration
+async def test_free_mode_yuanying_commander_spawns_as_warlock_hero(commander_client):
+    from sqlalchemy import select
+    from app.models import Player, Tile, Unit
+
+    c, sessions = commander_client
+    created = await c.post("/games", json={
+        "name": "free yuanying commander",
+        "map_preset": "balanced_2p_15",
+        "mode": "free",
+        "battle_config": {"commander": "yuanying"},
+    })
+    assert created.status_code == 201, created.text
+    game_id = created.json()["id"]
+
+    joined_host = await c.post(f"/games/{game_id}/join", json={"user_name": "host"})
+    assert joined_host.status_code == 201, joined_host.text
+    joined_guest = await c.post(f"/games/{game_id}/join", json={"user_name": "guest"})
+    assert joined_guest.status_code == 201, joined_guest.text
+
+    started = await c.post(f"/games/{game_id}/start")
+    assert started.status_code == 200, started.text
+
+    async with sessions() as session:
+        host = await session.scalar(
+            select(Player).where(Player.game_id == game_id, Player.seat == 0)
+        )
+        assert host.commander_id == "yuanying"
+        assert host.co_state["commander_id"] == "yuanying"
+        assert host.co_state["threshold"] == 16
+
+        host_hq = await session.scalar(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.owner_id == host.id,
+                Tile.terrain == "castle",
+            )
+        )
+        assert host_hq is not None
+        hq_unit = await session.scalar(
+            select(Unit).where(
+                Unit.player_id == host.id,
+                Unit.x == host_hq.x,
+                Unit.y == host_hq.y,
+            )
+        )
+        assert hq_unit is not None
+        assert hq_unit.unit_type == "warlock"
+        assert hq_unit.hero_id == "yuanying"
+        assert "poison_burst" in hq_unit.skills
+
+
+@pytest.mark.integration
 async def test_free_mode_empty_commander_spawns_dragon_rider_on_hq(commander_client):
     from sqlalchemy import select
     from app.models import Player, Tile, Unit

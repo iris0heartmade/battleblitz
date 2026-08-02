@@ -37,6 +37,7 @@ const _KNOWN_TYPES := [
 const _HERO_SPRITES := {
 	"anna": "anna.png",
 	"yun":  "yun.png",
+	"yuanying": "yuanying.png",
 }
 # team_id → 右上角字母(team_a=A / team_b=B / team_c=C / team_d=D)。
 # 1V1 free-for-all(team=None)→ 不显示字母,只显示阵营色块。

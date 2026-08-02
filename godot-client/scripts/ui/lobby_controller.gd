@@ -804,7 +804,7 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 		ai_commander_option.clear()
 		ai_commander_option.add_item("电脑自动选择指挥官")
 	# 如果 API 返回空(新玩家无解锁),fallback 到硬编码默认指挥官(等同 webui 行为)
-	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna"]
+	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna", "yuanying"]
 	for item in pool:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
@@ -1434,6 +1434,7 @@ func _lobby_seat_commander_ability_text(seat_index: int) -> String:
 	match commander_id:
 		"yun": return "能力：稳健推进"
 		"anna": return "能力：快速抢点"
+		"yuanying": return "能力：5x5 沉默领域，术士压制"
 		"": return "能力：默认规则"
 		_: return "能力：专属指挥"
 

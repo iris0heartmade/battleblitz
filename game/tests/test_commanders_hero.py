@@ -50,7 +50,9 @@ def test_yuanying_compiled_profile_includes_silence_metadata():
     assert yuanying.mdef_override == 14
 
     # 资产路径
+    assert yuanying.sprite_path == "yuanying.png"
     assert yuanying.portrait_path == "portrait_yuanying.png"
+    assert yuanying.crest_path == "crest_yuanying.png"
 
     # passive: 全队 MATK +10% + 射程 +1
     assert yuanying.commander_passive is not None

@@ -31,3 +31,16 @@ def test_youko_hero_assets_exist_for_web_and_godot():
     for asset_name in expected:
         assert (ROOT / "game" / "app" / "web" / "assets" / "heroes" / asset_name).exists()
         assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()
+
+
+def test_yuanying_hero_assets_exist_for_web_and_godot():
+    expected = ("yuanying.png", "portrait_yuanying.png", "crest_yuanying.png")
+    for asset_name in expected:
+        assert (ROOT / "game" / "app" / "web" / "assets" / "heroes" / asset_name).exists()
+        assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()
+
+
+def test_godot_hero_sprite_registry_includes_yuanying():
+    source = (ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd").read_text(encoding="utf-8")
+
+    assert '"yuanying": "yuanying.png"' in source

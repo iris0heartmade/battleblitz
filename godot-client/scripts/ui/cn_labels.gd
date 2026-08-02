@@ -70,6 +70,8 @@ static func skill_cn(skill_id: String) -> String:
 			return "奥术冲击"
 		"sing":
 			return "吟诗"
+		"poison_burst":
+			return "剧毒迸发"
 		_:
 			return skill_id
 

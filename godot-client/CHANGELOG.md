@@ -2,6 +2,18 @@
 
 ## 2026-08-02
 
+- 鸢影正式可用化:
+  - 补齐 `yuanying.png` / `crest_yuanying.png` / `portrait_yuanying.png` 在 Godot 与 Web 两端的英雄资源(Godot `.import` 旁文件由编辑器自动生成,被 `.gitignore` 排除,不入库)。
+  - `unit_node.gd` hero sprite registry 加入 `yuanying`,鸢影英雄单位现在会在棋盘上使用专属立绘资源。
+  - 大厅默认指挥官池 fallback 加入 `yuanying`,座位卡能力文案显示"5x5 沉默领域，术士压制"。
+  - 新增集成测试锁定自由模式选择鸢影后:玩家 `commander_id=yuanying`,CO 阈值 16,HQ 生成 `hero_id=yuanying` 的 warlock,并继承 `poison_burst`。
+
+- Agent 回归修复:
+  - `_ask_llm_with_retry` 批量决策返回 list 的测试契约同步;单决策场景取首个 `ActionPlan`。
+  - `Reaction` 文案重新按测试契约截断到 40 字。
+  - `AgentAction.action_id` 禁止空格,防止 LLM 把合法动作 ID 改写成不可执行文本。
+  - 未知 personality fallback 在 system prompt 中显式标注"均衡型人格"。
+
 - 通用 status effect 框架(P+):
   - 后端 `game/app/status/` 新包:`effects.py` 注册表 + `engine.py` 钩子函数;`Unit.status_effects: list[dict]` JSON 字段,`UnitOut.status_effects` 公开字段;5 个 effect 注册(poison 毒 / paralyze 麻痹 / blind 致盲 / slow 减速 / silence 沉默,后者从 `silence_until_turn` 字段迁移)。
   - 钩子函数:`tick_effects_at_turn_start`(poison 扣 HP + 倒计时) / `should_skip_action`(paralyze 概率 skip) / `modify_hit_chance`(blind) / `modify_mov`(slow) / `should_block_attack`(silence) / `is_silenced` / `get_status_summary`。
