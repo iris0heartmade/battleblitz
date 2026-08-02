@@ -21,15 +21,16 @@ class_name Highlights
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 
-enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER }
+enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER, SILENCE_PICK }
 
 const _COLORS := {
-	Mode.MOVE:     Color(0.37, 0.78, 0.98, 0.28),
-	Mode.ATTACK:   Color(0.95, 0.40, 0.45, 0.34),
-	Mode.PATH:     Color(0.37, 0.78, 0.98, 0.85),
-	Mode.THREAT:   Color(0.98, 0.65, 0.30, 0.50),
-	Mode.SELECTED: Color(1.00, 0.78, 0.18, 0.96),
-	Mode.HOVER:    Color(1.00, 1.00, 1.00, 0.60),
+	Mode.MOVE:        Color(0.37, 0.78, 0.98, 0.28),
+	Mode.ATTACK:      Color(0.95, 0.40, 0.45, 0.34),
+	Mode.PATH:        Color(0.37, 0.78, 0.98, 0.85),
+	Mode.THREAT:      Color(0.98, 0.65, 0.30, 0.50),
+	Mode.SELECTED:    Color(1.00, 0.78, 0.18, 0.96),
+	Mode.HOVER:       Color(1.00, 1.00, 1.00, 0.60),
+	Mode.SILENCE_PICK: Color(0.75, 0.55, 1.00, 0.50),  # 鸢影·沉默领域选中心
 }
 
 # Per-mode child nodes; lazily created on first use.

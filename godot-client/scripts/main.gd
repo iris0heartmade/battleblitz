@@ -47,6 +47,9 @@ var _pending_attack_target_id: int = -1
 # 技能模式状态机(heal 选友军 / arcane_strike 选敌军,通用)
 var _skill_mode_unit_id: int = -1
 var _skill_targets: Dictionary = {}
+# 鸢影·沉默领域选中心模式 (P+):玩家选 5×5 中心后 fire。
+# -1 = 未进入模式,>=0 = 该 player_id 的 commander 等待选中心。
+var _silence_pick_center_for_pid: int = -1
 var _pending_skill_id: String = ""
 const _ACTION_CONTEXT_INITIAL := "initial"
 const _ACTION_CONTEXT_POST_MOVE := "post_move"
@@ -1750,6 +1753,15 @@ func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y
 func _on_co_power_pressed(pid: int) -> void:
 	if _game_id <= 0:
 		return
+	# 鸢影·沉默领域:需要先选 5×5 中心,不立即 fire。
+	var co_id: String = ""
+	for co_entry in GameState.co_states:
+		if co_entry is Dictionary and int(co_entry.get("player_id", -1)) == pid:
+			co_id = String(co_entry.get("commander_id", "") or "")
+			break
+	if co_id == "yuanying":
+		_enter_silence_pick_center_mode(pid)
+		return
 	# 8c: 可选 pre-action 对话(默认关闭,设置开关)
 	if UserSettings.get_value("dialog.v1.co_power_confirm", false):
 		await DialogManager.play([{
@@ -1759,11 +1771,56 @@ func _on_co_power_pressed(pid: int) -> void:
 		}])
 	NetworkClient.action_co_power(
 		_game_id, pid,
+		Vector2i(-1, -1),  # 无中心
 		Callable(self, "_on_co_power_response"),
 	)
 	_update_status("⚡ 指挥官技激活中 (#%d)..." % pid)
 	# 视觉反馈:屏幕中央大飘字 + 屏幕震动
 	_play_co_power_fx()
+
+
+# 鸢影·沉默领域:进入"选中心"模式,玩家点格子选 5×5 中心。
+func _enter_silence_pick_center_mode(pid: int) -> void:
+	_silence_pick_center_for_pid = pid
+	_update_status("沉默领域:点选 5×5 中心(右键取消)")
+	if board != null:
+		board.highlight_silence_pick_mode(true)
+
+
+# 鸢影·沉默领域:玩家点格子 → 设 center → fire。
+func _handle_silence_center_pick(tile: Vector2i) -> void:
+	var pid: int = _silence_pick_center_for_pid
+	if pid <= 0:
+		return
+	if tile.x < 0 or tile.y < 0:
+		return
+	_silence_pick_center_for_pid = -1
+	if board != null:
+		board.highlight_silence_pick_mode(false)
+	# 8c: 可选 pre-action 对话
+	if UserSettings.get_value("dialog.v1.co_power_confirm", false):
+		await DialogManager.play([{
+			"speaker": "",
+			"text": "沉默领域即将发动(中心 (%d, %d)),确认?" % [tile.x, tile.y],
+			"type": "narration",
+		}])
+	NetworkClient.action_co_power(
+		_game_id, pid,
+		tile,
+		Callable(self, "_on_co_power_response"),
+	)
+	_update_status("⚡ 沉默领域激活中 (中心 (%d, %d))..." % [tile.x, tile.y])
+	_play_co_power_fx()
+
+
+# 鸢影·沉默领域:右键 / ESC 取消。
+func _cancel_silence_pick() -> void:
+	if _silence_pick_center_for_pid <= 0:
+		return
+	_silence_pick_center_for_pid = -1
+	if board != null:
+		board.highlight_silence_pick_mode(false)
+	_update_status("已取消沉默领域选择")
 
 
 ## 8c: CO power 响应 — 成功后播一句旁白
@@ -2140,6 +2197,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		if _move_mode_unit_id > 0 and board != null:
 			_update_path_dots_on_hover(event.global_position)
+		# 鸢影·沉默领域:跟踪 hover cell,显示 5×5 outline
+		if _silence_pick_center_for_pid > 0 and board != null:
+			board.update_silence_pick_hover(event.global_position)
 		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
 	# 右键:有面板→关面板;行动模式→取消;点单位→显示射程;空地→清除
@@ -2162,6 +2222,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		# ② 行动模式 → 取消
+		if _silence_pick_center_for_pid > 0:
+			_cancel_silence_pick()
+			get_viewport().set_input_as_handled()
+			return
 		if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
 			_cancel_action_mode()
 			_hide_action_bubble()
@@ -2331,6 +2395,10 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 
 # M4.1:点击地图格子(空白区 / 落点)→ 处理
 func _on_board_tile_clicked(tile: Vector2i) -> void:
+	# 鸢影·沉默领域选中心:任何 tile 点击都优先处理(玩家选 center)
+	if _silence_pick_center_for_pid > 0:
+		_handle_silence_center_pick(tile)
+		return
 	if _move_mode_unit_id <= 0:
 		if tile.x >= 0 and tile.y >= 0 and _try_open_recruit_at_tile(tile):
 			return

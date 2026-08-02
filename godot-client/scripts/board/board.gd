@@ -218,6 +218,82 @@ func show_attack_marks(range_tiles: Array) -> void:
 		highlights.show_outline(Highlights.Mode.ATTACK, range_tiles)
 
 
+# 鸢影·沉默领域选中心模式(P+):
+# on=True 时显示中央提示气泡 + hover 时绘制 5×5 outline;
+# on=False 清。
+var _silence_pick_label: Label = null
+var _silence_pick_active: bool = false
+var _silence_hover_cell: Vector2i = Vector2i(-1, -1)
+
+
+func highlight_silence_pick_mode(on: bool) -> void:
+	_silence_pick_active = on
+	if on:
+		if _silence_pick_label == null:
+			_silence_pick_label = Label.new()
+			_silence_pick_label.name = "SilencePickHint"
+			_silence_pick_label.text = "⚡ 沉默领域:点选 5×5 中心(右键取消)"
+			_silence_pick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_silence_pick_label.add_theme_color_override("font_color", Color(0.85, 0.55, 1.0))
+			_silence_pick_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+			_silence_pick_label.add_theme_constant_override("shadow_offset_x", 2)
+			_silence_pick_label.add_theme_constant_override("shadow_offset_y", 2)
+			_silence_pick_label.add_theme_font_size_override("font_size", 18)
+			var sz := Vector2(420, 32)
+			_silence_pick_label.size = sz
+			_silence_pick_label.position = Vector2(-sz.x * 0.5, -sz.y * 0.5 + 24)
+		if not _silence_pick_label.is_inside_tree():
+			add_child(_silence_pick_label)
+		_silence_pick_label.visible = true
+		if highlights != null:
+			highlights.clear()
+	else:
+		if _silence_pick_label != null:
+			_silence_pick_label.visible = false
+		if highlights != null:
+			highlights.clear_mode(Highlights.Mode.SILENCE_PICK)
+			highlights.clear_mode(Highlights.Mode.HOVER)
+		_silence_hover_cell = Vector2i(-1, -1)
+
+
+# 鸢影·沉默领域:鼠标移动时更新 5×5 outline 中心点。
+# 由 main.gd 转发 InputEventMouseMotion 调用,避免 board 自己 hook input 引发层级冲突。
+func update_silence_pick_hover(global_pos: Vector2) -> void:
+	if not _silence_pick_active:
+		return
+	if metrics == null or ground_layer == null:
+		return
+	var world_pos: Vector2 = global_pos
+	if board_camera != null and board_camera.enabled:
+		world_pos = board_camera.get_canvas_transform().affine_inverse() * global_pos
+	var local: Vector2 = ground_layer.to_local(world_pos)
+	var cell: Vector2i = ground_layer.local_to_map(local)
+	# 限制在地图范围内
+	if cell.x < 0 or cell.y < 0 or cell.x >= map_size.x or cell.y >= map_size.y:
+		_silence_hover_cell = Vector2i(-1, -1)
+	else:
+		_silence_hover_cell = cell
+	_refresh_silence_pick_outline()
+
+
+# 鸢影·沉默领域:刷新 5×5 outline(中心 ±2)。
+func _refresh_silence_pick_outline() -> void:
+	if highlights == null:
+		return
+	highlights.clear_mode(Highlights.Mode.SILENCE_PICK)
+	highlights.clear_mode(Highlights.Mode.HOVER)
+	if _silence_hover_cell.x < 0:
+		return
+	var tiles: Array = []
+	for dx in range(-2, 3):
+		for dy in range(-2, 3):
+			var t: Vector2i = Vector2i(_silence_hover_cell.x + dx, _silence_hover_cell.y + dy)
+			if t.x >= 0 and t.y >= 0 and t.x < map_size.x and t.y < map_size.y:
+				tiles.append(t)
+	if tiles.size() > 0:
+		highlights.show_outline(Highlights.Mode.SILENCE_PICK, tiles)
+
+
 # M4.12:在指定 board-local 位置弹出浮动文字(damage/heal/kill/crit)。
 # 颜色按 kind 选:damage 红 / crit 烫金 / heal 绿 / kill 烫红
 # / levelup 蓝 — 由调用方传 color 字符串(#rrggbb)即可。
