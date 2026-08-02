@@ -38,6 +38,10 @@ const UNIT_KEYS := [
 	"hp", "max_hp", "atk", "def_", "matk", "mdef",
 	"mov", "mp", "morale", "x", "y", "has_acted", "has_moved",
 	"skills", "attack_range", "min_attack_range", "hero_id",
+	# 通用 status effect (P+):list[dict],每项 type/remaining_turns/params 等
+	"status_effects",
+	# 过渡期字段(silence 迁移后会删除):沉默到该 turn 之前都算沉默中
+	"silence_until_turn",
 ]
 
 ## The "def_" key is the int field stored as `def_` in the JSON
