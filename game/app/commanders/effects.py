@@ -152,6 +152,9 @@ def apply_silence_aura(
     """沉默领域:在 (center_x ± radius, center_y ± radius) 范围内,标记
     非 owner_player_id、且攻击类型为 magic 的单位 silence_until_turn。
 
+    新机制:走通用 status_effects 框架(详见 app/status/engine.py)。
+    同时保留旧 silence_until_turn 字段的写入以做向后兼容。
+
     Args:
         units: 全场 unit 列表(已 dead 的也会被传入,但会被 hp <= 0 过滤)
         center_xy: (x, y) 元组
@@ -165,6 +168,7 @@ def apply_silence_aura(
     """
     if radius <= 0 or duration_turns <= 0:
         return []
+    from app.status import add_effect
     cx, cy = center_xy
     expire_at = current_turn + duration_turns
     silenced: list = []
@@ -186,7 +190,15 @@ def apply_silence_aura(
             attack_kind = "physical"
         if attack_kind != "magic":
             continue
-        # 取最长沉默时长(避免新沉默覆盖旧的更短时长)
+        # 新机制:写入 status_effects(通用框架);同时保留旧字段做兜底。
+        add_effect(
+            unit,
+            "silence",
+            applied_turn=current_turn,
+            applied_by=owner_player_id,
+            remaining_turns=duration_turns,
+        )
+        # 旧字段兼容(过渡期)
         if unit.silence_until_turn < expire_at:
             unit.silence_until_turn = expire_at
         silenced.append(unit)
@@ -194,15 +206,22 @@ def apply_silence_aura(
 
 
 def is_unit_silenced(unit, *, current_turn) -> bool:
-    """检查单位当前是否被沉默(全局工具,供 attack / counter 拦截使用)。"""
+    """检查单位当前是否被沉默(全局工具,供 attack / counter 拦截使用)。
+
+    优先查通用 status_effects(新机制),fallback 到 silence_until_turn 旧字段。
+    """
+    from app.status import is_silenced as _is_silenced_new
+    if _is_silenced_new(unit):
+        return True
     return int(getattr(unit, "silence_until_turn", 0)) > int(current_turn)
 
 
 def clear_expired_silences(units, *, current_turn) -> int:
     """清空已过期沉默(silence_until_turn <= current_turn → 0)。
 
-    在每个玩家的回合开始时调一次,保证沉默只持续 N 个大回合。
-    Returns: 被清空的单位数量。
+    新机制下,通用 tick_effects_at_turn_start 已经把 status_effects 里
+    silence 的 remaining_turns 减到 0 自动过期(详见 app.status.engine)。
+    本函数保留旧字段(silence_until_turn)的清空兜底。
     """
     cleared = 0
     for unit in units:

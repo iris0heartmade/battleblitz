@@ -221,9 +221,16 @@ class Unit(Base):
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # CO power·沉默领域 (P+) 标记:沉默到 game.turn_number > silence_until_turn 时清空。
-    # 0 = 未沉默;N = 沉默到 game turn N。持续 duration_turns 个大回合。
-    # 沉默期间:该单位无法主动攻击、也无法反击(apply_damage 路径被拒)。
+    # 通用 status effect 列表 (P+):
+    #   [{"type": "poison"|"paralyze"|"blind"|"slow"|"silence",
+    #     "remaining_turns": int,
+    #     "applied_turn": int,
+    #     "applied_by": int|None,
+    #     ...type-specific params...}, ...]
+    # 钩子在 game/app/status/engine.py 集中实现。
+    status_effects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    # 过渡期字段(沉默迁移到 status_effects 后会删除):为兼容旧 co_state/存档保留。
     silence_until_turn: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     has_acted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
