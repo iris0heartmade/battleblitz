@@ -80,10 +80,23 @@ BattleBlitz 后端的"异常状态 / Buff / Debuff"基础设施。本文档说�
 | effect | 框架 + 测试 | game_logic / routes 实时钩子 |
 |---|---|---|
 | silence | ✅ 已就位 | ✅ 通过 `commanders/effects.py:is_unit_silenced` 接入 attack / counter |
-| poison / paralyze / blind / slow | ✅ 钩子函数实现 | ⚠ **未自动接入** attack / turn_start,需要后续按调用方上下文注入 |
+| poison | ✅ 已就位 | ✅ turn_start 扣 HP(`tick_effects_at_turn_start` 钩入 `on_player_turn_start`) |
+| paralyze | ✅ 已就位 | ✅ turn_start 概率 skip(`should_skip_action` 钩入 `on_player_turn_start`) |
+| blind | ✅ 已就位 | ✅ attack 每 hit 独立判定 miss(`modify_hit_chance` 钩入 `attack_with_double_strike`) |
+| slow | ✅ 已就位 | ✅ turn_start 减半 mov(`_refresh_mov_debuff` 钩入 `on_player_turn_start`) |
 
-新 effect 框架是"工具齐备"状态;实际让某个 effect 真正影响游戏流,需要在
-`game_logic.py:attack_with_double_strike` / `cleanup_dead_units` 等位置显式调用对应钩子。
+**实时钩子调用顺序**(`on_player_turn_start`):
+
+```
+对每个 owner_unit:
+  should_skip_action(unit)         # paralyze 在 tick 前判断,过期清理后会查不到
+    → 若 skip: has_acted=True + paralyzed_until_turn=game_turn_number
+  _refresh_mov_debuff(unit)       # slow 的 mov 调整在 tick 前(slow effect 还没被清)
+  tick_effects_at_turn_start(unit) # 最后扣 remaining_turns,过期清理
+```
+
+盲打 / 沉默 / 反击拦截:`attack_with_double_strike` 内 `_maybe_miss` wrap 一次
+blind 判定,沉默通过 `is_unit_silenced` 在 `routes/actions.py` 入口拦截。
 
 ---
 

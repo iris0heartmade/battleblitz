@@ -8,7 +8,12 @@
   - `apply_silence_aura`(鸢影沉默领域)改用 `add_effect(unit, "silence", ...)` 写新字段,旧 `silence_until_turn` 字段保留作 fallback。
   - godot 端 `unit_node.gd` 把原单一 `silence_overlay`/`silence_label` 替换为通用 status overlay + glyph 行(`☠⚡👁❄🔇`);`core/types.gd:UNIT_KEYS` 加 `status_effects`。
   - 详细设计文档:`game/app/status/README.md`。27 个 pytest 全过(`game/tests/test_status_effects.py`),完整套件 140/140 全过。
-  - ⚠ poison / paralyze / blind / slow 的钩子函数已就位但 **未自动接入** attack / turn_start 实时调用路径;加新 spell / skill 时再按调用方上下文接入。
+
+- Status effect 实时接入(P+ 闭环):
+  - `commanders.effects.on_player_turn_start` 集中钩子:每回合对玩家所有 unit 顺序执行 `should_skip_action`(paralyze → has_acted=True + paralyzed_until_turn) → `_refresh_mov_debuff`(slow 用 _base_mov 快照 + modify_mov 改 mov,过期自动恢复) → `tick_effects_at_turn_start`(poison 扣 HP / 倒计时 / 过期清理)。
+  - `game_logic.attack_with_double_strike` 加 `_maybe_miss` wrap:每 hit 独立判定 `modify_hit_chance`,miss 时 `damage=0`;Double-Strike 两次 hit 各自掷骰。
+  - 详细钩子调用顺序在 `commanders/effects.py:on_player_turn_start` 注释里(paralyze 在 tick 前判断,slow mov 在 tick 前生效)。
+  - 13 个端到端测试覆盖:`test_status_effects_live.py`(poison/paralyze/blind/slow 各类型 + 同挂组合 + Double-Strike + blind 独立判定)。完整套件 153/153 全过。
 
 - 沉默领域 godot 端 UI(鸢影 CO power 闭环):
   - `NetworkClient.action_co_power` 接可选 `center: Vector2i = (-1, -1)`,center 有效时附带 `body.center` 给后端。
