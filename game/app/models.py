@@ -221,6 +221,11 @@ class Unit(Base):
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # CO power·沉默领域 (P+) 标记:沉默到 game.turn_number > silence_until_turn 时清空。
+    # 0 = 未沉默;N = 沉默到 game turn N。持续 duration_turns 个大回合。
+    # 沉默期间:该单位无法主动攻击、也无法反击(apply_damage 路径被拒)。
+    silence_until_turn: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     has_acted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # True if the unit has moved this turn. Separate from has_acted so
     # a unit can move AND then attack/heal within the same turn.

@@ -692,8 +692,10 @@ async def _start_battle_internal(
             units=[u for u in units if u.player_id == first_player.id],
             co_state=first_player.co_state,
         )
+        # 全场 units,沉默领域 (鸢影 P+) 清空需要
+        all_units = list(units)
         from app.commanders.effects import on_player_turn_start
-        on_player_turn_start(target, game.turn_number)
+        on_player_turn_start(target, game.turn_number, all_units=all_units)
         first_player.co_state = target.co_state
 
     seat_to_player = {p.seat: p for p in players}

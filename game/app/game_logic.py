@@ -2050,7 +2050,12 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     return True
 
 
-async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> bool:
+async def _ai_attack(
+    session: AsyncSession,
+    attacker: Unit,
+    target: Unit,
+    current_turn: int = 0,
+) -> bool:
     """Perform an AI attack. Returns True if successful."""
     logger.info(f"AI attack: {attacker.name}(id={attacker.id},type={attacker.unit_type}) at ({attacker.x},{attacker.y}) -> {target.name}(id={target.id},type={target.unit_type},hp={target.hp}) at ({target.x},{target.y})")
     # 07-22 fix:_ai_attack 必须自带射程校验作为安全网,防止上游
@@ -2061,6 +2066,16 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
             "AI attack REJECTED (out of range): %s at (%d,%d) -> %s at (%d,%d), d=%d",
             attacker.name, attacker.x, attacker.y, target.name, target.x, target.y,
             manhattan((attacker.x, attacker.y), (target.x, target.y)),
+        )
+        return False
+
+    # CO power·沉默领域 (鸢影 P+):被沉默单位无法攻击。
+    from app.commanders.effects import is_unit_silenced
+    if is_unit_silenced(attacker, current_turn=current_turn):
+        logger.info(
+            "AI attack REJECTED (silenced): %s at (%d,%d) -> %s, silence_until_turn=%d, current=%d",
+            attacker.name, attacker.x, attacker.y, target.name,
+            attacker.silence_until_turn, current_turn,
         )
         return False
     target_tile = (
@@ -2093,6 +2108,7 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
         target.hp > 0
         and not has_counter_immunity
         and _t_can
+        and not is_unit_silenced(target, current_turn=current_turn)
     ):
         counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
         for h in counter_hits:
@@ -2502,7 +2518,7 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
         # 2. Attack?
         target = _ai_pick_attack_target(unit, snap, profile)
         if target is not None:
-            if await _ai_attack(session, unit, target):
+            if await _ai_attack(session, unit, target, current_turn=game.turn_number):
                 actions += 1
                 continue
         # 3. Claim (if standing on a claimable tile).
@@ -2596,7 +2612,7 @@ async def ai_take_one_action(
     # 2. Attack?
     target = _ai_pick_attack_target(unit, snap, profile)
     if target is not None:
-        if await _ai_attack(session, unit, target):
+        if await _ai_attack(session, unit, target, current_turn=game.turn_number):
             return True
     # 3. Claim?
     if await _ai_try_claim(session, game, ai_player, unit, profile,

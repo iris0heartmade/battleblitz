@@ -477,7 +477,7 @@ class LLMAgent:
                 if a.params.get("target_id") is not None else None
             if unit is None or target is None or unit.has_acted:
                 return False
-            ok = await _ai_attack(session, unit, target)
+            ok = await _ai_attack(session, unit, target, current_turn=game.turn_number)
             logger.info("  execute attack: unit_id=%d target=%d ok=%s → %dms",
                         a.unit_id, a.params.get("target_id"), ok,
                         int((time.perf_counter() - t0) * 1000))

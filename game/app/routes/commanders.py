@@ -19,7 +19,7 @@ from app.commanders.registry import get_power_threshold
 from app.database import get_session
 from app.game_locks import game_write_guard
 from app.mainline.loader import MainlineNotFound, load_mainline
-from app.models import Game, Player
+from app.models import Game, Player, Unit
 from app.progression.models import PlayerProfile
 
 router = APIRouter(tags=["commanders"])
@@ -41,6 +41,9 @@ class SelectBattleCommanderIn(_StrictBody):
 
 class FireCOPowerIn(_StrictBody):
     player_id: int
+    # CO power·沉默领域 (鸢影 P+) 需要中心坐标;其他 CO 可省略。
+    # Optional[dict] 形式 {"x": int, "y": int} 或 None
+    center: Optional[dict] = None
 
 
 def _commander(hero_id: str):
@@ -152,6 +155,36 @@ async def fire_co_power_endpoint(
         else:
             detail = "insufficient morale stars or commander has no power"
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
-    fire_co_power(player)
+
+    # 沉默领域 (鸢影 P+) 需要 center 坐标 + 全场 units。
+    center_xy: Optional[tuple] = None
+    if body.center is not None:
+        if not isinstance(body.center, dict):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "center must be an object")
+        try:
+            center_xy = (int(body.center.get("x")), int(body.center.get("y")))
+        except (TypeError, ValueError):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "center.x and center.y must be ints")
+
+    # 取全场 units(silence 区域选取需要;Unit 无 game_id 列,要 join Player)
+    all_units = (await session.scalars(
+        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game_id)
+    )).all()
+
+    try:
+        fire_co_power(
+            player,
+            center_xy=center_xy,
+            current_turn=game.turn_number,
+            all_units=all_units,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
     await session.commit()
-    return {"game_id": game_id, "player_id": player.id, "commander_id": player.commander_id, "meter": 0}
+    return {
+        "game_id": game_id,
+        "player_id": player.id,
+        "commander_id": player.commander_id,
+        "meter": 0,
+    }

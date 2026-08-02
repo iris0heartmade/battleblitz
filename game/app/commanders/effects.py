@@ -69,7 +69,14 @@ def can_fire_co_power(player) -> bool:
     )
 
 
-def fire_co_power(player):
+def fire_co_power(player, *, center_xy=None, current_turn=0, all_units=None):
+    """激活玩家 CO power。
+
+    Args:
+        center_xy: 沉默领域等的中心坐标 (x, y)。silence_radius > 0 时必传。
+        current_turn: 当前 game.turn_number(silence_until_turn 用)。
+        all_units: 全场 unit 列表(silence 区域选取用)。silence_radius > 0 时必传。
+    """
     if not can_fire_co_power(player):
         if getattr(player, "commander_id", None) is None:
             raise ValueError("no commander selected")
@@ -79,6 +86,23 @@ def fire_co_power(player):
         if co.get("stars_earned_total", 0) < co.get("power_cost", 6):
             raise ValueError("insufficient stars")
         raise ValueError("commander has no power")
+
+    power = get_commander_power(player.commander_id)
+    silence_radius = int(getattr(power, "silence_radius", 0))
+    silence_turns = int(getattr(power, "silence_duration_turns", 0))
+    if silence_radius > 0:
+        if center_xy is None or all_units is None:
+            raise ValueError(
+                f"silence_radius={silence_radius} requires center_xy and all_units"
+            )
+        apply_silence_aura(
+            all_units,
+            center_xy=center_xy,
+            radius=silence_radius,
+            duration_turns=silence_turns,
+            current_turn=current_turn,
+            owner_player_id=getattr(player, "id", None),
+        )
 
     power = get_commander_power(player.commander_id)
     baselines = {}
@@ -116,6 +140,78 @@ def fire_co_power(player):
     player.co_state = co
 
 
+def apply_silence_aura(
+    units,
+    *,
+    center_xy,
+    radius,
+    duration_turns,
+    current_turn,
+    owner_player_id,
+) -> list:
+    """沉默领域:在 (center_x ± radius, center_y ± radius) 范围内,标记
+    非 owner_player_id、且攻击类型为 magic 的单位 silence_until_turn。
+
+    Args:
+        units: 全场 unit 列表(已 dead 的也会被传入,但会被 hp <= 0 过滤)
+        center_xy: (x, y) 元组
+        radius: 整数半径(2 = 5×5 方形)
+        duration_turns: 持续大回合数(1 = 持续到下次自己回合开始)
+        current_turn: 当前 game.turn_number
+        owner_player_id: 沉默施放者(自己人不沉默)
+
+    Returns:
+        被沉默的单位列表(供 _log / 反馈用)
+    """
+    if radius <= 0 or duration_turns <= 0:
+        return []
+    cx, cy = center_xy
+    expire_at = current_turn + duration_turns
+    silenced: list = []
+    for unit in units:
+        if unit.hp <= 0:
+            continue
+        if unit.player_id == owner_player_id:
+            continue
+        if unit.x < cx - radius or unit.x > cx + radius:
+            continue
+        if unit.y < cy - radius or unit.y > cy + radius:
+            continue
+        # 只沉默魔法单位(attack_kind == "magic")
+        # 从 unit class 注册表查;查不到默认 non-magic(避免误沉默物理单位)
+        try:
+            from app.classes.units import get as get_unit_class
+            attack_kind = get_unit_class(unit.unit_type).attack_kind
+        except Exception:
+            attack_kind = "physical"
+        if attack_kind != "magic":
+            continue
+        # 取最长沉默时长(避免新沉默覆盖旧的更短时长)
+        if unit.silence_until_turn < expire_at:
+            unit.silence_until_turn = expire_at
+        silenced.append(unit)
+    return silenced
+
+
+def is_unit_silenced(unit, *, current_turn) -> bool:
+    """检查单位当前是否被沉默(全局工具,供 attack / counter 拦截使用)。"""
+    return int(getattr(unit, "silence_until_turn", 0)) > int(current_turn)
+
+
+def clear_expired_silences(units, *, current_turn) -> int:
+    """清空已过期沉默(silence_until_turn <= current_turn → 0)。
+
+    在每个玩家的回合开始时调一次,保证沉默只持续 N 个大回合。
+    Returns: 被清空的单位数量。
+    """
+    cleared = 0
+    for unit in units:
+        if int(getattr(unit, "silence_until_turn", 0)) > 0 and unit.silence_until_turn <= current_turn:
+            unit.silence_until_turn = 0
+            cleared += 1
+    return cleared
+
+
 def expire_power(player):
     co = dict(player.co_state or {})
     persisted = co.get("_power_baselines", {})
@@ -139,7 +235,7 @@ def expire_power(player):
     player.co_state = co
 
 
-def on_player_turn_start(player, game_turn_number: int):
+def on_player_turn_start(player, game_turn_number: int, all_units=None):
     # 用 _ensure_co_state 把 co_state 字段补齐(含 stars_earned_total 等)
     from app.commanders.meter import _ensure_co_state
     co = dict(_ensure_co_state(player))  # 强制新建 dict(避免与旧引用同一对象)
@@ -149,5 +245,8 @@ def on_player_turn_start(player, game_turn_number: int):
             expire_power(player)
             co = dict(_ensure_co_state(player))
         # 新机制:每回合不重置 stars_earned_total(累计型,放 power 才扣)
+        # 沉默领域 (鸢影 P+) 持续 N 大回合:game_turn_number 推进到 N 时清空。
+        if all_units is not None:
+            clear_expired_silences(all_units, current_turn=game_turn_number)
     co["last_start_turn"] = game_turn_number
     player.co_state = co

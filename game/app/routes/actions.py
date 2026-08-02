@@ -511,6 +511,14 @@ async def attack(
     if target.player_id == player.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
 
+    # CO power·沉默领域 (鸢影 P+):攻击者被沉默时,无法发动攻击。
+    from app.commanders.effects import is_unit_silenced
+    if is_unit_silenced(attacker, current_turn=game.turn_number):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"attacker is silenced until turn {attacker.silence_until_turn}",
+        )
+
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
@@ -566,6 +574,7 @@ async def attack(
         not is_kill
         and not has_immunity
         and _t_can
+        and not is_unit_silenced(target, current_turn=game.turn_number)
     ):
         # Defender's terrain bonus is the tile the defender is on
         counter_tile = (
