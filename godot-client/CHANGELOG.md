@@ -1,5 +1,23 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-02
+
+- 通用 status effect 框架(P+):
+  - 后端 `game/app/status/` 新包:`effects.py` 注册表 + `engine.py` 钩子函数;`Unit.status_effects: list[dict]` JSON 字段,`UnitOut.status_effects` 公开字段;5 个 effect 注册(poison 毒 / paralyze 麻痹 / blind 致盲 / slow 减速 / silence 沉默,后者从 `silence_until_turn` 字段迁移)。
+  - 钩子函数:`tick_effects_at_turn_start`(poison 扣 HP + 倒计时) / `should_skip_action`(paralyze 概率 skip) / `modify_hit_chance`(blind) / `modify_mov`(slow) / `should_block_attack`(silence) / `is_silenced` / `get_status_summary`。
+  - `apply_silence_aura`(鸢影沉默领域)改用 `add_effect(unit, "silence", ...)` 写新字段,旧 `silence_until_turn` 字段保留作 fallback。
+  - godot 端 `unit_node.gd` 把原单一 `silence_overlay`/`silence_label` 替换为通用 status overlay + glyph 行(`☠⚡👁❄🔇`);`core/types.gd:UNIT_KEYS` 加 `status_effects`。
+  - 详细设计文档:`game/app/status/README.md`。27 个 pytest 全过(`game/tests/test_status_effects.py`),完整套件 140/140 全过。
+  - ⚠ poison / paralyze / blind / slow 的钩子函数已就位但 **未自动接入** attack / turn_start 实时调用路径;加新 spell / skill 时再按调用方上下文接入。
+
+- 沉默领域 godot 端 UI(鸢影 CO power 闭环):
+  - `NetworkClient.action_co_power` 接可选 `center: Vector2i = (-1, -1)`,center 有效时附带 `body.center` 给后端。
+  - `main.gd` 检测 `commander_id == "yuanying"` 时进入"选中心"模式(`_silence_pick_center_for_pid` 状态机),`_on_board_tile_clicked` 入口优先处理沉默选 center;右键 / ESC 取消。
+  - `board.gd:highlight_silence_pick_mode(on)` 切换中央紫色提示气泡 + hover 时 `_refresh_silence_pick_outline` 实时绘制 5×5 紫色 outline(中心 ±2,地图边界裁剪);`main.gd:_unhandled_input` mouse_motion 转发 hover 给 board。
+  - `highlights.gd` `Mode` 枚举加 `SILENCE_PICK`,紫色 `Color(0.75, 0.55, 1.0, 0.50)`。
+
+- 鸢影 yuanying 基础注册:详见 commit `a672511` + `feat(heroes): 注册鸢影 yuanying - 沉默领域 CO, warlock 基础`。资产 `portrait_yuanying.png` 已就位,`sprite_path` / `crest_path` 仍待美术补。
+
 ## 2026-07-31
 
 - 修复棋盘 ↔ 主菜单的「瞬切错位」bug(游戏胜利 / 失败 / 中断 退出再回主菜单时,主菜单会被 BoardCamera 的 zoom/position/smoothing 残值拉飞一帧):
