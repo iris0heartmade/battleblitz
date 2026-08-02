@@ -1,5 +1,11 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-02 资源收尾
+
+- 鸢影美术资源二次收尾:
+  - 同步更新 Web 与 Godot 两端的 `yuanying.png` / `portrait_yuanying.png` / `crest_yuanying.png`。
+  - 已用 `game/tests/test_godot_unit_portrait_paths.py` 锁定资源路径与 Godot sprite registry，避免英雄图像资源缺失回流。
+
 ## 2026-08-02
 
 - 鸢影正式可用化:
