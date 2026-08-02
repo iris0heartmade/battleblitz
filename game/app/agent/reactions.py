@@ -33,8 +33,8 @@ class Reaction:
     text: str
 
     def __post_init__(self):
-        if len(self.text) > 60:
-            object.__setattr__(self, "text", self.text[:60])
+        if len(self.text) > 40:
+            object.__setattr__(self, "text", self.text[:40])
 
 
 # Placeholder docs for callers:

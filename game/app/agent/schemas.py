@@ -93,9 +93,10 @@ class AgentAction(BaseModel):
 
     @model_validator(mode="after")
     def _check_action_id_format(self) -> "AgentAction":
-        # Allow alphanumeric, underscore, dash, dot, space, and pipe (|| separator)
+        # Allow alphanumeric, underscore, dash, dot, and pipe (|| separator).
+        # Spaces are rejected because action_id must be copied verbatim.
         for c in self.action_id:
-            if not (c.isalnum() or c in " _-.|"):
+            if not (c.isalnum() or c in "_-.|"):
                 raise ValueError(f"action_id contains invalid chars: {self.action_id!r}")
         return self
 

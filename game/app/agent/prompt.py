@@ -47,7 +47,9 @@ PERSONALITIES: dict[str, str] = {
 
 
 def get_personality(name: str) -> str:
-    return PERSONALITIES.get(name, PERSONALITIES["balanced"])
+    if name in PERSONALITIES:
+        return PERSONALITIES[name]
+    return "均衡型人格。 " + PERSONALITIES["balanced"]
 
 
 # ----------------------------------------------------------------
@@ -117,9 +119,8 @@ def build_system_prompt(
     *,
     map_size: int = 15,
 ) -> str:
-    name = personality if personality in PERSONALITIES else "balanced"
     return _SYSTEM_PROMPT.render(
-        personality=get_personality(name),
+        personality=get_personality(personality),
         map_size=map_size,
     )
 

@@ -128,6 +128,8 @@ async def test_retry_recovers_on_second_attempt():
     plan = await agent._ask_llm_with_retry(
         system="x", user="y", legal=_legal_actions(),
     )
+    assert len(plan) == 1
+    plan = plan[0]
     assert plan.fallback is False
     assert plan.legal_action.action_id == "attack_1_9"
     assert plan.llm_retries == 1
@@ -142,6 +144,8 @@ async def test_fallback_after_all_retries_fail():
     plan = await agent._ask_llm_with_retry(
         system="x", user="y", legal=_legal_actions(),
     )
+    assert len(plan) == 1
+    plan = plan[0]
     assert plan.fallback is True
     # Fallback picks the highest-damage attack
     assert plan.legal_action.kind == "attack"
