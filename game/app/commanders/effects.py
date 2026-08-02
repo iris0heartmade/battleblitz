@@ -254,9 +254,24 @@ def expire_power(player):
     player.co_state = co
 
 
+def _refresh_mov_debuff(unit):
+    """turn_start 时刷新 unit.mov:slow 临时减半,过期恢复。
+
+    第一次调用时把 unit.mov 当作 _base_mov 存档;之后每次按
+    modify_mov(unit, base) 重算。
+    """
+    from app.status import modify_mov
+    base = getattr(unit, "_base_mov", None)
+    if base is None:
+        unit._base_mov = int(getattr(unit, "mov", 0))
+        base = unit._base_mov
+    unit.mov = modify_mov(unit, base=base)
+
+
 def on_player_turn_start(player, game_turn_number: int, all_units=None):
     # 用 _ensure_co_state 把 co_state 字段补齐(含 stars_earned_total 等)
     from app.commanders.meter import _ensure_co_state
+    from app.status import should_skip_action, tick_effects_at_turn_start
     co = dict(_ensure_co_state(player))  # 强制新建 dict(避免与旧引用同一对象)
     last = co.get("last_start_turn", -1)
     if last != -1 and game_turn_number > last:
@@ -267,5 +282,20 @@ def on_player_turn_start(player, game_turn_number: int, all_units=None):
         # 沉默领域 (鸢影 P+) 持续 N 大回合:game_turn_number 推进到 N 时清空。
         if all_units is not None:
             clear_expired_silences(all_units, current_turn=game_turn_number)
+            # status effects (P+):tick 倒计时,poison 扣 HP,paralyze skip,slow 调 mov
+            # 玩家的所有 unit(同 team + 自己) 走这条路径:
+            owner_units = [u for u in all_units if u.player_id == player.id]
+            for u in owner_units:
+                if u.hp <= 0:
+                    continue
+                # paralyze 在 tick 前判断:剩余 0 → tick 后过期清理 → 查不到
+                skip, reason = should_skip_action(u)
+                if skip:
+                    u.has_acted = True  # 本回合无法主动行动(仍可被攻击)
+                    u.paralyzed_until_turn = game_turn_number
+                # slow 的 mov 调整在 tick 前读(slow effect 还在生效)
+                _refresh_mov_debuff(u)
+                # 最后 tick:扣 remaining_turns,过期清理
+                tick_effects_at_turn_start(u, game_turn_number=game_turn_number)
     co["last_start_turn"] = game_turn_number
     player.co_state = co

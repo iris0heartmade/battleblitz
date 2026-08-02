@@ -435,29 +435,41 @@ def attack_with_double_strike(
     """Attack twice at 50% damage each, when the unit has the Double-Strike skill.
 
     Returns a list of 1 or 2 DamageResults.
+
+    status effect (P+):blind — 每个 hit 概率 miss(damage=0)。
     """
-    if SKILL_DOUBLE_STRIKE not in (attacker.skills or []):
-        return [
-            calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
-        ]
+    from app.status import modify_hit_chance
     rng = rng or random.Random()
+
+    def _maybe_miss(d: DamageResult) -> DamageResult:
+        # status effect: blind — 命中率乘子,每 hit 独立判定
+        hit_chance = modify_hit_chance(attacker, base=1.0)
+        if hit_chance < 1.0 and rng.random() > hit_chance:
+            return DamageResult(
+                damage=0, is_crit=False, is_kill=False,
+                effective_atk=d.effective_atk, defense_total=d.defense_total,
+            )
+        return d
+
+    if SKILL_DOUBLE_STRIKE not in (attacker.skills or []):
+        return [_maybe_miss(calculate_damage(attacker, defender, tile_def_bonus, rng=rng))]
     first = calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
     second = calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
     return [
-        DamageResult(
+        _maybe_miss(DamageResult(
             damage=max(1, first.damage // 2),
             is_crit=first.is_crit,
             is_kill=False,  # recomputed below
             effective_atk=first.effective_atk,
             defense_total=first.defense_total,
-        ),
-        DamageResult(
+        )),
+        _maybe_miss(DamageResult(
             damage=max(1, second.damage // 2),
             is_crit=second.is_crit,
             is_kill=False,
             effective_atk=second.effective_atk,
             defense_total=second.defense_total,
-        ),
+        )),
     ]
 
 
