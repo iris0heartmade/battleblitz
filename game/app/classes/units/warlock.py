@@ -14,6 +14,10 @@ Swordsman in role and HP/MOV, but its damage type is magic:
 
 No skills yet (matching Swordsman's `[]`). `strong_against` is left
 empty because the natural counter via stat layout is sufficient.
+
+As of 2026-08-02, warlocks default to `["poison_burst"]` (Poison Burst,
+2 MP / Manhattan 1–2 / 3-turn poison).  `arcane_strike` remains a
+hero-only skill (declared in hero `active_skills`).
 """
 from app.classes.units.base import BaseUnitClass
 
@@ -35,7 +39,7 @@ class Warlock(BaseUnitClass):
     base_mdef = 12
     attack_kind = "magic"
 
-    default_skills = []
+    default_skills = ["poison_burst"]
     attack_range = 2        # Manhattan 1–2 (sword + archer combined)
     min_attack_range = 0    # can attack adjacent targets
     can_move_after_action = False

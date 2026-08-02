@@ -37,6 +37,7 @@ class SkillContext:
     terrain_bonus: int = 0           # defender's tile def bonus (attack skills)
     ally_units: List[Unit] = None    # for heal / aoe skills
     enemy_units: List[Unit] = None
+    game_turn_number: int = 0        # 当前 game.turn_number(status effect 施加时间戳)
 
     def __post_init__(self):
         if self.ally_units is None:

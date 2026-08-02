@@ -735,6 +735,7 @@ async def use_skill(
         user=unit, target=target,
         ally_units=[u for u in all_units if u.player_id == player.id and u.hp > 0],
         enemy_units=[u for u in all_units if u.player_id != player.id and u.hp > 0],
+        game_turn_number=game.turn_number,
     )
 
     if not sk.can_use(ctx):
