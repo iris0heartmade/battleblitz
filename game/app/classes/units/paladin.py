@@ -11,7 +11,7 @@ class Paladin(BaseUnitClass):
     base_hp = 64
     base_atk = 28
     base_def = 12
-    base_mov = 9
+    base_mov = 6
 
     base_matk = 5
     base_mdef = 7
@@ -24,4 +24,4 @@ class Paladin(BaseUnitClass):
     strong_against = ["archer"]
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 85, 'atk': 50, 'def': 40, 'matk': 15, 'mdef': 30, 'mov': 15}
+    class_growth_rates = {'hp': 85, 'atk': 50, 'def': 40, 'matk': 15, 'mdef': 30, 'mov': 8}

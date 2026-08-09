@@ -11,7 +11,7 @@ class Sage(BaseUnitClass):
     base_hp = 54
     base_atk = 11
     base_def = 13
-    base_mov = 10
+    base_mov = 6
 
     base_matk = 30
     base_mdef = 18
@@ -25,4 +25,4 @@ class Sage(BaseUnitClass):
     strong_against = []
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 65, 'atk': 15, 'def': 25, 'matk': 60, 'mdef': 45, 'mov': 10}
+    class_growth_rates = {'hp': 65, 'atk': 15, 'def': 25, 'matk': 60, 'mdef': 45, 'mov': 5}

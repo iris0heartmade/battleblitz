@@ -14,7 +14,7 @@ Power 行为(用户需求):
   - 沉默状态持久化层 (后续 commit):在 attack / counter-attack 路径检查 is_silenced,
     turn_start 时清空标记,silence 区域选取逻辑在 routes/commanders.py 触发
 
-stat overrides(基于 warlock base: HP=45, ATK=8, DEF=10, MATK=22, MDEF=12, MOV=3, MP=8):
+stat overrides(基于 warlock base: HP=45, ATK=8, DEF=10, MATK=22, MDEF=12, MOV=5, MP=5):
 
     warlock (base)   yuanying (override)   delta
     --------------   ------------------   -----
@@ -23,8 +23,8 @@ stat overrides(基于 warlock base: HP=45, ATK=8, DEF=10, MATK=22, MDEF=12, MOV=
     DEF 10            11                   +1
     MATK 22           28                   +6  (核心:沉默依赖持续施法)
     MDEF 12           14                   +2
-    MOV 3             -- (inherit 3)       --
-    MP  8             -- (inherit 8)       --
+    MOV 5             -- (inherit 5)       --  (warlock 5,2026-08-09 平衡)
+    MP  5             -- (inherit 5)       --  (MOV/MP 合并后 == mov)
 """
 from dataclasses import dataclass
 
@@ -60,7 +60,7 @@ class Yuanying(BaseHero):
     def_override = 11
     matk_override = 28
     mdef_override = 14
-    # mov_override / mp_pool_override: 继承 warlock (3 / 8)
+    # mov_override / mp_pool_override: 继承 warlock (5 / 5,见模块 docstring)
 
     # ── Art assets (served from web/assets/heroes/) ───────────
     # NOTE: sprite_path / crest_path 资产**尚未生成**;游戏启动时若资产缺失会

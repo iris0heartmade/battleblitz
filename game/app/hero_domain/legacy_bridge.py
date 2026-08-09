@@ -45,31 +45,37 @@ _HERO_CLASS_SPECS: dict[str, dict] = {
     "blade_master": {
         "tier": 2,
         "promotion_options": [],
-        "promotion_bonuses": {"hp": 9, "atk": 7, "def": 3, "mov": 1, "mp": 1},
+        # 2026-08-10 平衡: 删 mov +1,mp +1 — 不能再涨 mov(6 已封顶)
+        "promotion_bonuses": {"hp": 9, "atk": 7, "def": 3},
         "caps": {"hp": 78, "atk": 40, "def": 28, "matk": 16, "mdef": 22, "mov": 8, "mp": 14},
     },
     "sniper": {
         "tier": 2,
         "promotion_options": [],
-        "promotion_bonuses": {"hp": 9, "atk": 6, "def": 4, "mov": 1, "mp": 1},
+        # 2026-08-10 平衡: 删 mov +1,mp +1
+        "promotion_bonuses": {"hp": 9, "atk": 6, "def": 4},
         "caps": {"hp": 70, "atk": 42, "def": 24, "matk": 16, "mdef": 20, "mov": 8, "mp": 14},
     },
     "paladin": {
         "tier": 2,
         "promotion_options": [],
-        "promotion_bonuses": {"hp": 9, "atk": 6, "def": 4, "mov": 1, "mp": 1},
+        # 2026-08-10 平衡: 删 mov +1,mp +1
+        "promotion_bonuses": {"hp": 9, "atk": 6, "def": 4},
         "caps": {"hp": 84, "atk": 44, "def": 26, "matk": 16, "mdef": 20, "mov": 9, "mp": 15},
     },
     "sage": {
         "tier": 2,
         "promotion_options": [],
-        "promotion_bonuses": {"hp": 4, "atk": 3, "def": 2, "matk": 4, "mdef": 4, "mov": 1, "mp": 2},
+        # 2026-08-10 平衡: 删 mov +1,mp +2 — 转职不能再涨 mov/移动池
+        # (mov 6 已封顶,移动池 == mov 已在 §9 合并)
+        "promotion_bonuses": {"hp": 4, "atk": 3, "def": 2, "matk": 4, "mdef": 4},
         "caps": {"hp": 70, "atk": 24, "def": 24, "matk": 48, "mdef": 34, "mov": 8, "mp": 18},
     },
     "saint": {
         "tier": 2,
         "promotion_options": [],
-        "promotion_bonuses": {"hp": 2, "atk": 2, "def": 3, "matk": 4, "mdef": 4, "mov": 1, "mp": 2},
+        # 2026-08-10 平衡: 删 mov +1,mp +2(同 sage)
+        "promotion_bonuses": {"hp": 2, "atk": 2, "def": 3, "matk": 4, "mdef": 4},
         "caps": {"hp": 64, "atk": 20, "def": 24, "matk": 34, "mdef": 34, "mov": 8, "mp": 16},
     },
 }

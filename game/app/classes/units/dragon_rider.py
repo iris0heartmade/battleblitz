@@ -15,7 +15,7 @@ class DragonRider(BaseUnitClass):
     base_hp = 42
     base_atk = 16
     base_def = 7
-    base_mov = 7
+    base_mov = 5
 
     base_matk = 3
     base_mdef = 6

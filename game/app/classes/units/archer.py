@@ -11,7 +11,7 @@ class Archer(BaseUnitClass):
     base_hp = 35
     base_atk = 20
     base_def = 6
-    base_mov = 5
+    base_mov = 3
 
     # Magic stats — physical unit, low magic offense/defense.
     base_matk = 4

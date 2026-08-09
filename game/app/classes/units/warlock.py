@@ -31,7 +31,7 @@ class Warlock(BaseUnitClass):
     base_hp = 45
     base_atk = 8          # low — magic damage comes from MATK
     base_def = 10         # slightly lower than Swordsman
-    base_mov = 8
+    base_mov = 5
 
     # Magic stats — magic-type attacker.
     base_matk = 22

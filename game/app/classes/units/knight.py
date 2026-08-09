@@ -11,7 +11,7 @@ class Knight(BaseUnitClass):
     base_hp = 55
     base_atk = 22
     base_def = 8
-    base_mov = 8
+    base_mov = 6
 
     # Magic stats — physical unit, low magic offense/defense.
     base_matk = 4

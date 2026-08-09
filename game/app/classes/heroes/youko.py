@@ -11,7 +11,7 @@ class Youko(BaseHero):
     def_override = 8
     matk_override = 12
     mdef_override = 15
-    mov_override = 4
+    mov_override = 5
 
     sprite_path = "youko.png"
     portrait_path = "portrait_youko.png"

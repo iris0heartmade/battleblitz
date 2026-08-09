@@ -17,8 +17,8 @@ stock warlock; unlisted fields inherit from ``Warlock`` verbatim.
     DEF  10           11              +1
     MATK 22           27              +5
     MDEF 12           -- (inherit)    --
-    MOV  3            4               +1  (faster than caster)
-    MP   8            -- (inherit)    --  (8 MP stays)
+    MOV  5            5               0   (2026-08-10: 全部英雄统一 mov=5)
+    MP   5            -- (inherit)    --  (5 MP, MOV/MP 合并后 == mov)
 
 Art notes for the designer:
     * ``heroes/yun.png``        — grid sprite (initially the swordsman
@@ -56,7 +56,7 @@ class Yun(BaseHero):
     def_override = 11          # warlock 10 → 11
     matk_override = 27         # warlock 22 → 27   (veteran caster)
     # mdef_override = -- (inherit 12)
-    mov_override = 4           # warlock  3 →  4   (faster)
+    mov_override = 5           # warlock 5 → 5 (2026-08-10: all heroes uniform mov=5)
     # mp_pool_override = -- (inherit 8)
 
     # ── Art assets (served from web/assets/heroes/) ───────────

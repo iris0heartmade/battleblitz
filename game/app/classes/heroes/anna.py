@@ -33,7 +33,7 @@ class Anna(BaseHero):
     def_override = 10
     matk_override = 12
     mdef_override = 14
-    mov_override = 3
+    mov_override = 5
 
     sprite_path = "anna.png"
     portrait_path = "portrait_anna.png"

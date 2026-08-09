@@ -14,9 +14,10 @@ Mechanics:
   ``Unit.status_effects`` from a SkillContext — the door is now open
   for ``silence_burst``, ``blind``, ``paralyze`` etc. to follow.
 
-Default users: ``warlock`` (their magic career + 8 MP pool + range 2
-fits the skill footprint). Other unit classes must declare
-``poison_burst`` explicitly via heroes' ``active_skills``.
+Default users: ``warlock`` (their magic career + 5-tile movement pool
+[base_mov=5, post 2026-08-09 balance] + range 2 fits the skill
+footprint). Other unit classes must declare ``poison_burst``
+explicitly via heroes' ``active_skills``.
 """
 from __future__ import annotations
 
