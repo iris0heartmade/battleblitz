@@ -39,8 +39,9 @@ def test_promote_hero_applies_bonus_and_resets_level():
     assert promoted.base_stats["matk"] == 31
     assert promoted.base_stats["mdef"] == 16
     assert promoted.base_stats["mov"] == 5
-    # yun 重做成纯法师后 mp=4,sage 转职加成 +2 → 6(MOV/MP 合并后 mp 是"当前移动力池")
-    assert promoted.base_stats["mp"] == 6
+    # 2026-08-10 平衡: sage 转职删了 mov +1 / mp +2,yun 继承 mov=5 → 转职后 mp 也 = 5
+    # (MOV/MP 合并后 mp == mov)
+    assert promoted.base_stats["mp"] == 5
 
 
 def test_promote_hero_rejects_invalid_target():

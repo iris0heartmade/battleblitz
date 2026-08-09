@@ -82,7 +82,7 @@ def test_resolve_effective_base_uses_class_stats_not_hero_overrides():
     assert base["def"] == warlock.base_def        # 10, not 11
     assert base["matk"] == warlock.base_matk      # 22, not 27
     assert base["mdef"] == warlock.base_mdef      # 12 (inherited)
-    assert base["mov"] == warlock.base_mov        # 8, not yun's 4
+    assert base["mov"] == warlock.base_mov        # 5, not yun's 4 (2026-08-10 balance: warlock 8->5)
     assert set(base.keys()) == set(STAT_KEYS)     # no `mp` key
 
 
@@ -306,6 +306,6 @@ def test_berserker_and_dragon_rider_baselines_match_expected_tiers():
     dragon_rider = get_class("dragon_rider")
 
     assert (berserker.base_hp, berserker.base_atk, berserker.base_def) == (48, 28, 8)
-    assert berserker.base_mov == 5  # T2 +speed pass
+    assert berserker.base_mov == 5
     assert (dragon_rider.base_hp, dragon_rider.base_atk, dragon_rider.base_def) == (42, 16, 7)
-    assert dragon_rider.base_mov == 7  # T2 +speed pass
+    assert dragon_rider.base_mov == 5  # 2026-08-10 平衡: 7->5,飞行补偿在 terrain_movement

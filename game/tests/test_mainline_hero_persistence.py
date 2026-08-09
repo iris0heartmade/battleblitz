@@ -132,9 +132,11 @@ class TestHeroCampaignStatePersistence:
                     assert yun_state["base_stats"]["matk"] == 40
 
                     # 当前战斗 MP 不应覆盖长期 pool
-                    # (yun 重做成纯法师后 mp 长期池 = 4,MOV/MP 合并后 mp 是"当前移动力池")
-                    assert yun_state["base_stats"]["mp"] == 4, (
-                        f"mp should be 4 (campaign_base), got {yun_state['base_stats']['mp']}"
+                    # 2026-08-10 平衡: yun mov_override = 5(全部英雄统一),mp == mov == 5
+                    # (MOV/MP 合并后 mp 是"当前移动力池")
+                    assert yun_state["base_stats"]["mp"] == 5, (
+                        f"mp should be 5 (campaign_base = mov_override), "
+                        f"got {yun_state['base_stats']['mp']}"
                     )
 
                     # anna 也在

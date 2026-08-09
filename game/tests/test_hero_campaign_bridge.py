@@ -16,7 +16,7 @@ def test_build_initial_campaign_state_from_legacy_hero_profile():
     assert state.level == 1
     assert state.base_stats["hp"] == 50
     assert state.base_stats["matk"] == 27
-    assert state.base_stats["mov"] == 4
+    assert state.base_stats["mov"] == 5  # 2026-08-10: 全部英雄统一 mov=5
     assert "arcane_strike" in state.learned_skills
     assert state.promoted is False
 
