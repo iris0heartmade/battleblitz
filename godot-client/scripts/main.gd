@@ -1913,12 +1913,16 @@ func _apply_theme(theme_name: String) -> void:
 
 
 # M6.13 Help / 玩法说明 — 显示游戏规则静态指南
-var _help_panel: Panel = null
+#
+# 实现用 ColorRect 当背景(不是 Panel),因为 Panel 是 Control 容器,
+# 没有 .color 属性 —— 用 Panel.color 会在第一次调用时 SCRIPT ERROR。
+# (Found via headless button smoke test on 2026-08-09.)
+var _help_panel: ColorRect = null
 
 
 func show_help() -> void:
 	if _help_panel == null:
-		_help_panel = Panel.new()
+		_help_panel = ColorRect.new()
 		_help_panel.anchor_left = 0.5
 		_help_panel.anchor_top = 0.5
 		_help_panel.anchor_right = 0.5
@@ -1929,6 +1933,11 @@ func show_help() -> void:
 		_help_panel.offset_bottom = 240.0
 		_help_panel.color = Color(0.06, 0.13, 0.10, 0.96)
 		get_tree().root.add_child(_help_panel)
+		# 内容容器(Panel 不会挡事件也不画背景,只用来 group)
+		var content := Panel.new()
+		content.anchor_right = 1.0
+		content.anchor_bottom = 1.0
+		_help_panel.add_child(content)
 		var title := Label.new()
 		title.text = "📖 玩 法 说 明"
 		title.anchor_right = 1.0
@@ -1937,7 +1946,7 @@ func show_help() -> void:
 		title.horizontal_alignment = 1
 		title.add_theme_font_size_override("font_size", 22)
 		title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-		_help_panel.add_child(title)
+		content.add_child(title)
 		var body := RichTextLabel.new()
 		body.bbcode_enabled = true
 		body.anchor_right = 1.0
@@ -1958,7 +1967,7 @@ func show_help() -> void:
 			+ "[color=#f4e8c1][b]胜利条件[/b][/color]\n"
 			+ "  消灭所有敌方单位,或占领对方总部(通用规则)"
 		)
-		_help_panel.add_child(body)
+		content.add_child(body)
 		var close := Button.new()
 		close.text = "关 闭"
 		close.anchor_left = 0.5
@@ -1971,7 +1980,7 @@ func show_help() -> void:
 		close.offset_bottom = -16.0
 		close.pressed.connect(hide_help)
 		close.add_theme_font_size_override("font_size", 14)
-		_help_panel.add_child(close)
+		content.add_child(close)
 	_help_panel.visible = true
 
 

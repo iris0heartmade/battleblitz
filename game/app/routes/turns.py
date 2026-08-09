@@ -760,8 +760,10 @@ async def _check_stale_turns() -> None:
                     game.current_player_index = next_seat
                     await session.refresh(next_player, ["units"])
                     # 取全场 units,沉默领域 (鸢影 P+) 清空需要
+                    # (L4 review / post-deploy:game_id was undefined in this
+                    # loop; use game.id instead.)
                     turn_units = (await session.execute(
-                        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game_id)
+                        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game.id)
                     )).scalars().all()
                     on_player_turn_start(next_player, game.turn_number, all_units=turn_units)
                     if next_player.is_ai:
