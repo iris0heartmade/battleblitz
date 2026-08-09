@@ -181,24 +181,39 @@ that rebalance work can adjust without touching the engine.
 
 All values are percentages. `0` = never grows, `100` = always grows.
 
+**Tier 2 modifier: every tier-2 class gets +10 on every growth rate**
+on top of the table below. This is the primary mechanism for making
+promotion *feel* like a power-up — at L20, a tier-2 unit will have
+roughly 10–15 more stat points per stat than a tier-1 unit that was
+promoted at L20 with the same per-level hits. Combined with the
+flat `promotion_bonus` (§7.3), the gap from t1 to t2 is meaningful
+in both L1 base and L20 total.
+
 | class (role)             | hp | atk | def | matk | mdef | mov | (FE8 analogue)        |
 |--------------------------|----|-----|-----|------|------|-----|-----------------------|
-| swordsman (balanced)     | 85 | 45  | 30  | 5    | 20   | 0   | Mercenary             |
-| archer (ranged phys)     | 65 | 50  | 20  | 5    | 15   | 0   | Archer                |
-| lancer (fast spear)      | 70 | 45  | 20  | 5    | 20   | 5   | Myrmidon              |
-| knight (double-strike)   | 80 | 45  | 35  | 5    | 15   | 5   | Cavalier              |
-| warlock (caster)         | 60 | 5   | 15  | 55   | 25   | 0   | Mage                  |
-| healer (cleric)          | 65 | 5   | 20  | 25   | 35   | 0   | Cleric                |
-| dragon_rider (wyvern)    | 80 | 50  | 25  | 5    | 15   | 5   | Wyvern Rider          |
-| falcon_knight (pegasus)  | 70 | 35  | 20  | 5    | 25   | 5   | Pegasus Knight        |
-| warrior (axe bruiser)    | 80 | 55  | 25  | 5    | 15   | 0   | Fighter               |
-| blade_master (sword+)    | 70 | 40  | 25  | 5    | 20   | 0   | Swordmaster           |
-| sniper (bow+)           | 60 | 50  | 20  | 5    | 15   | 0   | Sniper                |
-| paladin (cav+)          | 75 | 40  | 30  | 5    | 20   | 5   | Paladin               |
-| sage (mage+)            | 55 | 5   | 15  | 50   | 35   | 0   | Sage                  |
-| saint (cleric+)         | 60 | 5   | 20  | 25   | 40   | 0   | Bishop                |
-| berserker (fighter+)    | 80 | 55  | 20  | 5    | 10   | 0   | Berserker             |
-| bard (hero-only support) | 55 | 5   | 15  | 20   | 35   | 5   | Bard / Dancer         |
+| swordsman (T1)           | 85 | 45  | 30  | 5    | 20   | 0   | Mercenary             |
+| archer (T1)              | 65 | 50  | 20  | 5    | 15   | 0   | Archer                |
+| lancer (T1)              | 70 | 45  | 20  | 5    | 20   | 5   | Myrmidon              |
+| knight (T1)              | 80 | 45  | 35  | 5    | 15   | 5   | Cavalier              |
+| warlock (T1)             | 60 | 5   | 15  | 55   | 25   | 0   | Mage                  |
+| healer (T1)              | 65 | 5   | 20  | 25   | 35   | 0   | Cleric                |
+| dragon_rider (T1)        | 80 | 50  | 25  | 5    | 15   | 5   | Wyvern Rider          |
+| falcon_knight (T1)       | 70 | 35  | 20  | 5    | 25   | 5   | Pegasus Knight        |
+| warrior (T1)             | 80 | 55  | 25  | 5    | 15   | 0   | Fighter               |
+| **blade_master (T2)**    | **80** | **50**  | **35**  | **15**   | **30**   | **10**  | Swordmaster       |
+| **sniper (T2)**          | **70** | **60**  | **30**  | **15**   | **25**   | **10**  | Sniper            |
+| **paladin (T2)**         | **85** | **50**  | **40**  | **15**   | **30**   | **15**  | Paladin           |
+| **sage (T2)**            | **65** | **15**  | **25**  | **60**   | **45**   | **10**  | Sage              |
+| **saint (T2)**           | **70** | **15**  | **30**  | **35**   | **50**   | **10**  | Bishop            |
+| **berserker (T2)**       | **90** | **65**  | **30**  | **15**   | **20**   | **10**  | Berserker         |
+| bard (T1, hero-only)     | 55 | 5   | 15  | 20   | 35   | 5   | Bard / Dancer         |
+
+Numerical gap check (t1 swordsman vs t2 blade_master, atk/100 levels):
+- swordsman atk: 45 → expected atk gain over 20 levels ≈ 0.5 × 0.45 × 20 = ~9 points
+- blade_master atk: 50 → expected atk gain ≈ 0.5 × 0.5 × 20 = ~10 points
+- + promotion bonus +2 atk (one-time)
+- ⇒ t2 is ~+3 atk ahead of t1 at L20, *plus* higher L1 base. That is the
+  intended "promotion matters" feel without runaway scaling.
 
 Heuristic used:
 - "Physical" classes get high `atk` + `hp`; low `matk`.
@@ -262,14 +277,22 @@ the clamp prevents that from being exploitable.
 
 | hero       | base_class | hp  | atk | def | matk | mdef | mov | design intent                |
 |------------|------------|-----|-----|-----|------|------|-----|------------------------------|
-| `yun`      | warlock    | 0   | +15 | 0   | +5   | 0    | 0   | battle-mage: high atk for a caster |
-| `yuanying` | warlock    | +5  | 0   | 0   | +10  | +5   | 0   | pure damage: lean into matk    |
+| `yun`      | warlock    | 0   | 0   | 0   | +20  | +5   | 0   | pure-output mage: maximum matk, fragile, leans into the "veteran field-mage" framing from the existing yun.py docstring |
+| `yuanying` | warlock    | +5  | 0   | 0   | +10  | +5   | 0   | balanced caster: matk + bulk, contrasts yun's fragility |
 | `anna`     | healer     | 0   | 0   | +5  | 0    | +5   | 0   | defensively-tuned healer       |
 | `youko`    | bard       | 0   | 0   | 0   | +10  | +5   | 0   | song-buffer: lean into matk    |
 
 These match the existing `*_override` deltas in spirit (yun atk+12
 in the override, yun atk+15 in the modifier) so the hero's identity
 stays the same.
+
+Note on yun: in prior versions of this table yun had `+15 atk`,
+which would have re-framed him as a "battle-mage" leaning on
+physical attacks. The hero's narrative (see `yun.py`: "a veteran
+field-mage, out-marches ordinary casters") is *magical*, not
+physical — so yun stays on the pure-output-mage curve (`+20 matk`,
+`+5 mdef`) and the atk stat is untouched relative to his base
+class.
 
 ## 9. MOV/MP merge
 
