@@ -149,7 +149,7 @@ def _draw_title(ax, curve: ClassGrowthCurve) -> None:
     line2 = f"policy: {bl.formula_note.splitlines()[0] if bl.formula_note else 'n/a'}"
     extra_lines = bl.formula_note.splitlines()[1:] if bl.formula_note else []
     line3 = ("  ".join(extra_lines) if extra_lines
-             else f"Lv 1..{curve.max_level}  ·  7 维成长可视化")
+             else f"Lv 1..{curve.max_level}  ·  {len(STAT_LABELS)} 维成长可视化")
 
     ax.text(0.0, 0.85, line1, transform=ax.transAxes,
             fontsize=15, fontweight="bold", color="#1a1a1a",
@@ -163,13 +163,13 @@ def _draw_title(ax, curve: ClassGrowthCurve) -> None:
 
 
 # ============================================================
-# Panel: small multiples (7 stat panels, 2×4 grid)
+# Panel: small multiples (6 stat panels + 1 note, 2×4 grid)
 # ============================================================
 
 def _draw_small_multiples(fig, sm: GridSpecFromSubplotSpec,
                           curve: ClassGrowthCurve,
                           key_levels: tuple) -> None:
-    """2 rows × 4 cols.  Cells 0..6 → 7 stats.  Cell 7 → context note."""
+    """2 rows × 4 cols.  Cells 0..5 → 6 stats.  Cell 6 → static-key note."""
     bl = curve.baseline
     positions = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2)]
     axes = [fig.add_subplot(sm[r, c]) for (r, c) in positions]
@@ -366,7 +366,7 @@ def _draw_total(ax, curve: ClassGrowthCurve, key_levels: tuple) -> None:
     ax.tick_params(axis="both", labelsize=8, color="#888")
     ax.set_xticks(sorted({1, 5, 10, 15, 20} & set(levels)))
     ax.set_yticks(_nice_ticks(ymin, ymax + pad))  # data-only range for ticks
-    ax.set_title("总和  ·  sum across 7 stats",
+    ax.set_title(f"总和  ·  sum across {len(STAT_LABELS)} stats",
                  fontsize=10.5, color="#1a1a1a", pad=4)
 
     headline_lv = curve.max_level
