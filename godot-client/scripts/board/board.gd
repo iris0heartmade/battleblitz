@@ -465,7 +465,9 @@ func _handle_camera_input(event: InputEvent) -> void:
 			board_camera.position_smoothing_enabled = false
 		_pan_was_dragging = true
 		var pan_delta: Vector2 = (event.global_position - _pan_start_mouse) / board_camera.zoom.x
-		board_camera.position = _pan_start_cam_pos - pan_delta
+		# 用 _safe_set_position 让 camera 走「框不能越过 board」clamp,
+		# 而不是 Camera2D 内置 limit_* (那个会把 position 吸附到 limit 边界,体感很奇怪)。
+		board_camera._safe_set_position(_pan_start_cam_pos - pan_delta)
 		board_camera.mark_user_positioned()
 		get_viewport().set_input_as_handled()
 		return
@@ -474,15 +476,25 @@ func _handle_camera_input(event: InputEvent) -> void:
 func _zoom_at_point(screen_pos: Vector2, delta: float) -> void:
 	if board_camera == null:
 		return
-	var old_zoom: float = board_camera.zoom.x
-	var new_zoom: float = clamp(old_zoom + delta, ZOOM_MIN, ZOOM_MAX)
-	if new_zoom == old_zoom:
+	# user_factor 是相对 fit_zoom 的乘数;ZOOM_MIN/MAX 直接作用于 user_factor。
+	# camera 内部会把 user_factor 乘 fit_zoom 得到最终 zoom,这里不用算实际值。
+	var old_user_factor: float = board_camera.get_user_zoom_factor()
+	var new_user_factor: float = clamp(old_user_factor + delta, ZOOM_MIN, ZOOM_MAX)
+	if new_user_factor == old_user_factor:
 		return
+	# 把鼠标下的世界点保持不动,先算旧/新 zoom 下的 mouse world,差量补偿到 position。
+	# camera.zoom.x = fit_zoom * user_factor,这里用旧/新值算。
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	# fit_zoom 不能直接拿(camera 私有),用旧 zoom / 旧 user_factor 推出 fit_zoom。
+	var fit_zoom: float = 1.0
+	if old_user_factor > 0.0:
+		fit_zoom = board_camera.zoom.x / old_user_factor
+	var old_zoom: float = fit_zoom * old_user_factor
+	var new_zoom: float = fit_zoom * new_user_factor
 	var mouse_world_before: Vector2 = (screen_pos - vp_size * 0.5) / old_zoom + board_camera.position
-	board_camera.zoom = Vector2(new_zoom, new_zoom)
+	board_camera.apply_user_zoom_factor_delta(new_user_factor - old_user_factor)
 	var mouse_world_after: Vector2 = (screen_pos - vp_size * 0.5) / new_zoom + board_camera.position
-	board_camera.position += mouse_world_before - mouse_world_after
+	board_camera._safe_set_position(board_camera.position + (mouse_world_before - mouse_world_after))
 	board_camera.mark_user_positioned()
 
 
