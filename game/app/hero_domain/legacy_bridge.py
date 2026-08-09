@@ -78,6 +78,12 @@ _HERO_CLASS_SPECS: dict[str, dict] = {
 def build_hero_character_template(hero_id: str) -> HeroCharacterTemplate:
     hero = get_hero(hero_id)
     unit_class = get_unit_class(hero.base_class_id)
+    # See module-level NOTE on the "mp" key — `base_stats["mp"]` here
+    # is the hero's long-term campaign MP resource (independent of
+    # the per-turn movement budget).  `mp_pool_override` is gone per
+    # spec §9; we fall through to `unit_class.base_mov` as a sane
+    # default for hero's starting MP pool (same value the
+    # runtime-side unit uses for its movement budget).
     effective_stats = {
         "hp": hero.hp_override if hero.hp_override is not None else unit_class.base_hp,
         "atk": hero.atk_override if hero.atk_override is not None else unit_class.base_atk,
@@ -85,7 +91,7 @@ def build_hero_character_template(hero_id: str) -> HeroCharacterTemplate:
         "matk": hero.matk_override if hero.matk_override is not None else unit_class.base_matk,
         "mdef": hero.mdef_override if hero.mdef_override is not None else unit_class.base_mdef,
         "mov": hero.mov_override if hero.mov_override is not None else unit_class.base_mov,
-        "mp": hero.mp_pool_override if hero.mp_pool_override is not None else unit_class.mp_pool,
+        "mp": (hero.mov_override if hero.mov_override is not None else unit_class.base_mov),
     }
     return HeroCharacterTemplate(
         hero_id=hero.hero_id,
@@ -97,6 +103,17 @@ def build_hero_character_template(hero_id: str) -> HeroCharacterTemplate:
 
 
 def build_hero_class_template(class_id: str) -> HeroClassTemplate:
+    # NOTE on "mp" field below:
+    #   The Unit-class / runtime-side `mp` was merged with `mov` per
+    #   spec §9 (MOV/MP merge).  This module's `caps["mp"]` and the
+    #   `_HERO_CLASS_SPECS[*]["promotion_bonuses"]["mp"]` entries
+    #   below still surface an `mp` key, but they are the HERO
+    #   CAMPAIGN resource cap (a long-term pool stored on
+    #   HeroCampaignState.base_stats["mp"] and read by
+    #   `app.hero_domain.promote_hero`), NOT the per-turn movement
+    #   budget.  See `app.hero_domain.promotion` and the
+    #   HeroCampaignState dataclass for the campaign-side definition.
+    #   Out of scope for the MOV/MP merge commit; left as-is.
     spec = _HERO_CLASS_SPECS.get(class_id)
     if spec is None:
         unit_class = get_unit_class(class_id)
@@ -111,7 +128,6 @@ def build_hero_class_template(class_id: str) -> HeroClassTemplate:
                 "matk": unit_class.base_matk + 15,
                 "mdef": unit_class.base_mdef + 15,
                 "mov": unit_class.base_mov + 3,
-                "mp": unit_class.mp_pool + 8,
             },
         }
     return HeroClassTemplate(

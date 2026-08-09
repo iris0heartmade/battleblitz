@@ -35,7 +35,6 @@ class UnitClassProfile:
     base_atk: int
     base_def: int
     base_mov: int
-    mp_pool: int
     default_skills: Tuple[str, ...]
     attack_range: int          # 1 = melee, 2+ = ranged (max Manhattan distance)
     can_move_after_action: bool
@@ -46,6 +45,13 @@ class UnitClassProfile:
     base_matk: int = 0
     base_mdef: int = 0
     terrain_movement: Mapping[str, Mapping[str, int | bool]] = field(default_factory=dict)
+    # Per-stat growth rates (%) used by RolledGrowthPolicy.  Keys must
+    # match STAT_KEYS in app.progression.policies (hp/atk/def/matk/mdef/mov).
+    class_growth_rates: Mapping[str, int] = field(default_factory=dict)
+    # Per-stat cap (same keys).  A single global cap is held in
+    # app.progression.policies.STAT_CAPS; per-class overrides are not
+    # supported in this commit.
+    stat_caps: Mapping[str, int] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------
@@ -70,7 +76,6 @@ class BaseUnitClass(ABC):
     base_atk: ClassVar[int]              # 18
     base_def: ClassVar[int]              # 12
     base_mov: ClassVar[int]              # 3
-    mp_pool: ClassVar[int]               # 5
 
     # ── Magic stats ────────────────────────────────────────────
     # Physical units have low matk/mdef; magic units have high matk/mdef
@@ -95,6 +100,13 @@ class BaseUnitClass(ABC):
     # data; class implementations must not add terrain-specific code paths.
     terrain_movement: ClassVar[Mapping[str, Mapping[str, int | bool]]] = {}
 
+    # ── Growth (per-stat %, see RolledGrowthPolicy) ─────────────
+    # Tier-1 classes use a base archetype. Tier-2 classes get +10 on every
+    # stat (the "promotion matters" feel) — see spec §7.2.
+    # All keys in STAT_KEYS are required; the registry will warn if any
+    # are missing.
+    class_growth_rates: ClassVar[Mapping[str, int]] = {}
+
     @classmethod
     def compile(cls) -> UnitClassProfile:
         """Return an immutable snapshot for use by the engine."""
@@ -107,7 +119,6 @@ class BaseUnitClass(ABC):
             base_atk=cls.base_atk,
             base_def=cls.base_def,
             base_mov=cls.base_mov,
-            mp_pool=cls.mp_pool,
             default_skills=tuple(cls.default_skills),
             attack_range=cls.attack_range,
             min_attack_range=cls.min_attack_range,
@@ -121,4 +132,8 @@ class BaseUnitClass(ABC):
                 terrain: dict(rule)
                 for terrain, rule in cls.terrain_movement.items()
             },
+            class_growth_rates=dict(cls.class_growth_rates),
+            # Per-class stat_caps default to empty; RolledGrowthPolicy
+            # falls back to module-level STAT_CAPS when this is empty.
+            stat_caps={},
         )

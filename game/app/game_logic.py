@@ -2372,7 +2372,7 @@ async def _ai_try_recruit(
         hp=profile_obj.base_hp, max_hp=profile_obj.base_hp,
         atk=profile_obj.base_atk, def_=profile_obj.base_def,
         matk=profile_obj.base_matk, mdef=profile_obj.base_mdef,
-        mov=profile_obj.mp_pool, mp=0, morale=0,
+        mov=profile_obj.base_mov, mp=profile_obj.base_mov, morale=0,
         x=tile.x, y=tile.y,
         has_acted=True, has_moved=True,
         skills=list(profile_obj.default_skills),

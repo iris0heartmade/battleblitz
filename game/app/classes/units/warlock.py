@@ -31,8 +31,7 @@ class Warlock(BaseUnitClass):
     base_hp = 45
     base_atk = 8          # low — magic damage comes from MATK
     base_def = 10         # slightly lower than Swordsman
-    base_mov = 3
-    mp_pool = 8           # more MP than Swordsman — magic career
+    base_mov = 8
 
     # Magic stats — magic-type attacker.
     base_matk = 22
@@ -45,3 +44,6 @@ class Warlock(BaseUnitClass):
     can_move_after_action = False
 
     strong_against = []     # natural counter via stats
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 60, 'atk': 5, 'def': 15, 'matk': 55, 'mdef': 25, 'mov': 0}

@@ -1058,7 +1058,7 @@ async def recruit_unit(
         # Fire-Emblem summon timing: new unit cannot act this turn —
         # mov gets the full pool so next turn it can move, but mp and
         # has_acted/has_moved are 0/True so it can't act or move now.
-        mov=profile.mp_pool, mp=0,
+        mov=profile.base_mov, mp=0,
         morale=0,
         x=tile.x, y=tile.y,
         has_acted=True,    # can't act this turn

@@ -214,6 +214,13 @@ class Unit(Base):
     # each of the unit owner's turns.
     mp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Deterministic RNG seed used by RolledGrowthPolicy when a generic
+    # unit is spawned at L>1.  Without this seed, save-and-reload would
+    # produce different L10 stats on each load.  Set by the spawn
+    # path; legacy rows default to 0 (which the spawn path treats as
+    # "no seed, use a fresh non-deterministic RNG").
+    growth_seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Morale (0..MORALE_MAX). Awards +1 per kill, capped. Persistent across
     # turns — represents the unit's battle experience.
     morale: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

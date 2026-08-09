@@ -12,7 +12,6 @@ class Youko(BaseHero):
     matk_override = 12
     mdef_override = 15
     mov_override = 4
-    mp_pool_override = 6
 
     sprite_path = "youko.png"
     portrait_path = "portrait_youko.png"
@@ -22,3 +21,7 @@ class Youko(BaseHero):
     passive_skills = []
 
     dialogue_name = "洋子"
+
+    # Personal growth modifier on top of the base class's growth rates.
+    # See RolledGrowthPolicy and spec §8.2.
+    personal_growth_modifier = {'matk': 10, 'mdef': 5}

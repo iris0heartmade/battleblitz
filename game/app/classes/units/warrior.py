@@ -18,8 +18,7 @@ class Warrior(BaseUnitClass):
     base_hp = 28
     base_atk = 10
     base_def = 3
-    base_mov = 3
-    mp_pool = 4
+    base_mov = 4
 
     # Magic stats — physical unit
     base_matk = 4
@@ -33,3 +32,6 @@ class Warrior(BaseUnitClass):
     attack_kind = "physical"
 
     strong_against = []  # 暂无克制关系(斧克剑,剑系刚平衡)
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 80, 'atk': 55, 'def': 25, 'matk': 5, 'mdef': 15, 'mov': 0}

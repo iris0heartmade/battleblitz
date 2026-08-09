@@ -11,8 +11,7 @@ class Archer(BaseUnitClass):
     base_hp = 35
     base_atk = 20
     base_def = 6
-    base_mov = 3
-    mp_pool = 5
+    base_mov = 5
 
     # Magic stats — physical unit, low magic offense/defense.
     base_matk = 4
@@ -29,3 +28,6 @@ class Archer(BaseUnitClass):
     ignores_line_of_sight = True   # 狙击：无视障碍
 
     strong_against = []   # reserved for future matchup against Warlock
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 65, 'atk': 50, 'def': 20, 'matk': 5, 'mdef': 15, 'mov': 0}

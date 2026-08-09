@@ -38,8 +38,8 @@ class SingSkill(BaseSkill):
         target.has_moved = False
         profile = get_unit_class(target.unit_type)
         if profile is not None:
-            target.mp = profile.mp_pool
-            target.mov = profile.mp_pool
+            target.mp = profile.base_mov
+            target.mov = profile.base_mov
         ctx.user.has_acted = True
         ctx.user.mp = 0
         return SkillResult(

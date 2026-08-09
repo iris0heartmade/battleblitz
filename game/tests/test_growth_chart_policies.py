@@ -34,6 +34,7 @@ from app.classes.units import get as get_class
 from app.progression.policies import (
     AutolevelPolicy,
     BattleLanePolicy,
+    RolledGrowthPolicy,
     STAT_KEYS,
     TIER2_TYPE_IDS,
     ClassBaseline,
@@ -64,25 +65,29 @@ def test_resolve_class_only_inherits_baseline():
     assert set(base.keys()) == set(STAT_KEYS)
 
 
-def test_resolve_hero_overrides_applied_in_order():
-    """Hero with overrides → override wins, base_class fills the rest.
+def test_resolve_effective_base_uses_class_stats_not_hero_overrides():
+    """Hero identity no longer overrides L1 stats (spec §3 / §5).
 
-    yun overrides: hp=50, atk=20, def=11, matk=27, mov=4
-    yun inherits: mdef=12 (warlock), mp=8 (warlock)"""
+    yun's legacy ``*_override`` fields (hp=50, atk=20, ...) are
+    intentionally ignored — the L1 block is the base class's stats
+    verbatim; growth is shaped via ``personal_growth_modifier`` instead.
+    ``mp`` is also gone (MOV/MP merge, spec §9): ``mov`` is the single
+    movement source, so the resolved block carries exactly STAT_KEYS.
+    """
     yun = get_hero("yun")
     warlock = get_class("warlock")
     base = resolve_effective_base(warlock, yun)
-    assert base["hp"] == 50       # override
-    assert base["atk"] == 20      # override
-    assert base["def"] == 11      # override
-    assert base["matk"] == 27     # override
-    assert base["mdef"] == 12     # inherited from warlock
-    assert base["mov"] == 4       # override
-    assert base["mp"] == 8        # inherited from warlock
+    assert base["hp"] == warlock.base_hp          # 45, not yun's 50
+    assert base["atk"] == warlock.base_atk        # 8, not yun's 20
+    assert base["def"] == warlock.base_def        # 10, not 11
+    assert base["matk"] == warlock.base_matk      # 22, not 27
+    assert base["mdef"] == warlock.base_mdef      # 12 (inherited)
+    assert base["mov"] == warlock.base_mov        # 8, not yun's 4
+    assert set(base.keys()) == set(STAT_KEYS)     # no `mp` key
 
 
 def test_resolve_hero_with_no_overrides_inherits_everything():
-    """A hero with all `None` overrides is identical to its base class.
+    """A hero with no personal stats is identical to its base class.
 
     We don't currently have such a hero in the registry, so simulate
     one — the function should still resolve cleanly."""
@@ -91,7 +96,7 @@ def test_resolve_hero_with_no_overrides_inherits_everything():
     # Every key matches the class profile verbatim.
     assert base["hp"] == bm.base_hp
     assert base["matk"] == bm.base_matk
-    assert base["mp"] == bm.mp_pool
+    assert base["mov"] == bm.base_mov
 
 
 # ============================================================
@@ -120,32 +125,6 @@ def test_autolevel_policy_baseline_resolves_hero_correctly():
     assert bl.base_class_id == "warlock"
     # formula_note explicitly says hero is using the generic formula
     assert "autolevel_boss" in bl.formula_note
-
-
-def test_battle_lane_stat_at_level_matches_spawn_helper():
-    """Cross-check: chart's stat_at_level matches app.modes.spawn_generic_stats
-    at the same start_level for a plain class.  If this fails, either
-    BattleLanePolicy or spawn_generic_stats drifted apart."""
-    from app.modes import spawn_generic_stats
-
-    bm = get_class("blade_master")
-    policy = BattleLanePolicy()
-    bl = policy.baseline(class_profile=bm, hero_profile=None)
-
-    for lv in (1, 5, 10, 20):
-        from_policy = dict(policy.stat_at_level(baseline_=bl, level=lv))
-        from_spawn = spawn_generic_stats(bm.type_id, start_level=lv)
-        assert from_policy["hp"] == from_spawn["hp"], (
-            f"HP mismatch at Lv {lv}: policy={from_policy['hp']} "
-            f"spawn={from_spawn['hp']}"
-        )
-        assert from_policy["atk"] == from_spawn["atk"]
-        assert from_policy["def"] == from_spawn["def"]
-        assert from_policy["matk"] == from_spawn["matk"]
-        assert from_policy["mdef"] == from_spawn["mdef"]
-        # mov is class-static and not in spawn_generic_stats — must match L1.
-        assert from_policy["mov"] == bm.base_mov
-        assert from_policy["mp"] == bm.mp_pool
 
 
 def test_autolevel_rejects_level_below_1():
@@ -190,27 +169,13 @@ def test_battle_lane_hero_uses_base_class_attack_kind_for_growth_sides():
     l20 = dict(policy.stat_at_level(baseline_=bl, level=20))
 
     assert bl.attack_kind == "magic"
-    assert l20["matk"] == 36
+    # Warlock base (L1): matk=22, mdef=12, atk=8, def=10.  BattleLane magic
+    # rates: matk 50 / mdef 15 / atk 10 / def 10 over 19 level-ups, with hero
+    # L1 block now coming straight from the class (no *__override* boost).
+    assert l20["matk"] == 31
     assert l20["mdef"] == 14
-    assert l20["atk"] == 21
-    assert l20["def"] == 12
-
-
-def test_battle_lane_policy_matches_generic_spawn_helper():
-    from app.modes import spawn_generic_stats
-
-    policy = BattleLanePolicy()
-    for type_id in ("warlock", "swordsman"):
-        cls = get_class(type_id)
-        bl = policy.baseline(class_profile=cls, hero_profile=None)
-        for lv in (1, 10, 20):
-            from_policy = dict(policy.stat_at_level(baseline_=bl, level=lv))
-            from_spawn = spawn_generic_stats(type_id, start_level=lv)
-            assert from_policy["hp"] == from_spawn["hp"]
-            assert from_policy["atk"] == from_spawn["atk"]
-            assert from_policy["def"] == from_spawn["def"]
-            assert from_policy["matk"] == from_spawn["matk"]
-            assert from_policy["mdef"] == from_spawn["mdef"]
+    assert l20["atk"] == 9
+    assert l20["def"] == 11
 
 
 # ============================================================
@@ -229,17 +194,18 @@ def test_compute_class_growth_produces_full_curve():
         assert set(stats.keys()) == set(STAT_KEYS)
 
 
-def test_compute_hero_growth_composes_base_and_overrides():
+def test_compute_hero_growth_uses_class_base_l1():
     curve = compute_hero_growth(
         hero_profile=get_hero("anna"),
         max_level=20,
         policy=AutolevelPolicy(),
     )
-    # anna base stats with overrides: hp=46, def=10, matk=12, mdef=14, mov=3, mp=6
-    assert curve.values[1]["hp"] == 46
-    assert curve.values[1]["def"] == 10
-    assert curve.values[1]["matk"] == 12
-    # her atk is NOT overridden, so should inherit healer base_atk=5
+    # anna's L1 block is the healer class verbatim (legacy *_override
+    # values hp=46 / def=10 / matk=12 are ignored per spec §3/§5):
+    # healer hp=40 / def=9 / matk=8, with atk inherited from healer too.
+    assert curve.values[1]["hp"] == 40
+    assert curve.values[1]["def"] == 9
+    assert curve.values[1]["matk"] == 8
     assert curve.values[1]["atk"] == 5
 
 
@@ -277,6 +243,34 @@ def test_all_hero_curves_present():
     assert {"yun", "anna"}.issubset(hero_ids)
 
 
+def test_rolled_growth_curve_is_monotonic_and_deterministic():
+    """FE8 rolled growth never *decreases* a stat (deltas are 0/1/2).
+
+    Regression guard: the dataset must roll incrementally from L1
+    (mirroring ``app.modes.spawn_generic_stats``), NOT re-roll from base
+    per level with a fresh RNG.  The old behaviour produced sawtooth
+    "descent" dips in the charts (two independent random sequences for
+    L5 vs L6).  The per-subject fixed seed also keeps charts reproducible
+    (diff-able index.json).
+    """
+    policy = RolledGrowthPolicy()
+    curves = all_class_curves(max_level=20, policy=policy) \
+        + all_hero_curves(max_level=20, policy=policy)
+    assert curves, "expected at least one curve for rolled policy"
+    for cv in curves:
+        for lv in range(2, 21):
+            for k in STAT_KEYS:
+                assert cv.values[lv][k] >= cv.values[lv - 1][k], (
+                    f"{cv.baseline.type_id} L{lv} {k} dropped "
+                    f"({cv.values[lv - 1][k]} -> {cv.values[lv][k]})"
+                )
+    # Determinism: two independent passes over the same subjects agree.
+    pass1 = all_class_curves(max_level=20, policy=policy)
+    pass2 = all_class_curves(max_level=20, policy=policy)
+    for a, b in zip(pass1, pass2):
+        assert a.values == b.values, f"{a.baseline.type_id} curve not deterministic"
+
+
 # ============================================================
 # Registry + Protocol surface
 # ============================================================
@@ -312,6 +306,6 @@ def test_berserker_and_dragon_rider_baselines_match_expected_tiers():
     dragon_rider = get_class("dragon_rider")
 
     assert (berserker.base_hp, berserker.base_atk, berserker.base_def) == (48, 28, 8)
-    assert berserker.base_mov == 4
+    assert berserker.base_mov == 5  # T2 +speed pass
     assert (dragon_rider.base_hp, dragon_rider.base_atk, dragon_rider.base_def) == (42, 16, 7)
-    assert dragon_rider.base_mov == 5
+    assert dragon_rider.base_mov == 7  # T2 +speed pass

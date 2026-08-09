@@ -3,10 +3,10 @@
 Covers:
   - GameMode enum membership
   - ModeConfig.mainline() / .free() builders
-  - AUTOEVEL_RATES match FE8 Boss pattern
   - spawn_generic_stats L1 == class.base
-  - spawn_generic_stats L10 adds Boss-autolevel bonus
-  - spawn_generic_stats L=20 caps reasonable
+  - spawn_generic_stats L10 applies RolledGrowthPolicy incrementally
+    (deterministic under a fixed growth_seed; monotonic vs L1)
+  - spawn_generic_stats L=20 respects STAT_CAPS
   - spawn_hero_stats deliberately raises NotImplementedError
   - mov / attack_range don't scale with level
 """
@@ -97,33 +97,43 @@ def test_spawn_generic_l1_returns_class_base():
         assert stats["mdef"] == p.base_mdef, f"{tid} mdef mismatch at L1"
 
 
-def test_spawn_generic_l10_autolevel_applied():
-    """At L10 (+9 levels above L1) the lane autolevel rate kicks in.
+def test_spawn_generic_l10_rolled_growth_applied():
+    """At L10 (+9 level-ups) spawn matches RolledGrowthPolicy applied 9×.
 
-    Bonus per stat = int(9 × lane_rate / 100), where lane_rate comes from
-    the unit's combat lane (physical/magic) — see lane_growth_rates().
-    Expectations are derived from the implementation's own base + rates so
-    this stays correct across数值 re-calibration.
+    spawn_generic_stats now rolls incrementally from L1 with
+    RolledGrowthPolicy.roll_level_up (see app.modes.spawn_generic_stats).
+    With a fixed growth_seed the result is deterministic; this cross-checks
+    the spawn helper against the policy itself so the two can't drift apart.
     """
+    import random
+
     from app.classes.units import get
-    from app.progression.policies import lane_growth_rates
+    from app.progression.policies import RolledGrowthPolicy
 
     p = get("lancer")
-    rates = lane_growth_rates(p.attack_kind)
-    s_l1 = spawn_generic_stats("lancer", start_level=1)
-    s_l10 = spawn_generic_stats("lancer", start_level=10)
+    policy = RolledGrowthPolicy()
+    bl = policy.baseline(class_profile=p, hero_profile=None)
+    rng = random.Random(42)
+    out = dict(bl.base_stats)
+    for _ in range(9):  # L1 → L10
+        out = policy.roll_level_up(current_stats=out, baseline_=bl, rng=rng)
 
-    assert s_l10["hp"] == s_l1["hp"] + int(9 * rates["hp"] / 100)
-    assert s_l10["atk"] == s_l1["atk"] + int(9 * rates["atk"] / 100)
-    assert s_l10["def"] == s_l1["def"] + int(9 * rates["def"] / 100)
+    s_l10 = spawn_generic_stats("lancer", start_level=10, growth_seed=42)
+    for k in ("hp", "atk", "def", "matk", "mdef"):
+        assert s_l10[k] == out[k], f"{k}: spawn={s_l10[k]} policy={out[k]}"
+    assert s_l10["mov"] == p.base_mov  # mov stays class-static
 
 
 def test_spawn_generic_mov_does_not_scale():
-    """mov is class-static — must not change with level."""
-    s_l1 = spawn_generic_stats("falcon_knight", start_level=1)
-    s_l10 = spawn_generic_stats("falcon_knight", start_level=10)
+    """mov is class-static for classes whose mov growth rate is 0.
+
+    (falcon_knight 现在 mov 成长率 5%,L10 会随机成长 6~8,不再是静态
+    维度;这里用 warrior —— mov 成长率 0 —— 验证静态语义。)
+    """
+    s_l1 = spawn_generic_stats("warrior", start_level=1)
+    s_l10 = spawn_generic_stats("warrior", start_level=10)
     assert s_l1["mov"] == s_l10["mov"]
-    assert s_l10["mov"] == 6  # falcon_knight.base_mov = 6
+    assert s_l10["mov"] == 4  # warrior.base_mov = 4
 
 
 def test_spawn_generic_attack_range_does_not_scale():
@@ -135,21 +145,17 @@ def test_spawn_generic_attack_range_does_not_scale():
 
 
 def test_spawn_generic_l20_caps_are_reasonable():
-    """At L20 (+19 levels) lane-autolevel bumps follow the formula and stay sane."""
-    from app.classes.units import get
-    from app.progression.policies import lane_growth_rates
+    """At L20 (+19 rolled level-ups) stats stay under the module caps."""
+    from app.progression.policies import STAT_CAPS
 
-    p = get("warrior")
-    rates = lane_growth_rates(p.attack_kind)
-    s = spawn_generic_stats("warrior", start_level=20)
-    # Formula: base + int(19 × lane_rate / 100) — derived from implementation.
-    assert s["hp"] == p.base_hp + int(19 * rates["hp"] / 100)
-    assert s["atk"] == p.base_atk + int(19 * rates["atk"] / 100)
-    assert s["def"] == p.base_def + int(19 * rates["def"] / 100)
-    # Sanity caps: a 19-level autolevel must not explode into absurd stats.
-    assert s["hp"] < 120
-    assert s["atk"] < 60
-    assert s["def"] < 40
+    s = spawn_generic_stats("warrior", start_level=20, growth_seed=7)
+    s_l1 = spawn_generic_stats("warrior", start_level=1)
+    # Rolled growth bumps stats up, but never over the per-stat caps.
+    for k, cap in STAT_CAPS.items():
+        if k == "mov":
+            continue  # warrior mov growth is 0
+        assert s[k] <= cap, f"{k} = {s[k]} > cap {cap}"
+    assert s["hp"] > s_l1["hp"], "L20 should outgrow L1 HP"
 
 
 def test_spawn_generic_zero_levels_above_l1():
@@ -252,18 +258,21 @@ def test_apply_spawn_to_unit_mainline_l1_uses_class_base():
         assert unit.mov == profile.base_mov, f"{tid} mov"
 
 
-def test_apply_spawn_to_unit_free_l10_autolevel_hp():
-    """Free mode L10 → hp grows by 9 × 85 / 100 = +7."""
+def test_apply_spawn_to_unit_free_l10_rolled_growth():
+    """Free L10 rolled growth is deterministic under a fixed seed and bumps HP."""
     from app.modes import apply_spawn_generic_to_unit
+
+    unit_a = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_a, "lancer", start_level=10, growth_seed=42)
+    unit_b = _make_unit("lancer")
+    apply_spawn_generic_to_unit(unit_b, "lancer", start_level=10, growth_seed=42)
+    assert unit_a.hp == unit_b.hp  # same seed → same roll
 
     unit_l1 = _make_unit("lancer")
     apply_spawn_generic_to_unit(unit_l1, "lancer", start_level=1)
-
-    unit_l10 = _make_unit("lancer")
-    apply_spawn_generic_to_unit(unit_l10, "lancer", start_level=10)
-
-    hp_bump = int(9 * 0.85)  # +7
-    assert unit_l10.hp == unit_l1.hp + hp_bump
+    assert unit_a.hp > unit_l1.hp, "free L10 should outgrow L1 HP"
+    assert unit_a.atk > unit_l1.atk, "free L10 should outgrow L1 Atk"
+    assert unit_a.max_hp == unit_a.hp, "spawn must keep hp == max_hp"
 
 
 def test_apply_spawn_to_unit_skips_level_below_one():
@@ -366,12 +375,12 @@ def test_gamemode_string_values_match_api_schema():
 
 def test_apply_spawn_free_l10_matches_applied_l10_dictionary():
     """End-to-end: start_level=10 via apply_spawn_generic_to_unit must match
-    spawn_generic_stats free config output."""
+    spawn_generic_stats free config output (same seed → same roll)."""
     from app.modes import spawn_generic_stats, apply_spawn_generic_to_unit
 
-    stats_dict = spawn_generic_stats("lancer", start_level=10)
+    stats_dict = spawn_generic_stats("lancer", start_level=10, growth_seed=42)
     unit = _make_unit("lancer")
-    apply_spawn_generic_to_unit(unit, "lancer", start_level=10)
+    apply_spawn_generic_to_unit(unit, "lancer", start_level=10, growth_seed=42)
     assert unit.hp == stats_dict["hp"]
     assert unit.atk == stats_dict["atk"]
     assert unit.def_ == stats_dict["def"]
@@ -381,17 +390,17 @@ def test_apply_spawn_free_l10_matches_applied_l10_dictionary():
 
 
 def test_apply_spawn_free_l10_actually_raises_stats_above_l1():
-    """Acceptance: free L10 must show measurable stat boost vs L1.
+    """Acceptance: free L10 (rolled, seed 42) must outgrow L1.
 
-    For a lancer: HP rises 27→34 (+9 × 0.85 ≈ +7);
-    Atk rises 8→12 (+9 × 0.50 ≈ +4).  No regression to L1 defaults.
+    Lancer rates hp 70% / atk 45% — over 9 rolled level-ups both almost
+    surely hit; the fixed seed pins a concrete, deterministic result.
     """
     from app.modes import apply_spawn_generic_to_unit
 
     unit_l1 = _make_unit("lancer")
     apply_spawn_generic_to_unit(unit_l1, "lancer", start_level=1)
     unit_l10 = _make_unit("lancer")
-    apply_spawn_generic_to_unit(unit_l10, "lancer", start_level=10)
+    apply_spawn_generic_to_unit(unit_l10, "lancer", start_level=10, growth_seed=42)
 
     assert unit_l10.hp > unit_l1.hp, "free L10 should have higher HP than L1"
     assert unit_l10.atk > unit_l1.atk, "free L10 should have higher Atk than L1"

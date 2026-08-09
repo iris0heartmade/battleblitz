@@ -34,7 +34,8 @@ from tools.growth_charts.dataset import ClassGrowthCurve
 # Style constants
 # ============================================================
 
-#: CN-EN stat label tuples for the 7 chart axes.  CN first.
+#: CN-EN stat label tuples for the 6 chart axes.  CN first.
+#: (MOV/MP merged per spec §9 — only one panel for movement now.)
 STAT_LABELS: Sequence[tuple] = (
     ("hp",   "HP",   "生命"),
     ("atk",  "ATK",  "攻击"),
@@ -42,7 +43,6 @@ STAT_LABELS: Sequence[tuple] = (
     ("matk", "MATK", "魔攻"),
     ("mdef", "MDEF", "魔防"),
     ("mov",  "MOV",  "移力"),
-    ("mp",   "MP",   "MP 池"),
 )
 
 #: Tableau-10 inspired 7-color categorical palette.  Fixed order —
@@ -55,7 +55,6 @@ STAT_PALETTE: Dict[str, str] = {
     "matk": "#8E5CC0",  # grape purple
     "mdef": "#C49A2C",  # ochre yellow
     "mov":  "#2A8E92",  # cyan gray
-    "mp":   "#806060",  # neutral brown
 }
 
 #: Total-stats panel uses a single neutral hue — the line tells the

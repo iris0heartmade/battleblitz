@@ -11,8 +11,7 @@ class Saint(BaseUnitClass):
     base_hp = 48
     base_atk = 7
     base_def = 12
-    base_mov = 4
-    mp_pool = 8
+    base_mov = 8
 
     base_matk = 16
     base_mdef = 18
@@ -24,3 +23,6 @@ class Saint(BaseUnitClass):
     can_move_after_action = False
 
     strong_against = []
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 70, 'atk': 15, 'def': 30, 'matk': 35, 'mdef': 50, 'mov': 10}

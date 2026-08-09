@@ -132,8 +132,9 @@ class TestHeroCampaignStatePersistence:
                     assert yun_state["base_stats"]["matk"] == 40
 
                     # 当前战斗 MP 不应覆盖长期 pool
-                    assert yun_state["base_stats"]["mp"] == 8, (
-                        f"mp should be 8 (campaign_base), got {yun_state['base_stats']['mp']}"
+                    # (yun 重做成纯法师后 mp 长期池 = 4,MOV/MP 合并后 mp 是"当前移动力池")
+                    assert yun_state["base_stats"]["mp"] == 4, (
+                        f"mp should be 4 (campaign_base), got {yun_state['base_stats']['mp']}"
                     )
 
                     # anna 也在

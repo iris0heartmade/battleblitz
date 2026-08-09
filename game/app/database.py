@@ -108,6 +108,16 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN status_effects JSON NOT NULL DEFAULT '[]'"
         ))
         logger.info("Migration: added units.status_effects")
+    # 2026-08-09: growth-redesign — growth_seed for deterministic per-stat
+    # rolled spawn (RolledGrowthPolicy).  0 = "no seed" (the spawn
+    # path uses a fresh non-deterministic RNG for legacy rows).  New
+    # rows pick up the unit's id (or whatever the spawner provides) so
+    # save-and-reload reproduces L10 stats exactly.
+    if "growth_seed" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN growth_seed INTEGER NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added units.growth_seed")
     # 2026-08-09: silence_until_turn column is **deprecated**. Code paths
     # now read status_effects exclusively (see app/status/engine.py and
     # app/commanders/effects.py:is_unit_silenced). For databases that

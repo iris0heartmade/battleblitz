@@ -39,7 +39,8 @@ def test_promote_hero_applies_bonus_and_resets_level():
     assert promoted.base_stats["matk"] == 31
     assert promoted.base_stats["mdef"] == 16
     assert promoted.base_stats["mov"] == 5
-    assert promoted.base_stats["mp"] == 10
+    # yun 重做成纯法师后 mp=4,sage 转职加成 +2 → 6(MOV/MP 合并后 mp 是"当前移动力池")
+    assert promoted.base_stats["mp"] == 6
 
 
 def test_promote_hero_rejects_invalid_target():
@@ -51,4 +52,24 @@ def test_promote_hero_rejects_invalid_target():
             state,
             build_hero_class_template("healer"),
             build_hero_class_template("sage"),
+        )
+
+
+def test_legacy_bridge_fallback_drops_plus_eight_mp():
+    """Spec §9 step 12: drop the `+8 mp` legacy fallback in
+    build_hero_class_template.  Classes NOT in the explicit
+    _HERO_CLASS_SPECS table (e.g. `bard`, `warrior`, `dragon_rider`)
+    fall through to the inline caps builder, which must NOT
+    synthesize an "mp" key from `base_mov + 8`.  Caps are an
+    upper-bound surface; an unwanted `mp` here would let
+    promote_hero silently cap (or grow) the hero campaign mp.
+
+    Regression guard: if the `+8 mp` branch sneaks back in,
+    `t.caps` will contain "mp" and this test will fail.
+    """
+    for fallback_class in ("bard", "warrior", "dragon_rider", "falcon_knight"):
+        t = build_hero_class_template(fallback_class)
+        assert "mp" not in t.caps, (
+            f"legacy '+8 mp' fallback re-emerged for {fallback_class!r}: "
+            f"caps={t.caps!r}"
         )

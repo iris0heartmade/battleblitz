@@ -53,13 +53,14 @@ class HeroProfile:
     def_override: Optional[int]
     matk_override: Optional[int]
     mdef_override: Optional[int]
-    # Movement tiles per turn.  Independent from MP pool — a hero can
-    # move 4 tiles but still have 8 MP if it wants.
+    # Movement tiles per turn (the only movement stat; see spec §9).
     mov_override: Optional[int]
-    # MP pool per turn (separate from `mov_override` so a hero can
-    # have asymmetric mobility / resource budgets, e.g. a slow
-    # caster with deep MP).
-    mp_pool_override: Optional[int]
+    # Per-stat personal growth modifier (%).  Combined with the base
+    # class's class_growth_rates by RolledGrowthPolicy, then clamped
+    # to [0, 100].  Positive values = hero is better at this stat
+    # than the class baseline; negative values = worse.
+    # Keys must be a subset of STAT_KEYS in app.progression.policies.
+    personal_growth_modifier: Mapping[str, int]
     terrain_movement: Mapping[str, Mapping[str, int | bool]]
 
     # ── Skill bindings (P2.6+ reservation) ────────────────────
@@ -124,11 +125,14 @@ class BaseHero(ABC):
     def_override: ClassVar[Optional[int]] = None
     matk_override: ClassVar[Optional[int]] = None
     mdef_override: ClassVar[Optional[int]] = None
-    # Movement tiles per turn.  Independent from MP — a hero can
-    # move 4 tiles but still have 8 MP if the designer wants.
+    # Movement tiles per turn.  This is the SOLE movement stat — see
+    # spec §9 (the previous separate `mp_pool` field was removed
+    # in the growth-redesign commit).
     mov_override: ClassVar[Optional[int]] = None
-    # MP pool per turn.  None = inherit from base class's mp_pool.
-    mp_pool_override: ClassVar[Optional[int]] = None
+    # Personal growth modifier on top of the base class's
+    # class_growth_rates.  See RolledGrowthPolicy and spec §8.
+    # Empty dict = no modification (hero grows exactly like the class).
+    personal_growth_modifier: ClassVar[Mapping[str, int]] = {}
     # Hero entries override only the specified keys of their base class's
     # terrain movement profile (for example, a river-crossing talent).
     terrain_movement: ClassVar[Mapping[str, Mapping[str, int | bool]]] = {}
@@ -175,7 +179,7 @@ class BaseHero(ABC):
             matk_override=cls.matk_override,
             mdef_override=cls.mdef_override,
             mov_override=cls.mov_override,
-            mp_pool_override=cls.mp_pool_override,
+            personal_growth_modifier=dict(cls.personal_growth_modifier),
             terrain_movement={
                 terrain: dict(rule)
                 for terrain, rule in cls.terrain_movement.items()

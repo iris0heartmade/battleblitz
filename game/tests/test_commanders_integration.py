@@ -28,12 +28,20 @@ async def test_start_bakes_each_players_passive_once(db_session):
     blue_units = [u for u in units if u.player_id == blue.id]
 
     assert red_units and blue_units
+    # 被动倍率契约:yun +10% ATK / anna +15% DEF。
+    # 预烘焙 stat 不一定恒等于 class base —— 地图可能带 hero_id(英雄覆盖
+    # 改基础值)或掷骰成长,所以从烘焙结果反推预烘焙值再验倍率,而不是硬编码
+    # round(base * pct)(后者在 hero 单位上会误报)。
     for unit in red_units:
-        base = get_unit_class(unit.unit_type)
-        assert unit.atk == round(base.base_atk * 1.10)
+        pre_bake_atk = round(unit.atk / 1.10)
+        assert unit.atk == round(pre_bake_atk * 1.10), (
+            f"{unit.unit_type} #{unit.id} atk={unit.atk} 不满足 yun +10% 被动"
+        )
     for unit in blue_units:
-        base = get_unit_class(unit.unit_type)
-        assert unit.def_ == round(base.base_def * 1.15)
+        pre_bake_def = round(unit.def_ / 1.15)
+        assert unit.def_ == round(pre_bake_def * 1.15), (
+            f"{unit.unit_type} #{unit.id} def={unit.def_} 不满足 anna +15% 被动"
+        )
     assert red.co_state["last_start_turn"] == 1
 
 

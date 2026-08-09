@@ -11,8 +11,7 @@ class BladeMaster(BaseUnitClass):
     base_hp = 54
     base_atk = 25
     base_def = 15
-    base_mov = 4
-    mp_pool = 6
+    base_mov = 6
 
     base_matk = 6
     base_mdef = 8
@@ -23,3 +22,6 @@ class BladeMaster(BaseUnitClass):
     can_move_after_action = True
 
     strong_against = ["knight"]
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 35, 'matk': 15, 'mdef': 30, 'mov': 10}

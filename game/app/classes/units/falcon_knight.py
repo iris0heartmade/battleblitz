@@ -19,7 +19,6 @@ class FalconKnight(BaseUnitClass):
     base_atk = 9
     base_def = 6
     base_mov = 6
-    mp_pool = 6
 
     # Magic stats — Pegasi 略偏魔法抗性
     base_matk = 4
@@ -33,3 +32,6 @@ class FalconKnight(BaseUnitClass):
     attack_kind = "physical"
 
     strong_against = []  # 暂无克制关系
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 70, 'atk': 35, 'def': 20, 'matk': 5, 'mdef': 25, 'mov': 5}

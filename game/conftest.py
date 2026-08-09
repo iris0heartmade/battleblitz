@@ -163,7 +163,7 @@ async def playing_game(db_session):
             hp=uc.base_hp, max_hp=uc.base_hp,
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
-            mov=uc.mp_pool, mp=uc.mp_pool,
+            mov=uc.base_mov, mp=uc.base_mov,
             morale=0,
             x=int(u["x"]), y=int(u["y"]),
             has_acted=False, has_moved=False,

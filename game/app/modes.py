@@ -40,12 +40,20 @@ Module surface
 """
 from __future__ import annotations
 
+import logging
+import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 from app.classes.units import get
-from app.progression.policies import lane_growth_rates
+from app.progression.policies import (
+    RandomSource,
+    RolledGrowthPolicy,
+    STAT_KEYS,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -120,43 +128,61 @@ AUTOEVEL_RATES: dict[str, int] = {
 def spawn_generic_stats(
     type_id: str,
     start_level: int = 1,
+    *,
+    growth_seed: Optional[int] = None,
+    rng: Optional[RandomSource] = None,
 ) -> dict[str, int]:
     """Compute generic unit stats at the given starting level.
 
-    Per Phase 2 §6.5.3:
+    Per spec (post growth-redesign):
 
       - At L1 (= Mainline default): result == class.base.
-      - At L+ (Free / Skirmish):
-          result[hp] += (start_level - 1) × 85 / 100
-          result[atk] += (start_level - 1) × 50 / 100
-          result[def] += (start_level - 1) × 10 / 100
-          …etc per AUTOEVEL_RATES.
+      - At L+ (Free / Skirmish): ``(start_level - 1)`` independent
+        level-ups, each applying RolledGrowthPolicy.roll_level_up
+        to every stat in STAT_KEYS.  Each roll uses the class's
+        per-stat ``class_growth_rates``; deltas are clamped against
+        ``STAT_CAPS`` (or the per-class override).
 
-    Returns a Dict of stat-name → int value.
-    mov and attack_range are NOT scaled — they're class-static.
+    Determinism:
+      - If ``rng`` is provided, it is used directly (the unit's
+        saved ``growth_seed`` was used to construct it upstream).
+      - Else if ``growth_seed`` is given, a ``random.Random(growth_seed)``
+        is built and used.
+      - Else a fresh ``random.Random()`` is built (non-deterministic;
+        used by tests that don't care about reproducibility).
 
-    Generic does NOT level up at runtime; this function is called once
-    when the unit joins a battle.  Chapter-modifier (attack/defense
-    multipliers) is applied separately by the spawn caller.
+    ``rng`` accepts any :data:`RandomSource`: a bare callable
+    returning a float in [0, 1) (e.g. ``random.random``), or any
+    object with a ``.random()`` method (e.g. ``random.Random``).
+    Production callers pass a ``random.Random(seed)`` instance;
+    the chart tool passes ``random.random``.
     """
-
     profile = get(type_id)
-    levels_above_l1 = max(0, start_level - 1)
-    rates = lane_growth_rates(profile.attack_kind)
-
-    def grow(base: int, rate_key: str) -> int:
-        rate = rates.get(rate_key, 0)
-        return base + int(levels_above_l1 * rate / 100)
-
+    if start_level <= 1:
+        # Fast path: no level-ups, just return class.base + static fields.
+        return {
+            "hp":   profile.base_hp,
+            "atk":  profile.base_atk,
+            "def":  profile.base_def,
+            "matk": profile.base_matk,
+            "mdef": profile.base_mdef,
+            "mov":  profile.base_mov,
+            "attack_range": profile.attack_range,
+        }
+    if rng is None:
+        rng = random.Random(growth_seed) if growth_seed is not None else random.Random()
+    policy = RolledGrowthPolicy()
+    baseline = policy.baseline(class_profile=profile, hero_profile=None)
+    out = dict(baseline.base_stats)
+    for _ in range(2, start_level + 1):
+        out = policy.roll_level_up(current_stats=out, baseline_=baseline, rng=rng)
     return {
-        # Core combat stats — autolevel-capable.
-        "hp":   grow(profile.base_hp,   "hp"),
-        "atk":  grow(profile.base_atk,  "atk"),
-        "def":  grow(profile.base_def,  "def"),
-        "matk": grow(profile.base_matk, "matk"),
-        "mdef": grow(profile.base_mdef, "mdef"),
-        # Static class metadata (never scales).
-        "mov":          profile.base_mov,
+        "hp":   out["hp"],
+        "atk":  out["atk"],
+        "def":  out["def"],
+        "matk": out["matk"],
+        "mdef": out["mdef"],
+        "mov":  out["mov"],
         "attack_range": profile.attack_range,
     }
 
@@ -169,6 +195,9 @@ def apply_spawn_generic_to_unit(
     unit,
     type_id: str,
     start_level: int = 1,
+    *,
+    growth_seed: Optional[int] = None,
+    rng: Optional[RandomSource] = None,
 ) -> None:
     """Mutate a Unit row in-place with generic spawn stats.
 
@@ -176,9 +205,10 @@ def apply_spawn_generic_to_unit(
     matk/mdef/mov).  Leaves hero_id, name, x/y, morale, skills, co_state
     etc. alone — those are populated by the caller.
 
-    Per Phase 2 §6.5.3:
+    Per spec:
       start_level = 1 → fields == class.base
-      start_level = N → fields += (N-1) × Boss autolevel rate.
+      start_level = N → fields grown by ``(N-1)`` per-stat rolled
+                       level-ups (RolledGrowthPolicy).
 
     Notes:
       - Type-erased: takes ``unit`` as opaque object so this module
@@ -189,8 +219,14 @@ def apply_spawn_generic_to_unit(
         ``list(uc.default_skills)`` separately.
       - Unit level is preserved from the caller's input — caller sets
         ``unit.level`` if needed before invoking this.
+      - If the unit has a ``growth_seed`` attribute, it's used to
+        seed the deterministic RNG.  Callers can override via the
+        ``growth_seed`` or ``rng`` kwargs.
     """
-    stats = spawn_generic_stats(type_id, start_level=start_level)
+    seed = growth_seed if growth_seed is not None else getattr(unit, "growth_seed", None)
+    stats = spawn_generic_stats(
+        type_id, start_level=start_level, growth_seed=seed, rng=rng,
+    )
     unit.hp = stats["hp"]
     unit.max_hp = stats["hp"]
     unit.atk = stats["atk"]
@@ -198,22 +234,16 @@ def apply_spawn_generic_to_unit(
     unit.matk = stats["matk"]
     unit.mdef = stats["mdef"]
     unit.mov = stats["mov"]
+    if seed is not None and hasattr(unit, "growth_seed"):
+        # Persist the seed we used so future spawns (or save/reload)
+        # reproduce the same roll.
+        unit.growth_seed = int(seed)
 
 
 # ============================================================
 # Class-surface helper — also used during spawn to keep non-Generic
 # fields honest.
 # ============================================================
-
-def unit_default_mp_pool(type_id: str) -> int:
-    """Fallback mp_pool used when the spawn path needs an mp_pool number
-    but the caller hasn't picked one explicitly.
-
-    Pulled from :func:`app.classes.units.get` (the canonical mp_pool
-    per class) — wrappers exist so future callers can override mp_pool
-    via chapter config without editing game.py.
-    """
-    return get(type_id).mp_pool
 
 
 # ============================================================

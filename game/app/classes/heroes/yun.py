@@ -81,3 +81,7 @@ class Yun(BaseHero):
     # Scene files reference the speaker as "云" (display_cn), so
     # the dialog system can resolve it without any extra wiring.
     dialogue_name = "云"
+
+    # Personal growth modifier on top of the base class's growth rates.
+    # See RolledGrowthPolicy and spec §8.2.
+    personal_growth_modifier = {'matk': 20, 'mdef': 5}

@@ -309,7 +309,7 @@ def _apply_hero_overrides(
             candidate.matk = hero_base.base_matk
             candidate.mdef = hero_base.base_mdef
             candidate.mov = hero_base.base_mov
-            candidate.mp = hero_base.mp_pool
+            candidate.mp = hero_base.base_mov
             candidate.skills = list(hero_base.default_skills)
 
         # Stat overrides — None means inherit from base class.  The
@@ -329,12 +329,7 @@ def _apply_hero_overrides(
             candidate.mdef = hero.mdef_override
         if hero.mov_override is not None:
             candidate.mov = hero.mov_override
-        # mp_pool_override is applied independently of mov_override so
-        # designers can keep MP distinct from movement (e.g. a slow
-        # caster with deep MP).  When mp_pool_override is unset, MP
-        # already inherited from the base class.
-        if hero.mp_pool_override is not None:
-            candidate.mp = hero.mp_pool_override
+            candidate.mp = hero.mov_override
         # Skill union: base class default_skills + hero active + hero
         # passive, deduped while preserving order.  Done AFTER the
         # base-class reconciliation above (which may have rewritten
@@ -640,7 +635,7 @@ async def _start_battle_internal(
             max_hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
-            mov=uc.mp_pool, mp=uc.mp_pool,
+            mov=uc.base_mov, mp=uc.base_mov,
             # New units start at 0 stars of morale; the gold-star UI
             # is preserved as three empty ★☆☆ indicators and the
             # engine bumps it by 1 per kill up to MORALE_MAX (3).
@@ -1583,7 +1578,6 @@ async def list_unit_classes():
             "base_mdef": u.base_mdef,
             "attack_kind": u.attack_kind,
             "base_mov": u.base_mov,
-            "mp_pool": u.mp_pool,
             "attack_range": u.attack_range,
             "can_move_after_action": u.can_move_after_action,
             "default_skills": list(u.default_skills),

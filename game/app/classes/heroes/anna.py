@@ -34,7 +34,6 @@ class Anna(BaseHero):
     matk_override = 12
     mdef_override = 14
     mov_override = 3
-    mp_pool_override = 6
 
     sprite_path = "anna.png"
     portrait_path = "portrait_anna.png"
@@ -48,3 +47,7 @@ class Anna(BaseHero):
     power_threshold = 14
 
     dialogue_name = "安娜"
+
+    # Personal growth modifier on top of the base class's growth rates.
+    # See RolledGrowthPolicy and spec §8.2.
+    personal_growth_modifier = {'def': 5, 'mdef': 5}

@@ -11,8 +11,7 @@ class Swordsman(BaseUnitClass):
     base_hp = 45
     base_atk = 18
     base_def = 12
-    base_mov = 3
-    mp_pool = 5
+    base_mov = 5
 
     # Magic stats — physical unit, low magic offense/defense.
     base_matk = 4
@@ -24,3 +23,6 @@ class Swordsman(BaseUnitClass):
     can_move_after_action = False
 
     strong_against = ["knight"]
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 85, 'atk': 45, 'def': 30, 'matk': 5, 'mdef': 20, 'mov': 0}

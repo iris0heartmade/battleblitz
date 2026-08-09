@@ -17,8 +17,7 @@ class Berserker(BaseUnitClass):
     base_hp = 48
     base_atk = 28
     base_def = 8
-    base_mov = 4
-    mp_pool = 5
+    base_mov = 5
 
     # Magic stats — physical, low magic vuln
     base_matk = 4
@@ -32,3 +31,6 @@ class Berserker(BaseUnitClass):
     attack_kind = "physical"
 
     strong_against = []
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 90, 'atk': 65, 'def': 30, 'matk': 15, 'mdef': 20, 'mov': 10}

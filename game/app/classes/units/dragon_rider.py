@@ -15,8 +15,7 @@ class DragonRider(BaseUnitClass):
     base_hp = 42
     base_atk = 16
     base_def = 7
-    base_mov = 5
-    mp_pool = 7
+    base_mov = 7
 
     base_matk = 3
     base_mdef = 6
@@ -37,3 +36,6 @@ class DragonRider(BaseUnitClass):
         "castle_wall": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},
         "gate": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},
     }
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 25, 'matk': 5, 'mdef': 15, 'mov': 5}

@@ -18,8 +18,7 @@ class Lancer(BaseUnitClass):
     base_hp = 27
     base_atk = 8
     base_def = 7
-    base_mov = 5
-    mp_pool = 6
+    base_mov = 6
 
     # Magic stats — physical unit, modest magic defense
     base_matk = 4
@@ -33,3 +32,6 @@ class Lancer(BaseUnitClass):
     attack_kind = "physical"
 
     strong_against = ["knight"]  # 枪克重装
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 70, 'atk': 45, 'def': 20, 'matk': 5, 'mdef': 20, 'mov': 5}

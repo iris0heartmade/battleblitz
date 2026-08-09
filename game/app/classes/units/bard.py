@@ -11,8 +11,7 @@ class Bard(BaseUnitClass):
     base_hp = 36
     base_atk = 4
     base_def = 7
-    base_mov = 4
-    mp_pool = 6
+    base_mov = 6
 
     base_matk = 10
     base_mdef = 13
@@ -24,3 +23,6 @@ class Bard(BaseUnitClass):
     can_move_after_action = False
 
     strong_against = []
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 55, 'atk': 5, 'def': 15, 'matk': 20, 'mdef': 35, 'mov': 5}

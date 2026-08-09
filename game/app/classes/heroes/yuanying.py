@@ -97,3 +97,7 @@ class Yuanying(BaseHero):
 
     # ── Dialog binding ─────────────────────────────────────────
     dialogue_name = "鸢影"
+
+    # Personal growth modifier on top of the base class's growth rates.
+    # See RolledGrowthPolicy and spec §8.2.
+    personal_growth_modifier = {'hp': 5, 'matk': 10, 'mdef': 5}
