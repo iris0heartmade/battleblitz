@@ -37,7 +37,6 @@ def _mk_unit(*, unit_id=1, player_id=1, x=0, y=0, hp=20, mp=8, status_effects=No
         skills=["poison_burst"],
         attack_range=2, min_attack_range=0,
         status_effects=list(status_effects or []),
-        silence_until_turn=0,
     )
 
 

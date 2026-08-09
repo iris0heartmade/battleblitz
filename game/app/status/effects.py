@@ -28,9 +28,9 @@ class EffectDef:
 EFFECT_DEFS: dict[str, EffectDef] = {
     "poison":   EffectDef("poison",   "毒",   "☠", 3, {"dmg_pct": 0.05}),
     "paralyze": EffectDef("paralyze", "麻痹", "⚡", 2, {"miss_pct": 0.25}),
-    "blind":    EffectDef("blind",    "致盲", "👁", 2, {"miss_pct": 0.50}),
+    "blind":    EffectDef("blind",    "致盲", "◌", 2, {"miss_pct": 0.50}),
     "slow":     EffectDef("slow",     "减速", "❄", 2, {"mov_mult": 0.50}),
-    "silence":  EffectDef("silence",  "沉默", "👁", 1, {}),
+    "silence":  EffectDef("silence",  "沉默", "🔇", 1, {}),
 }
 
 
@@ -46,29 +46,39 @@ def add_effect(
     remaining_turns: Optional[int] = None,
     params: Optional[dict] = None,
 ) -> dict:
-    """往 unit.status_effects 加一个 effect dict。返回添加的 effect。
+    """往 unit.status_effects 加一个 effect dict。返回添加/合并后的 effect。
 
-    如果同 type 已存在,取 max(remaining_turns, 已有)。
-    params:不传时用 EFFECT_DEFS[type].default_params 的 copy。
+    如果同 type 已存在,取 max(remaining_turns, 已有);新 params 优先合并到
+    旧 params 里;applied_turn / applied_by 用最新值。
+
+    L3 修复:旧实现是 *原地改 caller 持有的 effect dict*,这会让外部提前
+    拿走的 `old = find_effect(unit, "poison")` 引用被偷偷改值。现在改成
+    构造新 dict 替换 list 里同 type 的位置 — 返回的是新对象,旧引用稳定。
     """
     if effect_type not in EFFECT_DEFS:
         raise ValueError(f"unknown status effect type: {effect_type!r}")
     defn = EFFECT_DEFS[effect_type]
     effects = list(getattr(unit, "status_effects", []) or [])
-    # 已有同 type → 取最大 remaining + 合并 params(新值优先)+ 更新 applied_turn
-    for eff in effects:
+    # 已有同 type → 构造新 dict 替换,不原地改 caller 引用的旧 dict
+    for idx, eff in enumerate(effects):
         if eff.get("type") == effect_type:
-            eff["remaining_turns"] = max(
-                int(eff.get("remaining_turns", 0)),
-                remaining_turns if remaining_turns is not None else defn.default_remaining,
-            )
-            eff["applied_turn"] = applied_turn  # 最新覆盖
-            if applied_by is not None:
-                eff["applied_by"] = applied_by
+            old_params = eff.get("params") or {}
+            merged_params = dict(old_params)
             if params:
-                eff.setdefault("params", {})
-                eff["params"].update({k: v for k, v in params.items() if v is not None})
-            return eff
+                merged_params.update({k: v for k, v in params.items() if v is not None})
+            new_eff = {
+                "type": effect_type,
+                "remaining_turns": max(
+                    int(eff.get("remaining_turns", 0)),
+                    remaining_turns if remaining_turns is not None else defn.default_remaining,
+                ),
+                "applied_turn": applied_turn,  # 最新覆盖
+                "applied_by": applied_by if applied_by is not None else eff.get("applied_by"),
+                "params": merged_params,
+            }
+            effects[idx] = new_eff
+            unit.status_effects = effects
+            return new_eff
     # 新增
     eff = {
         "type": effect_type,

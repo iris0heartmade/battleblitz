@@ -108,15 +108,16 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN status_effects JSON NOT NULL DEFAULT '[]'"
         ))
         logger.info("Migration: added units.status_effects")
-    # 2026-08-09: Yuanying silence aura — transitional column kept in
-    # parallel with status_effects(silence). New rows default to 0
-    # (no pending silence). Will be dropped once Godot clients roll
-    # out reading status_effects exclusively.
-    if "silence_until_turn" not in unit_cols:
-        sync_conn.execute(text(
-            "ALTER TABLE units ADD COLUMN silence_until_turn INTEGER NOT NULL DEFAULT 0"
-        ))
-        logger.info("Migration: added units.silence_until_turn")
+    # 2026-08-09: silence_until_turn column is **deprecated**. Code paths
+    # now read status_effects exclusively (see app/status/engine.py and
+    # app/commanders/effects.py:is_unit_silenced). For databases that
+    # still have the legacy column from a previous run, copy any non-zero
+    # silence_until_turn values into status_effects and DROP the column.
+    # This is idempotent: re-running on an already-clean DB is a no-op.
+    if "silence_until_turn" in unit_cols:
+        _backfill_legacy_silence_until_turn(sync_conn)
+        sync_conn.execute(text("ALTER TABLE units DROP COLUMN silence_until_turn"))
+        logger.info("Migration: dropped units.silence_until_turn (deprecated)")
     # 2026-06-30: P0.4 — players.gold, tiles.subtype for the economy +
     # castle-sub-features feature. The `claim_sessions` table is created
     # by create_all() above (it's a new table, not an ALTER on existing).
@@ -305,6 +306,80 @@ def _run_legacy_migrations(sync_conn) -> None:
             logger.info(
                 "Migration note: %s not present; create_all will add it", tbl,
             )
+
+
+def _backfill_legacy_silence_until_turn(sync_conn) -> None:
+    """One-time backfill: any row with ``silence_until_turn > 0`` has its
+    silence copied into ``status_effects`` and the legacy field zeroed.
+
+    Idempotent: re-running on a DB that already has silence_until_turn == 0
+    for every row is a no-op. Safe to call every time ``init_db`` runs.
+
+    We compute ``remaining_turns`` as ``silence_until_turn - game_turn``,
+    clamped to ``>= 1`` (the silence is at least the rest of the current
+    big turn). If we don't know the current turn we use the legacy value
+    directly as a conservative ``remaining_turns`` — slightly over-counting
+    is harmless because the next ``on_player_turn_start`` tick will trim
+    it down. ``applied_turn`` is left at 0 to mark it as "we don't know
+    when this was applied" (purely informational).
+    """
+    import json as _json
+
+    # Touch game_turn_number if it exists; otherwise pass 0.
+    try:
+        turn_rows = sync_conn.execute(text(
+            "SELECT turn_number FROM games ORDER BY id DESC LIMIT 1"
+        )).fetchall()
+        current_turn = int(turn_rows[0][0]) if turn_rows else 0
+    except Exception:  # pragma: no cover - defensive
+        current_turn = 0
+
+    rows = sync_conn.execute(text(
+        "SELECT id, status_effects, silence_until_turn "
+        "FROM units WHERE silence_until_turn > 0"
+    )).fetchall()
+
+    if not rows:
+        return
+
+    migrated = 0
+    for row in rows:
+        unit_id, raw_effects, expire_at = row[0], row[1], int(row[2])
+        # status_effects may be a JSON string (sqlite JSON column) or list
+        if isinstance(raw_effects, (list, tuple)):
+            effects = list(raw_effects)
+        else:
+            try:
+                effects = _json.loads(raw_effects or "[]")
+            except (TypeError, ValueError):
+                effects = []
+        # Skip if a silence entry is already there (idempotent on re-runs)
+        if any(isinstance(e, dict) and e.get("type") == "silence" for e in effects):
+            sync_conn.execute(text(
+                "UPDATE units SET silence_until_turn = 0 WHERE id = :id"
+            ), {"id": unit_id})
+            continue
+        # Conservative remaining: at least 1, otherwise difference.
+        remaining = max(1, expire_at - current_turn) if current_turn else max(1, expire_at)
+        effects.append({
+            "type": "silence",
+            "remaining_turns": remaining,
+            "applied_turn": 0,
+            "applied_by": None,
+            "params": {},
+            "migrated_from": "silence_until_turn",
+        })
+        sync_conn.execute(text(
+            "UPDATE units SET status_effects = :fx, silence_until_turn = 0 "
+            "WHERE id = :id"
+        ), {"fx": _json.dumps(effects), "id": unit_id})
+        migrated += 1
+
+    if migrated:
+        logger.info(
+            "Migration: backfilled %d units from silence_until_turn into status_effects",
+            migrated,
+        )
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

@@ -16,6 +16,8 @@ from app.classes.heroes import get as get_hero
 from app.commanders.actions import can_player_fire_now
 from app.commanders.effects import can_fire_co_power, fire_co_power
 from app.commanders.registry import get_power_threshold
+from app.commanders.validation import CenterOutOfBounds, validate_center_xy
+from app.config import MAP_SIZE
 from app.database import get_session
 from app.game_locks import game_write_guard
 from app.mainline.loader import MainlineNotFound, load_mainline
@@ -165,6 +167,12 @@ async def fire_co_power_endpoint(
             center_xy = (int(body.center.get("x")), int(body.center.get("y")))
         except (TypeError, ValueError):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "center.x and center.y must be ints")
+        # L2:边界校验。apply_silence_aura 不查 range(它只循环范围内 unit),
+        # 但越界中心会让客户端以为生效在边缘外、且未来若加新 radius 立即踩雷。
+        try:
+            validate_center_xy(center_xy, map_size=MAP_SIZE)
+        except CenterOutOfBounds as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
     # 取全场 units(silence 区域选取需要;Unit 无 game_id 列,要 join Player)
     all_units = (await session.scalars(

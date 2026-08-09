@@ -516,7 +516,7 @@ async def attack(
     if is_unit_silenced(attacker, current_turn=game.turn_number):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"attacker is silenced until turn {attacker.silence_until_turn}",
+            "attacker is silenced (status_effects contains silence)",
         )
 
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))

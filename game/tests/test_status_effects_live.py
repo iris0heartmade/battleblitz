@@ -39,7 +39,6 @@ def _mk_unit(
         skills=list(skills or []),
         attack_range=2, min_attack_range=0,
         status_effects=list(status_effects or []),
-        silence_until_turn=0,
     )
 
 

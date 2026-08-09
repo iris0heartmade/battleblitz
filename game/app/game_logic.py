@@ -2085,9 +2085,9 @@ async def _ai_attack(
     from app.commanders.effects import is_unit_silenced
     if is_unit_silenced(attacker, current_turn=current_turn):
         logger.info(
-            "AI attack REJECTED (silenced): %s at (%d,%d) -> %s, silence_until_turn=%d, current=%d",
+            "AI attack REJECTED (silenced): %s at (%d,%d) -> %s, current=%d",
             attacker.name, attacker.x, attacker.y, target.name,
-            attacker.silence_until_turn, current_turn,
+            current_turn,
         )
         return False
     target_tile = (

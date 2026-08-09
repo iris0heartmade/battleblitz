@@ -211,10 +211,9 @@ class UnitOut(APIModel):
     skills: List[str]
     # 通用 status effect 列表 (P+):
     #   [{"type": "poison"|"paralyze"|"blind"|"slow"|"silence", ...}, ...]
-    # 详情见 game/app/status/engine.py。
+    # 详情见 game/app/status/engine.py。silence 状态读这里,不再有
+    # 单独的 silence_until_turn 字段。
     status_effects: List[dict] = []
-    # 过渡期字段(silence 迁移后会删除):沉默持续到的绝对 turn 编号,0 = 未沉默。
-    silence_until_turn: int = 0
     # Class-level combat stats the client needs to render attack range /
     # threat-area overlays without hard-coding values per unit type.
     attack_range: int = 1

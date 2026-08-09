@@ -1,5 +1,29 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-09 英雄美术资源登记(L4 review 补登记)
+
+所有英雄美术资源均为 8-bit PNG,统一存放在 `godot-client/assets/heroes/`。
+
+| Hero    | 单位立绘           | 大头贴 portrait          | 队徽 crest    | 备注 |
+|---------|--------------------|--------------------------|----------------|------|
+| anna    | `anna.png` 1254×1254 RGBA | `portrait_anna.png` 800×1400 RGBA | `crest_anna.png` 120×120 RGBA | 初始版 |
+| anna_boss | (复用 anna)        | `portrait_anna_boss.png` 774×1355 **RGB** | (复用 anna)    | RGB 无 alpha,变体 BOSS 头像 |
+| yun     | `yun.png` 717×781 RGBA    | `portrait_yun.png` 800×1400 RGBA  | `crest_yun.png` 120×120 RGBA  | |
+| youko   | `youko.png` 1254×1254 RGBA | `portrait_youko.png` 800×1400 RGBA | `crest_youko.png` 120×120 RGBA | |
+| yuanying | `yuanying.png` 768×768 RGBA | `portrait_yuanying.png` 948×1659 RGBA | `crest_yuanying.png` 256×256 RGBA | 鸢影;队徽比其它大一档(2× 边长) |
+
+License / 来源:
+- 当前批次均为项目内原创 / 委托绘制的占位与正式稿,版权属项目所有。
+- 后续若引入外部素材(Free-license 库 / 委托 / 自制),需在每张资源同目录放
+  `LICENSE.txt` / `CREDITS.md`,在 CHANGELOG 本节登记出处,license 类别
+  (CC0 / CC-BY / MIT / 商业 等)。
+
+格式约定(后续新增资源请遵守):
+- 单位立绘 (`<hero>.png`):正方形 1024+ 边长,RGBA,带透明背景。
+- 大头贴 (`portrait_<hero>.png`):近似 4:5(800×1400 或相近),RGBA。
+- 队徽 (`crest_<hero>.png`):120×120,RGBA,适配小队栏 1× 显示。
+- 不使用 JPG(WebP 在 Godot 4 已稳定,RGBA 不适用);PSD / AI 源文件不入库。
+
 ## 2026-08-02 资源收尾
 
 - 鸢影美术资源二次收尾:

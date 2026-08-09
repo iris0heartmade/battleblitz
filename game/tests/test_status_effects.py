@@ -30,11 +30,10 @@ from app.status import (
 )
 
 
-def _mk_unit(*, status_effects=None, hp=20, max_hp=20, silence_until_turn=0, mov=4):
+def _mk_unit(*, status_effects=None, hp=20, max_hp=20, mov=4):
     return SimpleNamespace(
         status_effects=list(status_effects or []),
         hp=hp, max_hp=max_hp,
-        silence_until_turn=silence_until_turn,
         mov=mov,
     )
 
@@ -267,17 +266,25 @@ def test_is_silenced_new_field_only():
 
 
 def test_is_silenced_legacy_field_ignored():
-    """旧 silence_until_turn 字段(无新 effect)不算被沉默。"""
-    u = _mk_unit(silence_until_turn=5)
-    assert is_silenced(u) is False  # 新 is_silenced 不读旧字段
+    """silence_until_turn 字段已废弃:is_silenced 只读 status_effects。
 
-
-def test_should_block_attack_silence_legacy_field_fallback():
-    """commanders.effects.is_unit_silenced 同时读 status_effects + 旧字段(过渡期 fallback)。
-
-    旧字段的兼容由 commanders.effects.is_unit_silenced() 集中处理,这里
-    测的是它的包装层。
+    即便 unit 上残留 silence_until_turn 属性(老数据),只要 status_effects
+    里没有 silence entry,就视作未沉默。数据迁移见
+    database._backfill_legacy_silence_until_turn。
     """
+    u = _mk_unit()
+    # 模拟老数据:残留 silence_until_turn 属性,但 status_effects 空
+    u.silence_until_turn = 5
+    assert is_silenced(u) is False
+
+
+def test_is_unit_silenced_no_legacy_fallback():
+    """commanders.effects.is_unit_silenced 也不再读旧字段;只走新机制。"""
     from app.commanders.effects import is_unit_silenced as _is_silenced_compat
-    u = _mk_unit(silence_until_turn=5)
+    # status_effects 空 + 残留 silence_until_turn → 视作未沉默
+    u = _mk_unit()
+    u.silence_until_turn = 5
+    assert _is_silenced_compat(u, current_turn=4) is False
+    # 但加了 status_effects 后立即生效
+    add_effect(u, "silence", applied_turn=1)
     assert _is_silenced_compat(u, current_turn=4) is True

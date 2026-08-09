@@ -159,8 +159,8 @@ def apply_silence_aura(
     2v2 / FFA 团队模式下,同 team_id 但不同 player_id 的友军魔法单位
     不会被误沉默(参见 game/app/classes/heroes/yuanying.py:9,43)。
 
-    新机制:走通用 status_effects 框架(详见 app/status/engine.py)。
-    同时保留旧 silence_until_turn 字段的写入以做向后兼容。
+    走通用 status_effects 框架(详见 app/status/engine.py)。
+    `silence_until_turn` 字段已废弃,本函数不再写入。
 
     Args:
         units: 全场 unit 列表(已 dead 的也会被传入,但会被 hp <= 0 过滤)
@@ -214,7 +214,7 @@ def apply_silence_aura(
             attack_kind = "physical"
         if attack_kind != "magic":
             continue
-        # 新机制:写入 status_effects(通用框架);同时保留旧字段做兜底。
+        # 写入 status_effects(通用框架);silence_until_turn 字段已废弃不再写。
         add_effect(
             unit,
             "silence",
@@ -222,9 +222,6 @@ def apply_silence_aura(
             applied_by=owner_player_id,
             remaining_turns=duration_turns,
         )
-        # 旧字段兼容(过渡期)
-        if unit.silence_until_turn < expire_at:
-            unit.silence_until_turn = expire_at
         silenced.append(unit)
     return silenced
 
@@ -232,27 +229,24 @@ def apply_silence_aura(
 def is_unit_silenced(unit, *, current_turn) -> bool:
     """检查单位当前是否被沉默(全局工具,供 attack / counter 拦截使用)。
 
-    优先查通用 status_effects(新机制),fallback 到 silence_until_turn 旧字段。
+    只读通用 status_effects 新机制。silence_until_turn 字段已废弃,不再
+    作为 fallback 来源;若发现老存档里有非零值,迁移代码
+    (database._migrate_legacy_silence_until_turn)会在读出时把它转写到
+    status_effects 并清零。
     """
     from app.status import is_silenced as _is_silenced_new
-    if _is_silenced_new(unit):
-        return True
-    return int(getattr(unit, "silence_until_turn", 0)) > int(current_turn)
+    return _is_silenced_new(unit)
 
 
 def clear_expired_silences(units, *, current_turn) -> int:
-    """清空已过期沉默(silence_until_turn <= current_turn → 0)。
+    """兼容期保留的清理入口。
 
     新机制下,通用 tick_effects_at_turn_start 已经把 status_effects 里
     silence 的 remaining_turns 减到 0 自动过期(详见 app.status.engine)。
-    本函数保留旧字段(silence_until_turn)的清空兜底。
+    本函数现在是个 no-op(silence_until_turn 字段已废弃),保留是为了
+    旧调用方不会因为删函数而崩;返回 0。
     """
-    cleared = 0
-    for unit in units:
-        if int(getattr(unit, "silence_until_turn", 0)) > 0 and unit.silence_until_turn <= current_turn:
-            unit.silence_until_turn = 0
-            cleared += 1
-    return cleared
+    return 0
 
 
 def expire_power(player):

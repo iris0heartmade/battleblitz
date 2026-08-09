@@ -1,11 +1,14 @@
 """沉默领域 (鸢影 P+) — 沉默状态系统集成测试。
 
-覆盖:
+silence_until_turn 字段已废弃,所有 silence 状态读 status_effects。
+本文件覆盖:
 - apply_silence_aura:5×5 区域选择、非同 team、只 magic 单位、cap 取最长
-- is_unit_silenced / clear_expired_silences:基本工具
+- is_unit_silenced:基本工具(只读 status_effects)
 - fire_co_power(silence_radius > 0) 触发 apply_silence_aura
-- on_player_turn_start 清空过期沉默(silence_duration_turns 后)
+- on_player_turn_start 通过 tick_effects_at_turn_start 清空过期沉默
 - routes/actions.py:attack / counter 在 silence 时拒绝
+- 2v2 / FFA team mode:同 team_id 的友军魔法单位不被沉默
+- clear_expired_silences 现在是 no-op(兼容入口)
 """
 from types import SimpleNamespace
 
@@ -24,17 +27,30 @@ from app.models import Game, Player, Unit
 
 
 def _mk_unit(unit_id: int, owner_id: int, x: int, y: int, *, type_id="warlock", team_id=None):
-    """Construct a SimpleNamespace that mimics Unit enough for silence checks."""
-    u = SimpleNamespace(
+    """构造一个 SimpleNamespace 模拟 Unit,带 status_effects list。"""
+    return SimpleNamespace(
         id=unit_id,
         player_id=owner_id,
         unit_type=type_id,
         x=x, y=y,
         hp=20,
-        silence_until_turn=0,
+        status_effects=[],
         team_id=team_id,
     )
-    return u
+
+
+def _silenced(unit) -> bool:
+    return any(
+        isinstance(e, dict) and e.get("type") == "silence"
+        for e in (getattr(unit, "status_effects", []) or [])
+    )
+
+
+def _silence_remaining(unit) -> int:
+    for e in (getattr(unit, "status_effects", []) or []):
+        if isinstance(e, dict) and e.get("type") == "silence":
+            return int(e.get("remaining_turns", 0))
+    return 0
 
 
 def test_apply_silence_aura_silences_enemy_magic_units_in_5x5():
@@ -58,26 +74,28 @@ def test_apply_silence_aura_silences_enemy_magic_units_in_5x5():
     )
 
     assert silenced == [enemy_warlock]
-    assert enemy_warlock.silence_until_turn == 4
-    assert enemy_archer.silence_until_turn == 0
-    assert ally_warlock.silence_until_turn == 0
-    assert far_enemy.silence_until_turn == 0
-    assert dead_enemy.silence_until_turn == 0
+    assert _silenced(enemy_warlock)
+    assert _silence_remaining(enemy_warlock) == 1
+    assert not _silenced(enemy_archer)
+    assert not _silenced(ally_warlock)
+    assert not _silenced(far_enemy)
+    assert not _silenced(dead_enemy)
 
 
-def test_apply_silence_aura_takes_max_existing_until():
+def test_apply_silence_aura_takes_max_existing_remaining():
     """如果单位已被沉默更长时间,不要缩短。"""
     owner = SimpleNamespace(id=1)
     u = _mk_unit(201, owner_id=2, x=5, y=5)
-    u.silence_until_turn = 10  # 已沉默到 turn 10
+    # 预存一个 remaining=5 的 silence
+    u.status_effects = [{"type": "silence", "remaining_turns": 5, "applied_turn": 0, "params": {}}]
     units = [u]
 
     apply_silence_aura(
         units, center_xy=(5, 5), radius=2,
         duration_turns=1, current_turn=3, owner_player_id=owner.id,
     )
-    # expire_at = 3 + 1 = 4,小于已有的 10,保留 10
-    assert u.silence_until_turn == 10
+    # 已有的 5 大于新加的 1 → 保留 5
+    assert _silence_remaining(u) == 5
 
 
 def test_apply_silence_aura_5x5_square_boundary():
@@ -92,33 +110,27 @@ def test_apply_silence_aura_5x5_square_boundary():
         duration_turns=1, current_turn=1, owner_player_id=owner.id,
     )
     assert silenced == [inside_edge]
-    assert outside_one.silence_until_turn == 0
-    assert outside_two.silence_until_turn == 0
+    assert not _silenced(outside_one)
+    assert not _silenced(outside_two)
 
 
 def test_is_unit_silenced_basic():
-    """silence_until_turn=N 含义:沉默持续到 turn N 结束。turn N 开始时已解除。"""
+    """is_unit_silenced 只读 status_effects;无 silence entry → False。"""
     u = _mk_unit(1, owner_id=2, x=0, y=0)
     assert not is_unit_silenced(u, current_turn=5)
-    u.silence_until_turn = 6
-    assert is_unit_silenced(u, current_turn=5)         # 仍沉默
-    assert not is_unit_silenced(u, current_turn=6)      # turn 6 开始 → 解除
-    assert not is_unit_silenced(u, current_turn=7)
+    u.status_effects = [{"type": "silence", "remaining_turns": 2, "applied_turn": 0, "params": {}}]
+    assert is_unit_silenced(u, current_turn=5)
+    assert is_unit_silenced(u, current_turn=99)
 
 
-def test_clear_expired_silences():
+def test_clear_expired_silences_is_noop():
+    """clear_expired_silences 现在是 no-op 兼容入口,返回 0。"""
     u1 = _mk_unit(1, owner_id=2, x=0, y=0)
-    u1.silence_until_turn = 5
-    u2 = _mk_unit(2, owner_id=2, x=1, y=1)
-    u2.silence_until_turn = 7
-    u3 = _mk_unit(3, owner_id=2, x=2, y=2)
-    # u3 未沉默
-
-    cleared = clear_expired_silences([u1, u2, u3], current_turn=5)
-    assert cleared == 1
-    assert u1.silence_until_turn == 0  # 5 <= 5 清空
-    assert u2.silence_until_turn == 7  # 7 > 5 保留
-    assert u3.silence_until_turn == 0  # 仍是 0
+    u1.status_effects = [{"type": "silence", "remaining_turns": 1, "applied_turn": 0, "params": {}}]
+    cleared = clear_expired_silences([u1], current_turn=5)
+    assert cleared == 0
+    # 不应清掉 status_effects 里的 silence(由 on_player_turn_start → tick 来清)
+    assert _silence_remaining(u1) == 1
 
 
 def test_apply_silence_aura_noop_when_radius_zero():
@@ -130,19 +142,16 @@ def test_apply_silence_aura_noop_when_radius_zero():
         duration_turns=1, current_turn=1, owner_player_id=owner.id,
     )
     assert silenced == []
-    assert u.silence_until_turn == 0
+    assert not _silenced(u)
 
 
 def test_fire_co_power_yuanying_triggers_silence_aura():
     """fire_co_power + silence_radius=2 → 调 apply_silence_aura。"""
-    # 模拟玩家:yun(yun power 是 atk_pct,无 silence),yuanying(silence_radius=2)
-    # 这里测 yuanying 路径
     from app.classes.heroes import get as get_hero
 
     yuanying = get_hero("yuanying")
     assert yuanying.commander_power.silence_radius == 2
 
-    # 构造玩家 + 单位
     owner = SimpleNamespace(id=1)
     target = _mk_unit(101, owner_id=2, x=5, y=5)  # magic 单位
     unit_list = [target]
@@ -165,7 +174,8 @@ def test_fire_co_power_yuanying_triggers_silence_aura():
         current_turn=3,
         all_units=unit_list,
     )
-    assert target.silence_until_turn == 4  # 3 + 1
+    assert _silenced(target)
+    assert _silence_remaining(target) == 1
     assert player.co_state["stars_earned_total"] == 12  # 18 - 6
     assert player.co_state["is_power_active"] is True
 
@@ -194,7 +204,6 @@ def test_fire_co_power_yun_no_silence_works_without_center():
         co_state={"commander_id": "yun", "stars_earned_total": 18,
                   "threshold": 18, "power_cost": 6, "is_power_active": False},
     )
-    # 不传 center / all_units 也 OK
     fire_co_power(player)
     assert player.co_state["is_power_active"] is True
 
@@ -221,7 +230,8 @@ async def test_silenced_unit_cannot_attack_via_endpoint(db_session, monkeypatch)
     attacker = Unit(player_id=p1.id, unit_type="warlock", name="A",
                     hp=20, max_hp=20, atk=20, def_=1, matk=20, mdef=1,
                     mov=3, mp=3, x=0, y=0, skills=[],
-                    silence_until_turn=10)  # 沉默到 turn 10
+                    status_effects=[{"type": "silence", "remaining_turns": 3,
+                                     "applied_turn": 0, "applied_by": None, "params": {}}])
     target = Unit(player_id=p2.id, unit_type="archer", name="T",
                   hp=20, max_hp=20, atk=20, def_=1, matk=0, mdef=0,
                   mov=3, mp=3, x=1, y=0, skills=[])
@@ -239,7 +249,6 @@ async def test_silenced_unit_cannot_attack_via_endpoint(db_session, monkeypatch)
                                      effective_atk=10, defense_total=0)],
     )
 
-    # current_turn 默认 0,attacker.silence_until_turn=10 > 0 → 沉默
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc:
         await attack(game.id, AttackRequest(
@@ -249,8 +258,8 @@ async def test_silenced_unit_cannot_attack_via_endpoint(db_session, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_on_player_turn_start_clears_expired_silence(db_session):
-    """on_player_turn_start 时 silence_until_turn <= current_turn → 清空。"""
+async def test_on_player_turn_start_ticks_silence_to_zero(db_session):
+    """on_player_turn_start 调 tick_effects_at_turn_start → remaining=0 自动过期。"""
     from app.commanders.effects import on_player_turn_start
 
     game = Game(name="cl", status="playing", map_seed=1, win_condition="defend",
@@ -270,23 +279,26 @@ async def test_on_player_turn_start_clears_expired_silence(db_session):
     u1 = Unit(player_id=p1.id, unit_type="warlock", name="A",
               hp=20, max_hp=20, atk=20, def_=1, matk=20, mdef=1,
               mov=3, mp=3, x=0, y=0, skills=[],
-              silence_until_turn=2)
+              status_effects=[{"type": "silence", "remaining_turns": 1,
+                               "applied_turn": 0, "applied_by": None, "params": {}}])
     u2 = Unit(player_id=p1.id, unit_type="warlock", name="B",
               hp=20, max_hp=20, atk=20, def_=1, matk=20, mdef=1,
               mov=3, mp=3, x=1, y=0, skills=[],
-              silence_until_turn=10)
+              status_effects=[{"type": "silence", "remaining_turns": 5,
+                               "applied_turn": 0, "applied_by": None, "params": {}}])
     db_session.add_all([u1, u2])
     await db_session.flush()
     await db_session.refresh(p1, ["units"])
 
-    # game_turn_number=2 > last_start_turn=1 → 进 clear 分支
-    # silence_until_turn <= 2 的清空(u1),10 的保留(u2)
+    # game_turn_number=2 > last_start_turn=1 → 进 tick 分支
     on_player_turn_start(p1, 2, all_units=[u1, u2])
-    await db_session.commit()  # 持久化 silence_until_turn 改动
+    await db_session.commit()
     await db_session.refresh(u1)
     await db_session.refresh(u2)
-    assert u1.silence_until_turn == 0
-    assert u2.silence_until_turn == 10
+    # u1 remaining 1 → 0,被清;u2 remaining 5 → 4
+    assert not _silenced(u1)
+    assert _silenced(u2)
+    assert _silence_remaining(u2) == 4
 
 
 # =========================================================================
@@ -297,13 +309,11 @@ async def test_on_player_turn_start_clears_expired_silence(db_session):
 
 def test_apply_silence_aura_skips_ally_in_2v2_team_mode():
     """2v2:同 team_id 的友军魔法单位,即使不同 player_id,也不被沉默。"""
-    # 玩家 1 是 owner(player_id=1, team_id="red"),
-    # 玩家 2 是同 team("red", 队友),玩家 3 / 4 是对方 team("blue")。
     owner = SimpleNamespace(id=1, team_id="red")
     ally_warlock = _mk_unit(201, owner_id=2, x=5, y=5, team_id="red")  # 队友
     enemy_warlock = _mk_unit(202, owner_id=3, x=5, y=5, team_id="blue")  # 敌人
     enemy2_warlock = _mk_unit(203, owner_id=4, x=5, y=5, team_id="blue")  # 敌人
-    teamless_warlock = _mk_unit(204, owner_id=99, x=5, y=5, team_id=None)  # 无 team(不应当作队友)
+    teamless_warlock = _mk_unit(204, owner_id=99, x=5, y=5, team_id=None)  # 无 team
     units = [ally_warlock, enemy_warlock, enemy2_warlock, teamless_warlock]
 
     silenced = apply_silence_aura(
@@ -316,17 +326,15 @@ def test_apply_silence_aura_skips_ally_in_2v2_team_mode():
         owner_player=owner,
     )
 
-    # ally 不沉默,teamless 被沉默(因为他不是队友),两个 enemy 被沉默
-    assert ally_warlock.silence_until_turn == 0
-    assert enemy_warlock.silence_until_turn == 4
-    assert enemy2_warlock.silence_until_turn == 4
-    assert teamless_warlock.silence_until_turn == 4
+    assert not _silenced(ally_warlock)
+    assert _silenced(enemy_warlock)
+    assert _silenced(enemy2_warlock)
+    assert _silenced(teamless_warlock)  # 无 team → 不是队友 → 被沉默
     assert silenced == [enemy_warlock, enemy2_warlock, teamless_warlock]
 
 
 def test_apply_silence_aura_team_filter_no_op_in_1v1():
     """1v1 模式:owner_player 没传 / 没 team_id,只按 player_id 过滤(向后兼容)。"""
-    # 1v1 玩家(无 team_id),owner_player=None 时也应当 work
     owner = SimpleNamespace(id=1)  # 无 team_id
     enemy_warlock = _mk_unit(301, owner_id=2, x=5, y=5)  # 无 team_id
     units = [enemy_warlock]
@@ -341,4 +349,5 @@ def test_apply_silence_aura_team_filter_no_op_in_1v1():
         owner_player=owner,
     )
     assert silenced == [enemy_warlock]
-    assert enemy_warlock.silence_until_turn == 2
+    assert _silenced(enemy_warlock)
+    assert _silence_remaining(enemy_warlock) == 1

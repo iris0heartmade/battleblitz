@@ -77,7 +77,7 @@ var _mp_badge_label: Label = null
 var _team_badge: ColorRect = null
 var _team_badge_label: Label = null
 var _acted_overlay: ColorRect = null
-# 通用 status effect (P+):紫色蒙版 + glyphs(☠⚡👁❄ 等)行,显示在单位顶部
+# 通用 status effect (P+):紫色蒙版 + glyphs(☠⚡◌❄🔇)行,显示在单位顶部
 # unit_data.status_effects 是 list[dict],每个 dict 含 type / remaining_turns / glyph
 var _status_overlay: ColorRect = null
 var _status_label: Label = null
@@ -87,7 +87,7 @@ var _status_label: Label = null
 const _STATUS_GLYPH := {
 	"poison":   "☠",
 	"paralyze": "⚡",
-	"blind":    "👁",
+	"blind":    "◌",
 	"slow":     "❄",
 	"silence":  "🔇",
 }

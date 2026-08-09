@@ -227,11 +227,9 @@ class Unit(Base):
     #     "applied_turn": int,
     #     "applied_by": int|None,
     #     ...type-specific params...}, ...]
-    # 钩子在 game/app/status/engine.py 集中实现。
+    # 钩子在 game/app/status/engine.py 集中实现。silence 也走这里,
+    # 不再有独立的 silence_until_turn 字段。
     status_effects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
-    # 过渡期字段(沉默迁移到 status_effects 后会删除):为兼容旧 co_state/存档保留。
-    silence_until_turn: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     has_acted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # True if the unit has moved this turn. Separate from has_acted so

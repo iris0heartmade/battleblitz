@@ -6,12 +6,36 @@
 - modify_hit_chance:blind → 降命中率
 - modify_mov:slow → 降 MOV
 - should_block_attack:silence → 阻止 attack / counter
-- is_silenced:helper,向后兼容 silence_until_turn 字段
+- is_silenced:helper,silence 状态走 status_effects
 """
 from __future__ import annotations
 
+import copy
 import random
 from typing import Any
+
+from sqlalchemy import inspect as _sa_inspect
+
+
+def _flag_status_effects_modified(unit: Any) -> None:
+    """SQLAlchemy 默认的 JSON column 不跟踪 list 内部 dict 的 mutation;
+    整体 list 引用替换时,如果 new_effects 里只是原 dict 引用,
+    history.has_changes() 也会返回 False,commit 时不会发出 UPDATE。
+
+    对 ORM 单位的 status_effects,显式 flag_modified 强制 SQLAlchemy
+    在下一次 flush 时把当前 list 序列化写回 DB。
+
+    非 ORM 对象(SimpleNamespace、Pydantic、纯数据类)没有 SQLAlchemy 状态,
+    这里必须跳过 —— 不然 _sa_inspect 会抛 NoInspectionAvailable,
+    把 unit_test 路径全打挂。
+    """
+    try:
+        state = _sa_inspect(unit)
+    except Exception:  # noqa: BLE001 - 非 ORM 对象就是 no-op
+        return
+    if state.persistent or state.detached:
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(unit, "status_effects")
 
 
 def tick_effects_at_turn_start(unit: Any, *, game_turn_number: int) -> list[str]:
@@ -37,13 +61,17 @@ def tick_effects_at_turn_start(unit: Any, *, game_turn_number: int) -> list[str]
             cur_hp = int(getattr(unit, "hp", 0))
             new_hp = max(0, cur_hp - dmg)
             unit.hp = new_hp
-        # 默认消耗 1 回合
-        eff["remaining_turns"] = int(eff.get("remaining_turns", 0)) - 1
-        if eff["remaining_turns"] <= 0:
+        # 默认消耗 1 回合。用 deepcopy 构造新 entry,避免 SQLAlchemy 的
+        # JSON column history 把"原 dict 引用在新 list 里"误判为未变化,
+        # 导致 commit 时丢更新。
+        new_eff = copy.deepcopy(eff)
+        new_eff["remaining_turns"] = int(new_eff.get("remaining_turns", 0)) - 1
+        if new_eff["remaining_turns"] <= 0:
             expired.append(eff_type)
         else:
-            new_effects.append(eff)
+            new_effects.append(new_eff)
     unit.status_effects = new_effects
+    _flag_status_effects_modified(unit)
     return expired
 
 
