@@ -4,6 +4,7 @@ const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
 const CnLabels = preload("res://scripts/ui/cn_labels.gd")
 const HudTheme = preload("res://scripts/ui/hud_theme.gd")
 const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
+const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -263,6 +264,7 @@ var _death_event_seq: int = 0  # 阵亡事件单调序列号,去重 DialogManage
 @onready var connecting_label: Label = $Connecting/ConnectingInner/ConnectingLabel
 @onready var connecting_title: Label = $Connecting/ConnectingInner/ConnectingTitle
 @onready var reconnect_button: Button = $Connecting/ConnectingInner/ReconnectButton
+@onready var connecting_abort_btn: Button = $Connecting/ConnectingInner/AbortButton
 
 # 框架面板(灌主题用) — 改用 ColorRect + ReferenceRect 组合更稳
 @onready var backdrop: ColorRect = $Backdrop
@@ -377,6 +379,9 @@ func _ready() -> void:
 		AudioManager.set_muted(saved_mute)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
+	# 2026-08-09:Connecting 面板「放弃,返回主菜单」按钮
+	if connecting_abort_btn != null and is_instance_valid(connecting_abort_btn):
+		connecting_abort_btn.pressed.connect(_on_connecting_abort_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
 	war_report_close_btn.pressed.connect(_on_war_report_close_pressed)
 
@@ -487,6 +492,13 @@ func _ready() -> void:
 	if board != null and is_instance_valid(board) \
 			and not board.tile_clicked.is_connected(_on_board_tile_clicked):
 		board.tile_clicked.connect(_on_board_tile_clicked)
+	# 2026-08-09:棋盘地图真正加载完成后进入光标模式。
+	# _show_view("game") 里 deferred 的 _enter_board_focus 常因棋盘还没加载
+	# (WS 快照未到,map_size == 0)提前 return,之后无人重试 → board_focused
+	# 永远 false,光标不画、方向键/摇杆无效。这里在 load_map 完成后补一次。
+	if board != null and is_instance_valid(board) \
+			and not board.map_loaded.is_connected(_on_board_map_loaded):
+		board.map_loaded.connect(_on_board_map_loaded)
 
 	# NetworkClient status
 	NetworkClient.ws_connected.connect(func():
@@ -669,6 +681,18 @@ func _show_view(name: String) -> void:
 	if name != "game" and name != "editor":
 		_reset_board_cameras()
 	_current_view = name
+	# 2026-08-09:view 切换时同步 InputState.board_focused + grab focus
+	# menu/lobby/mainline 等"非棋盘 view":board_focused = false,默认 focus 到该 view 的主按钮
+	# game view:board_focused = true,光标可被方向键 / 摇杆控制
+	# 切到 game 前先解掉 board_focused(防上一次没关),然后 view 真正显示后再 enter
+	if name == "game":
+		# 切到棋盘:延迟到下一帧再 enter,等 Board 加载完
+		call_deferred("_enter_board_focus")
+	else:
+		InputState.board_focused = false
+		InputState.cursor_cell = Vector2i(-1, -1)
+		# 给当前 view 一个默认 focus 目标
+		_focus_default_for_view(name)
 
 
 func _reset_board_cameras() -> void:
@@ -695,6 +719,83 @@ func _reset_board_cameras() -> void:
 		_post_frame_retry_count = 0
 		_viewport_safety_reset_pending = true
 		call_deferred("_post_frame_viewport_reset")
+
+
+# === 2026-08-09:键盘 + 手柄 view 切换的 focus 管理 ===
+# game view:进入 board_focus(光标模式);其它 view:grab focus 到该 view 主按钮
+func _enter_board_focus() -> void:
+	if board == null or not is_instance_valid(board):
+		return
+	if board.map_size.x <= 0 or board.map_size.y <= 0:
+		return
+	# 光标初始化:第一个我方单位 > 地图中心 > (0,0)
+	var initial_cell: Vector2i = _find_cursor_initial_cell()
+	InputState.cursor_cell = initial_cell
+	InputState.board_focused = true
+	# 释放所有 Control 的 focus(否则 ui_accept 会被某个 Button 抢走)
+	get_viewport().gui_release_focus()
+
+
+func _find_cursor_initial_cell() -> Vector2i:
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
+		return Vector2i(0, 0)
+	# 找第一个当前玩家的单位
+	if GameState != null:
+		var my_pid: int = int(GameState.local_player_id)
+		for u in GameState.latest_snapshot.get("units", []):
+			if typeof(u) != TYPE_DICTIONARY:
+				continue
+			if int(u.get("player_id", -1)) == my_pid:
+				return Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+	# 退而求其次:地图中心
+	return Vector2i(board.map_size.x / 2, board.map_size.y / 2)
+
+
+# 2026-08-09:board.load_map 完成后由 map_loaded 信号触发。
+# 覆盖"新建/重连/续档"里 _show_view("game") 的 deferred _enter_board_focus
+# 因棋盘未加载而空跑的场景;已在焦点中则不动(避免打断进行中的移动/攻击模式)。
+func _on_board_map_loaded(_width: int, _height: int, _biome: String) -> void:
+	if _current_view != "game":
+		return
+	if InputState == null:
+		return
+	if InputState.board_focused:
+		return
+	_enter_board_focus()
+
+
+func _focus_default_for_view(view_name: String) -> void:
+	# 给常见 view 落默认 focus(避免玩家连按 Tab 才能进菜单)
+	match view_name:
+		"menu":
+			# 主菜单:ResumeButton 优先(如有),否则 MainlineButton
+			if resume_button != null and is_instance_valid(resume_button) and resume_button.is_visible_in_tree() and not resume_button.disabled:
+				resume_button.grab_focus()
+			elif mainline_button != null and is_instance_valid(mainline_button):
+				mainline_button.grab_focus()
+		"lobby":
+			# lobby 内部子控件太多,留给 lobby_controller 自己管
+			pass
+		"mainline":
+			# mainline 内部子控件也很多,留给 mainline_controller
+			pass
+		"editor":
+			# editor 内部有自己的 focus
+			pass
+		"saves":
+			pass
+		"in_progress":
+			pass
+		"connecting":
+			# 2026-08-09:Connecting 面板默认 focus 落「放弃」按钮
+			# 玩家进入这个面板通常已经卡住,默认要"退出"的概率高于"再试一次"。
+			# 没新增 AbortButton 时,fallback 到 ReconnectButton(老行为)。
+			if connecting_abort_btn != null and is_instance_valid(connecting_abort_btn):
+				connecting_abort_btn.grab_focus()
+			elif reconnect_button != null and is_instance_valid(reconnect_button):
+				reconnect_button.grab_focus()
+		_:
+			pass
 
 
 # P2+: 帧末兜底 reset。同帧内 _tween_killed_too_early / state_updated 回调可能
@@ -965,6 +1066,27 @@ func _show_first_tutorial_deferred() -> void:
 func _on_reconnect_pressed() -> void:
 	if _game_id > 0 and _player_id > 0:
 		NetworkClient.connect_to_game(_game_id, _player_id)
+
+
+# 2026-08-09:Connecting 面板的"放弃重连,返回主菜单"按钮 handler。
+# 关键:disconnect WS,重置 _game_id / _player_id / _resume_* 状态,
+# 切回 menu。否则下次进游戏会从上次的中断存档续上,不是玩家预期。
+func _on_connecting_abort_pressed() -> void:
+	# 1) 关 WS
+	if NetworkClient != null and NetworkClient.has_method("ws_close"):
+		NetworkClient.ws_close()
+	# 2) 切回 menu
+	_show_view("menu")
+	# 3) 状态清理(主菜单要的"白纸"状态)
+	_game_id = 0
+	_player_id = 0
+	_resume_game_id = 0
+	_resume_player_id = 0
+	_resume_kind = ""
+	# 4) 顺手清 connecting label 文字(下次进别留尾巴)
+	if connecting_label != null and is_instance_valid(connecting_label):
+		connecting_label.text = "已断开,正在返回主菜单..."
+	_update_status("已放弃重连,返回主菜单")
 
 
 func _on_exit_pressed() -> void:
@@ -1582,6 +1704,15 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 		return
 	var local: Vector2 = layer.to_local(global_pos)
 	var target_cell: Vector2i = layer.local_to_map(local)
+	_update_path_dots_at_cell(target_cell)
+
+
+# 2026-08-09:键盘/手柄光标模式 — 玩家光标移到哪格,这里直接收 cell。
+# 复用 _update_path_dots_on_hover 内部的 path 计算 + dots 渲染逻辑,
+# 把"screen pos → cell"这一步在外面完成。
+func _update_path_dots_at_cell(target_cell: Vector2i) -> void:
+	if board == null or _move_reachable_set.is_empty():
+		return
 	if target_cell == _path_hover_last:
 		return
 	_path_hover_last = target_cell
@@ -2149,6 +2280,59 @@ func _on_ai_thinking(thinking: bool) -> void:
 	ai_thinking_label.modulate.a = 1.0
 	_ai_pulse_tween = create_tween().set_loops()
 	_ai_pulse_tween.set_trans(Tween.TRANS_SINE)
+
+
+# 2026-08-09:全局返回上一级 — LIFO 关掉最上层 modal。
+# 返回:true 表示关掉了某 modal(让 caller 调 set_input_as_handled);
+#       false 表示没 modal 在最上层,让其它逻辑继续走(棋盘 cancel / 暂停 toggle)。
+func _try_close_topmost_modal() -> bool:
+	# LIFO 顺序:后开的先关。最靠"玩家"的最先关。
+	# 顺序按 panel 显隐的常见 LIFO 路径调:
+	#   ConfirmDialog(顶层) > BattleResult(终局) > AttackConfirm(战斗中)
+	#   > Recruit(选中空兵营后) > WarReport(终局后) > Settings(任何时候)
+	#   > Pause(战斗中) > TutorialBubble(任何时候)
+	# 注意:ActionBubble 不接 ui_cancel(玩家按 ui_cancel 时通常是要退出行动模式,
+	# ActionBubble 跟 board.cancel_cursor 同语义,留给 board._handle_cursor_input 处理)。
+	if _is_visible(confirm_dialog):
+		# Confirm 弹窗 Esc = 选 No(默认焦点,更安全)
+		_on_confirm_no_pressed()
+		return true
+	if _is_visible(battle_result_panel):
+		# BattleResult Esc = 关闭面板(玩家可能想看棋盘)
+		hide_battle_result()
+		return true
+	if _is_visible(attack_confirm_panel):
+		# 攻击确认 Esc = 取消攻击
+		_on_attack_cancel_pressed()
+		return true
+	if _is_visible(recruit_panel):
+		_on_recruit_close_pressed()
+		return true
+	if _is_visible(war_report_panel):
+		war_report_panel.visible = false
+		return true
+	if _is_visible(tutorial_bubble):
+		_on_tutorial_got_it_pressed()
+		return true
+	if _is_visible(settings_panel):
+		_hide_settings_panel()
+		return true
+	if _is_visible(pause_panel):
+		# pause 在 board_focused 已被让给 board.cancel(我们在 _unhandled_input 顶部分流)
+		# 这里 pause.visible 时一律关暂停
+		_toggle_pause()
+		return true
+	if _is_visible(connecting_panel):
+		# 重连卡住 → 放弃,回主菜单
+		_on_connecting_abort_pressed()
+		return true
+	return false
+
+
+func _is_visible(panel: Control) -> bool:
+	if panel == null or not is_instance_valid(panel):
+		return false
+	return panel.visible
 	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 0.4, 0.8)
 	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 1.0, 0.8)
 
@@ -2181,6 +2365,16 @@ func _update_status(text: String) -> void:
 # ============================================================
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 2026-08-09:全局返回上一级(模态 LIFO)— Esc / 手柄 A 先关最上层 modal
+	# 优先级(从上到下,先匹配先关):
+	#   ConfirmDialog → BattleResultPanel → AttackConfirmPanel → RecruitPanel
+	#   → WarReportPanel → SettingsPanel → PausePanel → ConnectingPanel(放弃重连)
+	# 命中即 set_input_as_handled,后续 board / ui_cancel / ui_back 不再处理。
+	# 注意:board_focused 棋盘模式让位给 modal(玩家开的 modal 优先于棋盘微观操作)。
+	if event.is_action_pressed("ui_cancel"):
+		if _try_close_topmost_modal():
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if editor_view != null and is_instance_valid(editor_view) and editor_view.visible and event.ctrl_pressed:
 			if event.keycode == KEY_Z:
@@ -2193,6 +2387,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
 	if event.is_action_pressed("pause"):
+		# 2026-08-09:board_focused 时(棋盘光标模式)Esc 走"取消行动模式",
+		# 不触发暂停。玩家按 Start(手柄)/ 主动点暂停按钮才暂停。
+		if InputState != null and InputState.board_focused \
+				and not (settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible):
+			return
 		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
 		if settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible:
 			_hide_settings_panel()
@@ -2356,6 +2555,8 @@ func _show_recruit_at(info: Dictionary) -> void:
 		btn.pressed.connect(_on_recruit_button_pressed.bind(unit_type))
 		recruit_list.add_child(btn)
 	recruit_panel.visible = true
+	# 2026-08-09:grab focus 到第一个可点按钮(动态列表,用 first focusable)
+	UIPanelFocus.grab_first_focusable(recruit_panel)
 
 
 func _on_recruit_button_pressed(unit_type: String) -> void:
@@ -2615,6 +2816,8 @@ func _toggle_pause() -> void:
 		if war_report_panel != null and is_instance_valid(war_report_panel):
 			war_report_panel.visible = false
 		get_tree().paused = true
+		# 2026-08-09:grab focus 到默认按钮(resume),手柄/键盘可立即点
+		UIPanelFocus.grab_on_show(pause_panel, pause_resume_btn)
 	else:
 		_hide_pause_panel()
 
@@ -2632,6 +2835,8 @@ func _show_settings_panel() -> void:
 	if settings_name_input != null and is_instance_valid(settings_name_input):
 		settings_name_input.text = _user_name
 	settings_panel.visible = true
+	# 2026-08-09:grab focus 到关闭按钮(玩家可能想直接退),手柄/键盘可立即按
+	UIPanelFocus.grab_on_show(settings_panel, settings_close_btn)
 
 
 func _hide_settings_panel() -> void:
@@ -2908,6 +3113,9 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
 	battle_result_panel.visible = true
+	# 2026-08-09:grab focus 到主按钮(看情况,优先 DetailBtn,否则 BackLobbyBtn)
+	var default_btn: Button = battle_detail_btn if battle_detail_btn != null else battle_back_lobby_btn
+	UIPanelFocus.grab_on_show(battle_result_panel, default_btn)
 
 
 func hide_battle_result() -> void:
@@ -2924,6 +3132,8 @@ func _on_battle_detail_pressed() -> void:
 	# 直接弹出战报面板(复用)
 	if war_report_panel != null and is_instance_valid(war_report_panel):
 		war_report_panel.visible = true
+		# 2026-08-09:grab focus 到关闭按钮(战报面板只读,默认落 close)
+		UIPanelFocus.grab_on_show(war_report_panel, war_report_close_btn)
 
 
 func _on_battle_back_menu_pressed() -> void:
@@ -3368,6 +3578,19 @@ func _cancel_action_mode() -> void:
 		_update_status("已取消行动模式")
 
 
+# 2026-08-09:board.gd 棋盘光标按取消(A / Esc)时调。
+# 包装 _cancel_action_mode + _hide_action_bubble + 清光标,
+# 行为对齐 main.gd 里"右键空地"的分支(也调这俩)。
+func _cursor_cancel_action() -> void:
+	_cancel_action_mode()
+	_hide_action_bubble()
+	if board != null and board.has_method("clear_selection_marks"):
+		board.clear_selection_marks()
+	# 重置光标到第一个我方单位,避免"取消完光标停在地块上看起来像死锁"
+	if board != null and is_instance_valid(board) and board.map_size.x > 0:
+		InputState.cursor_cell = _find_cursor_initial_cell()
+
+
 # 行动气泡的"取消"按钮 + 右键取消都走这里
 func _on_cancel_pressed() -> void:
 	_cancel_action_mode()
@@ -3452,6 +3675,8 @@ func _show_confirm(title: String, body: String, on_yes: Callable, on_no: Callabl
 		confirm_body_label.text = body
 	if confirm_dialog != null and is_instance_valid(confirm_dialog):
 		confirm_dialog.visible = true
+		# 2026-08-09:grab focus 到默认按钮 = No(更安全,误按不会真退出)
+		UIPanelFocus.grab_on_show(confirm_dialog, confirm_no_btn)
 
 
 func _hide_confirm() -> void:
@@ -3488,6 +3713,8 @@ func _show_attack_confirm(attacker_id: int, target_id: int) -> void:
 		attack_confirm_body.text = _build_attack_confirm_text(attacker, info)
 	if attack_confirm_panel != null and is_instance_valid(attack_confirm_panel):
 		attack_confirm_panel.visible = true
+		# 2026-08-09:grab focus 到 Cancel(默认取消更安全,等 forecast 出来再确认)
+		UIPanelFocus.grab_on_show(attack_confirm_panel, attack_cancel_btn)
 	_show_attack_forecast_loading(attacker, info)
 	if _game_id > 0 and _player_id > 0 and NetworkClient != null:
 		NetworkClient.forecast_attack(

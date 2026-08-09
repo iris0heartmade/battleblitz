@@ -423,6 +423,7 @@ var _press_start_mouse: Vector2 = Vector2.ZERO
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	_handle_cursor_input(event)
 	_handle_camera_input(event)
 
 
@@ -431,6 +432,18 @@ func handle_camera_input_from_owner(event: InputEvent) -> void:
 
 
 func _handle_camera_input(event: InputEvent) -> void:
+	# 2026-08-09:鼠标移动时同步光标 cell — 鼠标/手柄玩家看到的"当前格"一致
+	if event is InputEventMouseMotion and InputState != null and InputState.board_focused:
+		var world_pos: Vector2 = event.global_position
+		if board_camera != null and board_camera.enabled:
+			world_pos = board_camera.get_canvas_transform().affine_inverse() * event.global_position
+		if ground_layer != null:
+			var local: Vector2 = ground_layer.to_local(world_pos)
+			var cell: Vector2i = ground_layer.local_to_map(local)
+			if cell.x >= 0 and cell.y >= 0 and cell.x < map_size.x and cell.y < map_size.y:
+				if InputState.cursor_cell != cell:
+					InputState.cursor_cell = cell
+		# 不 return — 后续相机/pan 逻辑继续走
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
@@ -581,15 +594,45 @@ func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
 # 频繁 Tween 创建/销毁。
 var _flag_blink_t: float = 0.0
 const _FLAG_BLINK_HALF_PERIOD := 0.45
+# 2026-08-09:棋盘光标脉动(呼吸效果,sin 波)— 让玩家在棋盘上一眼看见光标位置
+var _cursor_visible: bool = false
+var _cursor_pulse_phase: float = 0.0
+const _CURSOR_PULSE_PERIOD := 0.9
 
 func _process(delta: float) -> void:
-	if flag_layer == null:
+	if flag_layer != null:
+		_flag_blink_t += delta
+		# 每隔 _FLAG_BLINK_HALF_PERIOD 秒翻转一次 modulate.a
+		if _flag_blink_t >= _FLAG_BLINK_HALF_PERIOD:
+			_flag_blink_t = 0.0
+			_update_flag_blink()
+	# 光标脉动:在 board_focused 时才绘制
+	if InputState != null and InputState.board_focused and InputState.cursor_cell.x >= 0:
+		_cursor_pulse_phase += delta
+		_update_cursor_render()
+	# 2026-08-09:持续按住方向键 / 摇杆时光标持续移动
+	_tick_cursor_repeat(delta)
+
+
+# 2026-08-09:根据 InputState.cursor_cell 渲染光标。
+# 复用 highlights.show_cursor_at + 脉动 alpha(0.65 ~ 1.0)。
+func _update_cursor_render() -> void:
+	if highlights == null:
 		return
-	_flag_blink_t += delta
-	# 每隔 _FLAG_BLINK_HALF_PERIOD 秒翻转一次 modulate.a
-	if _flag_blink_t >= _FLAG_BLINK_HALF_PERIOD:
-		_flag_blink_t = 0.0
-		_update_flag_blink()
+	if InputState == null:
+		return
+	var cell: Vector2i = InputState.cursor_cell
+	if cell.x < 0 or cell.y < 0 or cell.x >= map_size.x or cell.y >= map_size.y:
+		_cursor_visible = false
+		highlights.clear_mode(Highlights.Mode.CURSOR)
+		return
+	# 脉动 alpha:0.65 ~ 1.0,周期 0.9s
+	var phase01: float = 0.5 + 0.5 * sin(_cursor_pulse_phase * TAU / _CURSOR_PULSE_PERIOD)
+	var alpha: float = lerp(0.65, 1.0, phase01)
+	var base_color: Color = Highlights._COLORS[Highlights.Mode.CURSOR]
+	var pulsed: Color = Color(base_color.r, base_color.g, base_color.b, alpha)
+	highlights.show_cursor_at(cell, pulsed)
+	_cursor_visible = true
 
 
 func _update_flag_blink() -> void:
@@ -717,3 +760,214 @@ func _rebuild_units(units_data: Array) -> void:
 		if not (unit_data is Dictionary):
 			continue
 		_add_unit_node(unit_data)
+
+
+# ============================================================
+# 2026-08-09:棋盘虚拟光标 + 键盘/手柄操作路由
+# 设计:光标 cell 走 InputState.cursor_cell,确认 / 取消 / 缩放走专属 action
+#   (Switch 反转 B=确认 A=取消)。所有现有"点击 cell" / "右键 cell"逻辑
+#   全部复用,不绕过。
+# ============================================================
+
+const _CURSOR_REPEAT_DELAY := 0.18  # 持续按方向键时光标移动间隔
+const _CURSOR_REPEAT_INITIAL := 0.32  # 第一次重复前等待
+var _cursor_hold_dir: Vector2i = Vector2i.ZERO
+var _cursor_hold_t: float = 0.0
+var _cursor_initial_t: float = 0.0
+var _cursor_hold_axis: Vector2 = Vector2.ZERO
+
+
+func _handle_cursor_input(event: InputEvent) -> void:
+	if InputState == null:
+		return
+	# board_focused == false 时,光标不动(玩家在 UI 面板里)
+	if not InputState.board_focused:
+		return
+	if map_size.x <= 0 or map_size.y <= 0:
+		return
+	# 只在 GameView 顶层(没被 modal 锁)时响应
+	if InputState.is_input_locked():
+		return
+
+	# === 光标移动:方向键 / 摇杆(单次 + 持续) ===
+	if event.is_action_pressed("board_cursor_up"):
+		_move_cursor(Vector2i(0, -1))
+		_begin_cursor_repeat(Vector2i(0, -1))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_down"):
+		_move_cursor(Vector2i(0, 1))
+		_begin_cursor_repeat(Vector2i(0, 1))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_left"):
+		_move_cursor(Vector2i(-1, 0))
+		_begin_cursor_repeat(Vector2i(-1, 0))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_right"):
+		_move_cursor(Vector2i(1, 0))
+		_begin_cursor_repeat(Vector2i(1, 0))
+		get_viewport().set_input_as_handled()
+		return
+	# 摇杆持续按住 → 持续移动
+	if event is InputEventJoypadMotion:
+		var jm: InputEventJoypadMotion = event
+		if jm.axis == 0 or jm.axis == 1:
+			_update_cursor_hold_axis(jm.axis, jm.axis_value)
+	# 方向键松开 → 停掉 repeat
+	if event is InputEventKey:
+		var k: InputEventKey = event
+		if not k.pressed:
+			match k.keycode:
+				KEY_UP, KEY_W:    _end_cursor_repeat_if_dir(Vector2i(0, -1))
+				KEY_DOWN, KEY_S:  _end_cursor_repeat_if_dir(Vector2i(0, 1))
+				KEY_LEFT, KEY_A:  _end_cursor_repeat_if_dir(Vector2i(-1, 0))
+				KEY_RIGHT, KEY_D: _end_cursor_repeat_if_dir(Vector2i(1, 0))
+	if event is InputEventJoypadMotion:
+		var jm2: InputEventJoypadMotion = event
+		if jm2.axis == 0 or jm2.axis == 1:
+			_update_cursor_hold_axis(jm2.axis, jm2.axis_value)
+
+	# === 缩放 ===
+	if event.is_action_pressed("board_zoom_in"):
+		_zoom_at_viewport_center(ZOOM_STEP)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_zoom_out"):
+		_zoom_at_viewport_center(-ZOOM_STEP)
+		get_viewport().set_input_as_handled()
+		return
+
+	# === 确认(Switch 反转:B = 确认)===
+	# 复用 _unhandled_input 在 main.gd 里的"左键点击"分支:把光标 cell 当成"鼠标点的那格"。
+	# 通过 emit_unit_clicked / emit_tile_clicked 走现成路径。
+	if event.is_action_pressed("board_confirm"):
+		_confirm_cursor()
+		get_viewport().set_input_as_handled()
+		return
+
+	# === 取消(Switch 反转:A = 取消)===
+	# 复用"右键空地"分支 — 取消行动模式 + 清高亮。
+	if event.is_action_pressed("board_cancel"):
+		_cancel_cursor()
+		get_viewport().set_input_as_handled()
+		return
+
+
+# 持续按住方向键 / 摇杆时光标持续移动
+func _tick_cursor_repeat(delta: float) -> void:
+	if _cursor_hold_dir == Vector2i.ZERO:
+		return
+	if InputState == null or not InputState.board_focused:
+		_cursor_hold_dir = Vector2i.ZERO
+		return
+	_cursor_hold_t += delta
+	# 第一次重复等 _CURSOR_REPEAT_INITIAL,之后 _CURSOR_REPEAT_DELAY 间隔
+	if _cursor_initial_t < _CURSOR_REPEAT_INITIAL:
+		_cursor_initial_t += delta
+		return
+	if _cursor_hold_t < _CURSOR_REPEAT_DELAY:
+		return
+	_cursor_hold_t = 0.0
+	_move_cursor(_cursor_hold_dir)
+
+
+func _begin_cursor_repeat(dir: Vector2i) -> void:
+	_cursor_hold_dir = dir
+	_cursor_hold_t = 0.0
+	_cursor_initial_t = 0.0
+
+
+func _end_cursor_repeat_if_dir(dir: Vector2i) -> void:
+	if _cursor_hold_dir == dir:
+		_cursor_hold_dir = Vector2i.ZERO
+
+
+func _update_cursor_hold_axis(axis: int, value: float) -> void:
+	# 轴 0=X,轴 1=Y;每个轴独立评估。
+	# 简单策略:哪个轴的 |value| > deadzone 就 update hold dir 对应方向。
+	if axis == 0:
+		if absf(value) < 0.3:
+			_cursor_hold_axis.x = 0.0
+		else:
+			_cursor_hold_axis.x = value
+	elif axis == 1:
+		if absf(value) < 0.3:
+			_cursor_hold_axis.y = 0.0
+		else:
+			_cursor_hold_axis.y = value
+	# 决定 hold_dir
+	var new_dir := Vector2i.ZERO
+	if absf(_cursor_hold_axis.x) > 0.4:
+		new_dir.x = 1 if _cursor_hold_axis.x > 0.0 else -1
+	if absf(_cursor_hold_axis.y) > 0.4:
+		new_dir.y = 1 if _cursor_hold_axis.y > 0.0 else -1
+	# 同一行只 hold 一个方向(避免斜着走时光标走对角线 — 战棋是 4 方向)
+	if new_dir.x != 0 and new_dir.y != 0:
+		# 哪个轴的绝对值更大,留哪个
+		if absf(_cursor_hold_axis.x) > absf(_cursor_hold_axis.y):
+			new_dir.y = 0
+		else:
+			new_dir.x = 0
+	if new_dir != _cursor_hold_dir:
+		_cursor_hold_dir = new_dir
+		_cursor_hold_t = 0.0
+		_cursor_initial_t = 0.0
+
+
+func _move_cursor(delta: Vector2i) -> void:
+	if InputState == null:
+		return
+	var cur: Vector2i = InputState.cursor_cell
+	if cur.x < 0:
+		cur = Vector2i(0, 0)
+	var next := Vector2i(
+		clamp(cur.x + delta.x, 0, map_size.x - 1),
+		clamp(cur.y + delta.y, 0, map_size.y - 1),
+	)
+	if next == cur:
+		return
+	InputState.cursor_cell = next
+	# 同步 hover_tile(让现有的"hover 显示 info / 画 path dots"白嫖)
+	InputState.hover_tile = next
+	# 主动触发 main.gd 的 path-dots 更新(若在 move 模式)
+	var main_node := get_node_or_null("/root/Main")
+	if main_node != null and main_node.has_method("_update_path_dots_at_cell"):
+		main_node.call("_update_path_dots_at_cell", next)
+
+
+func _confirm_cursor() -> void:
+	# 复用现成"鼠标左键点击 cell"逻辑 — emit unit_clicked / tile_clicked
+	if InputState == null:
+		return
+	var cell: Vector2i = InputState.cursor_cell
+	if cell.x < 0:
+		return
+	var unit_id: int = _unit_id_at_cell(cell)
+	if unit_id > 0:
+		emit_unit_clicked(unit_id)
+		return
+	# 没单位:走 tile 点击逻辑(行动模式时是落点,非模式时是清高亮)
+	emit_tile_clicked(tile_to_screen(cell))
+
+
+func _cancel_cursor() -> void:
+	# 复用"右键"路径:取消行动模式 / 清高亮
+	var main_node := get_node_or_null("/root/Main")
+	if main_node != null and main_node.has_method("_cursor_cancel_action"):
+		main_node.call("_cursor_cancel_action")
+		return
+	# 退路:自己清高亮
+	if highlights != null:
+		highlights.clear()
+
+
+func _zoom_at_viewport_center(delta: float) -> void:
+	# 屏幕中心而不是鼠标位置(手柄玩家没鼠标)
+	if board_camera == null:
+		return
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var center: Vector2 = vp_size * 0.5
+	# _zoom_at_point 内部会读 board_camera 当前位置,直接复用即可
+	_zoom_at_point(center, delta)

@@ -21,7 +21,7 @@ class_name Highlights
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 
-enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER, SILENCE_PICK }
+enum Mode { NONE, MOVE, ATTACK, PATH, THREAT, SELECTED, HOVER, CURSOR, SILENCE_PICK }
 
 const _COLORS := {
 	Mode.MOVE:        Color(0.37, 0.78, 0.98, 0.28),
@@ -30,6 +30,7 @@ const _COLORS := {
 	Mode.THREAT:      Color(0.98, 0.65, 0.30, 0.50),
 	Mode.SELECTED:    Color(1.00, 0.78, 0.18, 0.96),
 	Mode.HOVER:       Color(1.00, 1.00, 1.00, 0.60),
+	Mode.CURSOR:      Color(1.00, 1.00, 1.00, 0.95),  # 2026-08-09 键盘/手柄光标(白)
 	Mode.SILENCE_PICK: Color(0.75, 0.55, 1.00, 0.50),  # 鸢影·沉默领域选中心
 }
 
@@ -200,6 +201,78 @@ func _make_dot_sprite(color: Color) -> Node2D:
 	dot.color = color
 	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return wrapper
+
+
+# 2026-08-09:棋盘虚拟光标 — 4 段 4px 厚白边 + 4 角斜切小三角,便于跟普通 outline 区分。
+# 不用 Line2D 避免 outline 跟 high-DPI tile 缩放后发糊。
+func _make_cursor_sprite(color: Color) -> Node2D:
+	var wrapper := Node2D.new()
+	var bar_w: int = 4  # 普通 outline 是 2px,光标翻倍
+	for side in [
+		{"x": 0, "y": 0, "w": _tile_size.x, "h": bar_w},
+		{"x": 0, "y": _tile_size.y - bar_w, "w": _tile_size.x, "h": bar_w},
+		{"x": 0, "y": 0, "w": bar_w, "h": _tile_size.y},
+		{"x": _tile_size.x - bar_w, "y": 0, "w": bar_w, "h": _tile_size.y},
+	]:
+		var bar := ColorRect.new()
+		bar.size = Vector2(side.w, side.h)
+		bar.position = Vector2(side.x - _tile_size.x * 0.5, side.y - _tile_size.y * 0.5)
+		bar.color = color
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.name = "Bar"
+		wrapper.add_child(bar)
+	# 4 个小三角角标(在 4 角内侧,内嵌 6px)让玩家知道这是"可移动光标"而不是普通高亮
+	var corner_offset: int = 6
+	var corner_size: int = 8
+	var corner_positions := [
+		# top-left
+		Vector2(-_tile_size.x * 0.5 + corner_offset, -_tile_size.y * 0.5 + corner_offset),
+		# top-right
+		Vector2(_tile_size.x * 0.5 - corner_offset - corner_size, -_tile_size.y * 0.5 + corner_offset),
+		# bottom-left
+		Vector2(-_tile_size.x * 0.5 + corner_offset, _tile_size.y * 0.5 - corner_offset - corner_size),
+		# bottom-right
+		Vector2(_tile_size.x * 0.5 - corner_offset - corner_size, _tile_size.y * 0.5 - corner_offset - corner_size),
+	]
+	for p in corner_positions:
+		var tri := ColorRect.new()
+		tri.size = Vector2(corner_size, corner_size)
+		tri.position = p
+		tri.color = color
+		tri.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tri.name = "Corner"
+		wrapper.add_child(tri)
+	return wrapper
+
+
+# 显示/移动光标。clear_mode(CURSOR) 可清除。
+# show_outline(Mode.CURSOR, [tile]) 已经能用,但用 show_cursor() 更明确 + 4 角加角标。
+func show_cursor(tile: Vector2i) -> void:
+	show_cursor_at(tile, _COLORS[Mode.CURSOR])
+
+
+# 内部用,允许外部指定颜色(脉动用)
+func show_cursor_at(tile: Vector2i, color: Color) -> void:
+	clear_mode(Mode.CURSOR)
+	if _terrain_layer == null:
+		return
+	if tile.x < 0 or tile.y < 0 or tile.x >= _board_size.x or tile.y >= _board_size.y:
+		return
+	var node := _ensure_mode_node(Mode.CURSOR)
+	# CURSOR 模式只显示 1 个 sprite — 不走 pool,_checkout_sprite 会创建 N 个浪费
+	if not _pool.has(node):
+		_pool[node] = []
+	var pool: Array = _pool[node]
+	var sprite: Node2D = null
+	if pool.size() > 0:
+		sprite = pool[0]
+		_apply_color(sprite, color)
+	else:
+		sprite = _make_cursor_sprite(color)
+		node.add_child(sprite)
+		pool.append(sprite)
+	sprite.position = _tile_to_viewport(tile)
+	sprite.visible = true
 
 ## Convert a tile coord to a global position using the bound layer.
 func _tile_to_viewport(tile: Vector2i) -> Vector2:

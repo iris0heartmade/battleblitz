@@ -25,6 +25,7 @@ extends Control
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
 const CnLabels = preload("res://scripts/ui/cn_labels.gd")
+const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 
 var _main: Node = null
 
@@ -320,6 +321,7 @@ func _show_lobby_choose() -> void:
 	_restore_lobby_default_layout()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_create_view() -> void:
@@ -343,6 +345,7 @@ func _show_lobby_create_view() -> void:
 	_refresh_lobby_create_start_gate()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_join_view() -> void:
@@ -363,6 +366,7 @@ func _show_lobby_join_view() -> void:
 	_layout_lobby_entry_form()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_in_room() -> void:
@@ -390,6 +394,38 @@ func _show_lobby_in_room() -> void:
 			player_count_label.text = "—"
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
+	_grab_focus_for_mode()
+
+
+# 2026-08-09:手柄/键盘导航 — 每个大厅子视图抢默认焦点。
+# Godot 手柄导航依赖某个 Control 先 grab_focus,否则十字键/确认键全无响应
+# (主菜单能用是因为 main._focus_default_for_view("menu") 抢了焦点;大厅此前
+# 是空 pass,所以建房/加入表单完全无法用十字键操作)。
+func _grab_focus_for_mode() -> void:
+	if not is_inside_tree():
+		return
+	var target: Button = null
+	match _lobby_mode:
+		"choose":
+			target = create_card_btn
+		"create":
+			# create_room_btn 可能被 start gate 禁用,禁用则退到第一个 focusable
+			if create_room_btn != null and not create_room_btn.disabled:
+				target = create_room_btn
+		"join":
+			target = join_selected_btn
+		"in_room":
+			# 房内右下角的 inline 启动按钮(in_room 视图时 BottomBar 的 lobby_start_btn 已隐藏)
+			target = start_game_inline_btn if (start_game_inline_btn != null and start_game_inline_btn.visible) else lobby_start_btn
+		_:
+			target = null
+	if target != null and is_instance_valid(target) and target.is_visible_in_tree() and not target.disabled:
+		target.grab_focus()
+		return
+	# 兜底:第一个可见可 focus 的 Button
+	var frame: Control = get_node_or_null("LobbyFrame") as Control
+	if frame != null:
+		UIPanelFocus.grab_first_focusable(frame)
 
 
 func _set_lobby_detail_visible(v: bool) -> void:

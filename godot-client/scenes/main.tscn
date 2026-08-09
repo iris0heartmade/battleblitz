@@ -293,6 +293,10 @@ theme_override_font_sizes/font_size = 24
 text = "重 连"
 custom_minimum_size = Vector2(240, 60)
 
+[node name="AbortButton" type="Button" parent="Connecting/ConnectingInner"]
+text = "放弃,返回主菜单"
+custom_minimum_size = Vector2(240, 60)
+
 ; ============================================================
 ; T:3 基础大厅(联机厅)— 显示房间玩家列表 + Start 按钮
 ; 简化版:不展开 team / spectator 完整编辑,只支持查看 + Start。
