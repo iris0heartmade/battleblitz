@@ -263,9 +263,12 @@ func update_silence_pick_hover(global_pos: Vector2) -> void:
 		return
 	if metrics == null or ground_layer == null:
 		return
-	var world_pos: Vector2 = global_pos
-	if board_camera != null and board_camera.enabled:
-		world_pos = board_camera.get_canvas_transform().affine_inverse() * global_pos
+	# 相机禁用/null 时跳过 hover 映射,避免把 viewport 坐标误当世界坐标
+	# 产生错误的 cell 高亮。生产环境相机总是 enabled,这条路径基本 dead code,
+	# 但保底 early return 比给一个错位置的高亮更安全。
+	if board_camera == null or not board_camera.enabled:
+		return
+	var world_pos: Vector2 = board_camera.get_canvas_transform().affine_inverse() * global_pos
 	var local: Vector2 = ground_layer.to_local(world_pos)
 	var cell: Vector2i = ground_layer.local_to_map(local)
 	# 限制在地图范围内

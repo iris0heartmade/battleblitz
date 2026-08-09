@@ -23,7 +23,7 @@ from app.commanders.meter import _ensure_co_state
 from app.models import Game, Player, Unit
 
 
-def _mk_unit(unit_id: int, owner_id: int, x: int, y: int, *, type_id="warlock"):
+def _mk_unit(unit_id: int, owner_id: int, x: int, y: int, *, type_id="warlock", team_id=None):
     """Construct a SimpleNamespace that mimics Unit enough for silence checks."""
     u = SimpleNamespace(
         id=unit_id,
@@ -32,6 +32,7 @@ def _mk_unit(unit_id: int, owner_id: int, x: int, y: int, *, type_id="warlock"):
         x=x, y=y,
         hp=20,
         silence_until_turn=0,
+        team_id=team_id,
     )
     return u
 
@@ -286,3 +287,58 @@ async def test_on_player_turn_start_clears_expired_silence(db_session):
     await db_session.refresh(u2)
     assert u1.silence_until_turn == 0
     assert u2.silence_until_turn == 10
+
+
+# =========================================================================
+# 2v2 / FFA team mode (M1 fix): silence aura must NOT silence allied magic
+# units that share the firing player's team_id.
+# =========================================================================
+
+
+def test_apply_silence_aura_skips_ally_in_2v2_team_mode():
+    """2v2:同 team_id 的友军魔法单位,即使不同 player_id,也不被沉默。"""
+    # 玩家 1 是 owner(player_id=1, team_id="red"),
+    # 玩家 2 是同 team("red", 队友),玩家 3 / 4 是对方 team("blue")。
+    owner = SimpleNamespace(id=1, team_id="red")
+    ally_warlock = _mk_unit(201, owner_id=2, x=5, y=5, team_id="red")  # 队友
+    enemy_warlock = _mk_unit(202, owner_id=3, x=5, y=5, team_id="blue")  # 敌人
+    enemy2_warlock = _mk_unit(203, owner_id=4, x=5, y=5, team_id="blue")  # 敌人
+    teamless_warlock = _mk_unit(204, owner_id=99, x=5, y=5, team_id=None)  # 无 team(不应当作队友)
+    units = [ally_warlock, enemy_warlock, enemy2_warlock, teamless_warlock]
+
+    silenced = apply_silence_aura(
+        units,
+        center_xy=(5, 5),
+        radius=2,
+        duration_turns=1,
+        current_turn=3,
+        owner_player_id=owner.id,
+        owner_player=owner,
+    )
+
+    # ally 不沉默,teamless 被沉默(因为他不是队友),两个 enemy 被沉默
+    assert ally_warlock.silence_until_turn == 0
+    assert enemy_warlock.silence_until_turn == 4
+    assert enemy2_warlock.silence_until_turn == 4
+    assert teamless_warlock.silence_until_turn == 4
+    assert silenced == [enemy_warlock, enemy2_warlock, teamless_warlock]
+
+
+def test_apply_silence_aura_team_filter_no_op_in_1v1():
+    """1v1 模式:owner_player 没传 / 没 team_id,只按 player_id 过滤(向后兼容)。"""
+    # 1v1 玩家(无 team_id),owner_player=None 时也应当 work
+    owner = SimpleNamespace(id=1)  # 无 team_id
+    enemy_warlock = _mk_unit(301, owner_id=2, x=5, y=5)  # 无 team_id
+    units = [enemy_warlock]
+
+    silenced = apply_silence_aura(
+        units,
+        center_xy=(5, 5),
+        radius=2,
+        duration_turns=1,
+        current_turn=1,
+        owner_player_id=owner.id,
+        owner_player=owner,
+    )
+    assert silenced == [enemy_warlock]
+    assert enemy_warlock.silence_until_turn == 2

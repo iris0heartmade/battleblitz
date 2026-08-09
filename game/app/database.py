@@ -100,6 +100,23 @@ def _run_legacy_migrations(sync_conn) -> None:
             "ALTER TABLE units ADD COLUMN mdef INTEGER NOT NULL DEFAULT 0"
         ))
         logger.info("Migration: added units.mdef")
+    # 2026-08-09: P+ status-effect framework — generic list column on
+    # units. Existing rows default to an empty list, which matches the
+    # SQLAlchemy model default (mapped_column(JSON, default=list)).
+    if "status_effects" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN status_effects JSON NOT NULL DEFAULT '[]'"
+        ))
+        logger.info("Migration: added units.status_effects")
+    # 2026-08-09: Yuanying silence aura — transitional column kept in
+    # parallel with status_effects(silence). New rows default to 0
+    # (no pending silence). Will be dropped once Godot clients roll
+    # out reading status_effects exclusively.
+    if "silence_until_turn" not in unit_cols:
+        sync_conn.execute(text(
+            "ALTER TABLE units ADD COLUMN silence_until_turn INTEGER NOT NULL DEFAULT 0"
+        ))
+        logger.info("Migration: added units.silence_until_turn")
     # 2026-06-30: P0.4 — players.gold, tiles.subtype for the economy +
     # castle-sub-features feature. The `claim_sessions` table is created
     # by create_all() above (it's a new table, not an ALTER on existing).

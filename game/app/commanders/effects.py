@@ -102,6 +102,7 @@ def fire_co_power(player, *, center_xy=None, current_turn=0, all_units=None):
             duration_turns=silence_turns,
             current_turn=current_turn,
             owner_player_id=getattr(player, "id", None),
+            owner_player=player,
         )
 
     power = get_commander_power(player.commander_id)
@@ -131,13 +132,14 @@ def fire_co_power(player, *, center_xy=None, current_turn=0, all_units=None):
             unit.mp = min(unit.mov, unit.mp + extra_mov)
 
     co = dict(player.co_state or {})
-    # 新机制:扣 power_cost 颗星(默认 6),放 power 后剩余继续累计
-    from app.commanders.meter import consume_power_stars
-    consume_power_stars(player)
-    co = dict(player.co_state or {})  # consume 已改 in-place,重读保证最新
     co["is_power_active"] = True
     co["_power_baselines"] = baselines
     player.co_state = co
+    # 新机制:扣 power_cost 颗星(默认 6),放 power 后剩余继续累计。
+    # 放在最后 — 避免"星已扣但 is_power_active 还没设"的中间状态被任何
+    # 钩子(reader)看见;同时让 SQLAlchemy 只 flag_modified 一次(player.co_state = co)。
+    from app.commanders.meter import consume_power_stars
+    consume_power_stars(player)
 
 
 def apply_silence_aura(
@@ -148,9 +150,14 @@ def apply_silence_aura(
     duration_turns,
     current_turn,
     owner_player_id,
+    owner_player=None,
 ) -> list:
     """沉默领域:在 (center_x ± radius, center_y ± radius) 范围内,标记
-    非 owner_player_id、且攻击类型为 magic 的单位 silence_until_turn。
+    非 owner_team、且攻击类型为 magic 的单位 silence_until_turn。
+
+    设计:文档约定"非同 team 的魔法单位",而不是"非同 player"。
+    2v2 / FFA 团队模式下,同 team_id 但不同 player_id 的友军魔法单位
+    不会被误沉默(参见 game/app/classes/heroes/yuanying.py:9,43)。
 
     新机制:走通用 status_effects 框架(详见 app/status/engine.py)。
     同时保留旧 silence_until_turn 字段的写入以做向后兼容。
@@ -162,6 +169,8 @@ def apply_silence_aura(
         duration_turns: 持续大回合数(1 = 持续到下次自己回合开始)
         current_turn: 当前 game.turn_number
         owner_player_id: 沉默施放者(自己人不沉默)
+        owner_player: 施放者 Player 对象(可选,用于 team_id 比对;
+                     1v1 模式可省,只按 player_id 过滤即可)
 
     Returns:
         被沉默的单位列表(供 _log / 反馈用)
@@ -171,22 +180,37 @@ def apply_silence_aura(
     from app.status import add_effect
     cx, cy = center_xy
     expire_at = current_turn + duration_turns
+    owner_team_id = getattr(owner_player, "team_id", None) if owner_player is not None else None
     silenced: list = []
     for unit in units:
         if unit.hp <= 0:
             continue
         if unit.player_id == owner_player_id:
             continue
+        # 团队模式:同 team_id 的友军魔法单位也跳过。
+        # 1v1 模式没有 team_id(None == None)会落空,等价于不过滤。
+        if (
+            owner_team_id is not None
+            and getattr(unit, "team_id", None) is not None
+            and unit.team_id == owner_team_id
+        ):
+            continue
         if unit.x < cx - radius or unit.x > cx + radius:
             continue
         if unit.y < cy - radius or unit.y > cy + radius:
             continue
         # 只沉默魔法单位(attack_kind == "magic")
-        # 从 unit class 注册表查;查不到默认 non-magic(避免误沉默物理单位)
+        # 从 unit class 注册表查;查不到默认 non-magic(避免误沉默物理单位)。
+        # 只吞 KeyError:未知 unit_type 是真实数据错误,要打 warning;其他异常让它冒。
+        from app.classes.units import get as get_unit_class
         try:
-            from app.classes.units import get as get_unit_class
             attack_kind = get_unit_class(unit.unit_type).attack_kind
-        except Exception:
+        except KeyError:
+            import logging
+            logging.getLogger(__name__).warning(
+                "apply_silence_aura: unknown unit_type=%r, treating as physical (no silence)",
+                getattr(unit, "unit_type", None),
+            )
             attack_kind = "physical"
         if attack_kind != "magic":
             continue

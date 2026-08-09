@@ -29,6 +29,7 @@ from app.config import (
     INCOME_PER_TURN,
     INCOME_TERRAINS,
     LOBBY_CLEANUP_INTERVAL_SECONDS,
+    MAP_SIZE,
     TERRAIN_BARRACKS,
     TERRAIN_VILLAGE,
     CASTLE_VAULT,
@@ -417,7 +418,42 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
             # decision so a stale chain cannot emit a duplicate activation.
             await session.refresh(current, ["co_state", "units"])
             if ai_should_fire_co_power(current):
-                fire_co_power(current)
+                # AI auto-fire: silence-aura commanders (yuanying) need a
+                # center_xy and the full unit list. We pick a sane default
+                # here so the AI chain never crashes on a missing arg.
+                # Default heuristic: prefer the centroid of the AI's own
+                # alive units (their likely engagement zone); fall back to
+                # the map center if the AI has no units positioned yet.
+                ai_units = list(current.units or [])
+                alive_ai = [u for u in ai_units if getattr(u, "hp", 0) > 0]
+                if alive_ai:
+                    cx = round(sum(u.x for u in alive_ai) / len(alive_ai))
+                    cy = round(sum(u.y for u in alive_ai) / len(alive_ai))
+                else:
+                    cx, cy = MAP_SIZE // 2, MAP_SIZE // 2
+                cx = max(0, min(MAP_SIZE - 1, cx))
+                cy = max(0, min(MAP_SIZE - 1, cy))
+                all_units = (
+                    await session.execute(
+                        select(Unit).where(
+                            Unit.player_id.in_([p.id for p in players])
+                        )
+                    )
+                ).scalars().all()
+                try:
+                    fire_co_power(
+                        current,
+                        center_xy=(cx, cy),
+                        current_turn=game.turn_number,
+                        all_units=list(all_units),
+                    )
+                except ValueError as e:
+                    # A single bad fire must not kill the AI chain — log and
+                    # continue with the rest of the turn's actions.
+                    logger.warning(
+                        "AI %s (commander=%s) fire_co_power failed: %s",
+                        current.user_name, current.commander_id, e,
+                    )
                 session.add(ActionLog(
                     game_id=game.id,
                     turn_number=game.turn_number,

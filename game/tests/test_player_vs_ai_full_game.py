@@ -329,17 +329,29 @@ class TestDamageFormula:
 
 class TestCommanderMeter:
     async def test_killing_enemy_increases_meter(self, client):
-        """P3.0 commander meter — a kill should bump the attacker's meter."""
+        """A kill should bump the attacker's cumulative CO star slot.
+
+        New mechanism (post-refactor): kills flow through
+        ``award_morale → record_morale_star`` and land in
+        ``co_state["stars_earned_total"]`` (one star per kill, regardless
+        of unit class). The old ``co_state["meter"]`` field is no longer
+        incremented on kill.
+        """
         gid, human, _ai = await _make_game(client)
-        # Configure human with yun commander (meter threshold 22)
+        # Configure human with yun commander (threshold 18, power_cost 6).
         from app.database import AsyncSessionLocal
         from app.models import Player
         async with AsyncSessionLocal() as s:
             p = await s.get(Player, human)
             p.commander_id = "yun"
-            p.co_state = {"commander_id": "yun", "meter": 0,
-                          "threshold": 22, "is_power_active": False,
-                          "last_start_turn": -1}
+            p.co_state = {
+                "commander_id": "yun",
+                "stars_earned_total": 0,
+                "threshold": 18,
+                "power_cost": 6,
+                "is_power_active": False,
+                "last_start_turn": -1,
+            }
             await s.commit()
 
         state = await _state(client, gid)
@@ -365,9 +377,13 @@ class TestCommanderMeter:
 
         async with AsyncSessionLocal() as s:
             p = await s.get(Player, human)
-            # yun scores 2 for swordsman, 3 for archer, 4 for knight/warlock
-            assert p.co_state["meter"] >= 2, \
-                f"expected meter >= 2 after kill, got {p.co_state['meter']}"
+            # New mechanism: every kill adds exactly one star to the
+            # cumulative slot (the unit-class multiplier that the old
+            # ``meter`` field had is gone — see award_morale).
+            assert p.co_state.get("stars_earned_total", 0) >= 1, (
+                f"expected stars_earned_total >= 1 after kill, "
+                f"got {p.co_state.get('stars_earned_total')}"
+            )
 
 
 # ==========================================================================
