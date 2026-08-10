@@ -186,8 +186,8 @@ func _ready() -> void:
 	_assert_true("Menu has dev cover picker", title_cover_picker != null,
 		"title page should expose a development-only cover preview switcher")
 	if title_cover_picker != null:
-		_assert_eq("Menu dev cover picker count", title_cover_picker.item_count, 5,
-			"development preview should include the five title_cover images")
+		_assert_eq("Menu dev cover picker count", title_cover_picker.item_count, 6,
+			"development preview should include the six title_cover images")
 		_assert_true("Menu dev cover picker hidden by default", not title_cover_picker.visible,
 			"development preview controls should stay hidden unless explicitly enabled")
 	# P2:大厅逻辑已搬到 lobby_controller.gd(挂 $Lobby),断言改指控制器

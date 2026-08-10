@@ -37,7 +37,7 @@ func _ready() -> void:
 	_assert_true("default cover is previewable", main.title_cover_paths.has(main.title_cover_default_path))
 	_assert_true("dev picker exists", picker != null)
 	if picker != null:
-		_assert_eq("dev picker candidate count", picker.item_count, 5)
+		_assert_eq("dev picker candidate count", picker.item_count, 6)
 		_assert_true("dev picker hidden by default", not picker.visible)
 		for index in range(picker.item_count):
 			picker.select(index)

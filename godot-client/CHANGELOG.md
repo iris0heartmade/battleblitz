@@ -1,5 +1,11 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-10 鸢影棋盘棋子 Q 版化
+
+- `assets/heroes/yuanying.png`: 从完整高精立绘缩放图替换为 768×768 透明 Q 版棋盘 sprite,48px 棋盘显示下保留银发、黑紫斗篷与镰刀轮廓。
+- 同步 Web 与 Godot 两端 `yuanying.png`,保留 `portrait_yuanying.png` 作为详情/对话大立绘,`crest_yuanying.png` 作为小头像资源。
+- 后端 `Yuanying` 资源注释清理为当前事实,并新增回归测试防止旧的完整立绘裁切图再次回流。
+
 ## 2026-08-10 手柄棋盘光标初始位置改为本方 HQ
 
 - 根因:光标状态字段本身正常(`InputState.cursor_cell` / `board_focused` 都有 setter + signal),但 `_find_cursor_initial_cell()` 优先选择本方第一个单位。单位排序随地图/后端快照变化,导致手柄进入棋盘时落点不稳定。
@@ -8,11 +14,14 @@
 
 ## 2026-08-10 标题页按钮布局调整
 
+- `assets/ui/title_cover_v1_undead_king.png` ~ `title_cover_v6_bard_market.png`：接入用户从旧 ChatGPT 会话下载的 6 张封面图；默认封面切到 `title_cover_v5_party_dawn.png`。
+- `scripts/main.gd`：标题页封面候选列表从 5 张扩展到 6 张；图片加载器先走磁盘解码，避免新导入 PNG 在开发期预览时先触发 `No loader found` 噪音。
+- `tools/smoke_test.gd` / `tools/title_cover_test.gd`：同步封面候选数为 6，覆盖开发期下拉框全部切换。
 - `scenes/main.tscn`：主菜单标题与操作区从屏幕中央移到右侧标题安全区，左侧封面主体不再被两列按钮遮挡。
 - 主入口改为竖向层级：`主线存档` 作为最高优先级按钮，`联机大厅` 与房间号加入位于其下；存档、进行中、玩法、地图编辑、设置、退出收束为右下辅助行。
 - `tools/title_cover_test.gd`：新增布局断言，覆盖右侧锚点、紧凑宽度、主按钮竖排、辅助按钮横排和主按钮高度。
-- 旧 ChatGPT 会话图片未重新生成；当前工具只能读取旧会话文本，未暴露生成图文件本体。待图片文件拖入/下载到本地后，可直接替换 `assets/ui/title_cover_v*.png`。
-- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 22 passed / 0 failed。
+- 旧 ChatGPT 会话图片未重新生成；直接使用项目根目录中用户提供的原图复制为 Godot 资产。
+- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 23 passed / 0 failed。`tools/menu_screenshot.tscn` 在 headless dummy 渲染下无法读取 viewport 纹理，未产出截图。
 
 ## 2026-08-10 手柄 ActionBubble 焦点修复
 

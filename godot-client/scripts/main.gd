@@ -204,13 +204,14 @@ const _STATE_POLL_INTERVAL_SEC: float = 1.0
 var _state_poll_timer: Timer = null
 
 # Main menu widgets (GBA 风 V2)
-@export var title_cover_default_path: String = "res://assets/ui/title_cover_v4_annavsyouko.png"
+@export var title_cover_default_path: String = "res://assets/ui/title_cover_v5_party_dawn.png"
 @export var title_cover_paths: Array[String] = [
-	"res://assets/ui/title_cover_v1_cinematic.png",
-	"res://assets/ui/title_cover_v2_darkfantasy.png",
-	"res://assets/ui/title_cover_v3_impressionist.png",
-	"res://assets/ui/title_cover_v4_annavsyouko.png",
-	"res://assets/ui/title_cover_v5_mirror.png",
+	"res://assets/ui/title_cover_v1_undead_king.png",
+	"res://assets/ui/title_cover_v2_snow_farewell.png",
+	"res://assets/ui/title_cover_v3_leviathan_market.png",
+	"res://assets/ui/title_cover_v4_cathedral_prayer.png",
+	"res://assets/ui/title_cover_v5_party_dawn.png",
+	"res://assets/ui/title_cover_v6_bard_market.png",
 ]
 @onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
 @onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
@@ -392,14 +393,14 @@ func _load_title_cover_texture(path: String) -> Texture2D:
 			var jpg_err := jpg.load_jpg_from_buffer(bytes)
 			if jpg_err == OK and not jpg.is_empty():
 				return ImageTexture.create_from_image(jpg)
+	var img := Image.new()
+	var err := img.load(global_path)
+	if err == OK and not img.is_empty():
+		return ImageTexture.create_from_image(img)
 	var tex := load(path) as Texture2D
 	if tex != null:
 		return tex
-	var img := Image.new()
-	var err := img.load(global_path)
-	if err != OK or img.is_empty():
-		return null
-	return ImageTexture.create_from_image(img)
+	return null
 
 
 func _ready() -> void:
