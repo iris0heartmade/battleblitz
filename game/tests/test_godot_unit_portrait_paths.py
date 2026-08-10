@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,18 @@ def test_yuanying_hero_assets_exist_for_web_and_godot():
     for asset_name in expected:
         assert (ROOT / "game" / "app" / "web" / "assets" / "heroes" / asset_name).exists()
         assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()
+
+
+def test_yuanying_board_sprite_is_not_old_fullbody_portrait_crop():
+    old_fullbody_crop_sha256 = "62f66ee20e4ab0d29e2e935e413c355e3aa499ff82efe8880f2217b52a58c22c"
+    web_sprite = ROOT / "game" / "app" / "web" / "assets" / "heroes" / "yuanying.png"
+    godot_sprite = ROOT / "godot-client" / "assets" / "heroes" / "yuanying.png"
+
+    web_hash = hashlib.sha256(web_sprite.read_bytes()).hexdigest()
+    godot_hash = hashlib.sha256(godot_sprite.read_bytes()).hexdigest()
+
+    assert web_hash == godot_hash
+    assert web_hash != old_fullbody_crop_sha256
 
 
 def test_godot_hero_sprite_registry_includes_yuanying():

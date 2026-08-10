@@ -334,6 +334,70 @@ def test_godot_unit_refresh_does_not_reset_position_or_leave_stale_tweens():
     assert "position = Vector2.ZERO" not in unit_node
 
 
+def test_godot_status_effect_icons_render_at_unit_bottom_right():
+    unit_node = _read(UNIT_NODE_GD)
+    assert '"poison":   "☠"' in unit_node
+    assert '"paralyze": "⚡"' in unit_node
+    assert '"blind":    "◌"' in unit_node
+    assert '"slow":     "❄"' in unit_node
+    assert '"silence":  "🔇"' in unit_node
+    assert "var status_icon_sz := Vector2(30, 16)" in unit_node
+    assert "_status_label.position = Vector2(-6, 6)" in unit_node
+    assert "_status_label.add_theme_font_size_override(\"font_size\", 11)" in unit_node
+    assert "_status_label.text = \"\".join(glyphs).substr(0, 2)" in unit_node
+    assert "_status_overlay" not in unit_node
+
+
+def test_godot_building_claim_badges_are_separate_from_owner_flags():
+    board = _read(BOARD_GD)
+
+    assert "func _collect_pending_claim_tiles() -> Dictionary:" in board
+    assert "func _add_claim_badge_at(cell: Vector2i, claim: Dictionary) -> void:" in board
+    assert "func _claim_target_color(claim: Dictionary) -> Color:" in board
+    assert "func _claim_badge_text(claim: Dictionary) -> String:" in board
+
+    rebuild_start = board.index("func rebuild_flags(tiles: Array) -> void:")
+    rebuild_end = board.index("func _collect_pending_claim_tiles() -> Dictionary:", rebuild_start)
+    rebuild_body = board[rebuild_start:rebuild_end]
+    assert "var pending := _collect_pending_claim_tiles()" in rebuild_body
+    assert "for cell in pending.keys():" in rebuild_body
+    assert "_add_claim_badge_at(cell, pending[cell])" in rebuild_body
+
+    blink_start = board.index("func _update_flag_blink() -> void:")
+    blink_end = board.index("func load_map(", blink_start)
+    blink_body = board[blink_start:blink_end]
+    assert 'if String(child.name) != "OwnerFlag":' in blink_body
+    assert "claim_badge" not in blink_body
+
+
+def test_godot_building_owner_flags_are_banner_style_and_show_neutral_white():
+    board = _read(BOARD_GD)
+
+    for color in ["neutral", "red", "blue", "green", "yellow"]:
+        assert (ROOT / "godot-client" / "assets" / "ui" / "building_flags" / f"flag_{color}.png").exists()
+
+    assert 'const TEXTURE_LOADER := preload("res://scripts/core/texture_loader.gd")' in board
+    assert 'const _OWNER_FLAG_TEXTURES := {' in board
+    assert "func _flag_color_for_owner(owner_pid: int) -> String:" in board
+    assert 'return "neutral"' in board
+    assert "_add_flag_at(cell, owner_pid)" in board
+    assert "var owner_pid: int = 0" in board
+    assert "if owner_v != null:" in board
+    assert "continue  # 无归属不显示旗" not in board
+
+    flag_start = board.index("func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:")
+    flag_end = board.index("func _claim_target_color(", flag_start)
+    flag_body = board[flag_start:flag_end]
+    assert "Sprite2D.new()" in flag_body
+    assert "TEXTURE_LOADER.load_resized" in flag_body
+    assert "), 18)" in flag_body
+    assert "sprite.texture = tex" in flag_body
+    assert "sprite.position = Vector2(-14, 8)" in flag_body
+    assert "Line2D.new()" not in flag_body
+    assert "Polygon2D.new()" not in flag_body
+    assert "_FLAG_POINTS" not in flag_body
+
+
 def test_godot_team_badge_color_comes_from_team_not_player_color():
     board = _read(BOARD_GD)
     assert "func _team_color_for_unit(unit_data: Dictionary) -> Color:" in board

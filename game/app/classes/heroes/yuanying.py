@@ -63,11 +63,11 @@ class Yuanying(BaseHero):
     # mov_override / mp_pool_override: 继承 warlock (5 / 5,见模块 docstring)
 
     # ── Art assets (served from web/assets/heroes/) ───────────
-    # NOTE: sprite_path / crest_path 资产**尚未生成**;游戏启动时若资产缺失会
-    # 用默认占位。生成后把文件名填入即可,无需改其他代码。
-    sprite_path = "yuanying.png"             # 待生成(棋盘上的格子精灵)
-    portrait_path = "portrait_yuanying.png"   # 已存在(2026-07-31 入库,1.8MB)
-    crest_path = "crest_yuanying.png"         # 待生成(对话头像)
+    # yuanying.png is the board-piece sprite; portrait_yuanying.png remains
+    # the full character illustration used by detail/dialog UI.
+    sprite_path = "yuanying.png"
+    portrait_path = "portrait_yuanying.png"
+    crest_path = "crest_yuanying.png"
 
     # ── Skill bindings ─────────────────────────────────────────
     # 暂留空 — 沉默领域本身由 commander_power 触发,不需要 unit-level skill。
@@ -98,6 +98,11 @@ class Yuanying(BaseHero):
     # ── Dialog binding ─────────────────────────────────────────
     dialogue_name = "鸢影"
 
-    # Personal growth modifier on top of the base class's growth rates.
-    # See RolledGrowthPolicy and spec §8.2.
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 85, 'atk': 35, 'def': 40, 'matk': 80, 'mdef': 55, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
     personal_growth_modifier = {'hp': 5, 'matk': 10, 'mdef': 5}

@@ -5,6 +5,7 @@ class_name Board
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const UNIT_NODE_SCRIPT := preload("res://scripts/board/unit_node.gd")
+const TEXTURE_LOADER := preload("res://scripts/core/texture_loader.gd")
 
 # M4.11:FLIP 动画 — unit 位置变化时从旧坐标平滑插值到新坐标
 const _FLIP_DURATION := 0.32
@@ -25,15 +26,15 @@ var _unit_nodes_by_id: Dictionary = {}
 @onready var effects: Node2D = $EffectsLayer
 @onready var board_camera: Camera2D = $BoardCamera
 
-# M4.16+:三角旗 polygon 顶点(本地 cell 坐标系 48px tile)。
-# 锚定在 tile 左下角外侧,顶点朝右(向右飘)。
-#   ( -8,  8)  # 旗杆底(贴在 tile 左下角外侧)
-#   ( -8, -4)  # 旗杆顶
-#   (  0,  2)  # 旗尖(向右)
-# PackedVector2Array 不能作 const,放成 var。
-static var _FLAG_POINTS: PackedVector2Array = PackedVector2Array([
-	Vector2(-8, 8), Vector2(-8, -4), Vector2(0, 2),
-])
+# M4.16+:建筑归属旗锚定在 tile 左下角附近。
+# 有主建筑用玩家色贴图;中立建筑用白旗贴图。
+const _OWNER_FLAG_TEXTURES := {
+	"neutral": "res://assets/ui/building_flags/flag_neutral.png",
+	"red": "res://assets/ui/building_flags/flag_red.png",
+	"blue": "res://assets/ui/building_flags/flag_blue.png",
+	"green": "res://assets/ui/building_flags/flag_green.png",
+	"yellow": "res://assets/ui/building_flags/flag_yellow.png",
+}
 # M4.16+:哪些 terrain 算"建筑",显示阵营旗
 const _BUILDING_TERRAINS := ["barracks", "castle", "village"]
 
@@ -528,7 +529,7 @@ func emit_tile_clicked(global_pos: Vector2) -> void:
 
 
 # M4.16+:重建建筑阵营旗。tile_data 是 Array[Dictionary](server TileOut shape),
-# 包含 terrain / owner_id / x / y。闪烁由 _update_flag_blink() 单独处理。
+# 包含 terrain / owner_id / x / y。pending_claims 用独立徽标显示,避免误读为已过户。
 func rebuild_flags(tiles: Array) -> void:
 	if flag_layer == null or metrics == null:
 		return
@@ -537,7 +538,7 @@ func rebuild_flags(tiles: Array) -> void:
 		child.queue_free()
 	if tiles.is_empty():
 		return
-	var _pending := _collect_pending_claim_tiles()
+	var pending := _collect_pending_claim_tiles()
 	for t in tiles:
 		if not t is Dictionary:
 			continue
@@ -545,18 +546,18 @@ func rebuild_flags(tiles: Array) -> void:
 		if not _BUILDING_TERRAINS.has(terrain):
 			continue
 		var owner_v: Variant = t.get("owner_id", null)
-		if owner_v == null:
-			continue  # 无归属不显示旗
-		var owner_pid: int = int(owner_v)
-		if owner_pid <= 0:
-			continue
+		var owner_pid: int = 0
+		if owner_v != null:
+			owner_pid = int(owner_v)
 		var cell := Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
 		_add_flag_at(cell, owner_pid)
+	for cell in pending.keys():
+		_add_claim_badge_at(cell, pending[cell])
 	_update_flag_blink()
 
 
-# M4.16+:从 GameState.pending_claims 收集正在占领的 (x,y) 集合。
-# 让闪烁的旗在 claim 期间视觉上突出。
+# M4.16+:从 GameState.pending_claims 收集正在占领的 (x,y) -> claim。
+# owner flag 代表当前归属;claim badge 代表正在过户。
 func _collect_pending_claim_tiles() -> Dictionary:
 	var claiming: Dictionary = {}
 	if GameState == null:
@@ -564,29 +565,101 @@ func _collect_pending_claim_tiles() -> Dictionary:
 	for c in GameState.pending_claims:
 		if not c is Dictionary:
 			continue
-		claiming[Vector2i(int(c.get("tile_x", -1)), int(c.get("tile_y", -1)))] = true
+		claiming[Vector2i(int(c.get("tile_x", -1)), int(c.get("tile_y", -1)))] = c
 	return claiming
 
 
-# M4.16+:在 cell 中心放一面阵营色三角旗(polygon)。
-# 锚点是 cell 左下角外侧 8px(避免覆盖建筑 sprite)。
-func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
-	if metrics == null:
-		return
-	var poly := Polygon2D.new()
-	poly.polygon = _FLAG_POINTS
-	# 从 GameState.players[].color 取玩家阵营色。
+func _flag_color_for_owner(owner_pid: int) -> String:
+	if owner_pid <= 0:
+		return "neutral"
 	var color_name := "red"
 	if GameState != null:
 		var owner: Dictionary = GameState.get_player(owner_pid)
 		if not owner.is_empty():
 			color_name = String(owner.get("color", "red"))
-	poly.color = Config.player_color(color_name)
-	poly.position = metrics.cell_to_local(cell)
-	# Z 索引:在 UnitLayer 之前(在 GroundLayer 之上)
-	flag_layer.add_child(poly)
-	# 存 cell → Polygon2D 引用,闪烁时 toggle visible
-	poly.set_meta("tile_cell", cell)
+	if not _OWNER_FLAG_TEXTURES.has(color_name):
+		return "neutral"
+	return color_name
+
+
+# M4.16+:在 cell 左下角放一面像素风归属旗贴图。
+# 比代码绘制的几何旗更像正式资产,同时不盖住建筑主体。
+func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
+	if metrics == null:
+		return
+	var holder := Node2D.new()
+	holder.name = "OwnerFlag"
+	holder.position = metrics.cell_to_local(cell)
+	# Z 索引:在 UnitLayer 之前(在 GroundLayer 之上)。
+	flag_layer.add_child(holder)
+	holder.set_meta("tile_cell", cell)
+
+	var key := _flag_color_for_owner(owner_pid)
+	var tex: Texture2D = TEXTURE_LOADER.load_resized(String(_OWNER_FLAG_TEXTURES.get(key, _OWNER_FLAG_TEXTURES["neutral"])), 18)
+	if tex == null:
+		return
+	var sprite := Sprite2D.new()
+	sprite.texture = tex
+	sprite.position = Vector2(-14, 8)
+	holder.add_child(sprite)
+
+
+func _claim_target_color(claim: Dictionary) -> Color:
+	if GameState != null:
+		var target: Dictionary = GameState.get_player(int(claim.get("target_player_id", -1)))
+		if not target.is_empty():
+			return Config.player_color(String(target.get("color", "red")))
+	return Color("#f0c75e")
+
+
+func _claim_badge_text(claim: Dictionary) -> String:
+	var remaining: int = max(0, int(claim.get("turns_remaining", 0)))
+	var total: int = max(1, int(claim.get("total_turns", Config.CLAIM_TURNS_REQUIRED)))
+	return "%d/%d" % [remaining, total]
+
+
+func _claim_progress(claim: Dictionary) -> float:
+	var total: int = max(1, int(claim.get("total_turns", Config.CLAIM_TURNS_REQUIRED)))
+	var remaining: int = clamp(int(claim.get("turns_remaining", total)), 0, total)
+	return clamp(1.0 - float(remaining) / float(total), 0.0, 1.0)
+
+
+func _add_claim_badge_at(cell: Vector2i, claim: Dictionary) -> void:
+	if metrics == null:
+		return
+	var holder := Node2D.new()
+	holder.name = "ClaimBadge"
+	holder.position = metrics.cell_to_local(cell) + Vector2(0, -19)
+	flag_layer.add_child(holder)
+
+	var bg := Polygon2D.new()
+	bg.polygon = PackedVector2Array([
+		Vector2(-15, -6), Vector2(15, -6), Vector2(15, 6), Vector2(-15, 6),
+	])
+	bg.color = Color(0.05, 0.06, 0.07, 0.72)
+	holder.add_child(bg)
+
+	var fill_w: float = max(3.0, 30.0 * _claim_progress(claim))
+	var fill := Polygon2D.new()
+	fill.polygon = PackedVector2Array([
+		Vector2(-15, -6), Vector2(-15 + fill_w, -6),
+		Vector2(-15 + fill_w, 6), Vector2(-15, 6),
+	])
+	fill.color = _claim_target_color(claim)
+	holder.add_child(fill)
+
+	var label := Label.new()
+	label.text = _claim_badge_text(claim)
+	label.position = Vector2(-15, -8)
+	label.size = Vector2(30, 16)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 8)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	holder.add_child(label)
 
 
 # M4.16+:让属于 pending_claims 的旗闪烁(其他静态显示)。
@@ -640,7 +713,7 @@ func _update_flag_blink() -> void:
 		return
 	var claiming := _collect_pending_claim_tiles()
 	for child in flag_layer.get_children():
-		if not child is Polygon2D:
+		if String(child.name) != "OwnerFlag":
 			continue
 		var cell_v: Variant = child.get_meta("tile_cell", null)
 		if cell_v == null:

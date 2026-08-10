@@ -77,9 +77,8 @@ var _mp_badge_label: Label = null
 var _team_badge: ColorRect = null
 var _team_badge_label: Label = null
 var _acted_overlay: ColorRect = null
-# 通用 status effect (P+):紫色蒙版 + glyphs(☠⚡◌❄🔇)行,显示在单位顶部
+# 通用 status effect (P+):glyphs(☠⚡◌❄🔇)徽标,显示在单位右下角
 # unit_data.status_effects 是 list[dict],每个 dict 含 type / remaining_turns / glyph
-var _status_overlay: ColorRect = null
 var _status_label: Label = null
 
 # status effect type → 显示 glyph(对齐后端 app/status/effects.py EFFECT_DEFS)。
@@ -295,24 +294,21 @@ func _build_pieces(team_color: Color) -> void:
 	_acted_overlay.visible = false
 	add_child(_acted_overlay)
 
-	# ---- status effect overlay(紫色蒙版 + glyph 行)----
+	# ---- status effect glyph badge(右下角)----
 	# 通用 status_effects 列表里有任意 effect 时显示;过去单一 silence 现在
 	# 跟 poison / paralyze / blind / slow 共享同一渲染路径。
-	_status_overlay = ColorRect.new()
-	_status_overlay.size = Vector2(40, 40)
-	_status_overlay.position = -_status_overlay.size * 0.5
-	_status_overlay.color = Color(0.55, 0.30, 0.85, 0.55)
-	_status_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_status_overlay.visible = false
-	add_child(_status_overlay)
 	_status_label = Label.new()
 	_status_label.text = ""
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var sl_sz := Vector2(40, 16)
-	_status_label.size = sl_sz
-	_status_label.position = Vector2(-sl_sz.x * 0.5, -28)  # 顶部居中
-	_status_label.add_theme_font_size_override("font_size", 13)
+	var status_icon_sz := Vector2(30, 16)
+	_status_label.size = status_icon_sz
+	_status_label.position = Vector2(-6, 6)
+	_status_label.add_theme_font_size_override("font_size", 11)
+	_status_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	_status_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_label.add_theme_constant_override("shadow_offset_y", 1)
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.visible = false
 	add_child(_status_label)
@@ -369,7 +365,6 @@ func _refresh() -> void:
 	# 同时读旧 silence_until_turn(过渡期 fallback),有值也算被沉默
 	var legacy_silence: int = int(unit_data.get("silence_until_turn", 0))
 	var has_status: bool = status_effects.size() > 0 or legacy_silence > 0
-	_status_overlay.visible = has_status
 	if has_status:
 		var glyphs: Array = []
 		for eff in status_effects:
@@ -383,7 +378,7 @@ func _refresh() -> void:
 		# 过渡期:旧字段非空但新字段空 → 显示 🔇
 		if glyphs.is_empty() and legacy_silence > 0:
 			glyphs.append("🔇")
-		_status_label.text = "".join(glyphs)
+		_status_label.text = "".join(glyphs).substr(0, 2)
 		_status_label.visible = true
 	else:
 		_status_label.text = ""

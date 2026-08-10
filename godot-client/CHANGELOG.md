@@ -1,10 +1,26 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-10 异常状态图标移到棋子右下角
+
+- 当前异常状态共 5 种:`poison` 毒 `☠`,`paralyze` 麻痹 `⚡`,`blind` 致盲 `◌`,`slow` 减速 `❄`,`silence` 沉默 `🔇`;Godot `unit_node.gd` 与后端注册表保持同名映射。
+- `UnitNode` 不再绘制紫色异常状态蒙版,只把状态 glyph 放到右下角 30×16 小徽标,避免和士气星/阵营角标/角色脸重叠。
+- 多异常状态时右下角最多显示前两个 glyph,保证 48px 棋子仍然可读;`yuanying_board_sprite_screenshot` 预览样本加入沉默+毒双状态叠加。
+
+## 2026-08-10 建筑归属与占领中显示拆分
+
+- 核查后端占领链路:`ClaimSession` 到期前不改 `Tile.owner_id`,单位死亡/离开会取消占领,到期或二次 claim 才完成过户;既有 `test_claim.py` 覆盖该设计。
+- Godot `Board.rebuild_flags()` 现在把当前归属旗与 pending claim 徽标分开绘制:owner flag 只代表当前 `owner_id`,占领中另显示目标阵营色进度徽标与剩余/总回合数。
+- 修复中立建筑占领中无任何提示、敌方建筑只闪旧旗导致语义不清的问题。
+- 建筑归属旗从单片三角改为 AI 生成的像素风小旗 PNG;中立建筑也显示白旗,避免无主建筑和漏渲染建筑混淆。
+- 新增 `assets/ui/building_flags/flag_{neutral,red,blue,green,yellow}.png` 与源图集 `owner_flags_sheet_chromakey_source.png`;`Board` 改为通过 `TextureLoader` 加载 18px 贴图旗,并锚定在建筑图标左下角。
+- 新增 `tools/claim_badge_screenshot.tscn`,用于快速检查已有归属建筑与中立建筑的占领中徽标。
+
 ## 2026-08-10 鸢影棋盘棋子 Q 版化
 
 - `assets/heroes/yuanying.png`: 从完整高精立绘缩放图替换为 768×768 透明 Q 版棋盘 sprite,48px 棋盘显示下保留银发、黑紫斗篷与镰刀轮廓。
 - 同步 Web 与 Godot 两端 `yuanying.png`,保留 `portrait_yuanying.png` 作为详情/对话大立绘,`crest_yuanying.png` 作为小头像资源。
 - 后端 `Yuanying` 资源注释清理为当前事实,并新增回归测试防止旧的完整立绘裁切图再次回流。
+- 新增 `tools/yuanying_board_sprite_screenshot.tscn`,用于对比普通术士、鸢影正常态、鸢影行动/状态叠层的 48px 棋盘显示。
 
 ## 2026-08-10 手柄棋盘光标初始位置改为本方 HQ
 
