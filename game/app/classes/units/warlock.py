@@ -46,4 +46,4 @@ class Warlock(BaseUnitClass):
     strong_against = []     # natural counter via stats
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 60, 'atk': 5, 'def': 15, 'matk': 55, 'mdef': 25, 'mov': 0}
+    class_growth_rates = {'hp': 60, 'atk': 35, 'def': 35, 'matk': 55, 'mdef': 35, 'mov': 0}

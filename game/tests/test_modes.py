@@ -202,6 +202,62 @@ def test_spawn_hero_raises_not_implemented():
         spawn_hero_stats("swordsman", char_growth={"hp": 80}, level=1)
 
 
+def test_free_mode_hero_override_keeps_standard_l10_growth() -> None:
+    from app.models import Player, Unit
+    from app.routes.game import _apply_hero_overrides
+
+    player = Player(id=1, game_id=1, user_name="host", color="red", seat=0)
+    unit = Unit(
+        id=1,
+        player_id=1,
+        unit_type="warlock",
+        name="placeholder",
+        level=10,
+        exp=0,
+        hp=45,
+        max_hp=45,
+        atk=8,
+        def_=10,
+        matk=22,
+        mdef=12,
+        mov=5,
+        mp=5,
+        morale=0,
+        x=2,
+        y=2,
+        has_acted=False,
+        has_moved=False,
+        skills=["poison_burst"],
+        growth_seed=1200,
+    )
+
+    _apply_hero_overrides(
+        [unit],
+        [{"color": "red", "x": 2, "y": 2, "hero_id": "yuanying"}],
+        [player],
+    )
+
+    assert unit.hero_id == "yuanying"
+    assert unit.name == "鸢影"
+    assert unit.level == 10
+    assert unit.hp > 48
+    assert unit.max_hp == unit.hp
+
+
+def test_spawn_growth_seed_is_stable_and_slot_specific() -> None:
+    from app.routes.game import _spawn_growth_seed
+
+    assert _spawn_growth_seed(42, 0, 0, "swordsman") == _spawn_growth_seed(
+        42, 0, 0, "swordsman"
+    )
+    assert _spawn_growth_seed(42, 0, 0, "swordsman") != _spawn_growth_seed(
+        42, 0, 1, "swordsman"
+    )
+    assert _spawn_growth_seed(42, 0, 0, "swordsman") != _spawn_growth_seed(
+        42, 1, 0, "swordsman"
+    )
+
+
 # ── apply_spawn_generic_to_unit — Phase 2 Step 2 ───────────────
 
 

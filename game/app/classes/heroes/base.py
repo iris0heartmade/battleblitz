@@ -28,7 +28,7 @@ To add a new hero:
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, List, Mapping, Optional, Tuple
 
 from app.commanders import CommanderPassive, CommanderPower
@@ -97,6 +97,10 @@ class HeroProfile:
     commander_passive: Optional[CommanderPassive] = None
     commander_power: Optional[CommanderPower] = None
     power_threshold: Optional[int] = None
+    # Independent FE-style character growth table. When present, this is
+    # the hero growth source of truth; personal_growth_modifier remains
+    # only as a legacy compatibility fallback.
+    character_growth_rates: Mapping[str, int] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------
@@ -129,9 +133,12 @@ class BaseHero(ABC):
     # spec §9 (the previous separate `mp_pool` field was removed
     # in the growth-redesign commit).
     mov_override: ClassVar[Optional[int]] = None
-    # Personal growth modifier on top of the base class's
-    # class_growth_rates.  See RolledGrowthPolicy and spec §8.
-    # Empty dict = no modification (hero grows exactly like the class).
+    # Independent FE-style per-stat growth table. Empty keeps old
+    # personal_growth_modifier fallback for legacy test fixtures.
+    character_growth_rates: ClassVar[Mapping[str, int]] = {}
+    # Legacy fallback: personal growth modifier on top of the base
+    # class's class_growth_rates. New heroes should use
+    # character_growth_rates instead.
     personal_growth_modifier: ClassVar[Mapping[str, int]] = {}
     # Hero entries override only the specified keys of their base class's
     # terrain movement profile (for example, a river-crossing talent).
@@ -194,4 +201,5 @@ class BaseHero(ABC):
             commander_passive=cls.commander_passive,
             commander_power=cls.commander_power,
             power_threshold=cls.power_threshold,
+            character_growth_rates=dict(cls.character_growth_rates),
         )

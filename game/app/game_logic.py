@@ -368,6 +368,18 @@ def _attack_kind_of(unit: Unit) -> str:
     return getattr(profile, "attack_kind", "physical") or "physical"
 
 
+def _effective_tile_def_bonus(defender: Unit, tile_def_bonus: int) -> int:
+    """Apply defender passives that improve terrain defense."""
+    if tile_def_bonus <= 0:
+        return tile_def_bonus
+    from app.classes.units.skills import get_passive_for
+
+    bonus = tile_def_bonus
+    for sk in get_passive_for(defender):
+        bonus = sk.modify_terrain_def_bonus(bonus, defender)
+    return bonus
+
+
 def calculate_damage(
     attacker: Unit,
     defender: Unit,
@@ -389,6 +401,7 @@ def calculate_damage(
     damage = eff_atk * (eff_atk / (eff_atk + eff_def)) * type_adv * crit_mult
     """
     rng = rng or random.Random()
+    tile_def_bonus = _effective_tile_def_bonus(defender, tile_def_bonus)
     if crit is None:
         crit_chance = _crit_chance(attacker)
         crit = rng.random() < crit_chance

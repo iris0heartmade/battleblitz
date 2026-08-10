@@ -22,6 +22,11 @@ class Youko(BaseHero):
 
     dialogue_name = "洋子"
 
-    # Personal growth modifier on top of the base class's growth rates.
-    # See RolledGrowthPolicy and spec §8.2.
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 75, 'atk': 35, 'def': 35, 'matk': 55, 'mdef': 65, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
     personal_growth_modifier = {'matk': 10, 'mdef': 5}

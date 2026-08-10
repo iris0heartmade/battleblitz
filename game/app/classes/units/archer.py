@@ -9,7 +9,7 @@ class Archer(BaseUnitClass):
     glyph = "弓"
 
     base_hp = 35
-    base_atk = 20
+    base_atk = 18
     base_def = 6
     base_mov = 3
 
@@ -30,4 +30,4 @@ class Archer(BaseUnitClass):
     strong_against = []   # reserved for future matchup against Warlock
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 65, 'atk': 50, 'def': 20, 'matk': 5, 'mdef': 15, 'mov': 0}
+    class_growth_rates = {'hp': 65, 'atk': 45, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

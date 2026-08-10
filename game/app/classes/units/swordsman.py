@@ -25,4 +25,4 @@ class Swordsman(BaseUnitClass):
     strong_against = ["knight"]
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 85, 'atk': 45, 'def': 30, 'matk': 5, 'mdef': 20, 'mov': 0}
+    class_growth_rates = {'hp': 85, 'atk': 40, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

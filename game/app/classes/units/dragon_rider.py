@@ -13,7 +13,7 @@ class DragonRider(BaseUnitClass):
 
     # Kept below promoted cavalry bodies; flying terrain access is the hook.
     base_hp = 42
-    base_atk = 16
+    base_atk = 15
     base_def = 7
     base_mov = 5
 
@@ -38,4 +38,4 @@ class DragonRider(BaseUnitClass):
     }
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 25, 'matk': 5, 'mdef': 15, 'mov': 5}
+    class_growth_rates = {'hp': 80, 'atk': 45, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

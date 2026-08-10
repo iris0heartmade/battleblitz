@@ -48,6 +48,11 @@ class Anna(BaseHero):
 
     dialogue_name = "安娜"
 
-    # Personal growth modifier on top of the base class's growth rates.
-    # See RolledGrowthPolicy and spec §8.2.
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 80, 'atk': 35, 'def': 45, 'matk': 50, 'mdef': 70, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
     personal_growth_modifier = {'def': 5, 'mdef': 5}

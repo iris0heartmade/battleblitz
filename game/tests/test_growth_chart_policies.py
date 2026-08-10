@@ -202,10 +202,10 @@ def test_compute_hero_growth_uses_class_base_l1():
     )
     # anna's L1 block is the healer class verbatim (legacy *_override
     # values hp=46 / def=10 / matk=12 are ignored per spec §3/§5):
-    # healer hp=40 / def=9 / matk=8, with atk inherited from healer too.
+    # healer hp=40 / def=9 / matk=12, with atk inherited from healer too.
     assert curve.values[1]["hp"] == 40
     assert curve.values[1]["def"] == 9
-    assert curve.values[1]["matk"] == 8
+    assert curve.values[1]["matk"] == 12
     assert curve.values[1]["atk"] == 5
 
 
@@ -307,5 +307,5 @@ def test_berserker_and_dragon_rider_baselines_match_expected_tiers():
 
     assert (berserker.base_hp, berserker.base_atk, berserker.base_def) == (48, 28, 8)
     assert berserker.base_mov == 5
-    assert (dragon_rider.base_hp, dragon_rider.base_atk, dragon_rider.base_def) == (42, 16, 7)
+    assert (dragon_rider.base_hp, dragon_rider.base_atk, dragon_rider.base_def) == (42, 15, 7)
     assert dragon_rider.base_mov == 5  # 2026-08-10 平衡: 7->5,飞行补偿在 terrain_movement

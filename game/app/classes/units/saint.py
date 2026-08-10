@@ -25,4 +25,4 @@ class Saint(BaseUnitClass):
     strong_against = []
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 70, 'atk': 15, 'def': 30, 'matk': 35, 'mdef': 50, 'mov': 5}
+    class_growth_rates = {'hp': 70, 'atk': 35, 'def': 35, 'matk': 35, 'mdef': 50, 'mov': 0}

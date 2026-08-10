@@ -34,4 +34,4 @@ class Lancer(BaseUnitClass):
     strong_against = ["knight"]  # 枪克重装
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 70, 'atk': 45, 'def': 20, 'matk': 5, 'mdef': 20, 'mov': 5}
+    class_growth_rates = {'hp': 70, 'atk': 40, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

@@ -25,7 +25,7 @@ class Healer(BaseUnitClass):
     # Magic stats — magic-type backline support. MATK lower than Warlock
     # (it's not a primary attacker), MDEF matches Warlock so it doesn't
     # get one-shotted by other magic units.
-    base_matk = 8
+    base_matk = 12
     base_mdef = 12
     attack_kind = "magic"
 
@@ -37,4 +37,4 @@ class Healer(BaseUnitClass):
     strong_against = []
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 65, 'atk': 5, 'def': 20, 'matk': 25, 'mdef': 35, 'mov': 0}
+    class_growth_rates = {'hp': 65, 'atk': 35, 'def': 35, 'matk': 45, 'mdef': 35, 'mov': 0}

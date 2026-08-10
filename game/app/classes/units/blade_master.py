@@ -24,4 +24,4 @@ class BladeMaster(BaseUnitClass):
     strong_against = ["knight"]
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 35, 'matk': 15, 'mdef': 30, 'mov': 10}
+    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

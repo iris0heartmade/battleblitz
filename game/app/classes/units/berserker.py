@@ -33,4 +33,4 @@ class Berserker(BaseUnitClass):
     strong_against = []
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 90, 'atk': 65, 'def': 30, 'matk': 15, 'mdef': 20, 'mov': 10}
+    class_growth_rates = {'hp': 90, 'atk': 65, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

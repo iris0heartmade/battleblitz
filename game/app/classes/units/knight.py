@@ -9,7 +9,7 @@ class Knight(BaseUnitClass):
     glyph = "骑"
 
     base_hp = 55
-    base_atk = 22
+    base_atk = 20
     base_def = 8
     base_mov = 6
 
@@ -25,4 +25,4 @@ class Knight(BaseUnitClass):
     strong_against = ["archer"]
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 80, 'atk': 45, 'def': 35, 'matk': 5, 'mdef': 15, 'mov': 5}
+    class_growth_rates = {'hp': 80, 'atk': 35, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

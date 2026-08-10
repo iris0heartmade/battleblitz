@@ -187,14 +187,10 @@ def resolve_effective_base(
 ) -> Dict[str, int]:
     """L1 stat map for a class.
 
-    Per spec §3 / §5: hero identity no longer overrides initial stat
-    values — yun/yuanying/etc. shape their L1–L20 trajectory purely
-    through ``personal_growth_modifier`` (added to the class's
-    ``class_growth_rates`` for the roll-rate calculation).  The
-    hero_profile argument is kept for API compatibility but is
-    intentionally unused; future per-hero L1 overrides would be a
-    new field on ``HeroProfile``, not a reintroduction of the old
-    ``*_override`` family.
+    Per spec §3 / §5: hero identity no longer changes the class base
+    here. Named heroes use their own ``character_growth_rates`` for the
+    L1-L20 trajectory; runtime spawn paths still apply explicit
+    ``*_override`` values where a hero template declares bespoke L1 stats.
 
     Note: ``mp`` is no longer in the stat block — see spec §9
     (MOV/MP merge).  Runtime ``unit.mov`` and ``unit.mp`` continue
@@ -232,27 +228,40 @@ def infer_tier(*, type_id: str, is_hero: bool) -> int:
     return 2 if type_id in TIER2_TYPE_IDS else 1
 
 
+def _clamp_growth_rate(value: int) -> int:
+    if value < 0:
+        return 0
+    if value > 100:
+        return 100
+    return value
+
+
 def _resolve_effective_growth_rates(
     class_profile: UnitClassProfile,
     hero_profile: Optional[HeroProfile] = None,
 ) -> Dict[str, int]:
-    """Per-stat effective growth rate (class + personal, clamped).
+    """Per-stat effective growth rate.
 
-    Falls back to 0 for any stat the class didn't declare (a missing
-    key is an authoring error, but we don't want to crash the
-    registry on it — the warning is loud in
-    ``app.classes.units._validate_class_growth_rates``).
+    Heroes with ``character_growth_rates`` use that table directly.
+    Legacy fixtures without it fall back to class growth + personal
+    modifier. Generic classes use their own ``class_growth_rates``.
     """
+    character_growth_rates = (
+        getattr(hero_profile, "character_growth_rates", {}) if hero_profile else {}
+    )
+    if character_growth_rates:
+        return {
+            s: _clamp_growth_rate(int(character_growth_rates.get(s, 0)))
+            for s in STAT_KEYS
+        }
+
     class_rates = class_profile.class_growth_rates
     personal = hero_profile.personal_growth_modifier if hero_profile else {}
     out: Dict[str, int] = {}
     for s in STAT_KEYS:
-        v = int(class_rates.get(s, 0)) + int(personal.get(s, 0))
-        if v < 0:
-            v = 0
-        elif v > 100:
-            v = 100
-        out[s] = v
+        out[s] = _clamp_growth_rate(
+            int(class_rates.get(s, 0)) + int(personal.get(s, 0))
+        )
     return out
 
 
@@ -513,8 +522,8 @@ class RolledGrowthPolicy:
     ) -> ClassBaseline:
         is_hero = hero_profile is not None
         base_stats = resolve_effective_base(class_profile, hero_profile)
-        # Growth rate = class's class_growth_rates + hero's personal
-        # modifier, clamped to [0, 100].  See _resolve_effective_growth_rates.
+        # Hero growth is character_growth_rates when declared; legacy
+        # fixtures still fall back to class_growth_rates + modifier.
         growth_rates = _resolve_effective_growth_rates(class_profile, hero_profile)
         # Per-class stat_caps override the module-level default.
         caps = dict(class_profile.stat_caps) if class_profile.stat_caps else dict(STAT_CAPS)
@@ -523,7 +532,11 @@ class RolledGrowthPolicy:
             label_cn = hero_profile.display_cn
             label_en = type_id.title()
             base_class_id = hero_profile.base_class_id
-            note = "rolled: 职业成长率 + 个人成长 modifier(clamp 0~100)"
+            note = (
+                "rolled: 英雄 character_growth_rates"
+                if getattr(hero_profile, "character_growth_rates", {})
+                else "rolled: 职业成长率 + 个人成长 modifier(clamp 0~100)"
+            )
         else:
             type_id = class_profile.type_id
             label_cn = class_profile.display_cn

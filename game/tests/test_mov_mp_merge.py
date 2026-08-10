@@ -83,3 +83,22 @@ def test_every_class_growth_rate_in_range() -> None:
             assert 0 <= rate <= 100, (
                 f"{cls.type_id}.{stat} = {rate} not in [0, 100]"
             )
+
+
+def test_non_mov_class_growth_rates_respect_design_floor() -> None:
+    """Production class growth must follow the v2 35% non-MOV floor."""
+    for cls in list_all_classes():
+        for stat, rate in cls.class_growth_rates.items():
+            if stat == "mov":
+                continue
+            assert rate >= 35, (
+                f"{cls.type_id}.{stat} = {rate} below the 35% design floor"
+            )
+
+
+def test_class_mov_growth_rates_are_static() -> None:
+    """MOV is map scale, not a random growth stat."""
+    for cls in list_all_classes():
+        assert cls.class_growth_rates["mov"] == 0, (
+            f"{cls.type_id}.mov growth must be 0"
+        )

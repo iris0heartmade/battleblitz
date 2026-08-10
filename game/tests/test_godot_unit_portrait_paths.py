@@ -41,6 +41,20 @@ def test_yuanying_hero_assets_exist_for_web_and_godot():
         assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()
 
 
+def test_yilan_and_baiyu_hero_assets_exist_for_web_and_godot():
+    expected = (
+        "lin_yilan.png",
+        "portrait_lin_yilan.png",
+        "crest_lin_yilan.png",
+        "baiyu.png",
+        "portrait_baiyu.png",
+        "crest_baiyu.png",
+    )
+    for asset_name in expected:
+        assert (ROOT / "game" / "app" / "web" / "assets" / "heroes" / asset_name).exists()
+        assert (ROOT / "godot-client" / "assets" / "heroes" / asset_name).exists()
+
+
 def test_yuanying_board_sprite_is_not_old_fullbody_portrait_crop():
     old_fullbody_crop_sha256 = "62f66ee20e4ab0d29e2e935e413c355e3aa499ff82efe8880f2217b52a58c22c"
     web_sprite = ROOT / "game" / "app" / "web" / "assets" / "heroes" / "yuanying.png"
@@ -57,3 +71,10 @@ def test_godot_hero_sprite_registry_includes_yuanying():
     source = (ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd").read_text(encoding="utf-8")
 
     assert '"yuanying": "yuanying.png"' in source
+
+
+def test_godot_hero_sprite_registry_includes_yilan_and_baiyu():
+    source = (ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd").read_text(encoding="utf-8")
+
+    assert '"lin_yilan": "lin_yilan.png"' in source
+    assert '"baiyu": "baiyu.png"' in source

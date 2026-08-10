@@ -34,4 +34,4 @@ class FalconKnight(BaseUnitClass):
     strong_against = []  # 暂无克制关系
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 70, 'atk': 35, 'def': 20, 'matk': 5, 'mdef': 25, 'mov': 5}
+    class_growth_rates = {'hp': 70, 'atk': 35, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

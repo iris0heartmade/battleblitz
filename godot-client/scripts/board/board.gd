@@ -6,6 +6,7 @@ class_name Board
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const UNIT_NODE_SCRIPT := preload("res://scripts/board/unit_node.gd")
 const TEXTURE_LOADER := preload("res://scripts/core/texture_loader.gd")
+const MenuTheme := preload("res://scripts/ui/menu_theme.gd")
 
 # M4.11:FLIP 动画 — unit 位置变化时从旧坐标平滑插值到新坐标
 const _FLIP_DURATION := 0.32
@@ -609,7 +610,7 @@ func _claim_target_color(claim: Dictionary) -> Color:
 		var target: Dictionary = GameState.get_player(int(claim.get("target_player_id", -1)))
 		if not target.is_empty():
 			return Config.player_color(String(target.get("color", "red")))
-	return Color("#f0c75e")
+	return MenuTheme.C_GOLD
 
 
 func _claim_badge_text(claim: Dictionary) -> String:

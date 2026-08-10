@@ -82,6 +82,11 @@ class Yun(BaseHero):
     # the dialog system can resolve it without any extra wiring.
     dialogue_name = "云"
 
-    # Personal growth modifier on top of the base class's growth rates.
-    # See RolledGrowthPolicy and spec §8.2.
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 80, 'atk': 35, 'def': 35, 'matk': 90, 'mdef': 50, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
     personal_growth_modifier = {'matk': 20, 'mdef': 5}

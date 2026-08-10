@@ -34,4 +34,4 @@ class Warrior(BaseUnitClass):
     strong_against = []  # 暂无克制关系(斧克剑,剑系刚平衡)
 
     # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
-    class_growth_rates = {'hp': 80, 'atk': 55, 'def': 25, 'matk': 5, 'mdef': 15, 'mov': 0}
+    class_growth_rates = {'hp': 80, 'atk': 50, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}
