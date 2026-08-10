@@ -53,6 +53,28 @@ mouse_filter = 2
 anchor_right = 1.0
 anchor_bottom = 1.0
 
+[node name="TitleCover" type="TextureRect" parent="Menu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="TitleCoverScrim" type="ColorRect" parent="Menu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.025, 0.034, 0.038, 0.36)
+mouse_filter = 2
+
+[node name="TitleCoverDevPicker" type="OptionButton" parent="Menu"]
+visible = false
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -372.0
+offset_top = 18.0
+offset_right = -36.0
+offset_bottom = 54.0
+
 ; --- 外框(烫金,粗 4px)---
 [node name="FrameOuter" type="ColorRect" parent="Menu"]
 anchor_right = 1.0
@@ -88,66 +110,66 @@ editor_only = false
 
 ; --- 中央容器(标题 + group-card) ---
 [node name="CenterContainer" type="VBoxContainer" parent="Menu"]
-anchor_left = 0.5
+anchor_left = 1.0
 anchor_top = 0.5
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -570.0
-offset_top = -360.0
-offset_right = 570.0
-offset_bottom = 360.0
-theme_override_constants/separation = 36
-alignment = 1
+offset_left = -568.0
+offset_top = -336.0
+offset_right = -72.0
+offset_bottom = 336.0
+theme_override_constants/separation = 22
+alignment = 2
 
 ; --- 标题区(无 emoji,2 行文字) ---
 [node name="TitleBlock" type="VBoxContainer" parent="Menu/CenterContainer"]
-alignment = 1
-theme_override_constants/separation = 6
+alignment = 2
+theme_override_constants/separation = 4
 
 [node name="TitleLine1" type="Label" parent="Menu/CenterContainer/TitleBlock"]
 text = "战棋闪击"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 84
+theme_override_font_sizes/font_size = 76
 
 [node name="TitleLine2" type="Label" parent="Menu/CenterContainer/TitleBlock"]
 text = "战棋 · 轮回"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 26
 
 [node name="TitleDivider" type="HSeparator" parent="Menu/CenterContainer"]
 custom_minimum_size = Vector2(0, 1.5)
 
 [node name="Spacer1" type="Control" parent="Menu/CenterContainer"]
-custom_minimum_size = Vector2(0, 12)
+custom_minimum_size = Vector2(0, 4)
 
 ; --- 两列 group-card(单人对战 / 多人对战) ---
-[node name="GroupRow" type="HBoxContainer" parent="Menu/CenterContainer"]
-theme_override_constants/separation = 27
+[node name="GroupRow" type="VBoxContainer" parent="Menu/CenterContainer"]
+theme_override_constants/separation = 14
 alignment = 1
 
 ; --- Group A: 单人对战 ---
 [node name="SoloCard" type="VBoxContainer" parent="Menu/CenterContainer/GroupRow"]
-custom_minimum_size = Vector2(420, 0)
-theme_override_constants/separation = 12
+custom_minimum_size = Vector2(496, 0)
+theme_override_constants/separation = 8
 
 [node name="SoloCardTitle" type="Label" parent="Menu/CenterContainer/GroupRow/SoloCard"]
 text = "单人模式"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 21
+theme_override_font_sizes/font_size = 18
 
 [node name="MainlineButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
 text = "主线存档"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 78)
 
 ; --- Group B: 多人对战 ---
 [node name="MultiCard" type="VBoxContainer" parent="Menu/CenterContainer/GroupRow"]
-custom_minimum_size = Vector2(420, 0)
-theme_override_constants/separation = 12
+custom_minimum_size = Vector2(496, 0)
+theme_override_constants/separation = 8
 
 [node name="MultiCardTitle" type="Label" parent="Menu/CenterContainer/GroupRow/MultiCard"]
 text = "多人对战"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 21
+theme_override_font_sizes/font_size = 18
 
 [node name="LobbyButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard"]
 text = "联机大厅"
@@ -157,56 +179,56 @@ custom_minimum_size = Vector2(0, 66)
 theme_override_constants/separation = 12
 
 [node name="JoinByCodeInput" type="LineEdit" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(300, 50)
 placeholder_text = "输入房间号"
 max_length = 6
 virtual_keyboard_type = 2
 
 [node name="JoinByCodeButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
 text = "按号加入"
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(184, 50)
 
 ; --- Spacer ---
 [node name="Spacer2" type="Control" parent="Menu/CenterContainer"]
-custom_minimum_size = Vector2(0, 18)
+custom_minimum_size = Vector2(0, 10)
 
 ; --- 副按钮行(存档 / 编辑器 / 设置 / 退出) ---
 [node name="FooterRow" type="HBoxContainer" parent="Menu/CenterContainer"]
-custom_minimum_size = Vector2(870, 0)
-theme_override_constants/separation = 18
-alignment = 1
+custom_minimum_size = Vector2(496, 0)
+theme_override_constants/separation = 8
+alignment = 2
 
 ; T:5 单槽存档 — 主菜单 Resume button(默认隐藏)
 [node name="ResumeButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "继续对局"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(88, 42)
 visible = false
 disabled = true
 
 [node name="SavesButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "存档管理"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(88, 42)
 
 [node name="InProgressButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "▶ 进行中"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(88, 42)
 
 [node name="HelpButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "玩法说明"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(88, 42)
 
 [node name="EditorButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "地图编辑"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(88, 42)
 
 [node name="SettingsButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "设置"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(72, 42)
 disabled = true
 
 [node name="ExitButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "退出"
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(72, 42)
 
 ; --- 顶部 状态条 (Settings 入口放在右上角,左下角版本号) ---
 [node name="TopBarLabel" type="Label" parent="Menu"]

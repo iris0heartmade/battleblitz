@@ -1,5 +1,34 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-10 手柄棋盘光标初始位置改为本方 HQ
+
+- 根因:光标状态字段本身正常(`InputState.cursor_cell` / `board_focused` 都有 setter + signal),但 `_find_cursor_initial_cell()` 优先选择本方第一个单位。单位排序随地图/后端快照变化,导致手柄进入棋盘时落点不稳定。
+- 修复:新增 `_find_local_hq_cell()`,优先从 `GameState.tiles` 查找 `owner_id == local_player_id` 的 HQ(`terrain == "castle"` 或 `subtype == "castle_throne"`),并让初始光标按 `本方 HQ -> 本方单位 -> 地图中心` 回退。
+- 验证:新增 `test_godot_board_cursor_initializes_on_local_player_hq_before_units`,先红后绿。
+
+## 2026-08-10 标题页按钮布局调整
+
+- `scenes/main.tscn`：主菜单标题与操作区从屏幕中央移到右侧标题安全区，左侧封面主体不再被两列按钮遮挡。
+- 主入口改为竖向层级：`主线存档` 作为最高优先级按钮，`联机大厅` 与房间号加入位于其下；存档、进行中、玩法、地图编辑、设置、退出收束为右下辅助行。
+- `tools/title_cover_test.gd`：新增布局断言，覆盖右侧锚点、紧凑宽度、主按钮竖排、辅助按钮横排和主按钮高度。
+- 旧 ChatGPT 会话图片未重新生成；当前工具只能读取旧会话文本，未暴露生成图文件本体。待图片文件拖入/下载到本地后，可直接替换 `assets/ui/title_cover_v*.png`。
+- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 22 passed / 0 failed。
+
+## 2026-08-10 手柄 ActionBubble 焦点修复
+
+- 根因:棋盘光标选中单位后会显示 `ActionBubble`,但 `_enter_board_focus()` 释放了所有 UI 焦点,导致手柄玩家能移动棋盘光标,却不能稳定选择"移动/攻击/待命"等行动按钮。
+- 修复:`_show_action_bubble()` 打开时临时退出棋盘焦点并把焦点交给第一个可用行动按钮;`_hide_action_bubble()` 关闭后在游戏视图内恢复棋盘焦点,保证"选单位 -> 选命令 -> 选格子/目标"手柄链路不断。
+- `project.godot`: `pause` action 新增手柄 Start 键(`button_index=6`)绑定,避免只能键盘 Esc 暂停。
+- 验证:`test_godot_gamepad_action_bubble_temporarily_owns_focus` / `test_godot_gamepad_pause_has_start_button_binding` 先红后绿;`pytest game/tests/test_godot_client_contract.py -q` 38 passed;Godot headless import 与主场景短启动通过。
+
+## 2026-08-10 标题页封面接入
+
+- `scenes/main.tscn`：主菜单 `Menu` 下新增全屏 `TitleCover`，使用 `TextureRect.STRETCH_KEEP_ASPECT_COVERED` 铺满并裁切；新增半透明 `TitleCoverScrim` 保持标题与按钮可读；封面层 `mouse_filter=IGNORE`，不拦截既有标题交互。
+- `scripts/main.gd`：接入 5 张 `title_cover_*` 候选图，默认封面可通过导出变量、`ProjectSettings["battleblitz/title_cover/default_path"]` 或环境变量 `BB_TITLE_COVER` 配置；`BB_TITLE_COVER_DEV=1` 或 `--title-cover-dev` 时显示开发期预览下拉框。
+- `scripts/main.gd`：封面加载器兼容内容为 JPEG 但扩展名为 `.png` 的开发期图片，避免预览切换时因为 `.import valid=false` 失效。
+- `tools/title_cover_test.tscn` / `.gd`：新增定向 headless 验证，覆盖默认加载、裁切模式、鼠标穿透、5 张预览候选与切换。
+- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 13 passed / 0 failed；主场景 `BB_AUTO_QUIT=1` headless 短启动通过。完整 `smoke_test.tscn` 本轮两次运行均超过 120s/180s 超时未产出结果，需另行拆分慢用例。
+
 ## 2026-08-09 键盘 + 手柄两个盲区修复(本轮)
 
 上手柄接入后发现两处"有声无影"的断点,本次补上。

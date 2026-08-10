@@ -21,6 +21,8 @@ const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 ## and add a real [create] / [join] form with map/biome pickers.
 
 @onready var menu_panel: Control = $Menu
+@onready var title_cover: TextureRect = $Menu/TitleCover
+@onready var title_cover_dev_picker: OptionButton = $Menu/TitleCoverDevPicker
 @onready var connecting_panel: Control = $Connecting
 @onready var game_view: Control = $GameView
 @onready var status_label: Label = $StatusLabel
@@ -202,6 +204,14 @@ const _STATE_POLL_INTERVAL_SEC: float = 1.0
 var _state_poll_timer: Timer = null
 
 # Main menu widgets (GBA 风 V2)
+@export var title_cover_default_path: String = "res://assets/ui/title_cover_v4_annavsyouko.png"
+@export var title_cover_paths: Array[String] = [
+	"res://assets/ui/title_cover_v1_cinematic.png",
+	"res://assets/ui/title_cover_v2_darkfantasy.png",
+	"res://assets/ui/title_cover_v3_impressionist.png",
+	"res://assets/ui/title_cover_v4_annavsyouko.png",
+	"res://assets/ui/title_cover_v5_mirror.png",
+]
 @onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
 @onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
 
@@ -307,6 +317,91 @@ var _mainline_mercenary_payload: Dictionary = {}
 var _mainline_auto_retry_pending: bool = false
 
 
+func _setup_title_cover() -> void:
+	if title_cover == null or not is_instance_valid(title_cover):
+		return
+	title_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+
+	var selected_path := _configured_title_cover_path()
+	_apply_title_cover(selected_path)
+	_setup_title_cover_dev_picker(selected_path)
+
+
+func _configured_title_cover_path() -> String:
+	var configured := str(ProjectSettings.get_setting(
+		"battleblitz/title_cover/default_path",
+		title_cover_default_path
+	))
+	var env_path := OS.get_environment("BB_TITLE_COVER")
+	if env_path != "":
+		configured = env_path
+	if title_cover_paths.has(configured):
+		return configured
+	return title_cover_default_path
+
+
+func _setup_title_cover_dev_picker(selected_path: String) -> void:
+	if title_cover_dev_picker == null or not is_instance_valid(title_cover_dev_picker):
+		return
+	title_cover_dev_picker.clear()
+	for path in title_cover_paths:
+		title_cover_dev_picker.add_item(path.get_file().get_basename())
+		title_cover_dev_picker.set_item_metadata(title_cover_dev_picker.item_count - 1, path)
+	var selected_index := title_cover_paths.find(selected_path)
+	title_cover_dev_picker.selected = max(0, selected_index)
+	title_cover_dev_picker.visible = _title_cover_dev_preview_enabled()
+	if not title_cover_dev_picker.item_selected.is_connected(_on_title_cover_dev_selected):
+		title_cover_dev_picker.item_selected.connect(_on_title_cover_dev_selected)
+
+
+func _title_cover_dev_preview_enabled() -> bool:
+	if OS.get_environment("BB_TITLE_COVER_DEV") == "1":
+		return true
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--title-cover-dev":
+			return true
+	return false
+
+
+func _on_title_cover_dev_selected(index: int) -> void:
+	if title_cover_dev_picker == null or not is_instance_valid(title_cover_dev_picker):
+		return
+	var path := str(title_cover_dev_picker.get_item_metadata(index))
+	_apply_title_cover(path)
+
+
+func _apply_title_cover(path: String) -> void:
+	if title_cover == null or not is_instance_valid(title_cover):
+		return
+	var tex := _load_title_cover_texture(path)
+	title_cover.texture = tex
+	if tex == null:
+		push_warning("Title cover failed to load: %s" % path)
+
+
+func _load_title_cover_texture(path: String) -> Texture2D:
+	var global_path := ProjectSettings.globalize_path(path)
+	var file := FileAccess.open(global_path, FileAccess.READ)
+	if file != null:
+		var bytes := file.get_buffer(file.get_length())
+		file.close()
+		if bytes.size() >= 3 and bytes[0] == 0xff and bytes[1] == 0xd8 and bytes[2] == 0xff:
+			var jpg := Image.new()
+			var jpg_err := jpg.load_jpg_from_buffer(bytes)
+			if jpg_err == OK and not jpg.is_empty():
+				return ImageTexture.create_from_image(jpg)
+	var tex := load(path) as Texture2D
+	if tex != null:
+		return tex
+	var img := Image.new()
+	var err := img.load(global_path)
+	if err != OK or img.is_empty():
+		return null
+	return ImageTexture.create_from_image(img)
+
+
 func _ready() -> void:
 	# Try to restore the last player_name from disk.
 	var saved: Variant = UserSettings.get_value("settings.v1.player_name", "")
@@ -324,6 +419,7 @@ func _ready() -> void:
 
 	# === GBA 火纹风主题注入(V2 第 1+2 轮:主菜单 + HUD 4 角) ===
 	_apply_gba_theme()
+	_setup_title_cover()
 
 	_show_view("menu")
 	mainline_button.pressed.connect(_on_mainline_pressed)
@@ -736,9 +832,29 @@ func _enter_board_focus() -> void:
 	get_viewport().gui_release_focus()
 
 
+func _find_local_hq_cell() -> Vector2i:
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
+		return Vector2i(-1, -1)
+	if GameState == null:
+		return Vector2i(-1, -1)
+	var my_pid: int = int(GameState.local_player_id)
+	for t in GameState.tiles:
+		if typeof(t) != TYPE_DICTIONARY:
+			continue
+		var terrain: String = str(t.get("terrain", ""))
+		var subtype: String = str(t.get("subtype", ""))
+		if int(t.get("owner_id", -1)) == my_pid \
+				and (terrain == "castle" or subtype == "castle_throne"):
+			return Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
+	return Vector2i(-1, -1)
+
+
 func _find_cursor_initial_cell() -> Vector2i:
 	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
 		return Vector2i(0, 0)
+	var hq_cell := _find_local_hq_cell()
+	if hq_cell.x >= 0:
+		return hq_cell
 	# 找第一个当前玩家的单位
 	if GameState != null:
 		var my_pid: int = int(GameState.local_player_id)
@@ -3408,11 +3524,14 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 	action_bubble.visible = true
 	# Keyboard/gamepad users receive an explicit default action. The marker is
 	# deliberately non-color-only and remains readable when focus glow is subtle.
+	if InputState != null:
+		InputState.board_focused = false
 	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
 		if button != null and is_instance_valid(button) and button.visible and not button.disabled:
 			button.text = "▶ %s" % button.text
 			button.grab_focus()
 			break
+	UIPanelFocus.grab_first_focusable(action_bubble)
 
 
 func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
@@ -3517,6 +3636,20 @@ func _available_active_skill(ud: Dictionary) -> String:
 func _hide_action_bubble() -> void:
 	action_bubble.visible = false
 	_selected_unit_id = -1
+	_return_focus_to_board_if_game_active()
+
+
+func _return_focus_to_board_if_game_active() -> void:
+	if _current_view != "game":
+		return
+	if InputState == null:
+		return
+	if action_bubble != null and is_instance_valid(action_bubble) and action_bubble.visible:
+		return
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0 or board.map_size.y <= 0:
+		return
+	InputState.board_focused = true
+	get_viewport().gui_release_focus()
 
 
 func _on_move_pressed() -> void:

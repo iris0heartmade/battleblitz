@@ -169,6 +169,27 @@ func _ready() -> void:
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_check = main_scene.instantiate()
 	add_child(main_check)
+	var title_cover: TextureRect = main_check.get_node_or_null("Menu/TitleCover")
+	var title_cover_picker: OptionButton = main_check.get_node_or_null("Menu/TitleCoverDevPicker")
+	_assert_true("Menu has TitleCover", title_cover != null,
+		"title page should render a full-screen configurable cover image behind existing controls")
+	if title_cover != null:
+		_assert_eq("Menu TitleCover stretch mode", title_cover.stretch_mode, TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+			"title cover should fill the viewport and crop overflow without distorting the image")
+		_assert_eq("Menu TitleCover mouse filter", title_cover.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+			"title cover should not intercept existing title button interactions")
+		_assert_true("Menu TitleCover default loaded", title_cover.texture != null,
+			"title cover should load the configured default asset during _ready")
+		_assert_true("Menu TitleCover default path is in candidates",
+			main_check.title_cover_paths.has(main_check.title_cover_default_path),
+			"default title cover must be one of the five previewable title_cover assets")
+	_assert_true("Menu has dev cover picker", title_cover_picker != null,
+		"title page should expose a development-only cover preview switcher")
+	if title_cover_picker != null:
+		_assert_eq("Menu dev cover picker count", title_cover_picker.item_count, 5,
+			"development preview should include the five title_cover images")
+		_assert_true("Menu dev cover picker hidden by default", not title_cover_picker.visible,
+			"development preview controls should stay hidden unless explicitly enabled")
 	# P2:大厅逻辑已搬到 lobby_controller.gd(挂 $Lobby),断言改指控制器
 	var lobby_check = main_check.get_node("Lobby")
 	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"

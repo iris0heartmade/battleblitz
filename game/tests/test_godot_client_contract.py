@@ -601,3 +601,48 @@ def test_godot_youko_sing_skill_is_wired():
     assert '_pending_skill_id = "sing"' in source
     assert '"bard":' in labels
     assert '"sing":' in labels
+
+
+def test_godot_gamepad_action_bubble_temporarily_owns_focus():
+    source = _read(MAIN_GD)
+    show_start = source.index("func _show_action_bubble(")
+    show_end = source.index("func _refresh_action_bubble_buttons(", show_start)
+    show_body = source[show_start:show_end]
+    hide_start = source.index("func _hide_action_bubble(")
+    hide_end = source.index("func _on_move_pressed()", hide_start)
+    hide_body = source[hide_start:hide_end]
+
+    assert "InputState.board_focused = false" in show_body
+    assert "UIPanelFocus.grab_first_focusable(action_bubble)" in show_body
+    assert "_return_focus_to_board_if_game_active()" in hide_body
+    assert "func _return_focus_to_board_if_game_active() -> void:" in source
+
+
+def test_godot_gamepad_pause_has_start_button_binding():
+    source = _read(PROJECT_GODOT)
+    pause_start = source.index("pause={")
+    pause_end = source.index("; ------------------------------------------------------------", pause_start)
+    pause_body = source[pause_start:pause_end]
+
+    assert "InputEventJoypadButton" in pause_body
+    assert '"button_index":6' in pause_body or '"button_index":7' in pause_body
+
+
+def test_godot_board_cursor_initializes_on_local_player_hq_before_units():
+    source = _read(MAIN_GD)
+    assert "func _find_local_hq_cell() -> Vector2i:" in source
+
+    helper_start = source.index("func _find_local_hq_cell() -> Vector2i:")
+    helper_end = source.index("func _find_cursor_initial_cell()", helper_start)
+    helper_body = source[helper_start:helper_end]
+    assert "for t in GameState.tiles:" in helper_body
+    assert 'str(t.get("terrain", ""))' in helper_body
+    assert 'str(t.get("subtype", ""))' in helper_body
+    assert 'int(t.get("owner_id", -1)) == my_pid' in helper_body
+    assert 'terrain == "castle"' in helper_body or 'subtype == "castle_throne"' in helper_body
+
+    cursor_start = source.index("func _find_cursor_initial_cell() -> Vector2i:")
+    cursor_end = source.index("\n\n", cursor_start)
+    cursor_body = source[cursor_start:cursor_end]
+    assert "var hq_cell := _find_local_hq_cell()" in cursor_body
+    assert cursor_body.index("var hq_cell := _find_local_hq_cell()") < cursor_body.index("for u in GameState.latest_snapshot.get")
