@@ -246,8 +246,9 @@ func _on_lobby_pressed() -> void:
 
 func _on_lobby_list_saves_for_suspend_check(body: Variant, _code: int = 0) -> void:
 	if not (body is Dictionary):
-		# 拉失败兜底:不进 lobby,避免在用户不知情的情况下与 suspend 冲突。
-		_main._update_status("无法检查中断存档,请稍后重试")
+		# 中断存档检查失败时不能卡死主页入口;允许先进入大厅,后续创房仍走正常流程。
+		_main._update_status("无法检查中断存档,已进入联机大厅")
+		_enter_lobby_view()
 		return
 	var suspend: Variant = body.get("suspend", null)
 	if not (suspend is Dictionary):

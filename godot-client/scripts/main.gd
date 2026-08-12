@@ -833,20 +833,35 @@ func _enter_board_focus() -> void:
 	get_viewport().gui_release_focus()
 
 
+func _safe_int(value: Variant, fallback: int = -1) -> int:
+	if value == null:
+		return fallback
+	match typeof(value):
+		TYPE_INT:
+			return value
+		TYPE_FLOAT:
+			return int(value)
+		TYPE_STRING:
+			var text := (value as String).strip_edges()
+			if text.is_valid_int():
+				return text.to_int()
+	return fallback
+
+
 func _find_local_hq_cell() -> Vector2i:
 	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
 		return Vector2i(-1, -1)
 	if GameState == null:
 		return Vector2i(-1, -1)
-	var my_pid: int = int(GameState.local_player_id)
+	var my_pid: int = _safe_int(GameState.local_player_id, -1)
 	for t in GameState.tiles:
 		if typeof(t) != TYPE_DICTIONARY:
 			continue
 		var terrain: String = str(t.get("terrain", ""))
 		var subtype: String = str(t.get("subtype", ""))
-		if int(t.get("owner_id", -1)) == my_pid \
+		if _safe_int(t.get("owner_id", null), -1) == my_pid \
 				and (terrain == "castle" or subtype == "castle_throne"):
-			return Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
+			return Vector2i(_safe_int(t.get("x", 0), 0), _safe_int(t.get("y", 0), 0))
 	return Vector2i(-1, -1)
 
 
@@ -862,8 +877,8 @@ func _find_cursor_initial_cell() -> Vector2i:
 		for u in GameState.latest_snapshot.get("units", []):
 			if typeof(u) != TYPE_DICTIONARY:
 				continue
-			if int(u.get("player_id", -1)) == my_pid:
-				return Vector2i(int(u.get("x", 0)), int(u.get("y", 0)))
+			if _safe_int(u.get("player_id", null), -1) == my_pid:
+				return Vector2i(_safe_int(u.get("x", 0), 0), _safe_int(u.get("y", 0), 0))
 	# 退而求其次:地图中心
 	return Vector2i(board.map_size.x / 2, board.map_size.y / 2)
 

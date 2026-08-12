@@ -606,6 +606,17 @@ def test_godot_lobby_start_success_enters_game_without_connecting_view():
     assert "NetworkClient.connect_to_game" in body
 
 
+def test_godot_lobby_save_check_failure_still_opens_lobby():
+    source = _read(LOBBY_GD)
+    start = source.index("func _on_lobby_list_saves_for_suspend_check(")
+    end = source.index("func _on_lobby_discard_suspend_yes()", start)
+    body = source[start:end]
+    invalid_start = body.index("if not (body is Dictionary):")
+    invalid_end = body.index("var suspend: Variant", invalid_start)
+    invalid_body = body[invalid_start:invalid_end]
+    assert "_enter_lobby_view()" in invalid_body
+
+
 def test_godot_portrait_uses_native_size_inside_target_panel():
     source = _read(MAIN_GD)
     scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
@@ -694,6 +705,7 @@ def test_godot_gamepad_pause_has_start_button_binding():
 
 def test_godot_board_cursor_initializes_on_local_player_hq_before_units():
     source = _read(MAIN_GD)
+    assert "func _safe_int(value: Variant, fallback: int = -1) -> int:" in source
     assert "func _find_local_hq_cell() -> Vector2i:" in source
 
     helper_start = source.index("func _find_local_hq_cell() -> Vector2i:")
@@ -702,7 +714,8 @@ def test_godot_board_cursor_initializes_on_local_player_hq_before_units():
     assert "for t in GameState.tiles:" in helper_body
     assert 'str(t.get("terrain", ""))' in helper_body
     assert 'str(t.get("subtype", ""))' in helper_body
-    assert 'int(t.get("owner_id", -1)) == my_pid' in helper_body
+    assert '_safe_int(t.get("owner_id", null), -1) == my_pid' in helper_body
+    assert 'int(t.get("owner_id", -1))' not in helper_body
     assert 'terrain == "castle"' in helper_body or 'subtype == "castle_throne"' in helper_body
 
     cursor_start = source.index("func _find_cursor_initial_cell() -> Vector2i:")
