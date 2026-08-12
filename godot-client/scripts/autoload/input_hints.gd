@@ -24,10 +24,10 @@ const _STYLE_KEY := "settings.v1.controller_style"
 # ↑↓←→ 不在这里,UI 走系统 ui_* 自动就显示方向键,棋盘走 cell 光标不需要方向键提示
 const _TEXTS := {
 	Style.KEYBOARD: {
-		"confirm": "Enter",
-		"cancel":  "Esc",
-		"zoom_in": "+",
-		"zoom_out": "-",
+		"confirm": "Z/Enter",
+		"cancel":  "X/Esc",
+		"zoom_in": "E/+",
+		"zoom_out": "Q/-",
 		"pause":   "Esc",
 		"end_turn": "E",
 	},

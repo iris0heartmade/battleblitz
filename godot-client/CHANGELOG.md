@@ -1,5 +1,14 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-12 FE8 风格键盘操作支持
+
+### 新增
+- 棋盘和菜单新增 FE8 风格键盘键位:方向键或 WASD 移动,Z/Enter/Space 确认,X/Esc/Backspace 取消,Q/E 或 +/- 缩放。
+- `InputHints` 的键盘提示改为显示 `Z/Enter`、`X/Esc`、`E/+`、`Q/-`,玩家不用猜实际可用键位。
+
+### 变更
+- 键盘继续复用现有 `board_*` / `ui_*` action,不改变鼠标和手柄的原有操作链路。
+
 ## 2026-08-10 异常状态图标移到棋子右下角
 
 - 当前异常状态共 5 种:`poison` 毒 `☠`,`paralyze` 麻痹 `⚡`,`blind` 致盲 `◌`,`slow` 减速 `❄`,`silence` 沉默 `🔇`;Godot `unit_node.gd` 与后端注册表保持同名映射。

@@ -710,3 +710,38 @@ def test_godot_board_cursor_initializes_on_local_player_hq_before_units():
     cursor_body = source[cursor_start:cursor_end]
     assert "var hq_cell := _find_local_hq_cell()" in cursor_body
     assert cursor_body.index("var hq_cell := _find_local_hq_cell()") < cursor_body.index("for u in GameState.latest_snapshot.get")
+
+def test_godot_fe8_keyboard_bindings_are_mapped():
+    project = _read(PROJECT_GODOT)
+    hints = _read(ROOT / "godot-client" / "scripts" / "autoload" / "input_hints.gd")
+
+    def block(action: str) -> str:
+        start = project.index(f"{action}={{")
+        next_action = project.find("\n" + action.split("_")[0], start + len(action))
+        end = next_action if next_action != -1 else project.find("\n[", start)
+        return project[start:end]
+
+    for action, keycodes in {
+        "ui_up": ["4194320", "87"],
+        "ui_down": ["4194322", "83"],
+        "ui_left": ["4194319", "65"],
+        "ui_right": ["4194321", "68"],
+        "board_cursor_up": ["4194320", "87"],
+        "board_cursor_down": ["4194322", "83"],
+        "board_cursor_left": ["4194319", "65"],
+        "board_cursor_right": ["4194321", "68"],
+        "ui_accept": ["4194309", "4194310", "90", "32"],
+        "board_confirm": ["4194309", "90", "32"],
+        "ui_cancel": ["4194305", "4194308", "88"],
+        "board_cancel": ["4194305", "4194308", "88"],
+        "board_zoom_in": ["43", "61", "69"],
+        "board_zoom_out": ["45", "95", "81"],
+    }.items():
+        body = block(action)
+        for keycode in keycodes:
+            assert f'"keycode":{keycode}' in body
+
+    assert '"confirm": "Z/Enter"' in hints
+    assert '"cancel":  "X/Esc"' in hints
+    assert '"zoom_in": "E/+"' in hints
+    assert '"zoom_out": "Q/-"' in hints
