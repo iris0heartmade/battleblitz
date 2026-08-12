@@ -22,6 +22,12 @@ const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 
 @onready var menu_panel: Control = $Menu
 @onready var title_cover: TextureRect = $Menu/TitleCover
+@onready var submenu_title_covers: Array[TextureRect] = [
+	$Lobby/LobbyTitleCover,
+	$SavesView/SavesViewTitleCover,
+	$InProgressView/InProgressViewTitleCover,
+	$MainlineView/MainlineViewTitleCover,
+]
 @onready var title_cover_dev_picker: OptionButton = $Menu/TitleCoverDevPicker
 @onready var connecting_panel: Control = $Connecting
 @onready var game_view: Control = $GameView
@@ -152,6 +158,8 @@ var _unit_info_portrait_tex: TextureRect = null
 @onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitList
 @onready var recruit_close_btn: Button = $GameView/HUD/RecruitPanel/CloseBtn
 var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
+@onready var dialog_overlay: ColorRect = $GameView/HUD/DialogOverlay
+@onready var dialog_panel: Panel = $GameView/HUD/DialogPanel
 @onready var tutorial_bubble: Panel = $GameView/HUD/TutorialBubble
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
@@ -261,6 +269,7 @@ var _resume_kind: String = ""
 
 # T:3 基础大厅视图
 @onready var editor_view = $EditorView  # -> editor_controller.gd (P2)
+@onready var editor_hud: CanvasLayer = $EditorView/EditorHud
 
 @onready var lobby_view: Control = $Lobby
 # 大厅子控件引用已搬到 lobby_controller.gd(相对 $LobbyFrame 路径)
@@ -324,6 +333,11 @@ func _setup_title_cover() -> void:
 	title_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title_cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	for cover in submenu_title_covers:
+		if cover != null and is_instance_valid(cover):
+			cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 	var selected_path := _configured_title_cover_path()
 	_apply_title_cover(selected_path)
@@ -378,6 +392,9 @@ func _apply_title_cover(path: String) -> void:
 		return
 	var tex := _load_title_cover_texture(path)
 	title_cover.texture = tex
+	for cover in submenu_title_covers:
+		if cover != null and is_instance_valid(cover):
+			cover.texture = tex
 	if tex == null:
 		push_warning("Title cover failed to load: %s" % path)
 
@@ -622,14 +639,6 @@ func _ready() -> void:
 			_on_state_poll_response(body)
 	)
 
-	# P1:Reparent SettingsPanel to root so 主菜单 SettingsButton 可直接打开它
-	# (SettingsPanel 默认挂在 GameView/HUD 下,主菜单时 GameView 不可见)。
-	# reparent() 保留节点对象,@onready 引用继续有效。
-	if settings_panel != null and is_instance_valid(settings_panel) \
-			and settings_panel.get_parent() != self:
-		settings_panel.reparent(self)
-		settings_panel.visible = false
-
 	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play opens the lobby
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
 	# to validate the WS pipeline end-to-end without manual clicks.
@@ -738,6 +747,8 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	if editor_hud != null and is_instance_valid(editor_hud):
+		editor_hud.visible = (name == "editor")
 	in_progress_view.visible = (name == "in_progress")
 	# HUD 是 CanvasLayer,不受 GameView.visible 控制 — 手动同步显隐
 	if name == "game":
@@ -873,7 +884,7 @@ func _find_cursor_initial_cell() -> Vector2i:
 		return hq_cell
 	# 找第一个当前玩家的单位
 	if GameState != null:
-		var my_pid: int = int(GameState.local_player_id)
+		var my_pid: int = _safe_int(GameState.local_player_id, -1)
 		for u in GameState.latest_snapshot.get("units", []):
 			if typeof(u) != TYPE_DICTIONARY:
 				continue
@@ -1184,7 +1195,7 @@ func _show_first_tutorial_deferred() -> void:
 	if tutorial_text != null and is_instance_valid(tutorial_text):
 		tutorial_text.bbcode_enabled = true
 		tutorial_text.text = (
-			"[color=#f0c75e][b]📖 BattleBlitz · 玩法说明[/b][/color]\n\n"
+			"[color=#f0c75e][b]📖 BIPOLAR · 玩法说明[/b][/color]\n\n"
 			+ "1. [color=#a8c9ff]点击己方单位[/color] → 浮出 5 按钮气泡\n"
 			+ "2. [color=#5fa8e8]蓝色高亮[/color]是可移动的范围\n"
 			+ "3. [color=#e85a6a]红色高亮[/color]是攻击的范围\n"
@@ -2963,6 +2974,7 @@ func _hide_pause_panel() -> void:
 func _show_settings_panel() -> void:
 	if settings_panel == null or not is_instance_valid(settings_panel):
 		return
+	_prepare_modal_layer("settings")
 	# 同步当前玩家名到 input
 	if settings_name_input != null and is_instance_valid(settings_name_input):
 		settings_name_input.text = _user_name
@@ -2974,6 +2986,48 @@ func _show_settings_panel() -> void:
 func _hide_settings_panel() -> void:
 	if settings_panel != null and is_instance_valid(settings_panel):
 		settings_panel.visible = false
+
+
+func _prepare_modal_layer(active_modal: String) -> void:
+	# Keep modal presentation deterministic: CanvasLayer state is independent
+	# from GameView.visible, so every modal entry point normalizes it first.
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.visible = true
+		hud_layer.transform = Transform2D.IDENTITY
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.visible = true
+		battle_backdrop_layer.transform = Transform2D.IDENTITY
+	if settings_panel != null and is_instance_valid(settings_panel):
+		_center_panel_in_viewport(settings_panel, Vector2(720, 630))
+		settings_panel.visible = active_modal == "settings"
+	if battle_result_panel != null and is_instance_valid(battle_result_panel):
+		_center_panel_in_viewport(battle_result_panel, Vector2(900, 600))
+		battle_result_panel.visible = active_modal == "battle_result"
+	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		tutorial_bubble.visible = active_modal == "tutorial"
+	if war_report_panel != null and is_instance_valid(war_report_panel) and active_modal != "war_report":
+		war_report_panel.visible = false
+	if pause_panel != null and is_instance_valid(pause_panel) and active_modal != "pause":
+		pause_panel.visible = false
+	if dialog_panel != null and is_instance_valid(dialog_panel):
+		dialog_panel.visible = active_modal == "dialog"
+	if dialog_overlay != null and is_instance_valid(dialog_overlay):
+		dialog_overlay.visible = active_modal == "dialog"
+
+
+func _center_panel_in_viewport(panel: Control, panel_size: Vector2) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	var vp_size := get_viewport().get_visible_rect().size
+	var safe_size := Vector2(min(panel_size.x, vp_size.x - 96.0), min(panel_size.y, vp_size.y - 96.0))
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -safe_size.x * 0.5
+	panel.offset_top = -safe_size.y * 0.5
+	panel.offset_right = safe_size.x * 0.5
+	panel.offset_bottom = safe_size.y * 0.5
 
 
 func _on_settings_open_pressed() -> void:
@@ -3216,6 +3270,7 @@ func _on_capture_suspend_response(body: Variant, code: int) -> void:
 
 func show_tutorial() -> void:
 	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		_prepare_modal_layer("tutorial")
 		tutorial_bubble.visible = true
 
 
@@ -3227,6 +3282,7 @@ func hide_tutorial() -> void:
 func show_battle_result(winner_name: String, winner_color: String, stats: Dictionary) -> void:
 	if battle_result_panel == null or not is_instance_valid(battle_result_panel):
 		return
+	_prepare_modal_layer("battle_result")
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false
 	var color_godot: String = _color_name_to_godot(winner_color)

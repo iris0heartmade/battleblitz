@@ -27,7 +27,7 @@ offset_left = 12.0
 offset_top = 6.0
 offset_right = 1896.0
 offset_bottom = 33.0
-text = "战棋闪击客户端 · 像素战棋风"
+text = "BIPOLAR 客户端 · 像素战棋风"
 modulate = Color(0.7, 0.65, 0.5, 1)
 
 ; ============================================================
@@ -114,11 +114,11 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -568.0
-offset_top = -336.0
+offset_left = -600.0
+offset_top = -110.0
 offset_right = -72.0
-offset_bottom = 336.0
-theme_override_constants/separation = 22
+offset_bottom = 330.0
+theme_override_constants/separation = 10
 alignment = 2
 
 ; --- 标题区(无 emoji,2 行文字) ---
@@ -127,14 +127,14 @@ alignment = 2
 theme_override_constants/separation = 4
 
 [node name="TitleLine1" type="Label" parent="Menu/CenterContainer/TitleBlock"]
-text = "战棋闪击"
+text = "BIPOLAR"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 76
+theme_override_font_sizes/font_size = 36
 
 [node name="TitleLine2" type="Label" parent="Menu/CenterContainer/TitleBlock"]
 text = "战棋 · 轮回"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 16
 
 [node name="TitleDivider" type="HSeparator" parent="Menu/CenterContainer"]
 custom_minimum_size = Vector2(0, 1.5)
@@ -159,7 +159,7 @@ theme_override_font_sizes/font_size = 18
 
 [node name="MainlineButton" type="Button" parent="Menu/CenterContainer/GroupRow/SoloCard"]
 text = "主线存档"
-custom_minimum_size = Vector2(0, 78)
+custom_minimum_size = Vector2(0, 64)
 
 ; --- Group B: 多人对战 ---
 [node name="MultiCard" type="VBoxContainer" parent="Menu/CenterContainer/GroupRow"]
@@ -173,62 +173,63 @@ theme_override_font_sizes/font_size = 18
 
 [node name="LobbyButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard"]
 text = "联机大厅"
-custom_minimum_size = Vector2(0, 66)
+custom_minimum_size = Vector2(0, 54)
 
 [node name="JoinByCodeRow" type="HBoxContainer" parent="Menu/CenterContainer/GroupRow/MultiCard"]
 theme_override_constants/separation = 12
 
 [node name="JoinByCodeInput" type="LineEdit" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
-custom_minimum_size = Vector2(300, 50)
+custom_minimum_size = Vector2(300, 42)
 placeholder_text = "输入房间号"
 max_length = 6
 virtual_keyboard_type = 2
 
 [node name="JoinByCodeButton" type="Button" parent="Menu/CenterContainer/GroupRow/MultiCard/JoinByCodeRow"]
 text = "按号加入"
-custom_minimum_size = Vector2(184, 50)
+custom_minimum_size = Vector2(184, 42)
 
 ; --- Spacer ---
 [node name="Spacer2" type="Control" parent="Menu/CenterContainer"]
 custom_minimum_size = Vector2(0, 10)
 
 ; --- 副按钮行(存档 / 编辑器 / 设置 / 退出) ---
-[node name="FooterRow" type="HBoxContainer" parent="Menu/CenterContainer"]
+[node name="FooterRow" type="GridContainer" parent="Menu/CenterContainer"]
 custom_minimum_size = Vector2(496, 0)
-theme_override_constants/separation = 8
-alignment = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 4
 
 ; T:5 单槽存档 — 主菜单 Resume button(默认隐藏)
 [node name="ResumeButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "继续对局"
-custom_minimum_size = Vector2(88, 42)
+custom_minimum_size = Vector2(112, 38)
 visible = false
 disabled = true
 
 [node name="SavesButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "存档管理"
-custom_minimum_size = Vector2(88, 42)
+custom_minimum_size = Vector2(112, 38)
 
 [node name="InProgressButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "▶ 进行中"
-custom_minimum_size = Vector2(88, 42)
+custom_minimum_size = Vector2(112, 38)
 
 [node name="HelpButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "玩法说明"
-custom_minimum_size = Vector2(88, 42)
+custom_minimum_size = Vector2(112, 38)
 
 [node name="EditorButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "地图编辑"
-custom_minimum_size = Vector2(88, 42)
+custom_minimum_size = Vector2(112, 38)
 
 [node name="SettingsButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "设置"
-custom_minimum_size = Vector2(72, 42)
+custom_minimum_size = Vector2(112, 38)
 disabled = true
 
 [node name="ExitButton" type="Button" parent="Menu/CenterContainer/FooterRow"]
 text = "退出"
-custom_minimum_size = Vector2(72, 42)
+custom_minimum_size = Vector2(112, 38)
 
 ; --- 顶部 状态条 (Settings 入口放在右上角,左下角版本号) ---
 [node name="TopBarLabel" type="Label" parent="Menu"]
@@ -236,7 +237,7 @@ offset_left = 36.0
 offset_top = 21.0
 offset_right = 300.0
 offset_bottom = 51.0
-text = "战棋闪击客户端 版本 0.2"
+text = "BIPOLAR 客户端 版本 0.2"
 horizontal_alignment = 0
 theme_override_font_sizes/font_size = 18
 
@@ -252,7 +253,7 @@ offset_bottom = -24.0
 alignment = 1
 
 [node name="FooterLabel" type="Label" parent="Menu/Footer"]
-text = "像素战棋风 · © 2026 战棋闪击"
+text = "像素战棋风 · © 2026 BIPOLAR"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 16
 
@@ -329,10 +330,23 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("3_editor")
 
+[node name="EditorBackdrop" type="ColorRect" parent="EditorView"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.018, 0.035, 0.03, 1)
+
 [node name="EditorBoard" parent="EditorView" instance=ExtResource("2_board")]
 position = Vector2(36, 132)
 
-[node name="EditorPanel" type="ColorRect" parent="EditorView"]
+[node name="EditorHud" type="CanvasLayer" parent="EditorView"]
+visible = false
+layer = 20
+
+[node name="EditorPanel" type="ColorRect" parent="EditorView/EditorHud"]
 anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -342,7 +356,7 @@ offset_right = -36.0
 offset_bottom = -36.0
 color = Color(0.02, 0.04, 0.03, 0.92)
 
-[node name="EditorTitle" type="Label" parent="EditorView/EditorPanel"]
+[node name="EditorTitle" type="Label" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 24.0
 offset_right = 480.0
@@ -350,52 +364,52 @@ offset_bottom = 66.0
 text = "地图编辑器"
 theme_override_font_sizes/font_size = 33
 
-[node name="EditorMapNameInput" type="LineEdit" parent="EditorView/EditorPanel"]
+[node name="EditorMapNameInput" type="LineEdit" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 90.0
 offset_right = 480.0
 offset_bottom = 144.0
 placeholder_text = "地图名称"
 
-[node name="EditorBiomeOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorBiomeOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 168.0
 offset_right = 162.0
 offset_bottom = 222.0
 
-[node name="EditorApplyBiomeBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorApplyBiomeBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 174.0
 offset_top = 168.0
 offset_right = 234.0
 offset_bottom = 222.0
 text = "套用"
 
-[node name="EditorTerrainOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorTerrainOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 246.0
 offset_top = 168.0
 offset_right = 480.0
 offset_bottom = 222.0
 
-[node name="EditorSurfaceOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorSurfaceOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 246.0
 offset_top = 168.0
 offset_right = 480.0
 offset_bottom = 222.0
 
-[node name="EditorMapSelectOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorMapSelectOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 246.0
 offset_right = 306.0
 offset_bottom = 300.0
 
-[node name="EditorLoadBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorLoadBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 318.0
 offset_top = 246.0
 offset_right = 480.0
 offset_bottom = 300.0
 text = "加载地图"
 
-[node name="EditorStatus" type="Label" parent="EditorView/EditorPanel"]
+[node name="EditorStatus" type="Label" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 324.0
 offset_right = 480.0
@@ -403,76 +417,76 @@ offset_bottom = 384.0
 text = "就绪"
 theme_override_font_sizes/font_size = 20
 
-[node name="EditorModeOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorModeOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 390.0
 offset_right = 180.0
 offset_bottom = 444.0
 
-[node name="EditorUnitToolOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorUnitToolOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 192.0
 offset_top = 390.0
 offset_right = 318.0
 offset_bottom = 444.0
 
-[node name="EditorUnitOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorUnitOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 330.0
 offset_top = 390.0
 offset_right = 480.0
 offset_bottom = 444.0
 
-[node name="EditorUnitColorOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorUnitColorOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 456.0
 offset_right = 234.0
 offset_bottom = 510.0
 
-[node name="EditorSurfaceOwnerOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorSurfaceOwnerOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 456.0
 offset_right = 234.0
 offset_bottom = 510.0
 
-[node name="EditorUnitLevelOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorUnitLevelOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 246.0
 offset_top = 456.0
 offset_right = 480.0
 offset_bottom = 510.0
 
-[node name="EditorNewBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorNewBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 534.0
 offset_right = 234.0
 offset_bottom = 588.0
 text = "新建 15x15"
 
-[node name="EditorSaveBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorSaveBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 246.0
 offset_top = 534.0
 offset_right = 480.0
 offset_bottom = 588.0
 text = "保存地图"
 
-[node name="EditorWidthOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorWidthOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 606.0
 offset_right = 156.0
 offset_bottom = 660.0
 
-[node name="EditorHeightOption" type="OptionButton" parent="EditorView/EditorPanel"]
+[node name="EditorHeightOption" type="OptionButton" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 168.0
 offset_top = 606.0
 offset_right = 300.0
 offset_bottom = 660.0
 
-[node name="EditorResizeBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorResizeBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 312.0
 offset_top = 606.0
 offset_right = 480.0
 offset_bottom = 660.0
 text = "应用尺寸"
 
-[node name="EditorUndoBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorUndoBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 678.0
 offset_right = 234.0
@@ -480,7 +494,7 @@ offset_bottom = 732.0
 text = "撤销"
 disabled = true
 
-[node name="EditorRedoBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorRedoBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 246.0
 offset_top = 678.0
 offset_right = 480.0
@@ -488,14 +502,14 @@ offset_bottom = 732.0
 text = "重做"
 disabled = true
 
-[node name="EditorBackBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorBackBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 822.0
 offset_right = 480.0
 offset_bottom = 876.0
 text = "返回主菜单"
 
-[node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorPanel"]
+[node name="EditorDeleteBtn" type="Button" parent="EditorView/EditorHud/EditorPanel"]
 offset_left = 24.0
 offset_top = 750.0
 offset_right = 480.0
@@ -508,6 +522,20 @@ visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("16_lobby")
+
+[node name="LobbyTitleCover" type="TextureRect" parent="Lobby"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LobbyTitleCoverScrim" type="ColorRect" parent="Lobby"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.018, 0.027, 0.03, 0.64)
+
 [node name="LobbyFrame" type="Panel" parent="Lobby"]
 anchor_left = 0.04
 anchor_top = 0.05
@@ -956,6 +984,19 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("4_saves")
 
+[node name="SavesViewTitleCover" type="TextureRect" parent="SavesView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="SavesViewTitleCoverScrim" type="ColorRect" parent="SavesView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.018, 0.027, 0.03, 0.68)
+
 [node name="SaveFrame" type="ColorRect" parent="SavesView"]
 anchor_left = 0.5
 anchor_top = 0.5
@@ -1155,6 +1196,19 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("6_in_progress")
 
+[node name="InProgressViewTitleCover" type="TextureRect" parent="InProgressView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="InProgressViewTitleCoverScrim" type="ColorRect" parent="InProgressView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.018, 0.027, 0.03, 0.68)
+
 [node name="IPFrame" type="ColorRect" parent="InProgressView"]
 anchor_left = 0.5
 anchor_top = 0.5
@@ -1219,6 +1273,19 @@ visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("5_mainline")
+
+[node name="MainlineViewTitleCover" type="TextureRect" parent="MainlineView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="MainlineViewTitleCoverScrim" type="ColorRect" parent="MainlineView"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.018, 0.027, 0.03, 0.68)
 
 ; Responsive panels own the visible campaign/prepare layout.  The legacy
 ; MLFrame children remain below only as compatibility targets for old flows.
@@ -1417,7 +1484,7 @@ offset_left = -234.0
 offset_top = -153.0
 offset_right = -36.0
 offset_bottom = -99.0
-text = "✅ 准备好了"
+text = "准备好了"
 
 [node name="MLPrepRefreshBtn" type="Button" parent="MainlineView/MLFrame"]
 anchor_left = 1.0
@@ -2336,10 +2403,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -390.0
-offset_top = -345.0
-offset_right = 390.0
-offset_bottom = 345.0
+offset_left = -360.0
+offset_top = -315.0
+offset_right = 360.0
+offset_bottom = 315.0
 mouse_filter = 0
 
 [node name="OrnateFrame" type="NinePatchRect" parent="GameView/HUD/SettingsPanel"]
@@ -2382,7 +2449,7 @@ offset_left = 54.0
 offset_top = 90.0
 offset_right = -54.0
 offset_bottom = -72.0
-theme_override_constants/separation = 24
+theme_override_constants/separation = 18
 
 [node name="NameRow" type="HBoxContainer" parent="GameView/HUD/SettingsPanel/SettingsList"]
 theme_override_constants/separation = 18
@@ -2474,11 +2541,11 @@ alignment = 1
 theme_override_constants/separation = 24
 
 [node name="ApplyBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ButtonRow"]
-text = "✅  应用"
+text = "应用"
 custom_minimum_size = Vector2(180, 54)
 
 [node name="CancelBtn" type="Button" parent="GameView/HUD/SettingsPanel/SettingsList/ButtonRow"]
-text = "❌  取消"
+text = "取消"
 custom_minimum_size = Vector2(180, 54)
 
 ; --- 暂停面板(全屏半透蒙层 + 中央浮层) ---
@@ -2552,7 +2619,7 @@ text = "⏸  中断退出"
 custom_minimum_size = Vector2(0, 54)
 
 [node name="QuitBtn" type="Button" parent="GameView/HUD/PausePanel/PauseList"]
-text = "❌  退出游戏"
+text = "退出游戏"
 custom_minimum_size = Vector2(0, 54)
 
 ; ============================================================

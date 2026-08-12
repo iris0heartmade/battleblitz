@@ -11,6 +11,11 @@ func _ready() -> void:
 	var main: Node = root
 	if root.name == "SettingsScreenshot":
 		main = root.get_child(0) if root.get_child_count() > 0 else root
+	# Show game view through the production view switch so CanvasLayer/HUD state
+	# matches real play before opening the modal.
+	if main.has_method("_show_view"):
+		main.call("_show_view", "game")
+		await RenderingServer.frame_post_draw
 	# Show game view, hide menu/connecting.
 	var game_view: Node = main.find_child("GameView", true, false)
 	if game_view != null:
@@ -36,9 +41,12 @@ func _ready() -> void:
 					board.load_map(parsed)
 				break
 	# Show settings panel.
-	var settings: Panel = main.find_child("SettingsPanel", true, false)
-	if settings != null:
-		settings.visible = true
+	if main.has_method("_show_settings_panel"):
+		main.call("_show_settings_panel")
+	else:
+		var settings: Panel = main.find_child("SettingsPanel", true, false)
+		if settings != null:
+			settings.visible = true
 	for i in 4:
 		await RenderingServer.frame_post_draw
 	var img: Image = get_viewport().get_texture().get_image()
