@@ -1,10 +1,9 @@
 extends Node
 ## ui_review_screenshot.gd — 原创美术接入验收的确定性截图工具(本地 mock,无后端)。
-## 依次截图:主线存档 / 章节详情 / 英雄页 / 装备页 / 战斗默认态 / 单位选中 /
-## 行动菜单 / 对话框 / 暂停界面 / 战斗结算。输出到 res://.refactor_shots/。
+## 依次截图(共 11 张):主线存档 / 章节详情 / 新游戏整备 / 英雄页 / 装备页 /
+## 战斗默认态 / 单位选中 / 行动菜单 / 对话框 / 暂停界面 / 战斗结算。
+## 输出到 res://.refactor_shots/ui_<分辨率>/。
 ## 用法:godot --resolution 1280x720 --path godot-client res://tools/ui_review_screenshot.tscn
-
-const MAP_PATH := "res://../game/maps/balanced_2p_15.json"
 
 
 func _ready() -> void:
@@ -144,11 +143,12 @@ func _ready() -> void:
 		"x": 2, "y": 8, "player_id": 1, "color": "red",
 		"skills": ["arcane_blast"], "has_acted": false, "has_moved": false,
 	}
-	if not FileAccess.file_exists(MAP_PATH):
-		printerr("[ui-review] map not found: %s" % MAP_PATH)
+	var map_path := _resolve_map_path()
+	if map_path == "":
+		printerr("[ui-review] map not found: balanced_2p_15.json")
 		get_tree().quit(1)
 		return
-	var map_data: Variant = JSON.parse_string(FileAccess.open(MAP_PATH, FileAccess.READ).get_as_text())
+	var map_data: Variant = JSON.parse_string(FileAccess.open(map_path, FileAccess.READ).get_as_text())
 	if not (map_data is Dictionary):
 		printerr("[ui-review] invalid map json")
 		get_tree().quit(1)
@@ -257,11 +257,28 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
-var _review_size: Vector2i = Vector2i(1280, 720)
+var _review_size: Vector2i = Vector2i(1920, 1080)
+
+
+func _resolve_map_path() -> String:
+	# 与 smoke_test.gd 保持一致的多候选路径,避免重定位 godot-client 后截图工具失效。
+	var candidates: Array[String] = [
+		"res://../../game/maps/balanced_2p_15.json",
+		"res://../game/maps/balanced_2p_15.json",
+		"res://game/maps/balanced_2p_15.json",
+	]
+	for c in candidates:
+		if FileAccess.file_exists(c):
+			return c
+	return ""
 
 
 func _save(name: String) -> void:
-	var img: Image = get_viewport().get_texture().get_image()
+	var vp_texture := get_viewport().get_texture()
+	if vp_texture == null:
+		print("  WARN: %s viewport texture null (headless 无法读取 viewport)" % name)
+		return
+	var img: Image = vp_texture.get_image()
 	if img == null:
 		print("  WARN: %s viewport image null" % name)
 		return

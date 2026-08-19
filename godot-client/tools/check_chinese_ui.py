@@ -12,7 +12,15 @@ ASCII_WORD = re.compile(r"[A-Za-z][A-Za-z0-9_+\-/]*")
 QUOTED = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
 BBCODE = re.compile(r"\[[^\]]+\]")
 PRINTF = re.compile(r"%[-+0-9.]*[sdif]")
-TS_CN = re.compile(r'^\s*(text|placeholder_text|tooltip_text|item_\d+/text)\s*=')
+# 覆盖 tscn 中所有面向玩家的文本属性:
+# - Label/Button/RichTextLabel 的 text
+# - LineEdit/TextEdit 的 placeholder_text
+# - Control 的 tooltip_text
+# - OptionButton 弹出菜单项的 popup/item_N/text
+TS_CN = re.compile(
+    r'^\s*(?:text|placeholder_text|tooltip_text)\s*='
+    r'|(?:^|/)item_\d+/text\s*='
+)
 GD_UI_HINTS = (
     "add_item(",
     "set_item_text(",
