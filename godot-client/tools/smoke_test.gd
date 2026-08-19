@@ -41,8 +41,7 @@ func _init_autoloads() -> bool:
 		and _network_client != null \
 		and _user_settings != null
 	if not ok:
-		print("  FAIL  Missing required autoload(s): "
-			% _missing_autoload_names())
+		print("  FAIL  Missing required autoload(s): %s" % _missing_autoload_names())
 	return ok
 
 
