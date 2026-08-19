@@ -1550,7 +1550,7 @@ func _purchase_first_shop_item() -> void:
 		return
 	var item_id := str(item.get("item_id", ""))
 	if item_id == "":
-		_main._update_status("商品缺少 item_id")
+		_main._update_status("商品缺少编号")
 		return
 	_main._update_status("购买 %s..." % str(item.get("name", item_id)))
 	NetworkClient.purchase_post_battle_shop_item(_main._selected_mainline_id, _main._user_name, item_id, 1, Callable(self, "_on_prepare_shop_purchase_response"))
@@ -1776,7 +1776,7 @@ func _on_mainline_start_response(body: Variant, code: int = 0) -> void:
 
 func _enter_started_mainline_game() -> void:
 	if _main._game_id <= 0 or _main._player_id <= 0:
-		_main._update_status("Mainline start failed: missing game or player id")
+		_main._update_status("主线战斗启动失败：缺少对局或玩家编号。")
 		_main._show_view("mainline")
 		return
 	_main._show_view("game")
@@ -1811,7 +1811,7 @@ func _on_mainline_prebattle_dialogue_response(body: Variant, code: int = 0) -> v
 	if code >= 200 and code < 300:
 		await DialogManager.play(body)
 	else:
-		_main._update_status("Pre-battle dialogue failed to load; entering battle.")
+		_main._update_status("战前对白加载失败，直接进入战斗。")
 	_enter_started_mainline_game()
 
 
@@ -2013,7 +2013,7 @@ func _sync_prepare_equipment_select() -> void:
 		if item_id == "":
 			continue
 		var count := int(inventory.get(item_id, 0))
-		ml_prep_equipment_select.add_item("%s · %s · x%d" % [str(it.get("name", item_id)), str(it.get("slot", "item")), count])
+		ml_prep_equipment_select.add_item("%s · %s · ×%d" % [str(it.get("name", item_id)), str(it.get("slot", "道具")), count])
 		var idx := ml_prep_equipment_select.item_count - 1
 		ml_prep_equipment_select.set_item_metadata(idx, item_id)
 		if item_id == _main._selected_prepare_equipment_id:
@@ -2038,7 +2038,7 @@ func _sync_prepare_shop_select() -> void:
 		var item_id := str(it.get("item_id", ""))
 		if item_id == "":
 			continue
-		ml_prep_shop_select.add_item("%s · %dG" % [str(it.get("name", item_id)), int(it.get("price", 0))])
+		ml_prep_shop_select.add_item("%s · %d 金" % [str(it.get("name", item_id)), int(it.get("price", 0))])
 		var idx := ml_prep_shop_select.item_count - 1
 		ml_prep_shop_select.set_item_metadata(idx, item_id)
 		if item_id == _main._selected_prepare_shop_item_id:

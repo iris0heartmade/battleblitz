@@ -2359,23 +2359,23 @@ func _pick_empty_my_barracks_at_cell(cell: Vector2i) -> Dictionary:
 	if board == null or GameState == null:
 		return {}
 	if not GameState.is_local_turn:
-		_update_status("Not your turn...")
+		_update_status("当前不是你的回合。")
 		return {}
 	var tile := GameState.get_tile(cell.x, cell.y)
 	if tile.is_empty() and board.tile_lookup != null:
 		tile = board.tile_lookup.get(cell, {})
 	if tile.is_empty():
-		_update_status("Map data not loaded")
+		_update_status("地图数据尚未加载。")
 		return {}
 	if str(tile.get("terrain", "")) != "barracks":
 		return {}
 	var owner_id := int(tile.get("owner_id", -1))
 	if owner_id != _player_id:
-		_update_status("This barracks is not yours (owner=%d)" % owner_id)
+		_update_status("这座兵营不属于你（归属玩家 %d）。" % owner_id)
 		return {}
 	var occ_v: Variant = tile.get("occupied_unit_id", null)
 	if occ_v != null and int(occ_v) > 0:
-		_update_status("Barracks occupied; move the unit away first")
+		_update_status("兵营已被占用，请先将单位移开。")
 		return {}
 	var me: Dictionary = GameState.get_player(_player_id)
 	return {"x": cell.x, "y": cell.y, "gold": int(me.get("gold", 0))}
@@ -3884,7 +3884,7 @@ func _on_skill_pressed() -> void:
 	if skill_id == "sing":
 		var sing_out: Dictionary = _sing_targets(ud)
 		if sing_out.is_empty():
-			_update_status("Sing: no adjacent acted ally")
+			_update_status("歌唱：相邻位置没有已行动的友军。")
 			return
 		_pending_skill_id = "sing"
 		_skill_mode_unit_id = _selected_unit_id
@@ -3894,7 +3894,7 @@ func _on_skill_pressed() -> void:
 			for k in sing_out.keys():
 				sing_tiles.append(Vector2i(int(sing_out[k].get("x", 0)), int(sing_out[k].get("y", 0))))
 			board.show_attack_marks(sing_tiles)
-		_update_status("Sing: choose acted ally (%d)" % sing_out.size())
+		_update_status("歌唱：请选择已行动的友军（%d 名）。" % sing_out.size())
 		_hide_action_bubble()
 		return
 	var out: Dictionary = _heal_targets(ud)
@@ -4068,7 +4068,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		if co_state_d is Dictionary and co_state_d.get("is_power_active", false):
 			var co_id: String = str(co_state_d.get("commander_id", ""))
 			var co_name_cn := _commander_cn(co_id) if co_id != "" else "指挥官"
-			buffs.append("[color=#f2666b]🔥 %s 统御 Power 启动中[/color] → 全军 buff" % co_name_cn)
+			buffs.append("[color=#f2666b]🔥 %s 统御发动中[/color] → 全军增益" % co_name_cn)
 	# 4) 转职加成(高等级 → 转职后等级加成)
 	if lvl >= 10:
 		buffs.append("[color=#5fa8e8]📈 等级 %d 已解锁转职[/color]" % lvl)

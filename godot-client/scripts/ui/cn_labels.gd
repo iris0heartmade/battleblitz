@@ -66,6 +66,8 @@ static func skill_cn(skill_id: String) -> String:
 			return "连击"
 		"arcane_strike":
 			return "奥术冲击"
+		"arcane_blast":
+			return "奥术爆裂"
 		"sing":
 			return "吟诗"
 		_:

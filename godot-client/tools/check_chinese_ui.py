@@ -21,7 +21,9 @@ GD_UI_HINTS = (
     "_show_error(",
 )
 
-ALLOW_WORDS: set[str] = set()
+# 这些是国际通用的按键、网络协议、数值或游戏术语。其余面向玩家的自然
+# 语言一律不在白名单内，避免英文错误提示被掩盖。
+ALLOW_WORDS: set[str] = {"AI", "Esc", "HP", "HTTP", "Lv", "A", "B", "C", "D"}
 
 ALLOW_PATTERNS = (
     re.compile(r"^res://"),
@@ -62,6 +64,7 @@ def is_code_key(line: str, text: str) -> bool:
         f'.get("{text}"' in line
         or f'get("{text}"' in line
         or stripped.startswith(f'"{text}":')
+        or f'== "{text}"' in line
     )
 
 
