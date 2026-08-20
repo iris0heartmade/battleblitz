@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -20,6 +20,7 @@
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/secondary_panel_frame_9slice.png" id="19_skin_secondary_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer.png" id="20_skin_sidebar"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/chapter_result_title.png" id="21_skin_result_title"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/ink_navy_weave_tile.png" id="22_battle_backdrop"]
 [ext_resource type="Script" path="res://scripts/ui/lobby_controller.gd" id="16_lobby"]
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1510,7 +1511,20 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.018, 0.035, 0.055, 1)
+color = Color(0.025, 0.055, 0.082, 1)
+mouse_filter = 2
+
+[node name="Weave" type="TextureRect" parent="GameView/BattleBackdrop"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("22_battle_backdrop")
+expand_mode = 1
+stretch_mode = 1
+texture_repeat = 2
+modulate = Color(0.42, 0.48, 0.55, 0.52)
 mouse_filter = 2
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
@@ -1547,6 +1561,7 @@ modulate = Color(1, 1, 1, 0.92)
 mouse_filter = 2
 
 [node name="Heading" type="Label" parent="GameView/HUD/LeftHudWing"]
+anchor_right = 1.0
 offset_left = 36.0
 offset_top = 32.0
 offset_right = -36.0
@@ -1555,12 +1570,14 @@ text = "战术指令"
 theme_override_font_sizes/font_size = 18
 
 [node name="Hint" type="Label" parent="GameView/HUD/LeftHudWing"]
+anchor_right = 1.0
 offset_left = 36.0
 offset_top = 68.0
 offset_right = -36.0
-offset_bottom = 124.0
-text = "选择单位后显示可用行动\n右键取消 · Esc 暂停"
+offset_bottom = 300.0
+text = "选择单位后显示可用行动\n右键取消 · Esc 暂停\n\n操作\n左键  选择 / 确认\n滚轮  缩放地图\n拖拽  平移视野\n\n战术标记\n蓝框  可移动范围\n红框  可攻击目标"
 theme_override_font_sizes/font_size = 15
+autowrap_mode = 2
 
 [node name="RightHudWing" type="ColorRect" parent="GameView/HUD"]
 anchor_left = 0.755
@@ -1938,7 +1955,7 @@ offset_left = 44.0
 offset_top = 150.0
 offset_right = -44.0
 offset_bottom = 176.0
-text = "⚔ 选中单位"
+text = "战术准备"
 theme_override_font_sizes/font_size = 20
 
 [node name="UnitInfoSubtitle" type="Label" parent="GameView/HUD/InfoPanel"]
@@ -1947,7 +1964,7 @@ offset_left = 44.0
 offset_top = 178.0
 offset_right = -44.0
 offset_bottom = 202.0
-text = "职业 · 英雄 Lv.1 · 未行动"
+text = "等待选择我方单位"
 theme_override_font_sizes/font_size = 14
 
 [node name="StatIconRail" type="VBoxContainer" parent="GameView/HUD/InfoPanel"]
@@ -1989,7 +2006,7 @@ offset_right = -44.0
 offset_bottom = -40.0
 bbcode_enabled = true
 scroll_active = true
-text = "[i]点击单位查看详情[/i]"
+text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动\n\n[b]本回合流程[/b]\n1  选择尚未行动的单位\n2  决定移动、攻击或技能\n3  确认行动后结束回合"
 
 [node name="UnitPortraitPanel" type="Panel" parent="GameView/HUD/InfoPanel"]
 visible = false

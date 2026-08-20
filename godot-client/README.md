@@ -121,6 +121,24 @@ Run the smoke test:
 > the scene-based entry above; the legacy `godot --script smoke_test.gd`
 > form is no longer reliable because autoloads only register on scene load.
 
+Scan Chinese UI text (fails on unlocalized English in `scenes/` and `scripts/`):
+
+```bash
+python3 godot-client/tools/check_chinese_ui.py
+```
+
+Generate the three-resolution UI review screenshots (GPU required, not headless):
+
+```bash
+for res in 1280x720 1600x900 1920x1080; do
+  BB_REVIEW_RES="$res" "<godot_exe>" --rendering-method gl_compatibility \
+    --resolution "$res" --path godot-client res://tools/ui_review_screenshot.tscn
+done
+```
+
+UI change acceptance criteria (scorecard) live in
+`../docs/validation/godot-ui-scorecard.md`.
+
 Verify the two critical GUI entry flows against a running backend:
 
 ```bash
@@ -145,16 +163,21 @@ godot-client/
 │   ├── tiles/                 # legacy 48x48 per-terrain fallback tiles
 │   └── tilesets/              # preferred 48px-grid atlas sheets + same-name .txt label maps
 ├── scripts/
-│   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings
-│   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, types
+│   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings, AudioManager, DialogManager
+│   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, portrait_loader, texture_loader, types
 │   ├── board/                 # board, board_camera, highlights, unit_node
+│   ├── mainline/              # mainline_controller, mainline_responses, mainline_session
+│   ├── ui/                    # lobby/saves/editor controllers, cn_labels, theme modules, _components
 │   └── main.gd
 ├── scenes/
 │   ├── main.tscn
-│   └── board.tscn
+│   ├── board.tscn
+│   └── ui/                    # mainline_campaign_panel, mainline_prepare_panel
 └── tools/
     ├── sync_assets.py
-    ├── smoke_test.gd
+    ├── check_chinese_ui.py    # 中文 UI 文案扫描
+    ├── smoke_test.gd          # headless 烟测
+    ├── ui_review_screenshot.gd # 三档分辨率截图
     └── entry_flow_e2e.gd
 ```
 

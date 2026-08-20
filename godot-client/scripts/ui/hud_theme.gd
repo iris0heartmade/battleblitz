@@ -213,7 +213,7 @@ static func apply_hud(host: Node) -> void:
 		host.unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 		host.unit_info.add_theme_constant_override("line_separation", 2)
 		if host.unit_info.text.contains("点击单位查看详情"):
-			host.unit_info.text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动"
+			host.unit_info.text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动\n\n[b]本回合流程[/b]\n1  选择尚未行动的单位\n2  决定移动、攻击或技能\n3  确认行动后结束回合"
 	if compact and host.hero_portrait_panel != null and is_instance_valid(host.hero_portrait_panel):
 		host.hero_portrait_panel.offset_right = 122.0
 		host.hero_portrait_panel.offset_bottom = 330.0

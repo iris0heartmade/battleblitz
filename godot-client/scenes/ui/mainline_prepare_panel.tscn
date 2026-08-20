@@ -202,7 +202,7 @@ theme_override_font_sizes/font_size = 16
 
 [node name="MissionPanel" type="PanelContainer" parent="Layout/Columns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 0)
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
 
 [node name="MissionMargin" type="MarginContainer" parent="Layout/Columns/MissionPanel"]

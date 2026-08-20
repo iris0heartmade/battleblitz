@@ -207,8 +207,8 @@ func _refresh_content_insight(choice_index: int = -1) -> void:
 	match _active_tab:
 		"heroes":
 			%ContentKicker.text = "英雄档案 · 当前配置"
-			%InsightTitle.text = "出征流程"
-			%InsightBody.text = "1  核对英雄、部队与装备\n2  点击「完成整备」保存配置\n3  点击「开始战斗」进入地图"
+			%InsightTitle.text = "出征流程与状态"
+			%InsightBody.text = "1  核对英雄等级、生命与技能\n2  前往装备页确认三个装备槽\n3  检查部队与佣兵部署数量\n4  点击「完成整备」保存配置\n5  点击「开始战斗」进入地图\n\n当前英雄可在左侧切换；选中态以红底金框标识。"
 		"equipment":
 			%ContentKicker.text = "装备工房 · 变更预览"
 			%InsightTitle.text = "装备前后对照"
@@ -217,7 +217,7 @@ func _refresh_content_insight(choice_index: int = -1) -> void:
 			var selected_item := "尚未选择候选物品"
 			if choice_index >= 0 and choice_index < %ChoiceSelect.item_count:
 				selected_item = %ChoiceSelect.get_item_text(choice_index)
-			%InsightBody.text = "当前：%s\n候选：%s\n结算：槽位匹配后可保存；最终属性由服务器确认" % [current_block, selected_item]
+			%InsightBody.text = "当前：%s\n候选：%s\n\n变更规则\n◆ 候选物品必须匹配当前槽位\n◆ 选择后仍需完成整备才会保存\n◆ 最终属性与库存由服务器确认" % [current_block, selected_item]
 		"roster":
 			%ContentKicker.text = "部队名册 · 部署检查"
 			%InsightTitle.text = "编成建议"
@@ -253,6 +253,8 @@ func _apply_responsive_layout() -> void:
 	var compact_height := viewport_size.y <= 800.0
 	var equipment_page := _active_tab == "equipment"
 	var hero_page := _active_tab == "heroes"
+	%RosterPanel.custom_minimum_size.x = 250 if compact_width else 270
+	%MissionPanel.custom_minimum_size.x = 310 if compact_width else 320
 	%CouncilTitle.custom_minimum_size.y = 42 if compact_height else 48
 	%CouncilTitle.add_theme_font_size_override("font_size", 25 if compact_height else 27)
 	$Layout.add_theme_constant_override("separation", 6 if compact_height else 10)
@@ -269,17 +271,17 @@ func _apply_responsive_layout() -> void:
 	_content_body.add_theme_font_size_override("font_size", (18 if compact_height else 16) if equipment_page else (19 if compact_height else 18))
 	_mission_body.add_theme_font_size_override("font_size", 21 if compact_height else 16)
 	%ContentKicker.add_theme_font_size_override("font_size", (17 if compact_height else 14) if equipment_page else (18 if compact_height else 15))
-	%InsightBody.add_theme_font_size_override("font_size", (16 if compact_height else 15) if equipment_page else (17 if compact_height else 16))
+	%InsightBody.add_theme_font_size_override("font_size", (17 if compact_height else 15) if equipment_page else (18 if compact_height else 16))
 	%InsightTitle.add_theme_font_size_override("font_size", (19 if compact_height else 18) if equipment_page else (20 if compact_height else 19))
 	%ChoiceHint.add_theme_font_size_override("font_size", 16 if compact_height and equipment_page else 14)
-	%MissionChecklist.add_theme_font_size_override("font_size", 16)
+	%MissionChecklist.add_theme_font_size_override("font_size", 17 if compact_height else 16)
 	%ContentBody.custom_minimum_size.y = 0 if compact_height or equipment_page else 72
 	%HeroPortraitFrame.visible = hero_page
 	%HeroPortraitFrame.custom_minimum_size = Vector2(132, 144) if compact_height else Vector2(118, 142)
 	%HeroHeaderRow.add_theme_constant_override("separation", 12 if compact_width else 18)
 	# 英雄页承载流程，装备页承载当前→候选差异；两者都是核心信息而非装饰。
 	%ContentInsightPanel.visible = hero_page or equipment_page
-	%ContentInsightPanel.custom_minimum_size.y = (88 if compact_height else 100) if equipment_page else (92 if compact_height else 132)
+	%ContentInsightPanel.custom_minimum_size.y = (150 if compact_height else 210) if equipment_page else (170 if compact_height else 230)
 	$Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin.add_theme_constant_override("margin_top", 10 if equipment_page else 16)
 	$Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin.add_theme_constant_override("margin_bottom", 10 if equipment_page else 16)
 	%MissionChecklist.visible = not compact_height

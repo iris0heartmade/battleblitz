@@ -149,26 +149,26 @@ func _make_slot_card(index: int, record: Dictionary) -> PanelContainer:
 		chapter = "等待新的旅程"
 	var tag := Label.new()
 	tag.text = "档  %d" % (index + 1)
-	tag.add_theme_font_size_override("font_size", 13 if compact else 14)
+	tag.add_theme_font_size_override("font_size", 15 if compact else 14)
 	tag.add_theme_color_override("font_color", MainlineTheme.C_GOLD)
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(tag)
 	var title_label := Label.new()
 	title_label.text = title
-	title_label.add_theme_font_size_override("font_size", 20 if compact else 21)
+	title_label.add_theme_font_size_override("font_size", 23 if compact else 21)
 	title_label.add_theme_color_override("font_color", MainlineTheme.C_GOLD_BRIGHT if occupied else MainlineTheme.C_TEXT_DIM)
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(title_label)
 	var detail_label := Label.new()
 	detail_label.text = detail
-	detail_label.add_theme_font_size_override("font_size", 15 if compact else 16)
+	detail_label.add_theme_font_size_override("font_size", 17 if compact else 16)
 	detail_label.add_theme_color_override("font_color", MainlineTheme.C_TEXT if occupied else MainlineTheme.C_TEXT_DIM)
 	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(detail_label)
 	var chapter_label := Label.new()
 	chapter_label.text = chapter
-	chapter_label.add_theme_font_size_override("font_size", 13 if compact else 14)
+	chapter_label.add_theme_font_size_override("font_size", 15 if compact else 14)
 	chapter_label.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM)
 	chapter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(chapter_label)
@@ -242,16 +242,16 @@ func _apply_responsive_typography() -> void:
 	$Layout/FooterSafe.add_theme_constant_override("margin_top", 2 if compact_height else 6)
 	$Layout/FooterSafe.add_theme_constant_override("margin_bottom", 34 if compact_height else 24)
 	_preview_title.add_theme_font_size_override("font_size", 28 if compact_height else 32)
-	_preview_body.add_theme_font_size_override("font_size", 20 if compact_height else 19)
+	_preview_body.add_theme_font_size_override("font_size", 22 if compact_height else 19)
 	%PreviewBody.custom_minimum_size.y = 116 if compact_height else 190
 	%BriefingPanel.custom_minimum_size.y = 170 if compact_height else 250
 	%BriefingTitle.add_theme_font_size_override("font_size", 21 if compact_height else 20)
-	_briefing_body.add_theme_font_size_override("font_size", 18 if compact_height else 17)
+	_briefing_body.add_theme_font_size_override("font_size", 20 if compact_height else 17)
 	_briefing_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	%IntelTitle.add_theme_font_size_override("font_size", 21 if compact_height else 20)
-	_intel_body.add_theme_font_size_override("font_size", 17 if compact_height else 16)
-	_intel_status.add_theme_font_size_override("font_size", 16 if compact_height else 16)
-	%PreviewHint.add_theme_font_size_override("font_size", 15 if compact_height else 15)
+	_intel_body.add_theme_font_size_override("font_size", 19 if compact_height else 16)
+	_intel_status.add_theme_font_size_override("font_size", 18 if compact_height else 16)
+	%PreviewHint.add_theme_font_size_override("font_size", 17 if compact_height else 15)
 	_primary_action.custom_minimum_size.y = 66 if compact_height else 88
 	_primary_action.add_theme_font_size_override("font_size", 23 if compact else 24)
 	%BackButton.custom_minimum_size = Vector2(220 if compact_width else 260, 48 if compact_height else 54)
