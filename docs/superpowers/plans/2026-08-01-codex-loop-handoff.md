@@ -328,7 +328,7 @@ timeout 60 $GODOT --headless --rendering-method gl_compatibility --quit-after 30
 3. **不要模仿** 商业游戏角色/徽章/公司/艺术家风格。
 4. **不要 push** 到 origin(用户已经手动 push)。
 5. **不要删除** 现有 untracked 文件(用户可能正在改)。
-6. **不要让 smoke 掉** — 任何修改必须保持 592/0 通过。
+6. **不要让 smoke 掉** — 任何修改必须保持当前基线 608/0 通过。
 
 ## 10. 每轮结束的报告格式
 
@@ -417,3 +417,40 @@ git log --oneline -n <N>
 ---
 
 现在你可以开始第一轮 loop。祝好运。
+
+## 15. Codex 会话恢复与网络排障
+
+本机若需要继续这次 UI loop，可恢复既有 Codex 会话：
+
+```bash
+codex resume 019f7093-1059-7743-8a5e-5e04171f0d86
+```
+
+只有在确认当前仓库、命令和未提交文件都可信时，才追加 `--yolo`；恢复会话本身不要求关闭审批保护。
+
+如果 Codex 能通过 HTTPS 工作但 WebSocket 超时，或提示 provider endpoint 不可达，先运行：
+
+```bash
+codex doctor --summary
+```
+
+已知本机可用的临时代理位于 `127.0.0.1:7890`。仅在本地代理服务确实运行时，在当前终端设置：
+
+```bash
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+export ALL_PROXY=http://127.0.0.1:7890
+export http_proxy="$HTTP_PROXY"
+export https_proxy="$HTTPS_PROXY"
+export all_proxy="$ALL_PROXY"
+export NO_PROXY=localhost,127.0.0.1,::1
+export no_proxy="$NO_PROXY"
+```
+
+设置后重新运行 `codex doctor --summary`。如果代理未启动或排障结束，用以下命令清理当前终端变量：
+
+```bash
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY no_proxy
+```
+
+不要把 `codex doctor` 的整段机器路径、临时状态或未来可能出现的认证信息复制进长期项目文档；文档只保留可重复的诊断步骤。
