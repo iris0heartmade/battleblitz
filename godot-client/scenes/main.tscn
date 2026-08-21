@@ -15,10 +15,10 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/panel_frame_9slice_384_v1.png" id="13_battle_panel_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/top_status_rail_clean_1000x96_v2.png" id="14_battle_status_rail"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/compact_hud_plaque_180x72_v1.png" id="15_battle_compact_plaque"]
-[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/top_battle_status_bar.png" id="17_skin_top_bar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/top_battle_status_bar_refined_v3.png" id="17_skin_top_bar"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/compact_status_plate.png" id="18_skin_compact_plate"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/secondary_panel_frame_9slice.png" id="19_skin_secondary_frame"]
-[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer.png" id="20_skin_sidebar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer_refined_v3.png" id="20_skin_sidebar"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/chapter_result_title.png" id="21_skin_result_title"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/ink_navy_weave_tile.png" id="22_battle_backdrop"]
 [ext_resource type="Script" path="res://scripts/ui/lobby_controller.gd" id="16_lobby"]
@@ -1633,6 +1633,7 @@ custom_minimum_size = Vector2(80, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/TurnBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1659,6 +1660,7 @@ custom_minimum_size = Vector2(130, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/PhaseBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1696,6 +1698,7 @@ custom_minimum_size = Vector2(100, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1723,6 +1726,7 @@ custom_minimum_size = Vector2(120, 42)
 disabled = true
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/EndTurnButton"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0

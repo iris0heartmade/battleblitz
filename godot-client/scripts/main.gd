@@ -2669,7 +2669,7 @@ func _toggle_pause() -> void:
 		pause_panel.visible = true
 		# 暂停时关闭行动气泡 + 战报面板
 		if action_bubble != null and is_instance_valid(action_bubble):
-			action_bubble.visible = false
+			_hide_action_bubble()
 		if war_report_panel != null and is_instance_valid(war_report_panel):
 			war_report_panel.visible = false
 		get_tree().paused = true
@@ -3275,6 +3275,10 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 			"right_gutter", "right":
 				action_pointer.position = Vector2(-12.0, bubble_size.y * 0.5 - 10.0)
 	action_bubble.visible = true
+	# 紧凑布局的行动菜单会占满左侧翼板；临时收起静态说明，避免两个
+	# 信息层互相穿透。关闭菜单时由 _hide_action_bubble 恢复。
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		left_hud_wing.visible = false
 	# Keyboard/gamepad users receive an explicit default action. The marker is
 	# deliberately non-color-only and remains readable when focus glow is subtle.
 	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
@@ -3394,6 +3398,8 @@ func _available_active_skill(ud: Dictionary) -> String:
 
 func _hide_action_bubble() -> void:
 	action_bubble.visible = false
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		left_hud_wing.visible = true
 	_selected_unit_id = -1
 
 
@@ -4000,8 +4006,25 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
 	var compact_hud := _physical_window_width() <= 1366
 	_set_unit_info_portrait(ud)
+	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
+		if compact_hud and hero_portrait_panel.visible:
+			hero_portrait_panel.offset_left = 44.0
+			hero_portrait_panel.offset_top = 210.0
+			hero_portrait_panel.offset_right = 116.0
+			hero_portrait_panel.offset_bottom = 286.0
+		else:
+			hero_portrait_panel.offset_left = 40.0
+			hero_portrait_panel.offset_top = 210.0
+			hero_portrait_panel.offset_right = 160.0
+			hero_portrait_panel.offset_bottom = 370.0
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_left = (126.0 if compact_hud else 172.0) if hero_portrait_panel.visible else 44.0
+		unit_info.offset_left = 44.0 if compact_hud or not hero_portrait_panel.visible else 172.0
+		unit_info.offset_top = 294.0 if compact_hud and hero_portrait_panel.visible else 210.0
+		if compact_hud:
+			# 1280 窗口使用 1920 设计视口缩放；密度补偿后保持约 14px 物理字号。
+			unit_info.add_theme_font_size_override("normal_font_size", roundi(14.0 * _hud_density_scale()))
+		else:
+			unit_info.remove_theme_font_size_override("normal_font_size")
 	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
 		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
