@@ -145,9 +145,15 @@ static func apply_hud(host: Node) -> void:
 	var density: float = clampf(1920.0 / float(maxi(win_w, 1)), 1.0, 1.5)
 	var pill_size: int = roundi(18.0 * density)
 	var compact := win_w <= 1366
-	var sidebar_body_size: int = roundi((16.0 if compact else 18.0) * density)
-	var sidebar_heading_size: int = roundi((19.0 if compact else 20.0) * density)
-	var secondary_size: int = roundi((14.0 if compact else 16.0) * density)
+	# P1-1 / P1-2:响应式字号补偿 — 极小窗口(<=1366)与宽屏(>=1600)都加 2,
+	# 中段(1366..1600)保留默认,避免 1920 视觉密度反而不敌 1280。
+	# 修复前:小窗口勉强可读,大窗口中文"飘"在金属条上像噪点。
+	var font_bump: int = 2 if compact else (2 if win_w >= 1600 else 0)
+	# P1-1 / P1-2:font_size 不与 density 串行累加,只对小字体尺寸补 bump,
+	# density 已经按窗口缩放补偿过了,再加 bump 会让 1280 顶栏中文撑爆 badge。
+	var sidebar_body_size: int = roundi((16.0 if compact else 18.0) * density) + font_bump
+	var sidebar_heading_size: int = roundi((19.0 if compact else 20.0) * density) + font_bump
+	var secondary_size: int = roundi((14.0 if compact else 16.0) * density) + font_bump
 	if host.info_panel != null and is_instance_valid(host.info_panel):
 		# InfoPanel 常驻右翼;样式由 battle_theme.apply_floating_panel 唯一接管。
 		host.info_panel.visible = true

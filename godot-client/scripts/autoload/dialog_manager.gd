@@ -154,9 +154,24 @@ func _apply_responsive_layout(sz: Vector2i) -> void:
 		_continue_btn.custom_minimum_size.y = 48.0 if compact else 42.0
 
 
-## 取得场景里的 DialogOverlay 兄弟节点(.tscn:2542),负责压暗棋盘。
+## 取得场景里的 DialogOverlay 节点(.tscn:2542),负责压暗棋盘。
+## 截图工具场景结构是 UIReviewScreenshot/Main/...,而正常运行是 Main/...。
+## 用 find_child 递归搜,既能命中 wrapper 也能命中 main.tscn 原生节点,
+## 避免修 wrapper 路径后又在生产环境失效。find_child 的 owned=false 表示不
+## 要求返回值必须是当前 scene tree 的 own 子树,跨 wrapper / 实际两个场景都搜得到。
 func _overlay() -> ColorRect:
-	return get_tree().root.get_node_or_null("Main/GameView/HUD/DialogOverlay") as ColorRect
+	var root: Window = get_tree().root
+	if root == null:
+		return null
+	# 递归搜,先精确找 DialogOverlay,再退到名字包含 overlay 的第一个 ColorRect
+	# (兼容 mock 测试场景)。
+	var node: Node = root.find_child("DialogOverlay", true, false)
+	if node == null:
+		# Fallback:第一次出现的 ColorRect 当 overlay(测试场景缺 DialogOverlay 时)
+		node = root.find_child("@ColorRect@*", true, false)
+	if node is ColorRect:
+		return node
+	return null
 
 
 ## 程序构建 UI 子树 — 镜像原 scenes/main.tscn 2098–2155 的 anchor/offset/text

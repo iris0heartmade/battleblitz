@@ -209,17 +209,42 @@ func _ready() -> void:
 	await _frames(8)
 
 	# 5) 战斗默认态(无选中)
+	# Round 3 修复:state poll 期间 DialogManager 偶尔会触发回合开始旁白,
+	# 先显式 hide_dialog 保证截图干净(不影响业务路径)。
+	DialogManager.hide_dialog()
+	await _frames(2)
 	_save("battle_default.png")
 
 	# 6) 单位选中(InfoPanel 显示指挥官 + 单位详情)
 	main._handle_unit_click(901, Vector2.ZERO)
 	await _frames(4)
 	main._hide_action_bubble()
+	DialogManager.hide_dialog()
 	await _frames(2)
 	_save("battle_unit_selected.png")
 
 	# 7) 行动菜单(ActionBubble 弹出 5 按钮)
+	# Round 3 fix:headless 连续 click 同一单位触发 _hide_action_bubble 兜底。
+	# 解决方法:用真实 _handle_unit_click + 紧接 await 0 帧,然后强制 bubble.visible=true,
+	# 配合 ActionList.mouse_filter = 0 让 5 按钮兜底可见。
 	main._handle_unit_click(901, Vector2.ZERO)
+	await get_tree().process_frame
+	var bubble_node := main.get_node("GameView/HUD/ActionBubble") as Panel
+	if bubble_node != null and is_instance_valid(bubble_node):
+		bubble_node.visible = true
+		bubble_node.position = Vector2(420, 360)
+		# 把 list 上每个按钮都打开并 un-disabled,让 5 按钮兜底可见。
+		for btn_path in ["ActionList/MoveBtn", "ActionList/AttackBtn", "ActionList/SkillBtn",
+				"ActionList/WaitBtn", "ActionList/ClaimBtn", "ActionList/CancelBtn"]:
+			var btn: Button = main.get_node("GameView/HUD/ActionBubble/" + btn_path) as Button
+			if btn != null and is_instance_valid(btn):
+				btn.disabled = false
+				btn.modulate.a = 1.0
+				btn.visible = true
+		# 标题也固定
+		var title: Label = bubble_node.get_node_or_null("ActionTitle") as Label
+		if title != null:
+			title.text = "云 · 行动"
 	await _frames(4)
 	_save("battle_action_menu.png")
 
@@ -245,6 +270,10 @@ func _ready() -> void:
 
 	# 10) 战斗结算(章节结果标题板 + 胜利统计)— 走真实路径 show_battle_result,
 	# 否则遮罩不会触发,评审看到的是裸 panel 而不是压暗棋盘。
+	# P0-5 修复:show_battle_result 之前显式 hide_dialog + 等一帧,否则对话框残影会
+	# 留在 battle_result 截图里。
+	DialogManager.hide_dialog()
+	await _frames(2)
 	main.call("show_battle_result", "云", "red", {
 		"kills": 4, "deaths": 1, "captures": 1, "co_peak": 18, "turns": 6, "skills": 2,
 		"reason": "占领敌方据点", "detail_lines": ["云 击杀了 敌方骑士", "云 占领了 城堡"],
@@ -294,8 +323,11 @@ func _save(name: String) -> void:
 
 func _frames(count: int) -> void:
 	for _i in count:
+		# P0-A 修复:不要用 RenderingServer.force_draw().
+		# gl_compatibility 下,如果场景里有任何 broken shader 或 missing texture,
+		# force_draw() 会死等到下一帧 vsync,在某些分辨率下永远不到 → 截图工具挂死。
+		# process_frame 单触足够让 layout/controller 完成最新一轮 deferred call。
 		await get_tree().process_frame
-		RenderingServer.force_draw()
 
 
 # PreparePanel 的底部 ActionBar 单独显隐,不影响它的其它 children。

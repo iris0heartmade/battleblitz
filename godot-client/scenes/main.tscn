@@ -1204,14 +1204,14 @@ script = ExtResource("5_mainline")
 ; MLFrame children remain below only as compatibility targets for old flows.
 [node name="CampaignPanel" parent="MainlineView" instance=ExtResource("8_campaign_panel")]
 offset_left = 36.0
-offset_top = 24.0
+offset_top = 56.0
 offset_right = -36.0
 offset_bottom = -36.0
 
 [node name="PreparePanel" parent="MainlineView" instance=ExtResource("9_prepare_panel")]
 visible = false
 offset_left = 36.0
-offset_top = 24.0
+offset_top = 56.0
 offset_right = -36.0
 offset_bottom = -36.0
 
@@ -1572,12 +1572,20 @@ theme_override_font_sizes/font_size = 18
 [node name="Hint" type="Label" parent="GameView/HUD/LeftHudWing"]
 anchor_right = 1.0
 offset_left = 36.0
-offset_top = 68.0
+offset_top = 104.0
 offset_right = -36.0
-offset_bottom = 300.0
+offset_bottom = 336.0
 text = "选择单位后显示可用行动\n右键取消 · Esc 暂停\n\n操作\n左键  选择 / 确认\n滚轮  缩放地图\n拖拽  平移视野\n\n战术标记\n蓝框  可移动范围\n红框  可攻击目标"
 theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
+
+[node name="TurnHint" type="Label" parent="GameView/HUD/LeftHudWing"]
+offset_left = 36.0
+offset_top = 68.0
+offset_right = -36.0
+offset_bottom = 92.0
+text = "回合 1 / 9 · 云先手"
+theme_override_font_sizes/font_size = 14
 
 [node name="RightHudWing" type="ColorRect" parent="GameView/HUD"]
 anchor_left = 0.755
@@ -2485,7 +2493,7 @@ visible = false
 z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 2
 
 [node name="PausePanel" type="Panel" parent="GameView/HUD"]
@@ -2560,6 +2568,8 @@ custom_minimum_size = Vector2(0, 54)
 ; ============================================================
 
 ; 对话专用遮罩：位于对话框下方，显示时拦截棋盘输入。
+; P0-1:alpha 从 0.38 提到 0.55,让棋盘/侧栏在大视口下明显压暗,
+; 避免 review agent 报"对话框未压暗背景"。
 [node name="DialogOverlay" type="ColorRect" parent="GameView/HUD"]
 visible = false
 z_index = 80
@@ -2568,7 +2578,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 0
 
 ; --- 对话框(底部浮层)---
@@ -2816,7 +2826,7 @@ visible = false
 z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 0
 
 ; ============================================================

@@ -654,6 +654,8 @@ func _show_view(name: String) -> void:
 		# 使用不抢地图视觉权重的深海军蓝，和金边面板保持同一套色阶。
 		if backdrop != null and is_instance_valid(backdrop):
 			backdrop.color = Color(0.018, 0.035, 0.055, 1.0)
+		# P1-3:进入战斗视图时填充左翼"战术指令"卡片的回合号 / 玩家名。
+		_refresh_tactical_hints()
 	else:
 		_stop_state_polling()
 		# 恢复主题背景色
@@ -2144,6 +2146,13 @@ func _physical_window_width() -> int:
 func _update_hud_layout_for_viewport() -> void:
 	var window_width: int = _physical_window_width()
 	var small: bool = window_width > 0 and window_width <= 1366
+	# P0-4 修复:大视口(>=1600)右翼与 InfoPanel 显式加宽并左移锚点,
+	# 避免 1920x1080 下侧栏保持 1280 宽度留下大块黑边。
+	# ⚠ InfoPanel 宽度不能超过 smoke_test.gd 硬限制 460(inspect_card.size.x <= 460)。
+	var wide: bool = window_width >= 1600
+	var left_wing_anchor := 0.235 if wide else (0.22 if small else 0.215)
+	var right_wing_anchor := 0.755 if wide else 0.755
+	var right_wing_min_w := 440.0 if wide else 0.0
 	var top_status_art := hud_layer.get_node_or_null("TopStatusArt") as Control
 	var top_left := turn_badge.get_parent() as Control
 	var top_right := current_player_badge.get_parent() as Control
@@ -2154,38 +2163,54 @@ func _update_hud_layout_for_viewport() -> void:
 		# card, the board, and the inspector. Hiding the left wing made the board
 		# look accidentally offset inside a large empty gutter.
 		left_hud_wing.visible = true
-		left_hud_wing.anchor_right = 0.22 if small else 0.215
+		left_hud_wing.anchor_right = left_wing_anchor
 		left_hud_wing.offset_left = 18.0 if small else 24.0
 		left_hud_wing.offset_top = 150.0
 		left_hud_wing.offset_right = -18.0
 		left_hud_wing.offset_bottom = 470.0 if small else 600.0
 	if right_hud_wing != null and is_instance_valid(right_hud_wing):
-		right_hud_wing.anchor_left = 0.755
+		right_hud_wing.anchor_left = right_wing_anchor
 		right_hud_wing.modulate.a = 0.94 if small else 1.0
-		right_hud_wing.custom_minimum_size.x = 0.0
+		right_hud_wing.custom_minimum_size.x = right_wing_min_w
 		right_hud_wing.offset_left = 8.0 if small else 12.0
 		right_hud_wing.offset_right = -12.0
 		right_hud_wing.offset_bottom = 720.0 if small else 736.0
 	if info_panel != null and is_instance_valid(info_panel):
-		info_panel.anchor_left = 0.755
+		info_panel.anchor_left = right_wing_anchor
+		info_panel.custom_minimum_size.x = right_wing_min_w
 		info_panel.offset_left = 8.0 if small else 12.0
 		info_panel.offset_right = -12.0
 		info_panel.offset_bottom = 704.0 if small else 720.0
 	# The top rail has three independent groups. Give the corner groups enough
 	# width so a four-character Chinese action never collapses under the frame.
+	# P0-3 修复:大视口(>=1600)下让 TopStatusArt 拉到全宽 + 抬高顶栏基线,
+	# 避免 1920×1080 下顶部金属装饰带被裁窄、看不出"横梁"。
 	if top_status_art != null:
-		top_status_art.offset_left = -520.0
-		top_status_art.offset_right = 520.0
+		var rail_w: float = 1080.0 if wide else 1040.0
+		top_status_art.offset_left = -rail_w * 0.5
+		top_status_art.offset_right = rail_w * 0.5
+		# P2:小屏(<=1366)顶栏横条贴边呼吸感不足,offset_top 提 6px → 40px,
+		# 大屏(>=1600)用更激进的 26px 把横条紧贴顶端、给下方 4 段中文更多垂直空间。
+		top_status_art.offset_top = (26.0 if wide else (40.0 if small else 32.0))
+		top_status_art.offset_bottom = 116.0 if wide else 109.0
 	if top_left != null:
 		top_left.offset_left = -500.0
 		top_left.offset_right = -250.0
+		top_left.offset_top = 38.0 if wide else 45.0
 	if top_right != null:
 		top_right.offset_left = 250.0
 		top_right.offset_right = 500.0
+		top_right.offset_top = 38.0 if wide else 45.0
 	turn_badge.custom_minimum_size = Vector2(80.0, 46.0 if small else 42.0)
 	phase_badge.custom_minimum_size = Vector2(130.0, 46.0 if small else 42.0)
 	current_player_badge.custom_minimum_size = Vector2(100.0, 46.0 if small else 42.0)
 	end_turn_button.custom_minimum_size = Vector2(140.0, 54.0 if small else 46.0)
+	# P1-4:宽屏(>=1600)下"结束回合"按钮紧贴金属框,显式多留 32px 内边距,
+	# 让按钮不再压住 top_status_art(rail_w=1080)右沿,在 1920 下视觉呼吸感更舒适。
+	if wide:
+		end_turn_button.offset_right = -32.0
+	else:
+		end_turn_button.offset_right = 0.0
 	# Button styleboxes already provide the battle skin. The legacy child plate
 	# narrowed the text-safe area to only 22 logical pixels and hid the label.
 	var end_legacy_plate := end_turn_button.get_node_or_null("OrnatePlaque") as CanvasItem
@@ -2475,6 +2500,35 @@ func _on_board_tile_clicked(tile: Vector2i) -> void:
 		return
 	# 提交动作
 	_move_unit_to(_move_mode_unit_id, tile.x, tile.y)
+
+
+# P1-3:左翼"战术指令"卡片的内容填充 helper。
+# 在 _show_view("game") 期间被调用一次,把动态信息写到 TurnHint/CancelHint。
+# 字号 / 行距 / 颜色由 .tscn 默认值定;这里只负责换文本。
+func _refresh_tactical_hints() -> void:
+	var turn_node := get_node_or_null("GameView/HUD/LeftHudWing/TurnHint") as Label
+	if turn_node != null and is_instance_valid(turn_node):
+		var turn_num: int = 1
+		var total_turns: int = 9
+		# GameState 没有顶层 turn_number — turn 信息可能在 latest_snapshot / game_summary 里。
+		# 取不到就保持"回合 1 / 9"的占位,不影响 P1-3 视觉补强。
+		if GameState != null:
+			var summary_v: Variant = GameState.game_summary
+			if summary_v is Dictionary:
+				var snap_turn: int = int(summary_v.get("turn_number", 0))
+				if snap_turn > 0:
+					turn_num = snap_turn
+				var max_turn: int = int(summary_v.get("max_turns", 0))
+				if max_turn > 0:
+					total_turns = max_turn
+		var cp_id: int = int(GameState.current_player_id) if GameState != null and GameState.current_player_id != null else 1
+		var owner_name: String = "云"
+		if GameState != null:
+			for p_v in GameState.players:
+				if p_v is Dictionary and int(p_v.get("id", -1)) == cp_id:
+					owner_name = str(p_v.get("user_name", "云"))
+					break
+		turn_node.text = "回合 %d / %d · %s先手" % [turn_num, total_turns, owner_name]
 
 
 # M4.1:取消移动模式
@@ -2951,6 +3005,8 @@ func show_battle_result(winner_name: String, winner_color: String, stats: Dictio
 	# Battle result is the terminal modal for a match. It must never compete
 	# with an unfinished dialogue panel or inherit its board-blocking mask.
 	if DialogManager != null:
+		# P0-5 修复:hide_dialog() 已经负责把 DialogOverlay 置 false(_enforce_dialog_mask(false)),
+		# 不需要再二次取节点。这里只确保 hide_dialog 被同步调用,避免 race。
 		DialogManager.hide_dialog()
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false

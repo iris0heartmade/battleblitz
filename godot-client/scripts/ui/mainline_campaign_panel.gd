@@ -8,6 +8,7 @@ const MainlineTheme = preload("res://scripts/ui/mainline_theme.gd")
 
 @onready var _slots: VBoxContainer = %Slots
 @onready var _preview_title: Label = %PreviewTitle
+@onready var _chapter_badge: Label = %ChapterBadge
 @onready var _preview_body: Label = %PreviewBody
 @onready var _briefing_body: Label = %BriefingBody
 @onready var _intel_body: Label = %IntelBody
@@ -57,6 +58,23 @@ func select_slot(slot_index: int) -> void:
 	var next_mission: String = str(record.get("next_mission", "下一战: 待定"))
 	var recommend: String = str(record.get("recommend", "推荐等级: Lv.?"))
 	var save_time: String = str(record.get("save_time", "保存: —"))
+	# P2:章节编号金色徽章 — 从 chapter 字符串里提取「第 N 章」数字,
+	# 没匹配到就用 01 占位(测试场景数据可能没有标准 chapter 字符串)。
+	var chapter_idx: int = 1
+	var total_chapters: int = 9
+	var ci: int = chapter.find("第")
+	if ci >= 0:
+		var after: String = chapter.substr(ci + 1).strip_edges()
+		var digits: String = ""
+		for ch in after:
+			if ch >= "0" and ch <= "9":
+				digits += ch
+			else:
+				break
+		if digits != "":
+			chapter_idx = maxi(1, int(digits))
+	if _chapter_badge != null and is_instance_valid(_chapter_badge):
+		_chapter_badge.text = "%02d / %02d" % [chapter_idx, total_chapters] if occupied else "— / —"
 	# 中央只讲战役进度与队伍；下一战目标放进独立简报，避免同一份元数据重复三次。
 	_preview_body.text = "%s\n\n战役进度\n◆ %s\n✦ %s\n\n队伍编成\n⚔ %s" % [
 		summary, _without_prefix(chapter), _without_prefix(progress), _without_prefix(heroes_line),
@@ -293,3 +311,7 @@ func _apply_theme() -> void:
 	_intel_status.add_theme_color_override("font_color", MainlineTheme.C_GOLD_BRIGHT)
 	MainlineTheme.apply_primary(_primary_action)
 	MainlineTheme.apply_secondary(%BackButton)
+	# P1-1 / P1-2:响应式字号补偿 — 小屏/宽屏各 +1,中段保留默认。
+	MainlineTheme.adjust_font_sizes_for_viewport(
+		[_primary_action, %BackButton, %ArchiveTitle, _intel_status]
+	)

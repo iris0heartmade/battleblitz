@@ -21,6 +21,9 @@ var _active_tab := "heroes"
 var _last_content_body := ""
 var _hero_cards: Array[PanelContainer] = []
 var _selected_hero_id := ""
+# P0-6:整备确认状态。未确认时 StartAction 视觉降档(disabled 态),
+# 让"完成整备 → 开始战斗"两步顺序在视觉上可读。
+var _prepare_confirmed: bool = false
 
 
 func _ready() -> void:
@@ -148,12 +151,19 @@ func set_active_tab(tab: String) -> void:
 
 
 func set_prepare_ready(ready: bool) -> void:
-	%StartAction.disabled = not ready
-	%CompleteAction.disabled = not ready
+	_prepare_confirmed = ready
+	# 仅 Refresh 在未就绪时禁用;Complete 和 Start 按"两步引导"处理。
 	%RefreshAction.disabled = not ready
-	# “开始战斗”是整备页唯一主操作；完成整备保留为明确的前置步骤。
-	%CompleteAction.text = "1  完成整备"
-	%StartAction.text = "2  开始战斗 →"
+	%CompleteAction.disabled = false
+	# 未确认整备:StartAction 视觉降档(disabled),文本加引导箭头。
+	# 已确认整备:StartAction 升级为 enabled 可点,文本去掉箭头避免歧义。
+	%StartAction.disabled = not ready
+	if ready:
+		%CompleteAction.text = "✓  整备完成"
+		%StartAction.text = "开始战斗 →"
+	else:
+		%CompleteAction.text = "1  完成整备"
+		%StartAction.text = "2  开始战斗 →"
 
 
 func set_choices(kind: String, entries: Array, selected_index: int = 0, hint: String = "") -> void:
@@ -327,12 +337,24 @@ func _apply_theme() -> void:
 	MainlineTheme.apply_secondary(%BackAction)
 	MainlineTheme.apply_secondary(%RefreshAction)
 	MainlineTheme.apply_option(%ChoiceSelect)
-	MainlineTheme.apply_primary(%StartAction)
+	# P0-6 修复:语义顺序是「先完成整备,再开始战斗」;视觉权重应该让
+	# CompleteAction(确认)成为玩家视线第一焦点,StartAction 降为 secondary,
+	# 直到整备确认后再"激活"。这样能避免玩家直接跳过整备点开始。
+	MainlineTheme.apply_primary(%CompleteAction)
 	MainlineTheme.apply_danger(%AbandonAction)
-	MainlineTheme.apply_secondary(%CompleteAction)
+	MainlineTheme.apply_secondary(%StartAction)
+	# 未确认整备前 StartAction 视觉降一档(disabled 态),让完成整备的引导语义生效。
+	if not _prepare_confirmed:
+		%StartAction.disabled = true
 	MainlineTheme.apply_paper_text(_content_title, true)
 	MainlineTheme.apply_paper_text(_content_body)
 	MainlineTheme.apply_paper_text(%ContentKicker)
+	# P1-1 / P1-2:响应式字号补偿,在 _apply_theme 末尾批处理 mainline 区
+	# 所有 Label / Button / RichTextLabel,小屏/宽屏各 +1。
+	MainlineTheme.adjust_font_sizes_for_viewport(
+		[%BackAction, %RefreshAction, %CompleteAction, %StartAction, %AbandonAction,
+		 %CouncilTitle, _content_title, _content_body, %ContentKicker]
+	)
 	MainlineTheme.apply_paper_text(%InsightTitle, true)
 	MainlineTheme.apply_paper_text(%InsightBody)
 	%ContentKicker.add_theme_color_override("font_color", MainlineTheme.C_PARCHMENT_DIM)
