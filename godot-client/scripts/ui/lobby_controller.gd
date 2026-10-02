@@ -1073,10 +1073,10 @@ func _render_lobby_map_preview() -> void:
 		_refresh_lobby_create_start_gate()
 		return
 	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
-	var title := str(summary.get("name", summary.get("id", "Map")))
+	var title := str(summary.get("name", summary.get("id", "地图")))
 	var size_text := "%dx%d" % [int(summary.get("width", 0)), int(summary.get("height", 0))]
 	var players := int(summary.get("recommended_players", 0))
-	map_faction_summary.text = "[b]%s[/b]  %s  %dP\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
+	map_faction_summary.text = "[b]%s[/b]  %s  %d 人\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
 	if map_preview_texture != null and is_instance_valid(map_preview_texture):
 		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
 	_render_lobby_seat_columns(summary)

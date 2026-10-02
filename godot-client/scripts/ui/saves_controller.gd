@@ -326,7 +326,7 @@ func _render_suspend_row() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.bbcode_enabled = true
 	info.fit_content = true
-	info.text = "[b]中断存档[/b] game #%d\n[color=#d8c48a]%s · 触发点: %s[/color]" % [
+	info.text = "[b]中断存档[/b] 对局 #%d\n[color=#d8c48a]%s · 触发点: %s[/color]" % [
 		game_id, mid if mid != "" else "自由战", str(_suspend_record.get("suspend_point", "manual"))
 	]
 	hbox.add_child(info)

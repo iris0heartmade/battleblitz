@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
@@ -15,11 +15,12 @@
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/panel_frame_9slice_384_v1.png" id="13_battle_panel_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/top_status_rail_clean_1000x96_v2.png" id="14_battle_status_rail"]
 [ext_resource type="Texture2D" path="res://assets/ui/rebuild/battle/compact_hud_plaque_180x72_v1.png" id="15_battle_compact_plaque"]
-[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/top_battle_status_bar.png" id="17_skin_top_bar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/top_battle_status_bar_refined_v3.png" id="17_skin_top_bar"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/compact_status_plate.png" id="18_skin_compact_plate"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/secondary_panel_frame_9slice.png" id="19_skin_secondary_frame"]
-[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer.png" id="20_skin_sidebar"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/battle_sidebar_drawer_refined_v3.png" id="20_skin_sidebar"]
 [ext_resource type="Texture2D" path="res://assets/ui/original_v2/battle/chapter_result_title.png" id="21_skin_result_title"]
+[ext_resource type="Texture2D" path="res://assets/ui/original_v2/base/ink_navy_weave_tile.png" id="22_battle_backdrop"]
 [ext_resource type="Script" path="res://scripts/ui/lobby_controller.gd" id="16_lobby"]
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -1101,7 +1102,7 @@ offset_left = 48.0
 offset_top = 660.0
 offset_right = 1242.0
 offset_bottom = 690.0
-text = "中断存档  (战斗中保存的临时进度,resume 后会失效)"
+text = "中断存档  (战斗中保存的临时进度,继续后会失效)"
 theme_override_font_sizes/font_size = 20
 modulate = Color(0.65, 0.6, 0.45, 1)
 
@@ -1203,14 +1204,14 @@ script = ExtResource("5_mainline")
 ; MLFrame children remain below only as compatibility targets for old flows.
 [node name="CampaignPanel" parent="MainlineView" instance=ExtResource("8_campaign_panel")]
 offset_left = 36.0
-offset_top = 24.0
+offset_top = 56.0
 offset_right = -36.0
 offset_bottom = -36.0
 
 [node name="PreparePanel" parent="MainlineView" instance=ExtResource("9_prepare_panel")]
 visible = false
 offset_left = 36.0
-offset_top = 24.0
+offset_top = 56.0
 offset_right = -36.0
 offset_bottom = -36.0
 
@@ -1510,7 +1511,20 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.018, 0.035, 0.055, 1)
+color = Color(0.025, 0.055, 0.082, 1)
+mouse_filter = 2
+
+[node name="Weave" type="TextureRect" parent="GameView/BattleBackdrop"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("22_battle_backdrop")
+expand_mode = 1
+stretch_mode = 1
+texture_repeat = 2
+modulate = Color(0.42, 0.48, 0.55, 0.52)
 mouse_filter = 2
 
 [node name="Board" parent="GameView" instance=ExtResource("2_board")]
@@ -1547,6 +1561,7 @@ modulate = Color(1, 1, 1, 0.92)
 mouse_filter = 2
 
 [node name="Heading" type="Label" parent="GameView/HUD/LeftHudWing"]
+anchor_right = 1.0
 offset_left = 36.0
 offset_top = 32.0
 offset_right = -36.0
@@ -1555,12 +1570,22 @@ text = "战术指令"
 theme_override_font_sizes/font_size = 18
 
 [node name="Hint" type="Label" parent="GameView/HUD/LeftHudWing"]
+anchor_right = 1.0
+offset_left = 36.0
+offset_top = 104.0
+offset_right = -36.0
+offset_bottom = 336.0
+text = "选择单位后显示可用行动\n右键取消 · Esc 暂停\n\n操作\n左键  选择 / 确认\n滚轮  缩放地图\n拖拽  平移视野\n\n战术标记\n蓝框  可移动范围\n红框  可攻击目标"
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 2
+
+[node name="TurnHint" type="Label" parent="GameView/HUD/LeftHudWing"]
 offset_left = 36.0
 offset_top = 68.0
 offset_right = -36.0
-offset_bottom = 124.0
-text = "选择单位后显示可用行动\n右键取消 · Esc 暂停"
-theme_override_font_sizes/font_size = 15
+offset_bottom = 92.0
+text = "回合 1 / 9 · 云先手"
+theme_override_font_sizes/font_size = 14
 
 [node name="RightHudWing" type="ColorRect" parent="GameView/HUD"]
 anchor_left = 0.755
@@ -1616,6 +1641,7 @@ custom_minimum_size = Vector2(80, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/TurnBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1642,6 +1668,7 @@ custom_minimum_size = Vector2(130, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopLeft/PhaseBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1679,6 +1706,7 @@ custom_minimum_size = Vector2(100, 42)
 color = Color(0.02, 0.04, 0.03, 0.92)
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/CurrentPlayerBadge"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1706,6 +1734,7 @@ custom_minimum_size = Vector2(120, 42)
 disabled = true
 
 [node name="OrnatePlaque" type="NinePatchRect" parent="GameView/HUD/TopRight/EndTurnButton"]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1938,7 +1967,7 @@ offset_left = 44.0
 offset_top = 150.0
 offset_right = -44.0
 offset_bottom = 176.0
-text = "⚔ 选中单位"
+text = "战术准备"
 theme_override_font_sizes/font_size = 20
 
 [node name="UnitInfoSubtitle" type="Label" parent="GameView/HUD/InfoPanel"]
@@ -1947,7 +1976,7 @@ offset_left = 44.0
 offset_top = 178.0
 offset_right = -44.0
 offset_bottom = 202.0
-text = "职业 · 英雄 Lv.1 · 未行动"
+text = "等待选择我方单位"
 theme_override_font_sizes/font_size = 14
 
 [node name="StatIconRail" type="VBoxContainer" parent="GameView/HUD/InfoPanel"]
@@ -1989,7 +2018,7 @@ offset_right = -44.0
 offset_bottom = -40.0
 bbcode_enabled = true
 scroll_active = true
-text = "[i]点击单位查看详情[/i]"
+text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动\n\n[b]本回合流程[/b]\n1  选择尚未行动的单位\n2  决定移动、攻击或技能\n3  确认行动后结束回合"
 
 [node name="UnitPortraitPanel" type="Panel" parent="GameView/HUD/InfoPanel"]
 visible = false
@@ -2464,7 +2493,7 @@ visible = false
 z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 2
 
 [node name="PausePanel" type="Panel" parent="GameView/HUD"]
@@ -2539,6 +2568,8 @@ custom_minimum_size = Vector2(0, 54)
 ; ============================================================
 
 ; 对话专用遮罩：位于对话框下方，显示时拦截棋盘输入。
+; P0-1:alpha 从 0.38 提到 0.55,让棋盘/侧栏在大视口下明显压暗,
+; 避免 review agent 报"对话框未压暗背景"。
 [node name="DialogOverlay" type="ColorRect" parent="GameView/HUD"]
 visible = false
 z_index = 80
@@ -2547,7 +2578,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 0
 
 ; --- 对话框(底部浮层)---
@@ -2795,7 +2826,7 @@ visible = false
 z_index = 75
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.01, 0.03, 0.05, 0.38)
+color = Color(0.01, 0.03, 0.05, 0.55)
 mouse_filter = 0
 
 ; ============================================================

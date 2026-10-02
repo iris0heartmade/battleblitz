@@ -96,11 +96,11 @@ static func function_icon_sheet() -> Texture2D:
 # ── battle: 顶部状态条 / 侧栏 / 行动菜单 / 对话 / 结算 ──────
 
 static func top_battle_status_bar() -> Texture2D:
-	return _load("battle/top_battle_status_bar.png")
+	return _load("battle/top_battle_status_bar_refined_v3.png")
 
 
 static func battle_sidebar_drawer() -> Texture2D:
-	return _load("battle/battle_sidebar_drawer.png")
+	return _load("battle/battle_sidebar_drawer_refined_v3.png")
 
 
 static func action_menu_panel() -> Texture2D:

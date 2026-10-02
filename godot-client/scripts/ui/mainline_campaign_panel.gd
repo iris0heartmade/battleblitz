@@ -8,6 +8,7 @@ const MainlineTheme = preload("res://scripts/ui/mainline_theme.gd")
 
 @onready var _slots: VBoxContainer = %Slots
 @onready var _preview_title: Label = %PreviewTitle
+@onready var _chapter_badge: Label = %ChapterBadge
 @onready var _preview_body: Label = %PreviewBody
 @onready var _briefing_body: Label = %BriefingBody
 @onready var _intel_body: Label = %IntelBody
@@ -57,6 +58,23 @@ func select_slot(slot_index: int) -> void:
 	var next_mission: String = str(record.get("next_mission", "下一战: 待定"))
 	var recommend: String = str(record.get("recommend", "推荐等级: Lv.?"))
 	var save_time: String = str(record.get("save_time", "保存: —"))
+	# P2:章节编号金色徽章 — 从 chapter 字符串里提取「第 N 章」数字,
+	# 没匹配到就用 01 占位(测试场景数据可能没有标准 chapter 字符串)。
+	var chapter_idx: int = 1
+	var total_chapters: int = 9
+	var ci: int = chapter.find("第")
+	if ci >= 0:
+		var after: String = chapter.substr(ci + 1).strip_edges()
+		var digits: String = ""
+		for ch in after:
+			if ch >= "0" and ch <= "9":
+				digits += ch
+			else:
+				break
+		if digits != "":
+			chapter_idx = maxi(1, int(digits))
+	if _chapter_badge != null and is_instance_valid(_chapter_badge):
+		_chapter_badge.text = "%02d / %02d" % [chapter_idx, total_chapters] if occupied else "— / —"
 	# 中央只讲战役进度与队伍；下一战目标放进独立简报，避免同一份元数据重复三次。
 	_preview_body.text = "%s\n\n战役进度\n◆ %s\n✦ %s\n\n队伍编成\n⚔ %s" % [
 		summary, _without_prefix(chapter), _without_prefix(progress), _without_prefix(heroes_line),
@@ -149,26 +167,26 @@ func _make_slot_card(index: int, record: Dictionary) -> PanelContainer:
 		chapter = "等待新的旅程"
 	var tag := Label.new()
 	tag.text = "档  %d" % (index + 1)
-	tag.add_theme_font_size_override("font_size", 13 if compact else 14)
+	tag.add_theme_font_size_override("font_size", 15 if compact else 14)
 	tag.add_theme_color_override("font_color", MainlineTheme.C_GOLD)
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(tag)
 	var title_label := Label.new()
 	title_label.text = title
-	title_label.add_theme_font_size_override("font_size", 20 if compact else 21)
+	title_label.add_theme_font_size_override("font_size", 23 if compact else 21)
 	title_label.add_theme_color_override("font_color", MainlineTheme.C_GOLD_BRIGHT if occupied else MainlineTheme.C_TEXT_DIM)
 	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(title_label)
 	var detail_label := Label.new()
 	detail_label.text = detail
-	detail_label.add_theme_font_size_override("font_size", 15 if compact else 16)
+	detail_label.add_theme_font_size_override("font_size", 17 if compact else 16)
 	detail_label.add_theme_color_override("font_color", MainlineTheme.C_TEXT if occupied else MainlineTheme.C_TEXT_DIM)
 	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(detail_label)
 	var chapter_label := Label.new()
 	chapter_label.text = chapter
-	chapter_label.add_theme_font_size_override("font_size", 13 if compact else 14)
+	chapter_label.add_theme_font_size_override("font_size", 15 if compact else 14)
 	chapter_label.add_theme_color_override("font_color", MainlineTheme.C_TEXT_DIM)
 	chapter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.add_child(chapter_label)
@@ -242,16 +260,16 @@ func _apply_responsive_typography() -> void:
 	$Layout/FooterSafe.add_theme_constant_override("margin_top", 2 if compact_height else 6)
 	$Layout/FooterSafe.add_theme_constant_override("margin_bottom", 34 if compact_height else 24)
 	_preview_title.add_theme_font_size_override("font_size", 28 if compact_height else 32)
-	_preview_body.add_theme_font_size_override("font_size", 20 if compact_height else 19)
+	_preview_body.add_theme_font_size_override("font_size", 22 if compact_height else 19)
 	%PreviewBody.custom_minimum_size.y = 116 if compact_height else 190
 	%BriefingPanel.custom_minimum_size.y = 170 if compact_height else 250
 	%BriefingTitle.add_theme_font_size_override("font_size", 21 if compact_height else 20)
-	_briefing_body.add_theme_font_size_override("font_size", 18 if compact_height else 17)
+	_briefing_body.add_theme_font_size_override("font_size", 20 if compact_height else 17)
 	_briefing_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	%IntelTitle.add_theme_font_size_override("font_size", 21 if compact_height else 20)
-	_intel_body.add_theme_font_size_override("font_size", 17 if compact_height else 16)
-	_intel_status.add_theme_font_size_override("font_size", 16 if compact_height else 16)
-	%PreviewHint.add_theme_font_size_override("font_size", 15 if compact_height else 15)
+	_intel_body.add_theme_font_size_override("font_size", 19 if compact_height else 16)
+	_intel_status.add_theme_font_size_override("font_size", 18 if compact_height else 16)
+	%PreviewHint.add_theme_font_size_override("font_size", 17 if compact_height else 15)
 	_primary_action.custom_minimum_size.y = 66 if compact_height else 88
 	_primary_action.add_theme_font_size_override("font_size", 23 if compact else 24)
 	%BackButton.custom_minimum_size = Vector2(220 if compact_width else 260, 48 if compact_height else 54)
@@ -281,7 +299,7 @@ func _apply_theme() -> void:
 	MainlineTheme.apply_section_panel(%PreviewColumn, "paper")
 	MainlineTheme.apply_section_panel(%IntelColumn, "navy")
 	MainlineTheme.apply_item_card(%BriefingPanel)
-	MainlineTheme.apply_title_plate(%ArchiveTitle)
+	MainlineTheme.apply_page_heading(%ArchiveTitle)
 	MainlineTheme.apply_paper_text(_preview_title, true)
 	MainlineTheme.apply_paper_text(_preview_body)
 	MainlineTheme.apply_paper_text(_briefing_body)
@@ -293,3 +311,7 @@ func _apply_theme() -> void:
 	_intel_status.add_theme_color_override("font_color", MainlineTheme.C_GOLD_BRIGHT)
 	MainlineTheme.apply_primary(_primary_action)
 	MainlineTheme.apply_secondary(%BackButton)
+	# P1-1 / P1-2:响应式字号补偿 — 小屏/宽屏各 +1,中段保留默认。
+	MainlineTheme.adjust_font_sizes_for_viewport(
+		[_primary_action, %BackButton, %ArchiveTitle, _intel_status]
+	)

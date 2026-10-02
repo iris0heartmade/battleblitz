@@ -41,8 +41,7 @@ func _init_autoloads() -> bool:
 		and _network_client != null \
 		and _user_settings != null
 	if not ok:
-		print("  FAIL  Missing required autoload(s): "
-			% _missing_autoload_names())
+		print("  FAIL  Missing required autoload(s): %s" % _missing_autoload_names())
 	return ok
 
 
@@ -731,6 +730,14 @@ func _ready() -> void:
 		"finishing the last dialogue entry must restore board interaction")
 	_assert_true("Dialogue normal completion releases playback state", not DialogManager.is_playing(),
 		"finishing the last dialogue entry must release the dialogue input lock")
+	DialogManager.show_dialog({"speaker": "旁白", "text": "结算出现前应关闭本段对话。"})
+	main_check.call("show_battle_result", "云", "red", {"kills": 1})
+	_assert_true("Battle result closes active dialogue",
+		DialogManager._root == null or not DialogManager._root.visible,
+		"the terminal result modal must not stack above an active dialogue panel")
+	_assert_true("Battle result releases dialogue state", not DialogManager.is_playing(),
+		"result presentation must clear the dialogue input lock")
+	main_check.call("hide_battle_result")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",

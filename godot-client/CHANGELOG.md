@@ -1,5 +1,19 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-20
+
+- 新增 UI 验收评分卡 `docs/validation/godot-ui-scorecard.md`：把 UI 改动完成条件固定为可重复的自动化门槛
+  （烟测零失败 / 中文扫描通过 / 三档各 11 张截图 / 单图与总平均 ≥8.5）+ 截图评审，不以「能启动」作为完成标准。
+- 加固评分工具链：
+  - `tools/check_chinese_ui.py` 补齐 `popup/item_N/text`（OptionButton 菜单项）扫描，堵住菜单项英文漏报盲区。
+  - `tools/ui_review_screenshot.gd` 地图路径改多候选解析、补全 11 张截图清单注释、`_review_size` 默认对齐 1920×1080、
+    并给 `_save` 增加 viewport 纹理空值保护。
+  - `tools/smoke_test.gd` 修复缺 `%s` 占位符的格式化 bug。
+- 完成新版评分规则下的 UI 密度与响应式整改：补充战斗默认态操作/回合引导，接入墨蓝织纹战斗底幕，
+  丰富英雄与装备核对信息，并提高 1280×720 主线档案的中文可读性。
+- 验收结果：烟测 **608 通过 / 0 失败**；中文扫描通过；三档截图各 11/11；11 种画面全部达标，
+  最低单图 8.50、总平均 8.56。
+
 ## 2026-07-31
 
 - 修复棋盘 ↔ 主菜单的「瞬切错位」bug(游戏胜利 / 失败 / 中断 退出再回主菜单时,主菜单会被 BoardCamera 的 zoom/position/smoothing 残值拉飞一帧):

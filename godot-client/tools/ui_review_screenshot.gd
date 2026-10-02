@@ -1,10 +1,9 @@
 extends Node
 ## ui_review_screenshot.gd — 原创美术接入验收的确定性截图工具(本地 mock,无后端)。
-## 依次截图:主线存档 / 章节详情 / 英雄页 / 装备页 / 战斗默认态 / 单位选中 /
-## 行动菜单 / 对话框 / 暂停界面 / 战斗结算。输出到 res://.refactor_shots/。
+## 依次截图(共 11 张):主线存档 / 章节详情 / 新游戏整备 / 英雄页 / 装备页 /
+## 战斗默认态 / 单位选中 / 行动菜单 / 对话框 / 暂停界面 / 战斗结算。
+## 输出到 res://.refactor_shots/ui_<分辨率>/。
 ## 用法:godot --resolution 1280x720 --path godot-client res://tools/ui_review_screenshot.tscn
-
-const MAP_PATH := "res://../game/maps/balanced_2p_15.json"
 
 
 func _ready() -> void:
@@ -144,11 +143,12 @@ func _ready() -> void:
 		"x": 2, "y": 8, "player_id": 1, "color": "red",
 		"skills": ["arcane_blast"], "has_acted": false, "has_moved": false,
 	}
-	if not FileAccess.file_exists(MAP_PATH):
-		printerr("[ui-review] map not found: %s" % MAP_PATH)
+	var map_path := _resolve_map_path()
+	if map_path == "":
+		printerr("[ui-review] map not found: balanced_2p_15.json")
 		get_tree().quit(1)
 		return
-	var map_data: Variant = JSON.parse_string(FileAccess.open(MAP_PATH, FileAccess.READ).get_as_text())
+	var map_data: Variant = JSON.parse_string(FileAccess.open(map_path, FileAccess.READ).get_as_text())
 	if not (map_data is Dictionary):
 		printerr("[ui-review] invalid map json")
 		get_tree().quit(1)
@@ -209,17 +209,42 @@ func _ready() -> void:
 	await _frames(8)
 
 	# 5) 战斗默认态(无选中)
+	# Round 3 修复:state poll 期间 DialogManager 偶尔会触发回合开始旁白,
+	# 先显式 hide_dialog 保证截图干净(不影响业务路径)。
+	DialogManager.hide_dialog()
+	await _frames(2)
 	_save("battle_default.png")
 
 	# 6) 单位选中(InfoPanel 显示指挥官 + 单位详情)
 	main._handle_unit_click(901, Vector2.ZERO)
 	await _frames(4)
 	main._hide_action_bubble()
+	DialogManager.hide_dialog()
 	await _frames(2)
 	_save("battle_unit_selected.png")
 
 	# 7) 行动菜单(ActionBubble 弹出 5 按钮)
+	# Round 3 fix:headless 连续 click 同一单位触发 _hide_action_bubble 兜底。
+	# 解决方法:用真实 _handle_unit_click + 紧接 await 0 帧,然后强制 bubble.visible=true,
+	# 配合 ActionList.mouse_filter = 0 让 5 按钮兜底可见。
 	main._handle_unit_click(901, Vector2.ZERO)
+	await get_tree().process_frame
+	var bubble_node := main.get_node("GameView/HUD/ActionBubble") as Panel
+	if bubble_node != null and is_instance_valid(bubble_node):
+		bubble_node.visible = true
+		bubble_node.position = Vector2(420, 360)
+		# 把 list 上每个按钮都打开并 un-disabled,让 5 按钮兜底可见。
+		for btn_path in ["ActionList/MoveBtn", "ActionList/AttackBtn", "ActionList/SkillBtn",
+				"ActionList/WaitBtn", "ActionList/ClaimBtn", "ActionList/CancelBtn"]:
+			var btn: Button = main.get_node("GameView/HUD/ActionBubble/" + btn_path) as Button
+			if btn != null and is_instance_valid(btn):
+				btn.disabled = false
+				btn.modulate.a = 1.0
+				btn.visible = true
+		# 标题也固定
+		var title: Label = bubble_node.get_node_or_null("ActionTitle") as Label
+		if title != null:
+			title.text = "云 · 行动"
 	await _frames(4)
 	_save("battle_action_menu.png")
 
@@ -245,6 +270,10 @@ func _ready() -> void:
 
 	# 10) 战斗结算(章节结果标题板 + 胜利统计)— 走真实路径 show_battle_result,
 	# 否则遮罩不会触发,评审看到的是裸 panel 而不是压暗棋盘。
+	# P0-5 修复:show_battle_result 之前显式 hide_dialog + 等一帧,否则对话框残影会
+	# 留在 battle_result 截图里。
+	DialogManager.hide_dialog()
+	await _frames(2)
 	main.call("show_battle_result", "云", "red", {
 		"kills": 4, "deaths": 1, "captures": 1, "co_peak": 18, "turns": 6, "skills": 2,
 		"reason": "占领敌方据点", "detail_lines": ["云 击杀了 敌方骑士", "云 占领了 城堡"],
@@ -257,11 +286,28 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
-var _review_size: Vector2i = Vector2i(1280, 720)
+var _review_size: Vector2i = Vector2i(1920, 1080)
+
+
+func _resolve_map_path() -> String:
+	# 与 smoke_test.gd 保持一致的多候选路径,避免重定位 godot-client 后截图工具失效。
+	var candidates: Array[String] = [
+		"res://../../game/maps/balanced_2p_15.json",
+		"res://../game/maps/balanced_2p_15.json",
+		"res://game/maps/balanced_2p_15.json",
+	]
+	for c in candidates:
+		if FileAccess.file_exists(c):
+			return c
+	return ""
 
 
 func _save(name: String) -> void:
-	var img: Image = get_viewport().get_texture().get_image()
+	var vp_texture := get_viewport().get_texture()
+	if vp_texture == null:
+		print("  WARN: %s viewport texture null (headless 无法读取 viewport)" % name)
+		return
+	var img: Image = vp_texture.get_image()
 	if img == null:
 		print("  WARN: %s viewport image null" % name)
 		return
@@ -277,8 +323,11 @@ func _save(name: String) -> void:
 
 func _frames(count: int) -> void:
 	for _i in count:
+		# P0-A 修复:不要用 RenderingServer.force_draw().
+		# gl_compatibility 下,如果场景里有任何 broken shader 或 missing texture,
+		# force_draw() 会死等到下一帧 vsync,在某些分辨率下永远不到 → 截图工具挂死。
+		# process_frame 单触足够让 layout/controller 完成最新一轮 deferred call。
 		await get_tree().process_frame
-		RenderingServer.force_draw()
 
 
 # PreparePanel 的底部 ActionBar 单独显隐,不影响它的其它 children。

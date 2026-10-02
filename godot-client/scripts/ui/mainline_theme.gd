@@ -358,3 +358,40 @@ static func apply_frame(frame: Panel, border: ReferenceRect, title: Label, summa
 static func apply_slot_label(label: Label, occupied: bool) -> void:
 	label.add_theme_font_size_override("font_size", 13)
 	label.add_theme_color_override("font_color", C_TEXT if occupied else C_TEXT_DIM)
+
+
+## P1-1 / P1-2 修复:响应式字号补偿 — 极小窗口(<=1366)与宽屏(>=1600)都 +1。
+## 中段(1366..1600)保留默认,避免 1920 视觉密度反而不敌 1280。
+## 用法:_apply_theme 末尾调用一次,把已经被 MainlineTheme.apply_* 设的字号再 bump。
+## 接受 Label / Button / RichTextLabel;Button / RichTextLabel 用动态 dispatch
+## 调 add_theme_font_size_override,避免 isinstance 重复代码。
+static func _bump_root_font(node: Object, font_key: String, bump_amount: int) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if not node.has_method("get_tree"):
+		return
+	var tree: SceneTree = node.get_tree()
+	if tree == null:
+		return
+	var root: Window = tree.root
+	if root == null:
+		return
+	var vp_size: Vector2i = root.size
+	if vp_size.x <= 1366 or vp_size.x >= 1600:
+		var cur: int = node.get_theme_font_size(font_key)
+		if cur <= 0:
+			return
+		node.add_theme_font_size_override(font_key, cur + bump_amount)
+
+
+## 批量调整多个 Control 的字号(用于 _apply_theme 末尾批处理)。
+static func adjust_font_sizes_for_viewport(controls: Array) -> void:
+	for c in controls:
+		if c == null or not is_instance_valid(c):
+			continue
+		if c is Label:
+			_bump_root_font(c, "font_size", 1)
+		elif c is Button:
+			_bump_root_font(c, "font_size", 1)
+		elif c is RichTextLabel:
+			_bump_root_font(c, "normal_font_size", 1)

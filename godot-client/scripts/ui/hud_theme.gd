@@ -145,9 +145,15 @@ static func apply_hud(host: Node) -> void:
 	var density: float = clampf(1920.0 / float(maxi(win_w, 1)), 1.0, 1.5)
 	var pill_size: int = roundi(18.0 * density)
 	var compact := win_w <= 1366
-	var sidebar_body_size: int = roundi((16.0 if compact else 18.0) * density)
-	var sidebar_heading_size: int = roundi((19.0 if compact else 20.0) * density)
-	var secondary_size: int = roundi((14.0 if compact else 16.0) * density)
+	# P1-1 / P1-2:响应式字号补偿 — 极小窗口(<=1366)与宽屏(>=1600)都加 2,
+	# 中段(1366..1600)保留默认,避免 1920 视觉密度反而不敌 1280。
+	# 修复前:小窗口勉强可读,大窗口中文"飘"在金属条上像噪点。
+	var font_bump: int = 2 if compact else (2 if win_w >= 1600 else 0)
+	# P1-1 / P1-2:font_size 不与 density 串行累加,只对小字体尺寸补 bump,
+	# density 已经按窗口缩放补偿过了,再加 bump 会让 1280 顶栏中文撑爆 badge。
+	var sidebar_body_size: int = roundi((16.0 if compact else 18.0) * density) + font_bump
+	var sidebar_heading_size: int = roundi((19.0 if compact else 20.0) * density) + font_bump
+	var secondary_size: int = roundi((14.0 if compact else 16.0) * density) + font_bump
 	if host.info_panel != null and is_instance_valid(host.info_panel):
 		# InfoPanel 常驻右翼;样式由 battle_theme.apply_floating_panel 唯一接管。
 		host.info_panel.visible = true
@@ -213,7 +219,7 @@ static func apply_hud(host: Node) -> void:
 		host.unit_info.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
 		host.unit_info.add_theme_constant_override("line_separation", 2)
 		if host.unit_info.text.contains("点击单位查看详情"):
-			host.unit_info.text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动"
+			host.unit_info.text = "[b]选择我方单位[/b]\n查看属性、移动范围与可用行动\n\n[b]本回合流程[/b]\n1  选择尚未行动的单位\n2  决定移动、攻击或技能\n3  确认行动后结束回合"
 	if compact and host.hero_portrait_panel != null and is_instance_valid(host.hero_portrait_panel):
 		host.hero_portrait_panel.offset_right = 122.0
 		host.hero_portrait_panel.offset_bottom = 330.0
