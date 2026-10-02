@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 NETWORK_CLIENT = ROOT / "godot-client" / "scripts" / "autoload" / "network_client.gd"
 MAIN_GD = ROOT / "godot-client" / "scripts" / "main.gd"
+# T:3 — 联机大厅逻辑已从 main.gd 抽到 lobby_controller.gd(P2 组件化)。
+# 大厅相关契约断言必须在这里查,main.gd 里已经找不到这些函数了。
 LOBBY_GD = ROOT / "godot-client" / "scripts" / "ui" / "lobby_controller.gd"
 BOARD_GD = ROOT / "godot-client" / "scripts" / "board" / "board.gd"
 UNIT_NODE_GD = ROOT / "godot-client" / "scripts" / "board" / "unit_node.gd"
@@ -82,13 +84,19 @@ def test_godot_save_views_use_save_api_not_game_delete_api():
     assert 'NetworkClient.list_games(Callable(self, "_on_saves_response")' not in combined
 
 
-def test_godot_hero_portrait_renders_in_bottom_left_not_info_panel():
-    # T:#18 — 英雄立绘原本嵌在 InfoPanel 右侧 position=(282, 108) size=(86,118),
-    # 遮挡 "Lv.1" / 攻击射程 等文字。改成挂在独立的 HeroPortraitPanel 槽位,
-    # 该槽位锚定到 GameView/HUD 左下角(GoldPanel 上方),
-    # 不再嵌进 InfoPanel;unit_info.offset_right 也不再为立绘腾空间。
+def test_godot_hero_portrait_renders_in_info_panel_card():
+    # T:#18(V2 检视卡)— 英雄立绘与单位详情使用同一张 InfoPanel 检视卡
+    # (main.gd 顶部注释 "英雄立绘与单位详情使用同一张检视卡"),立绘嵌在
+    # InfoPanel/UnitPortraitPanel 里,不再硬编码 position=(282,108) 浮在
+    # InfoPanel 右侧遮挡 "Lv.1"/射程文字。早期 T:#18 迭代的"独立左下角
+    # HeroPortraitPanel"是死节点,现行设计是检视卡内嵌。
     main_src = _read(MAIN_GD)
     main_tscn = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    # 1) UnitPortraitPanel 挂在 InfoPanel 下
+    assert '[node name="UnitPortraitPanel" type="Panel" parent="GameView/HUD/InfoPanel"]' in main_tscn
+    # 2) main.gd @onready 指向检视卡内的 UnitPortraitPanel
+    assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel" in main_src
+    # 3) _set_unit_info_portrait 把 TextureRect 挂到 hero_portrait_panel + V6 等比缩放
     # 1) .tscn 里有 HeroPortraitPanel,挂在 GameView/HUD 下(不在 BottomLeft HBox 里)
     assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in main_tscn
     assert "HeroPortraitPanel" in main_tscn
@@ -107,10 +115,13 @@ def test_godot_hero_portrait_renders_in_bottom_left_not_info_panel():
     func_end = main_src.index("\n\n", func_idx)
     func_body = main_src[func_idx:func_end]
     assert "hero_portrait_panel.add_child(_unit_info_portrait_tex)" in func_body
-    # 5) 不再调 unit_info.offset_right = -108 (那是给 InfoPanel 内嵌立绘腾空间的)
-    assert "unit_info.offset_right = -108" not in func_body
-    # 6) 旧硬编码位置 (282, 108) 已删
-    assert "position = Vector2(282, 108)" not in func_body
+    assert "STRETCH_KEEP_ASPECT_CENTERED" in func_body
+    # 4) 不再调 unit_info.offset_right = -108 (那是给旧版右侧浮窗腾空间的)
+    assert "unit_info.offset_right = -108" not in main_src
+    # 5) 旧硬编码位置 (282, 108) 已删
+    assert "position = Vector2(282, 108)" not in main_src
+    # 6) 文本区随立绘可见性让位(offset_left 172 vs 44),不是叠字
+    assert "unit_info.offset_left = 172.0 if hero_portrait_panel.visible else 44.0" in main_src
 
 
 def test_godot_winner_resolution_returns_no_winner_for_draw_or_ambiguous():
@@ -198,7 +209,10 @@ def test_godot_lobby_commander_fetch_forwards_to_mainline_controller():
     assert "func _on_commanders_response(" not in main_src
     assert "func _on_commanders_response(" not in lobby_src
     # 3) _enter_lobby_view 里调用 get_unlocked_commanders 时,callback 必须是
+    #    Callable(mainline_view, "_on_commanders_response"),不能是 self
+    #    (该函数在 lobby_controller.gd)
     #    Callable(_main.mainline_view, "_on_commanders_response"),不能是 self
+    lobby_src = _read(LOBBY_GD)
     lobby_start = lobby_src.index("func _enter_lobby_view(")
     lobby_end = lobby_src.index("\n\n", lobby_start)
     lobby_body = lobby_src[lobby_start:lobby_end]
@@ -283,6 +297,9 @@ def test_godot_claim_remains_available_after_moving_onto_enemy_hq():
     source = _read(MAIN_GD)
     assert "context != _ACTION_CONTEXT_POST_ACTION" not in source
     assert "var can_claim := has_unit and _can_claim_here(ud)" in source
+    # action_claim 调用被格式化成了多行;断言放宽为"调用存在 + 参数一致"
+    assert "NetworkClient.action_claim(" in source
+    assert "_game_id, _player_id, _selected_unit_id" in source
     # _on_claim_pressed 里的 action_claim 已是多行调用,首行后换行续参
     assert "NetworkClient.action_claim(\n\t\t_game_id, _player_id, _selected_unit_id," in source
 
@@ -335,6 +352,70 @@ def test_godot_unit_refresh_does_not_reset_position_or_leave_stale_tweens():
     assert "existing.set_meta(\"move_tween\", t)" in board
     assert "old_tween.kill()" in board
     assert "position = Vector2.ZERO" not in unit_node
+
+
+def test_godot_status_effect_icons_render_at_unit_bottom_right():
+    unit_node = _read(UNIT_NODE_GD)
+    assert '"poison":   "☠"' in unit_node
+    assert '"paralyze": "⚡"' in unit_node
+    assert '"blind":    "◌"' in unit_node
+    assert '"slow":     "❄"' in unit_node
+    assert '"silence":  "🔇"' in unit_node
+    assert "var status_icon_sz := Vector2(30, 16)" in unit_node
+    assert "_status_label.position = Vector2(-6, 6)" in unit_node
+    assert "_status_label.add_theme_font_size_override(\"font_size\", 11)" in unit_node
+    assert "_status_label.text = \"\".join(glyphs).substr(0, 2)" in unit_node
+    assert "_status_overlay" not in unit_node
+
+
+def test_godot_building_claim_badges_are_separate_from_owner_flags():
+    board = _read(BOARD_GD)
+
+    assert "func _collect_pending_claim_tiles() -> Dictionary:" in board
+    assert "func _add_claim_badge_at(cell: Vector2i, claim: Dictionary) -> void:" in board
+    assert "func _claim_target_color(claim: Dictionary) -> Color:" in board
+    assert "func _claim_badge_text(claim: Dictionary) -> String:" in board
+
+    rebuild_start = board.index("func rebuild_flags(tiles: Array) -> void:")
+    rebuild_end = board.index("func _collect_pending_claim_tiles() -> Dictionary:", rebuild_start)
+    rebuild_body = board[rebuild_start:rebuild_end]
+    assert "var pending := _collect_pending_claim_tiles()" in rebuild_body
+    assert "for cell in pending.keys():" in rebuild_body
+    assert "_add_claim_badge_at(cell, pending[cell])" in rebuild_body
+
+    blink_start = board.index("func _update_flag_blink() -> void:")
+    blink_end = board.index("func load_map(", blink_start)
+    blink_body = board[blink_start:blink_end]
+    assert 'if String(child.name) != "OwnerFlag":' in blink_body
+    assert "claim_badge" not in blink_body
+
+
+def test_godot_building_owner_flags_are_banner_style_and_show_neutral_white():
+    board = _read(BOARD_GD)
+
+    for color in ["neutral", "red", "blue", "green", "yellow"]:
+        assert (ROOT / "godot-client" / "assets" / "ui" / "building_flags" / f"flag_{color}.png").exists()
+
+    assert 'const TEXTURE_LOADER := preload("res://scripts/core/texture_loader.gd")' in board
+    assert 'const _OWNER_FLAG_TEXTURES := {' in board
+    assert "func _flag_color_for_owner(owner_pid: int) -> String:" in board
+    assert 'return "neutral"' in board
+    assert "_add_flag_at(cell, owner_pid)" in board
+    assert "var owner_pid: int = 0" in board
+    assert "if owner_v != null:" in board
+    assert "continue  # 无归属不显示旗" not in board
+
+    flag_start = board.index("func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:")
+    flag_end = board.index("func _claim_target_color(", flag_start)
+    flag_body = board[flag_start:flag_end]
+    assert "Sprite2D.new()" in flag_body
+    assert "TEXTURE_LOADER.load_resized" in flag_body
+    assert "), 18)" in flag_body
+    assert "sprite.texture = tex" in flag_body
+    assert "sprite.position = Vector2(-14, 8)" in flag_body
+    assert "Line2D.new()" not in flag_body
+    assert "Polygon2D.new()" not in flag_body
+    assert "_FLAG_POINTS" not in flag_body
 
 
 def test_godot_team_badge_color_comes_from_team_not_player_color():
@@ -460,6 +541,170 @@ def test_godot_home_buttons_are_connected_or_intentionally_dynamic():
     assert "resume_button.visible = _resume_game_id > 0" in source
 
 
+def test_godot_visual_review_modal_layout_is_defensive():
+    source = _read(MAIN_GD)
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+
+    assert "func _prepare_modal_layer(active_modal: String) -> void:" in source
+    assert "func _center_panel_in_viewport(panel: Control, panel_size: Vector2) -> void:" in source
+    assert "settings_panel.reparent(self)" not in source
+
+    settings_start = source.index("func _show_settings_panel() -> void:")
+    settings_end = source.index("func _hide_settings_panel() -> void:", settings_start)
+    settings_body = source[settings_start:settings_end]
+    assert '_prepare_modal_layer("settings")' in settings_body
+    assert "settings_panel.visible = true" in settings_body
+
+    result_start = source.index("func show_battle_result(")
+    result_end = source.index("func hide_battle_result() -> void:", result_start)
+    result_body = source[result_start:result_end]
+    assert '_prepare_modal_layer("battle_result")' in result_body
+
+    tutorial_start = source.index("func show_tutorial() -> void:")
+    tutorial_end = source.index("func hide_tutorial() -> void:", tutorial_start)
+    tutorial_body = source[tutorial_start:tutorial_end]
+    assert '_prepare_modal_layer("tutorial")' in tutorial_body
+
+    panel_start = scene.index('[node name="SettingsPanel"')
+    panel_end = scene.index("\n\n", panel_start)
+    panel_block = scene[panel_start:panel_end]
+    assert "offset_left = -360.0" in panel_block
+    assert "offset_right = 360.0" in panel_block
+
+
+def test_godot_story_screenshot_reviews_one_modal_at_a_time():
+    story = _read(ROOT / "godot-client" / "tools" / "story_screenshot.gd")
+
+    assert "_capture_story_state(\"01_battle_result_only.png\", \"battle_result\")" in story
+    assert "_capture_story_state(\"02_dialog_only.png\", \"dialog\")" in story
+    assert "_capture_story_state(\"03_tutorial_only.png\", \"tutorial\")" in story
+    assert "# Show all 3 V2 round-7 panels." not in story
+    assert "func _hide_all_story_modals() -> void:" in story
+    assert 'for name in ["DialogOverlay", "DialogPanel", "TutorialBubble", "BattleResultPanel"' in story
+
+
+def test_godot_save_and_mainline_loading_have_timeout_fallbacks():
+    saves_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "saves_controller.gd")
+    mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
+
+    assert "const _LOAD_TIMEOUT_SEC" in saves_src
+    assert "var _load_request_id: int" in saves_src
+    assert "func _start_load_timeout" in saves_src
+    assert "func _on_load_timeout" in saves_src
+    assert "_load_request_id += 1" in saves_src
+    assert "NetworkClient.list_saves" in saves_src
+
+    assert "const _SLOT_LOAD_TIMEOUT_SEC" in mainline_src
+    assert "var _slot_request_id: int" in mainline_src
+    assert "func _start_slot_load_timeout" in mainline_src
+    assert "func _on_slot_load_timeout" in mainline_src
+    assert "_slot_request_id += 1" in mainline_src
+    assert "NetworkClient.list_saves" in mainline_src
+
+    saves_flow = _read(ROOT / "godot-client" / "tools" / "saves_flow_screenshot.gd")
+    mainline_flow = _read(ROOT / "godot-client" / "tools" / "mainline_flow_screenshot.gd")
+    assert "create_timer(3.6)" in saves_flow
+    assert 'save_status.text.contains("超时")' in saves_flow
+    assert "create_timer(3.6)" in mainline_flow
+    assert 'ml_title.text.contains("超时")' in mainline_flow
+
+
+def test_godot_main_menu_visual_hierarchy_avoids_logo_overlap():
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+
+    center_start = scene.index('[node name="CenterContainer"')
+    center_end = scene.index("\n\n", center_start)
+    center_block = scene[center_start:center_end]
+    assert "offset_left = -600.0" in center_block
+    assert "offset_top = -110.0" in center_block
+    assert "offset_bottom = 330.0" in center_block
+
+    title1_start = scene.index('[node name="TitleLine1"')
+    title1_end = scene.index("\n\n", title1_start)
+    title1_block = scene[title1_start:title1_end]
+    assert "theme_override_font_sizes/font_size = 36" in title1_block
+
+    title2_start = scene.index('[node name="TitleLine2"')
+    title2_end = scene.index("\n\n", title2_start)
+    title2_block = scene[title2_start:title2_end]
+    assert "theme_override_font_sizes/font_size = 16" in title2_block
+
+    footer_start = scene.index('[node name="FooterRow"')
+    footer_end = scene.index("\n\n", footer_start)
+    footer_block = scene[footer_start:footer_end]
+    assert 'type="GridContainer"' in footer_block
+    assert "columns = 4" in footer_block
+
+    for button_name in [
+        "SavesButton",
+        "InProgressButton",
+        "HelpButton",
+        "EditorButton",
+        "SettingsButton",
+        "ExitButton",
+    ]:
+        start = scene.index(f'[node name="{button_name}"')
+        end = scene.index("\n\n", start)
+        block = scene[start:end]
+        assert "custom_minimum_size = Vector2(112, 38)" in block
+
+
+def test_godot_submenus_reuse_title_cover_background():
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    main_src = _read(MAIN_GD)
+
+    for view_name in ["Lobby", "SavesView", "InProgressView", "MainlineView"]:
+        assert f'[node name="{view_name}TitleCover" type="TextureRect" parent="{view_name}"]' in scene
+        assert f'[node name="{view_name}TitleCoverScrim" type="ColorRect" parent="{view_name}"]' in scene
+
+    assert "@onready var submenu_title_covers: Array[TextureRect]" in main_src
+    assert "for cover in submenu_title_covers:" in main_src
+    assert "cover.texture = tex" in main_src
+
+
+def test_godot_editor_tools_are_on_canvas_layer_not_board_canvas():
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+    main_src = _read(MAIN_GD)
+    editor_src = _read(ROOT / "godot-client" / "scripts" / "ui" / "editor_controller.gd")
+
+    assert '[node name="EditorHud" type="CanvasLayer" parent="EditorView"]' in scene
+    editor_hud_start = scene.index('[node name="EditorHud"')
+    editor_hud_end = scene.index("\n\n", editor_hud_start)
+    assert "visible = false" in scene[editor_hud_start:editor_hud_end]
+    assert '[node name="EditorBackdrop" type="ColorRect" parent="EditorView"]' in scene
+    assert '[node name="EditorPanel" type="ColorRect" parent="EditorView/EditorHud"]' in scene
+    assert 'parent="EditorView/EditorPanel"' not in scene
+    assert "@onready var editor_hud: CanvasLayer = $EditorView/EditorHud" in main_src
+    assert "editor_hud.visible = (name == \"editor\")" in main_src
+    assert "$EditorHud/EditorPanel/EditorMapNameInput" in editor_src
+    assert "$EditorPanel/" not in editor_src
+
+
+def test_godot_primary_buttons_use_blue_gold_outline_not_solid_gold():
+    theme = _read(ROOT / "godot-client" / "scripts" / "ui" / "menu_theme.gd")
+    start = theme.index("static func apply_primary_button_theme")
+    end = theme.index("static func hover_soft_glow", start)
+    body = theme[start:end]
+
+    assert 'Color("#1a1208")' not in body
+    assert "sb_normal.bg_color = C_GOLD" not in body
+    assert "sb_hover.bg_color = C_GOLD_BRIGHT" not in body
+    assert "sb_normal.border_color = C_GOLD_BRIGHT" in body
+    assert "sb_normal.bg_color = Color(C_BTN_BLUE.r * 1.08" in body
+    assert "sb_hover.bg_color = C_BTN_BLUE_HOVER" in body
+
+
+def test_godot_modal_buttons_do_not_use_colored_emoji_as_style():
+    scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
+
+    for button_name in ["MLPrepCompleteBtn", "ApplyBtn", "CancelBtn", "QuitBtn"]:
+        start = scene.index(f'[node name="{button_name}"')
+        end = scene.index("\n\n", start)
+        block = scene[start:end]
+        assert "✅" not in block
+        assert "❌" not in block
+
+
 def test_godot_mainline_page_switch_hides_prepare_controls_except_ready():
     source = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
     start = source.index("func _set_mainline_page(")
@@ -545,6 +790,17 @@ def test_godot_lobby_start_success_enters_game_without_connecting_view():
     assert "NetworkClient.connect_to_game" in body
 
 
+def test_godot_lobby_save_check_failure_still_opens_lobby():
+    source = _read(LOBBY_GD)
+    start = source.index("func _on_lobby_list_saves_for_suspend_check(")
+    end = source.index("func _on_lobby_discard_suspend_yes()", start)
+    body = source[start:end]
+    invalid_start = body.index("if not (body is Dictionary):")
+    invalid_end = body.index("var suspend: Variant", invalid_start)
+    invalid_body = body[invalid_start:invalid_end]
+    assert "_enter_lobby_view()" in invalid_body
+
+
 def test_godot_portrait_uses_native_size_inside_target_panel():
     source = _read(MAIN_GD)
     scene = _read(ROOT / "godot-client" / "scenes" / "main.tscn")
@@ -604,3 +860,88 @@ def test_godot_youko_sing_skill_is_wired():
     assert '_pending_skill_id = "sing"' in source
     assert '"bard":' in labels
     assert '"sing":' in labels
+
+
+def test_godot_gamepad_action_bubble_temporarily_owns_focus():
+    source = _read(MAIN_GD)
+    show_start = source.index("func _show_action_bubble(")
+    show_end = source.index("func _refresh_action_bubble_buttons(", show_start)
+    show_body = source[show_start:show_end]
+    hide_start = source.index("func _hide_action_bubble(")
+    hide_end = source.index("func _on_move_pressed()", hide_start)
+    hide_body = source[hide_start:hide_end]
+
+    assert "InputState.board_focused = false" in show_body
+    assert "UIPanelFocus.grab_first_focusable(action_bubble)" in show_body
+    assert "_return_focus_to_board_if_game_active()" in hide_body
+    assert "func _return_focus_to_board_if_game_active() -> void:" in source
+
+
+def test_godot_gamepad_pause_has_start_button_binding():
+    source = _read(PROJECT_GODOT)
+    pause_start = source.index("pause={")
+    pause_end = source.find("\nboard_cursor_up={", pause_start)
+    if pause_end == -1:
+        pause_end = source.index("\n[", pause_start)
+    pause_body = source[pause_start:pause_end]
+
+    assert "InputEventJoypadButton" in pause_body
+    assert '"button_index":6' in pause_body or '"button_index":7' in pause_body
+
+
+def test_godot_board_cursor_initializes_on_local_player_hq_before_units():
+    source = _read(MAIN_GD)
+    assert "func _safe_int(value: Variant, fallback: int = -1) -> int:" in source
+    assert "func _find_local_hq_cell() -> Vector2i:" in source
+
+    helper_start = source.index("func _find_local_hq_cell() -> Vector2i:")
+    helper_end = source.index("func _find_cursor_initial_cell()", helper_start)
+    helper_body = source[helper_start:helper_end]
+    assert "for t in GameState.tiles:" in helper_body
+    assert 'str(t.get("terrain", ""))' in helper_body
+    assert 'str(t.get("subtype", ""))' in helper_body
+    assert '_safe_int(t.get("owner_id", null), -1) == my_pid' in helper_body
+    assert 'int(t.get("owner_id", -1))' not in helper_body
+    assert 'terrain == "castle"' in helper_body or 'subtype == "castle_throne"' in helper_body
+
+    cursor_start = source.index("func _find_cursor_initial_cell() -> Vector2i:")
+    cursor_end = source.index("\n\n", cursor_start)
+    cursor_body = source[cursor_start:cursor_end]
+    assert "var hq_cell := _find_local_hq_cell()" in cursor_body
+    assert cursor_body.index("var hq_cell := _find_local_hq_cell()") < cursor_body.index("for u in GameState.latest_snapshot.get")
+
+
+def test_godot_fe8_keyboard_bindings_are_mapped():
+    project = _read(PROJECT_GODOT)
+    hints = _read(ROOT / "godot-client" / "scripts" / "autoload" / "input_hints.gd")
+
+    def block(action: str) -> str:
+        start = project.index(f"{action}={{")
+        next_action = project.find("\n" + action.split("_")[0], start + len(action))
+        end = next_action if next_action != -1 else project.find("\n[", start)
+        return project[start:end]
+
+    for action, keycodes in {
+        "ui_up": ["4194320", "87"],
+        "ui_down": ["4194322", "83"],
+        "ui_left": ["4194319", "65"],
+        "ui_right": ["4194321", "68"],
+        "board_cursor_up": ["4194320", "87"],
+        "board_cursor_down": ["4194322", "83"],
+        "board_cursor_left": ["4194319", "65"],
+        "board_cursor_right": ["4194321", "68"],
+        "ui_accept": ["4194309", "4194310", "90", "32"],
+        "board_confirm": ["4194309", "90", "32"],
+        "ui_cancel": ["4194305", "4194308", "88"],
+        "board_cancel": ["4194305", "4194308", "88"],
+        "board_zoom_in": ["43", "61", "69"],
+        "board_zoom_out": ["45", "95", "81"],
+    }.items():
+        body = block(action)
+        for keycode in keycodes:
+            assert f'"keycode":{keycode}' in body
+
+    assert '"confirm": "Z/Enter"' in hints
+    assert '"cancel":  "X/Esc"' in hints
+    assert '"zoom_in": "E/+"' in hints
+    assert '"zoom_out": "Q/-"' in hints

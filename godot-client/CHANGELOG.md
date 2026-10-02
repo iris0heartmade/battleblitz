@@ -1,5 +1,320 @@
 # BattleBlitz Godot Client Changelog
 
+## 2026-08-13 标题页按钮与子菜单背景修复
+
+### 变更
+- 将标题页可见游戏名统一为 “BIPOLAR”，避免把项目名 BattleBlitz 或旧名“战棋闪击”误显示成真实游戏名。
+- 联机大厅、存档管理、进行中、主线存档等子菜单复用标题图作为暗化背景，子菜单视觉与标题页保持同一套风格。
+- 标题页底部辅助按钮改为 4 列网格布局，避免按钮数量和文案变化后挤出安全区域。
+
+### 修复
+- 修复标题页底部按钮在近期改动后再次贴边/超出的问题。
+- 修复联机大厅截图工具仍调用旧入口、导致误截标题页或灰屏的问题；现在会进入真实大厅子页面后再截图。
+- 修复进行中截图脚本调用已移除的活动对局接口导致超时残留 Godot 进程的问题；现在脚本带自我超时并按当前“进行中只管理存档/中断”的设计截图。
+
+## 2026-08-13 联机大厅入口紧急修复
+
+### 修复
+- 修复主页点击“联机大厅”时，如果中断存档检查接口临时失败会停留在主页、无法进入创房界面的问题；现在检查失败会降级进入联机大厅，并保留状态提示。
+- 修复进入战斗棋盘时本方 HQ 光标初始化遇到异常 `owner_id` 值会触发 `Invalid call. Nonexistent 'int' constructor` 的崩溃；现在会安全转换地块与单位归属字段，异常值自动走后备落点。
+
+## 2026-08-12 UI 截图评审修复
+
+### 修复
+- 修复主菜单标题与封面 Logo 争抢视觉焦点的问题，让入口按钮区下移并收窄，避免遮挡封面主体。
+- 修复设置面板被棋盘相机拖偏、只露出半边的问题；设置弹窗保持在 HUD 层居中显示。
+- 修复剧情/教程/战斗结算截图中多个弹窗叠在一起的问题；现在截图脚本会分别截取单个弹窗状态。
+- 修复存档管理和主线存档在后端无响应时一直“加载中”的问题；超过约 3 秒会显示可重试的超时提示。
+- 修复地图编辑器工具面板被棋盘相机带走导致界面只剩棋盘的问题；工具面板改挂到独立 CanvasLayer，保持固定在屏幕右侧。
+- 修复地图编辑器 HUD 从 CanvasLayer 泄漏到主菜单的问题；现在只有进入地图编辑器时才显示编辑器工具层。
+- 修复地图编辑器左侧默认灰底显得像调试画面的问题；现在使用深绿战棋背景色统一观感。
+
+### 变更
+- 更新菜单、设置、剧情、存档、主线、编辑器截图脚本，作为后续 UI 回归检查基准。
+- 补充 UI 合同测试，覆盖弹窗互斥、设置面板 HUD 层级、加载超时兜底、主菜单视觉层级、编辑器工具面板层级。
+- 统一主按钮视觉：从大块金底黑字调整为深蓝底、金色描边、暖白文字，并移除设置/主线/暂停按钮上的彩色 emoji 装饰。
+
+## 2026-08-12 FE8 风格键盘操作支持
+
+### 新增
+- 棋盘和菜单新增 FE8 风格键盘键位:方向键或 WASD 移动,Z/Enter/Space 确认,X/Esc/Backspace 取消,Q/E 或 +/- 缩放。
+- `InputHints` 的键盘提示改为显示 `Z/Enter`、`X/Esc`、`E/+`、`Q/-`,玩家不用猜实际可用键位。
+
+### 变更
+- 键盘继续复用现有 `board_*` / `ui_*` action,不改变鼠标和手柄的原有操作链路。
+
+## 2026-08-10 异常状态图标移到棋子右下角
+
+- 当前异常状态共 5 种:`poison` 毒 `☠`,`paralyze` 麻痹 `⚡`,`blind` 致盲 `◌`,`slow` 减速 `❄`,`silence` 沉默 `🔇`;Godot `unit_node.gd` 与后端注册表保持同名映射。
+- `UnitNode` 不再绘制紫色异常状态蒙版,只把状态 glyph 放到右下角 30×16 小徽标,避免和士气星/阵营角标/角色脸重叠。
+- 多异常状态时右下角最多显示前两个 glyph,保证 48px 棋子仍然可读;`yuanying_board_sprite_screenshot` 预览样本加入沉默+毒双状态叠加。
+
+## 2026-08-10 建筑归属与占领中显示拆分
+
+- 核查后端占领链路:`ClaimSession` 到期前不改 `Tile.owner_id`,单位死亡/离开会取消占领,到期或二次 claim 才完成过户;既有 `test_claim.py` 覆盖该设计。
+- Godot `Board.rebuild_flags()` 现在把当前归属旗与 pending claim 徽标分开绘制:owner flag 只代表当前 `owner_id`,占领中另显示目标阵营色进度徽标与剩余/总回合数。
+- 修复中立建筑占领中无任何提示、敌方建筑只闪旧旗导致语义不清的问题。
+- 建筑归属旗从单片三角改为 AI 生成的像素风小旗 PNG;中立建筑也显示白旗,避免无主建筑和漏渲染建筑混淆。
+- 新增 `assets/ui/building_flags/flag_{neutral,red,blue,green,yellow}.png` 与源图集 `owner_flags_sheet_chromakey_source.png`;`Board` 改为通过 `TextureLoader` 加载 18px 贴图旗,并锚定在建筑图标左下角。
+- 新增 `tools/claim_badge_screenshot.tscn`,用于快速检查已有归属建筑与中立建筑的占领中徽标。
+
+## 2026-08-10 鸢影棋盘棋子 Q 版化
+
+- `assets/heroes/yuanying.png`: 从完整高精立绘缩放图替换为 768×768 透明 Q 版棋盘 sprite,48px 棋盘显示下保留银发、黑紫斗篷与镰刀轮廓。
+- 同步 Web 与 Godot 两端 `yuanying.png`,保留 `portrait_yuanying.png` 作为详情/对话大立绘,`crest_yuanying.png` 作为小头像资源。
+- 后端 `Yuanying` 资源注释清理为当前事实,并新增回归测试防止旧的完整立绘裁切图再次回流。
+- 新增 `tools/yuanying_board_sprite_screenshot.tscn`,用于对比普通术士、鸢影正常态、鸢影行动/状态叠层的 48px 棋盘显示。
+
+## 2026-08-10 手柄棋盘光标初始位置改为本方 HQ
+
+- 根因:光标状态字段本身正常(`InputState.cursor_cell` / `board_focused` 都有 setter + signal),但 `_find_cursor_initial_cell()` 优先选择本方第一个单位。单位排序随地图/后端快照变化,导致手柄进入棋盘时落点不稳定。
+- 修复:新增 `_find_local_hq_cell()`,优先从 `GameState.tiles` 查找 `owner_id == local_player_id` 的 HQ(`terrain == "castle"` 或 `subtype == "castle_throne"`),并让初始光标按 `本方 HQ -> 本方单位 -> 地图中心` 回退。
+- 验证:新增 `test_godot_board_cursor_initializes_on_local_player_hq_before_units`,先红后绿。
+
+## 2026-08-10 标题页按钮布局调整
+
+- `assets/ui/title_cover_v1_undead_king.png` ~ `title_cover_v6_bard_market.png`：接入用户从旧 ChatGPT 会话下载的 6 张封面图；默认封面切到 `title_cover_v5_party_dawn.png`。
+- `scripts/main.gd`：标题页封面候选列表从 5 张扩展到 6 张；图片加载器先走磁盘解码，避免新导入 PNG 在开发期预览时先触发 `No loader found` 噪音。
+- `tools/smoke_test.gd` / `tools/title_cover_test.gd`：同步封面候选数为 6，覆盖开发期下拉框全部切换。
+- `scenes/main.tscn`：主菜单标题与操作区从屏幕中央移到右侧标题安全区，左侧封面主体不再被两列按钮遮挡。
+- 主入口改为竖向层级：`主线存档` 作为最高优先级按钮，`联机大厅` 与房间号加入位于其下；存档、进行中、玩法、地图编辑、设置、退出收束为右下辅助行。
+- `tools/title_cover_test.gd`：新增布局断言，覆盖右侧锚点、紧凑宽度、主按钮竖排、辅助按钮横排和主按钮高度。
+- 旧 ChatGPT 会话图片未重新生成；直接使用项目根目录中用户提供的原图复制为 Godot 资产。
+- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 23 passed / 0 failed。`tools/menu_screenshot.tscn` 在 headless dummy 渲染下无法读取 viewport 纹理，未产出截图。
+
+## 2026-08-10 手柄 ActionBubble 焦点修复
+
+- 根因:棋盘光标选中单位后会显示 `ActionBubble`,但 `_enter_board_focus()` 释放了所有 UI 焦点,导致手柄玩家能移动棋盘光标,却不能稳定选择"移动/攻击/待命"等行动按钮。
+- 修复:`_show_action_bubble()` 打开时临时退出棋盘焦点并把焦点交给第一个可用行动按钮;`_hide_action_bubble()` 关闭后在游戏视图内恢复棋盘焦点,保证"选单位 -> 选命令 -> 选格子/目标"手柄链路不断。
+- `project.godot`: `pause` action 新增手柄 Start 键(`button_index=6`)绑定,避免只能键盘 Esc 暂停。
+- 验证:`test_godot_gamepad_action_bubble_temporarily_owns_focus` / `test_godot_gamepad_pause_has_start_button_binding` 先红后绿;`pytest game/tests/test_godot_client_contract.py -q` 38 passed;Godot headless import 与主场景短启动通过。
+
+## 2026-08-10 标题页封面接入
+
+- `scenes/main.tscn`：主菜单 `Menu` 下新增全屏 `TitleCover`，使用 `TextureRect.STRETCH_KEEP_ASPECT_COVERED` 铺满并裁切；新增半透明 `TitleCoverScrim` 保持标题与按钮可读；封面层 `mouse_filter=IGNORE`，不拦截既有标题交互。
+- `scripts/main.gd`：接入 5 张 `title_cover_*` 候选图，默认封面可通过导出变量、`ProjectSettings["battleblitz/title_cover/default_path"]` 或环境变量 `BB_TITLE_COVER` 配置；`BB_TITLE_COVER_DEV=1` 或 `--title-cover-dev` 时显示开发期预览下拉框。
+- `scripts/main.gd`：封面加载器兼容内容为 JPEG 但扩展名为 `.png` 的开发期图片，避免预览切换时因为 `.import valid=false` 失效。
+- `tools/title_cover_test.tscn` / `.gd`：新增定向 headless 验证，覆盖默认加载、裁切模式、鼠标穿透、5 张预览候选与切换。
+- 验证：`Godot_v4.7-stable_win64_console.exe --headless --path godot-client --import --quit` 通过；`res://tools/title_cover_test.tscn` 13 passed / 0 failed；主场景 `BB_AUTO_QUIT=1` headless 短启动通过。完整 `smoke_test.tscn` 本轮两次运行均超过 120s/180s 超时未产出结果，需另行拆分慢用例。
+
+## 2026-08-09 键盘 + 手柄两个盲区修复(本轮)
+
+上手柄接入后发现两处"有声无影"的断点,本次补上。
+
+### 修复 1:棋盘光标永不激活 → 方向键/摇杆无法控制单位
+- 根因:`_show_view("game")` 里 `call_deferred("_enter_board_focus")` 执行时棋盘还没
+  加载地图(WS 快照未到,`board.map_size == 0`),`_enter_board_focus` 提前 return 且
+  无人重试 → `InputState.board_focused` 永远 false → 光标不画、`board._handle_cursor_input`
+  首行 return,方向键/摇杆全无效。
+- 修复:`main.gd` 连接 `board.map_loaded` 信号 → `_on_board_map_loaded()`:当前是 game
+  view 且尚未 board_focused 时补调 `_enter_board_focus()`。覆盖新建/重连/续档所有 load_map
+  路径;已在焦点中则不动(不打断进行中的移动/攻击模式)。
+
+### 修复 2:大厅(建房/加入/房内)控件无法用手柄操作
+- 根因:`main._focus_default_for_view("lobby")` 是空 `pass`,lobby 各子视图切换
+  (`_show_lobby_choose/_create_view/_join_view/_in_room`)从不 grab focus。Godot 手柄导航
+  依赖某个 Control 先有焦点,否则十字键/确认键全无响应(主菜单能用正是因为抢了焦点)。
+- 修复:`lobby_controller.gd` 新增 `_grab_focus_for_mode()`,按 `_lobby_mode` 抢默认焦点
+  (choose→建房卡 / create→开启游戏 / join→加入 / in_room→开局),无可用按钮时兜底
+  `UIPanelFocus.grab_first_focusable`。
+
+### 后端连带:成长图表曲线下降波动(工具修复)
+- `tools/growth_charts/dataset.py` 对 RolledGrowthPolicy 改为增量滚动 + 每主题固定种子
+  (镜像 `app.modes.spawn_generic_stats`),曲线单调不减且两次运行 PNG 完全一致。旧实现每级
+  独立重掷未播种随机数,L6 可能比 L5 低 → 图表锯齿下降。已更新 `test_growth_chart_policies.py`
+  (含单调性回归)并给 full-roster 地图补上 `bard`。
+
+### 后端连带:上一轮重构遗留的 ~23 条失败测试清理
+成长/MOV-MP/组件化重构让一批旧测试失配,本次按新契约全部对齐:
+- `test_modes.py` — spawn 断言从旧 autolevel 公式改为 rolled 播种契约(fix mov 静态断言)。
+- `test_godot_client_contract.py` — 大厅函数已搬到 lobby_controller.gd,契约测试跟着改读
+  LOBBY_GD;hero portrait 断言对齐"检视卡内嵌立绘"现行设计。
+- `test_godot_ui_design_tokens.py` — battle/mainline 主题加入 Color 白名单。
+- `test_commanders_integration.py` — passive 倍率断言改为反推预烘焙值(修 hero 单位 flaky)。
+- `test_hero_promotion.py` / `test_mainline_hero_persistence.py` — yun 纯法师重做后 mp=4。
+- `test_mainline_event_triggers.py` + `test_mainline_full_e2e.py` — **真 bug 修复**:
+  `event_trigger._INSERT` 原始 SQL 漏了 NOT NULL 的 `growth_seed` / `status_effects`,
+  wave 触发器 IntegrityError 崩掉 → 补齐两列。
+- `test_ws_gateway.py` — Windows 上 sync TestClient + aiosqlite worker-thread leak 挂起
+  (文件头已点名该限制),skip-on-win32,非 Windows CI 照常跑。
+
+## 2026-08-09 键盘 + 手柄"返回上一级"补全(本轮 commit)
+
+排查后发现 5 个 modal 缺键盘/手柄的"返回"快捷键,Connecting 面板缺"放弃"按钮。本次只补缺口,**不重构 view 栈**。
+
+### 改动文件
+- `scripts/main.gd`
+  - `_unhandled_input` 顶部新增 modal-LIFO 分流:`ui_cancel` 触发时按优先级关最上层 modal。
+  - `_try_close_topmost_modal()` 新方法:LIFO 顺序 Confirm → BattleResult → AttackConfirm → Recruit → WarReport → Tutorial → Settings → Pause → Connecting(放弃重连),命中即返回 true。
+  - `_on_connecting_abort_pressed()` 新方法:ws_close + 切回 menu + 重置 _game_id/_player_id/_resume_*。
+  - `@onready var connecting_abort_btn: Button` + `_ready` 里 connect 按钮事件。
+  - `_focus_default_for_view("connecting")` 优先 focus 落 AbortButton(玩家进入该面板大概率想退出),fallback 到 ReconnectButton。
+- `scenes/main.tscn` — `Connecting/ConnectingInner` 下新增 `AbortButton`(文字"放弃,返回主菜单")。
+
+### 语义说明(务必读一下)
+
+- **Esc / 手柄 A** = 全局"返回上一级 / 取消"键。
+- 优先级:**最上层可见 modal 优先**(Confirm > BattleResult > AttackConfirm > Recruit > WarReport > Tutorial > Settings > Pause > Connecting)。
+- 命中 modal → 关该 modal,后续逻辑(board.cancel / pause toggle)不再处理。
+- 没 modal 可见时:
+  - 棋盘光标模式 → `board.cancel_cursor`(取消行动模式 / 清高亮),这跟上次 commit 行为一致。
+  - 非棋盘模式 → 走 `pause` action(暂停 toggle),老行为不变。
+
+### ActionBubble 不走 ui_cancel
+
+按 Esc 时,如果 ActionBubble 可见,ActionBubble 的 CancelBtn 不直接接 ui_cancel(避免和棋盘模式取消重复),仍由 `board._handle_cursor_input` 接管 — 它已经调 `_cursor_cancel_action` → `_cancel_action_mode + _hide_action_bubble`,等同于点 CancelBtn。
+
+### Connecting 面板新行为
+
+- 之前:重连失败时只能 Ctrl+W 强退。
+- 现在:
+  - 鼠标点 `放弃,返回主菜单` 按钮 → disconnect WS,回主菜单,清 _game_id/_player_id/_resume_*,避免下次进游戏误从中断存档续上。
+  - 键盘按 Esc / 手柄 A → 走 `_try_close_topmost_modal` 命中 Abort 路径,等价于点按钮。
+  - 面板打开时默认 focus 落 AbortButton(而不是 ReconnectButton),键盘玩家 Tab 一次就到了 ReconnectButton(更安全的"重试"留二选)。
+
+### 测试
+
+- `Godot --headless --quit-after 90 --path .` — 编译过、跑 1.5s 无 ERROR。
+- `tools/button_smoke_test.tscn` — 116 pass / 0 fail(比上次 +2,新增 `connecting_abort_btn` 自动发现并 emit_signal 通过)。
+- 后端 `game/tests/` 这次没动 backend,不受影响。
+
+### 已知没动
+
+- 顶层 view 之间没引入返回栈(menu → lobby → editor 等是单跳 back 按钮,按 Esc 在 GameView 不返回主菜单 — 得先开暂停 → 点退出战斗)。
+- DialogManager(NPC 对话)的"继续"语义不是返回,没动。
+
+## 2026-08-09 键盘 + 手柄操作模式接入
+
+新增 Phase 1(UI 导航) + Phase 2(棋盘光标)。鼠标方案完全保留,新功能只是补充。
+
+### 改动文件
+- `project.godot` — `input` 段补全 5 个 ui_* 家族(`ui_accept` / `ui_cancel` / `ui_up/down/left/right`)和 10 个 board_* action;新增 `InputHints` autoload。
+- `scripts/autoload/input_hints.gd`(新)— 平台感知的按键提示文字(KB / Xbox / PS / Switch),通过 `UserSettings` 的 `settings.v1.controller_style` 覆盖(`auto` / `keyboard` / `xbox` / `playstation` / `switch`)。
+- `scripts/autoload/input_state.gd` — 加 `cursor_cell: Vector2i` + `board_focused: bool` + 两个对应 signal。
+- `scripts/board/highlights.gd` — 新增 `Mode.CURSOR`(4 角带小三角 + 4px 厚白边的"虚拟光标"视觉,跟普通 hover 区分);`show_cursor_at(tile, color)` API 允许外部控制脉动 alpha。
+- `scripts/board/board.gd`
+  - `_process` 增加光标脉动 + 持续按方向键/摇杆 repeat timer。
+  - `_handle_cursor_input` 路由 `board_cursor_*` / `board_zoom_*` / `board_confirm` / `board_cancel`。
+  - `_handle_camera_input` 顶部:鼠标 hover 同步 `InputState.cursor_cell`(鼠标/手柄玩家看到一致的"当前格")。
+  - `_zoom_at_viewport_center` — 手柄缩放改用屏幕中心为锚点(手柄玩家没鼠标)。
+  - `_confirm_cursor` / `_cancel_cursor` — 复用现有 `emit_unit_clicked` / `emit_tile_clicked` / `_cursor_cancel_action` 路径,不绕过 main.gd 的状态机。
+- `scripts/main.gd`
+  - 7 个 panel(`pause_panel` / `settings_panel` / `recruit_panel` / `war_report_panel` / `attack_confirm_panel` / `confirm_dialog` / `battle_result_panel`)打开时调 `UIPanelFocus.grab_on_show` 抢焦点。
+  - `_show_view` 切换时同步 `InputState.board_focused`:`game` 进 board_focus + 初始化光标(我方第一单位 > 地图中心);其它 view 退 board_focus + grab 该 view 主按钮。
+  - `pause` action 在 board_focused 时让给 `board_cancel`(棋盘光标模式 Esc = 取消,不是暂停)。
+  - `_update_path_dots_at_cell` + `_cursor_cancel_action` 两个薄包装给 board 调。
+- `scripts/ui/_components/ui_panel_focus.gd`(新)— 纯静态工具,帮"打开 panel → grab focus 到默认按钮"。
+
+### 玩家操作模式
+
+**键盘(KB)**
+| 场景 | 键位 |
+| --- | --- |
+| 菜单/面板 焦点跳转 | Tab / Shift+Tab |
+| 菜单/面板 确认 | Enter / Space |
+| 菜单/面板 取消 | Esc |
+| 棋盘光标移动 | ↑ ↓ ← → / WASD |
+| 棋盘光标确认 | Enter |
+| 棋盘光标取消 | Esc / Backspace |
+| 棋盘缩放 | `+` / `-`(或 `=` / `_`) |
+| 暂停 | Esc(在 game view 顶层) |
+
+**手柄(Switch 风格反转,默认)**
+
+| 动作 | Switch | Xbox 等价 | PS 等价 |
+| --- | --- | --- | --- |
+| 确认 | B | A | × |
+| 取消 | A | B | ○ |
+| 光标移动 | 左摇杆 / D-pad | 同上 | 同上 |
+| 缩放 | L / R | LB / RB | L1 / R1 |
+| 暂停 | + | Start | Options |
+| 结束回合 | X | Y | △ |
+
+手柄按键文字会按 `UserSettings.controller_style` 自动调整。`auto` 模式下,只要 `Input.get_connected_joypads()` 看到手柄就显示 Switch 反转;否则显示键盘。
+
+### 鼠标兼容性
+
+- 完全保留。鼠标点击 / 滚轮缩放 / 左键拖拽 pan 行为不变。
+- 鼠标 hover 时 `InputState.cursor_cell` 跟着鼠标走,所以鼠标/手柄玩家在棋盘上看到的"当前格"始终一致。
+- 光标视觉(白色 outline + 4 角三角)只在 `InputState.board_focused = true` 时显示,纯鼠标玩家在主菜单看不到任何多余元素。
+
+### 测试
+
+- `Godot --headless --quit-after 120 --path .` — 编译过、跑 2 秒无 ERROR。
+- `tools/button_smoke_test.tscn` — 114 pass / 0 fail,所有 button 引用 + `pressed` 信号没被新加的 autoload / panel focus 改动打乱。
+- 后端 `game/tests/test_*.py` 这次没动 backend,不受影响(计划原则:这次只动 godot 前端)。
+
+### 已知限制 / 后续增量
+
+- 光标在棋盘边缘不自动滚屏(没用 scroll-at-edge 联动 camera)。需要玩家用 `+` / `-` 缩放,或手柄 L/R 调视野。
+- 没接 CO Power / 技能快捷键(键位待定)。
+- 主菜单 → 切到 game view 时,光标会从第一个我方单位起步;没找到我方单位则放地图中心。
+- 多次"取消"会把光标重置回我方第一单位,避免取消后光标停在空地看起来像死锁。
+
+## 2026-08-09 英雄美术资源登记(L4 review 补登记)
+
+所有英雄美术资源均为 8-bit PNG,统一存放在 `godot-client/assets/heroes/`。
+
+| Hero    | 单位立绘           | 大头贴 portrait          | 队徽 crest    | 备注 |
+|---------|--------------------|--------------------------|----------------|------|
+| anna    | `anna.png` 1254×1254 RGBA | `portrait_anna.png` 800×1400 RGBA | `crest_anna.png` 120×120 RGBA | 初始版 |
+| anna_boss | (复用 anna)        | `portrait_anna_boss.png` 774×1355 **RGB** | (复用 anna)    | RGB 无 alpha,变体 BOSS 头像 |
+| yun     | `yun.png` 717×781 RGBA    | `portrait_yun.png` 800×1400 RGBA  | `crest_yun.png` 120×120 RGBA  | |
+| youko   | `youko.png` 1254×1254 RGBA | `portrait_youko.png` 800×1400 RGBA | `crest_youko.png` 120×120 RGBA | |
+| yuanying | `yuanying.png` 768×768 RGBA | `portrait_yuanying.png` 948×1659 RGBA | `crest_yuanying.png` 256×256 RGBA | 鸢影;队徽比其它大一档(2× 边长) |
+
+License / 来源:
+- 当前批次均为项目内原创 / 委托绘制的占位与正式稿,版权属项目所有。
+- 后续若引入外部素材(Free-license 库 / 委托 / 自制),需在每张资源同目录放
+  `LICENSE.txt` / `CREDITS.md`,在 CHANGELOG 本节登记出处,license 类别
+  (CC0 / CC-BY / MIT / 商业 等)。
+
+格式约定(后续新增资源请遵守):
+- 单位立绘 (`<hero>.png`):正方形 1024+ 边长,RGBA,带透明背景。
+- 大头贴 (`portrait_<hero>.png`):近似 4:5(800×1400 或相近),RGBA。
+- 队徽 (`crest_<hero>.png`):120×120,RGBA,适配小队栏 1× 显示。
+- 不使用 JPG(WebP 在 Godot 4 已稳定,RGBA 不适用);PSD / AI 源文件不入库。
+
+## 2026-08-02 资源收尾
+
+- 鸢影美术资源二次收尾:
+  - 同步更新 Web 与 Godot 两端的 `yuanying.png` / `portrait_yuanying.png` / `crest_yuanying.png`。
+  - 已用 `game/tests/test_godot_unit_portrait_paths.py` 锁定资源路径与 Godot sprite registry，避免英雄图像资源缺失回流。
+
+## 2026-08-02
+
+- 鸢影正式可用化:
+  - 补齐 `yuanying.png` / `crest_yuanying.png` / `portrait_yuanying.png` 在 Godot 与 Web 两端的英雄资源(Godot `.import` 旁文件由编辑器自动生成,被 `.gitignore` 排除,不入库)。
+  - `unit_node.gd` hero sprite registry 加入 `yuanying`,鸢影英雄单位现在会在棋盘上使用专属立绘资源。
+  - 大厅默认指挥官池 fallback 加入 `yuanying`,座位卡能力文案显示"5x5 沉默领域，术士压制"。
+  - 新增集成测试锁定自由模式选择鸢影后:玩家 `commander_id=yuanying`,CO 阈值 16,HQ 生成 `hero_id=yuanying` 的 warlock,并继承 `poison_burst`。
+
+- Agent 回归修复:
+  - `_ask_llm_with_retry` 批量决策返回 list 的测试契约同步;单决策场景取首个 `ActionPlan`。
+  - `Reaction` 文案重新按测试契约截断到 40 字。
+  - `AgentAction.action_id` 禁止空格,防止 LLM 把合法动作 ID 改写成不可执行文本。
+  - 未知 personality fallback 在 system prompt 中显式标注"均衡型人格"。
+
+- 通用 status effect 框架(P+):
+  - 后端 `game/app/status/` 新包:`effects.py` 注册表 + `engine.py` 钩子函数;`Unit.status_effects: list[dict]` JSON 字段,`UnitOut.status_effects` 公开字段;5 个 effect 注册(poison 毒 / paralyze 麻痹 / blind 致盲 / slow 减速 / silence 沉默,后者从 `silence_until_turn` 字段迁移)。
+  - 钩子函数:`tick_effects_at_turn_start`(poison 扣 HP + 倒计时) / `should_skip_action`(paralyze 概率 skip) / `modify_hit_chance`(blind) / `modify_mov`(slow) / `should_block_attack`(silence) / `is_silenced` / `get_status_summary`。
+  - `apply_silence_aura`(鸢影沉默领域)改用 `add_effect(unit, "silence", ...)` 写新字段,旧 `silence_until_turn` 字段保留作 fallback。
+  - godot 端 `unit_node.gd` 把原单一 `silence_overlay`/`silence_label` 替换为通用 status overlay + glyph 行(`☠⚡👁❄🔇`);`core/types.gd:UNIT_KEYS` 加 `status_effects`。
+  - 详细设计文档:`game/app/status/README.md`。27 个 pytest 全过(`game/tests/test_status_effects.py`),完整套件 140/140 全过。
+
+- Status effect 实时接入(P+ 闭环):
+  - `commanders.effects.on_player_turn_start` 集中钩子:每回合对玩家所有 unit 顺序执行 `should_skip_action`(paralyze → has_acted=True + paralyzed_until_turn) → `_refresh_mov_debuff`(slow 用 _base_mov 快照 + modify_mov 改 mov,过期自动恢复) → `tick_effects_at_turn_start`(poison 扣 HP / 倒计时 / 过期清理)。
+  - `game_logic.attack_with_double_strike` 加 `_maybe_miss` wrap:每 hit 独立判定 `modify_hit_chance`,miss 时 `damage=0`;Double-Strike 两次 hit 各自掷骰。
+  - 详细钩子调用顺序在 `commanders/effects.py:on_player_turn_start` 注释里(paralyze 在 tick 前判断,slow mov 在 tick 前生效)。
+  - 13 个端到端测试覆盖:`test_status_effects_live.py`(poison/paralyze/blind/slow 各类型 + 同挂组合 + Double-Strike + blind 独立判定)。完整套件 153/153 全过。
+
+- 沉默领域 godot 端 UI(鸢影 CO power 闭环):
+  - `NetworkClient.action_co_power` 接可选 `center: Vector2i = (-1, -1)`,center 有效时附带 `body.center` 给后端。
+  - `main.gd` 检测 `commander_id == "yuanying"` 时进入"选中心"模式(`_silence_pick_center_for_pid` 状态机),`_on_board_tile_clicked` 入口优先处理沉默选 center;右键 / ESC 取消。
+  - `board.gd:highlight_silence_pick_mode(on)` 切换中央紫色提示气泡 + hover 时 `_refresh_silence_pick_outline` 实时绘制 5×5 紫色 outline(中心 ±2,地图边界裁剪);`main.gd:_unhandled_input` mouse_motion 转发 hover 给 board。
+  - `highlights.gd` `Mode` 枚举加 `SILENCE_PICK`,紫色 `Color(0.75, 0.55, 1.0, 0.50)`。
+
+- 鸢影 yuanying 基础注册:详见 commit `a672511` + `feat(heroes): 注册鸢影 yuanying - 沉默领域 CO, warlock 基础`。资产 `portrait_yuanying.png` 已就位,`sprite_path` / `crest_path` 仍待美术补。
 ## 2026-08-20
 
 - 新增 UI 验收评分卡 `docs/validation/godot-ui-scorecard.md`：把 UI 改动完成条件固定为可重复的自动化门槛

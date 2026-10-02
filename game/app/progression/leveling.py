@@ -11,8 +11,15 @@ Design principles:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-from typing import Final, Protocol
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Final, Mapping, Optional, Protocol
+
+if TYPE_CHECKING:
+    # Avoid a runtime import cycle: policies imports nothing from
+    # leveling, but leveling calls into policies at runtime via
+    # apply_promotion_bonus().  The TYPE_CHECKING block keeps the
+    # type hint available to IDEs / mypy without forcing a load.
+    from app.progression.policies import promotion_bonus_for  # noqa: F401
 
 
 # ============================================================
@@ -105,6 +112,23 @@ class LevelUpResult:
     levels_gained: int
     new_level: int
     talent_points_awarded: int
+    # Per-stat delta applied by RolledGrowthPolicy during this
+    # award_exp() call.  Reserved by spec §14 ("award_exp() returns
+    # the rolled deltas in LevelUpResult.stat_delta"), but NOT
+    # populated by :func:`award_exp` in this commit — see "Deferred"
+    # note below.  Stays in the dataclass for forward-compat: when
+    # the spec lands the runtime-roll behavior, callers can start
+    # reading it without an API change.
+    #
+    # DEFERRED: this would require ``award_exp`` to know the unit's
+    # class_profile (for ``class_growth_rates``) and hero_profile
+    # (for ``personal_growth_modifier``); the current ``UnitLike``
+    # Protocol doesn't carry them.  Plumbing them through is a
+    # separate change.  Until then, runtime level-ups DO NOT
+    # re-roll stats; stat growth happens exactly once, at spawn,
+    # via :func:`app.modes.spawn_generic_stats` (L1..L-N rolled in
+    # one shot, seeded by ``unit.growth_seed``).
+    stat_delta: Mapping[str, int] = field(default_factory=dict)
 
 
 def award_exp(unit: UnitLike, amount: int) -> LevelUpResult:
@@ -114,6 +138,24 @@ def award_exp(unit: UnitLike, amount: int) -> LevelUpResult:
 
     If the unit is already at the tier's level cap, the EXP is **discarded**
     (we don't bank it across promotions, to keep matchmaking balanced).
+
+    Note on RolledGrowthPolicy integration:
+        This function is intentionally a pure EXP → level transition.
+        It does NOT re-roll per-stat growth on every level-up.  Per-stat
+        growth is computed exactly once, at spawn, by
+        :func:`app.modes.spawn_generic_stats` (which calls
+        :class:`app.progression.policies.RolledGrowthPolicy` once for
+        each (L2..L_start_level) and stores the resolved values on the
+        ``Unit`` row).  Runtime level-ups only bump ``unit.level`` and
+        ``unit.talent_points``; the per-stat fields on the row are
+        already pre-grown for that level.
+
+        If a future spec wants level-up-time re-roll, plumb the
+        unit's ``class_profile`` + ``hero_profile`` through
+        ``UnitLike`` and call :func:`RolledGrowthPolicy.roll_level_up`
+        once per level gained, accumulating the deltas into
+        ``LevelUpResult.stat_delta``.  See the DEFERRED note on
+        ``stat_delta`` above.
     """
     if amount < 0:
         raise ValueError("amount must be non-negative")
@@ -169,6 +211,42 @@ def promote(unit: UnitLike) -> int:
     return unit.tier
 
 
+def apply_promotion_bonus(
+    unit,
+    unit_type: str,
+) -> Mapping[str, int]:
+    """Apply the flat promotion bonus for a tier-1 class to a unit.
+
+    Reads ``unit_type`` (the unit's class id BEFORE the tier bump —
+    pass the *old* type id here), looks up :func:`promotion_bonus_for`,
+    and adds each non-zero entry to the matching ``unit`` attribute
+    (e.g. ``unit.hp += bonus["hp"]``).
+
+    Returns the dict that was applied, so callers can echo it back
+    in API responses / log lines.  Mutates the unit in place.
+
+    Note: this assumes the unit has a ``unit_type`` attribute.  In
+    practice the service layer reads ``unit.unit_type`` BEFORE calling
+    ``promote(unit)`` so the old class id is available.
+    """
+    # Local import: keeps the import-time graph clean (policies does
+    # NOT import leveling; leveling → policies is a one-way edge).
+    from app.progression.policies import promotion_bonus_for
+
+    bonus = promotion_bonus_for(unit_type)
+    if not any(bonus.values()):
+        return bonus
+    for stat, delta in bonus.items():
+        if delta == 0:
+            continue
+        current = getattr(unit, stat, None)
+        if current is None:
+            # stat not on this unit (e.g. legacy column absent); skip
+            continue
+        setattr(unit, stat, int(current) + int(delta))
+    return bonus
+
+
 def stat_at_level(base: int, level: int, curve: str = "linear") -> int:
     """Compute a base stat at a given level using the named growth curve."""
     if curve not in GROWTH_CURVES:
@@ -190,5 +268,6 @@ __all__ = [
     "can_promote",
     "award_exp",
     "promote",
+    "apply_promotion_bonus",
     "stat_at_level",
 ]

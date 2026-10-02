@@ -101,6 +101,9 @@ class PromoteResult(BaseModel):
     old_tier: int
     new_tier: int
     new_level_cap: int
+    # Per-stat promotion bonus applied (see spec §7.3).  Empty when
+    # the unit's class has no promotion-bonus row (tier-2 or unconfigured).
+    promotion_bonus: dict = Field(default_factory=dict)
 
 
 # ============================================================

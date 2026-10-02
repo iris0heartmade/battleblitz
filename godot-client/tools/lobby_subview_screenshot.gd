@@ -8,14 +8,22 @@ const _STEP_DELAY := 0.6
 func _ready() -> void:
 	for i in 3:
 		await RenderingServer.frame_post_draw
-	var main: Node = get_tree().current_scene
+	var scene: PackedScene = load("res://scenes/main.tscn")
+	var main: Node = scene.instantiate()
+	add_child(main)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	if main == null:
-		printerr("no current scene")
+		printerr("main scene unavailable")
+		get_tree().quit(1); return
+	var lobby: Node = main.get_node_or_null("Lobby")
+	if lobby == null:
+		printerr("Lobby node unavailable")
 		get_tree().quit(1); return
 
 	# === Frame 1: lobby choose 层 ===
-	if main.has_method("_on_lobby_pressed"):
-		main.call("_on_lobby_pressed")
+	if lobby.has_method("_enter_lobby_view"):
+		lobby.call("_enter_lobby_view")
 		print("[lobby] frame 1: _on_lobby_pressed")
 	await get_tree().create_timer(_STEP_DELAY).timeout
 	for i in 3:
@@ -23,8 +31,8 @@ func _ready() -> void:
 	_save(main, "lobby_subview_1_choose.png")
 
 	# === Frame 2: create view ===
-	if main.has_method("_on_create_card_pressed"):
-		main.call("_on_create_card_pressed")
+	if lobby.has_method("_on_create_card_pressed"):
+		lobby.call("_on_create_card_pressed")
 		print("[lobby] frame 2: _on_create_card_pressed")
 	await get_tree().create_timer(_STEP_DELAY).timeout
 	for i in 3:
@@ -32,8 +40,8 @@ func _ready() -> void:
 	_save(main, "lobby_subview_2_create.png")
 
 	# === Frame 3: join view ===
-	if main.has_method("_on_join_card_pressed"):
-		main.call("_on_join_card_pressed")
+	if lobby.has_method("_on_join_card_pressed"):
+		lobby.call("_on_join_card_pressed")
 		print("[lobby] frame 3: _on_join_card_pressed")
 	await get_tree().create_timer(_STEP_DELAY).timeout
 	for i in 3:
@@ -42,13 +50,13 @@ func _ready() -> void:
 
 	# === Frame 4: in_room 视图(房主控制台)— 走真实创建流程
 	# 先回到 choose → 创建卡片 → 触发 create_game
-	if main.has_method("_show_lobby_choose"):
-		main.call("_show_lobby_choose")
+	if lobby.has_method("_show_lobby_choose"):
+		lobby.call("_show_lobby_choose")
 		print("[lobby] frame 4a: back to choose")
 	await get_tree().create_timer(0.3).timeout
 	# 点 CreateCardBtn 触发创建
-	if main.has_method("_on_create_card_pressed"):
-		main.call("_on_create_card_pressed")
+	if lobby.has_method("_on_create_card_pressed"):
+		lobby.call("_on_create_card_pressed")
 		print("[lobby] frame 4b: click create card")
 	await get_tree().create_timer(0.4).timeout
 	# 点 CreateRoomBtn 提交创建表单

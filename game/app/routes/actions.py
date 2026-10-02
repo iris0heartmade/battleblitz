@@ -511,6 +511,14 @@ async def attack(
     if target.player_id == player.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
 
+    # CO power·沉默领域 (鸢影 P+):攻击者被沉默时,无法发动攻击。
+    from app.commanders.effects import is_unit_silenced
+    if is_unit_silenced(attacker, current_turn=game.turn_number):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "attacker is silenced (status_effects contains silence)",
+        )
+
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
@@ -566,6 +574,7 @@ async def attack(
         not is_kill
         and not has_immunity
         and _t_can
+        and not is_unit_silenced(target, current_turn=game.turn_number)
     ):
         # Defender's terrain bonus is the tile the defender is on
         counter_tile = (
@@ -726,6 +735,7 @@ async def use_skill(
         user=unit, target=target,
         ally_units=[u for u in all_units if u.player_id == player.id and u.hp > 0],
         enemy_units=[u for u in all_units if u.player_id != player.id and u.hp > 0],
+        game_turn_number=game.turn_number,
     )
 
     if not sk.can_use(ctx):
@@ -1048,7 +1058,7 @@ async def recruit_unit(
         # Fire-Emblem summon timing: new unit cannot act this turn —
         # mov gets the full pool so next turn it can move, but mp and
         # has_acted/has_moved are 0/True so it can't act or move now.
-        mov=profile.mp_pool, mp=0,
+        mov=profile.base_mov, mp=0,
         morale=0,
         x=tile.x, y=tile.y,
         has_acted=True,    # can't act this turn

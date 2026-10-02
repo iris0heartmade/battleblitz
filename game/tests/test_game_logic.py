@@ -117,6 +117,21 @@ class TestCalculateDamage:
         # Higher effective defense → less damage
         assert r_castle.damage < r_plain.damage
 
+    def test_terrain_tactician_adds_three_defense_on_defensive_terrain(self):
+        atk = _stub_unit(atk=30)
+        df = _stub_unit(hp=999, def_=10, skills=["terrain_tactician"])
+
+        r_plain = calculate_damage(
+            atk, df, tile_def_bonus=0, crit=False, rng=random.Random(2),
+        )
+        r_forest = calculate_damage(
+            atk, df, tile_def_bonus=2, crit=False, rng=random.Random(2),
+        )
+
+        assert r_plain.defense_total == 10
+        assert r_forest.defense_total == 15
+        assert r_forest.damage < r_plain.damage
+
     def test_crit_multiplies_damage(self):
         atk = _stub_unit(atk=30)
         df = _stub_unit(hp=999, def_=10)

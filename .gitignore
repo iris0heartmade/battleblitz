@@ -99,3 +99,19 @@ docs/参考/fe_image
 
 # ===== Local worktrees =====
 .worktrees/
+
+# ===== Growth-redesign dev scratch =====
+# One-shot scripts used during the 2026-08-09 growth-redesign implementation.
+# Kept locally for reference; not part of the codebase. Delete once their
+# data has been re-applied to the registry (already done in the matching
+# commit on feat/commander-sound-polish).
+_older_tmp
+_tmp_apply_growth.py
+_tmp_apply_hero_growth.py
+
+# ===== Growth chart review artifacts =====
+# PNG renders produced by `python -m tools.growth_charts --policy=...`
+# for visual review of the per-class / per-hero growth curves. The chart
+# tool is re-runnable; PNGs aren't tracked.
+tools/growth_charts_v1_rolled/
+

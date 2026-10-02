@@ -5,6 +5,8 @@ class_name Board
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const UNIT_NODE_SCRIPT := preload("res://scripts/board/unit_node.gd")
+const TEXTURE_LOADER := preload("res://scripts/core/texture_loader.gd")
+const MenuTheme := preload("res://scripts/ui/menu_theme.gd")
 
 # M4.11:FLIP 动画 — unit 位置变化时从旧坐标平滑插值到新坐标
 const _FLIP_DURATION := 0.32
@@ -25,15 +27,15 @@ var _unit_nodes_by_id: Dictionary = {}
 @onready var effects: Node2D = $EffectsLayer
 @onready var board_camera: Camera2D = $BoardCamera
 
-# M4.16+:三角旗 polygon 顶点(本地 cell 坐标系 48px tile)。
-# 锚定在 tile 左下角外侧,顶点朝右(向右飘)。
-#   ( -8,  8)  # 旗杆底(贴在 tile 左下角外侧)
-#   ( -8, -4)  # 旗杆顶
-#   (  0,  2)  # 旗尖(向右)
-# PackedVector2Array 不能作 const,放成 var。
-static var _FLAG_POINTS: PackedVector2Array = PackedVector2Array([
-	Vector2(-8, 8), Vector2(-8, -4), Vector2(0, 2),
-])
+# M4.16+:建筑归属旗锚定在 tile 左下角附近。
+# 有主建筑用玩家色贴图;中立建筑用白旗贴图。
+const _OWNER_FLAG_TEXTURES := {
+	"neutral": "res://assets/ui/building_flags/flag_neutral.png",
+	"red": "res://assets/ui/building_flags/flag_red.png",
+	"blue": "res://assets/ui/building_flags/flag_blue.png",
+	"green": "res://assets/ui/building_flags/flag_green.png",
+	"yellow": "res://assets/ui/building_flags/flag_yellow.png",
+}
 # M4.16+:哪些 terrain 算"建筑",显示阵营旗
 const _BUILDING_TERRAINS := ["barracks", "castle", "village"]
 
@@ -218,6 +220,85 @@ func show_attack_marks(range_tiles: Array) -> void:
 		highlights.show_outline(Highlights.Mode.ATTACK, range_tiles)
 
 
+# 鸢影·沉默领域选中心模式(P+):
+# on=True 时显示中央提示气泡 + hover 时绘制 5×5 outline;
+# on=False 清。
+var _silence_pick_label: Label = null
+var _silence_pick_active: bool = false
+var _silence_hover_cell: Vector2i = Vector2i(-1, -1)
+
+
+func highlight_silence_pick_mode(on: bool) -> void:
+	_silence_pick_active = on
+	if on:
+		if _silence_pick_label == null:
+			_silence_pick_label = Label.new()
+			_silence_pick_label.name = "SilencePickHint"
+			_silence_pick_label.text = "⚡ 沉默领域:点选 5×5 中心(右键取消)"
+			_silence_pick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_silence_pick_label.add_theme_color_override("font_color", Color(0.85, 0.55, 1.0))
+			_silence_pick_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+			_silence_pick_label.add_theme_constant_override("shadow_offset_x", 2)
+			_silence_pick_label.add_theme_constant_override("shadow_offset_y", 2)
+			_silence_pick_label.add_theme_font_size_override("font_size", 18)
+			var sz := Vector2(420, 32)
+			_silence_pick_label.size = sz
+			_silence_pick_label.position = Vector2(-sz.x * 0.5, -sz.y * 0.5 + 24)
+		if not _silence_pick_label.is_inside_tree():
+			add_child(_silence_pick_label)
+		_silence_pick_label.visible = true
+		if highlights != null:
+			highlights.clear()
+	else:
+		if _silence_pick_label != null:
+			_silence_pick_label.visible = false
+		if highlights != null:
+			highlights.clear_mode(Highlights.Mode.SILENCE_PICK)
+			highlights.clear_mode(Highlights.Mode.HOVER)
+		_silence_hover_cell = Vector2i(-1, -1)
+
+
+# 鸢影·沉默领域:鼠标移动时更新 5×5 outline 中心点。
+# 由 main.gd 转发 InputEventMouseMotion 调用,避免 board 自己 hook input 引发层级冲突。
+func update_silence_pick_hover(global_pos: Vector2) -> void:
+	if not _silence_pick_active:
+		return
+	if metrics == null or ground_layer == null:
+		return
+	# 相机禁用/null 时跳过 hover 映射,避免把 viewport 坐标误当世界坐标
+	# 产生错误的 cell 高亮。生产环境相机总是 enabled,这条路径基本 dead code,
+	# 但保底 early return 比给一个错位置的高亮更安全。
+	if board_camera == null or not board_camera.enabled:
+		return
+	var world_pos: Vector2 = board_camera.get_canvas_transform().affine_inverse() * global_pos
+	var local: Vector2 = ground_layer.to_local(world_pos)
+	var cell: Vector2i = ground_layer.local_to_map(local)
+	# 限制在地图范围内
+	if cell.x < 0 or cell.y < 0 or cell.x >= map_size.x or cell.y >= map_size.y:
+		_silence_hover_cell = Vector2i(-1, -1)
+	else:
+		_silence_hover_cell = cell
+	_refresh_silence_pick_outline()
+
+
+# 鸢影·沉默领域:刷新 5×5 outline(中心 ±2)。
+func _refresh_silence_pick_outline() -> void:
+	if highlights == null:
+		return
+	highlights.clear_mode(Highlights.Mode.SILENCE_PICK)
+	highlights.clear_mode(Highlights.Mode.HOVER)
+	if _silence_hover_cell.x < 0:
+		return
+	var tiles: Array = []
+	for dx in range(-2, 3):
+		for dy in range(-2, 3):
+			var t: Vector2i = Vector2i(_silence_hover_cell.x + dx, _silence_hover_cell.y + dy)
+			if t.x >= 0 and t.y >= 0 and t.x < map_size.x and t.y < map_size.y:
+				tiles.append(t)
+	if tiles.size() > 0:
+		highlights.show_outline(Highlights.Mode.SILENCE_PICK, tiles)
+
+
 # M4.12:在指定 board-local 位置弹出浮动文字(damage/heal/kill/crit)。
 # 颜色按 kind 选:damage 红 / crit 烫金 / heal 绿 / kill 烫红
 # / levelup 蓝 — 由调用方传 color 字符串(#rrggbb)即可。
@@ -344,6 +425,7 @@ var _press_start_mouse: Vector2 = Vector2.ZERO
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	_handle_cursor_input(event)
 	_handle_camera_input(event)
 
 
@@ -352,6 +434,18 @@ func handle_camera_input_from_owner(event: InputEvent) -> void:
 
 
 func _handle_camera_input(event: InputEvent) -> void:
+	# 2026-08-09:鼠标移动时同步光标 cell — 鼠标/手柄玩家看到的"当前格"一致
+	if event is InputEventMouseMotion and InputState != null and InputState.board_focused:
+		var world_pos: Vector2 = event.global_position
+		if board_camera != null and board_camera.enabled:
+			world_pos = board_camera.get_canvas_transform().affine_inverse() * event.global_position
+		if ground_layer != null:
+			var local: Vector2 = ground_layer.to_local(world_pos)
+			var cell: Vector2i = ground_layer.local_to_map(local)
+			if cell.x >= 0 and cell.y >= 0 and cell.x < map_size.x and cell.y < map_size.y:
+				if InputState.cursor_cell != cell:
+					InputState.cursor_cell = cell
+		# 不 return — 后续相机/pan 逻辑继续走
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
@@ -386,7 +480,9 @@ func _handle_camera_input(event: InputEvent) -> void:
 			board_camera.position_smoothing_enabled = false
 		_pan_was_dragging = true
 		var pan_delta: Vector2 = (event.global_position - _pan_start_mouse) / board_camera.zoom.x
-		board_camera.position = _pan_start_cam_pos - pan_delta
+		# 用 _safe_set_position 让 camera 走「框不能越过 board」clamp,
+		# 而不是 Camera2D 内置 limit_* (那个会把 position 吸附到 limit 边界,体感很奇怪)。
+		board_camera._safe_set_position(_pan_start_cam_pos - pan_delta)
 		board_camera.mark_user_positioned()
 		get_viewport().set_input_as_handled()
 		return
@@ -395,15 +491,25 @@ func _handle_camera_input(event: InputEvent) -> void:
 func _zoom_at_point(screen_pos: Vector2, delta: float) -> void:
 	if board_camera == null:
 		return
-	var old_zoom: float = board_camera.zoom.x
-	var new_zoom: float = clamp(old_zoom + delta, ZOOM_MIN, ZOOM_MAX)
-	if new_zoom == old_zoom:
+	# user_factor 是相对 fit_zoom 的乘数;ZOOM_MIN/MAX 直接作用于 user_factor。
+	# camera 内部会把 user_factor 乘 fit_zoom 得到最终 zoom,这里不用算实际值。
+	var old_user_factor: float = board_camera.get_user_zoom_factor()
+	var new_user_factor: float = clamp(old_user_factor + delta, ZOOM_MIN, ZOOM_MAX)
+	if new_user_factor == old_user_factor:
 		return
+	# 把鼠标下的世界点保持不动,先算旧/新 zoom 下的 mouse world,差量补偿到 position。
+	# camera.zoom.x = fit_zoom * user_factor,这里用旧/新值算。
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	# fit_zoom 不能直接拿(camera 私有),用旧 zoom / 旧 user_factor 推出 fit_zoom。
+	var fit_zoom: float = 1.0
+	if old_user_factor > 0.0:
+		fit_zoom = board_camera.zoom.x / old_user_factor
+	var old_zoom: float = fit_zoom * old_user_factor
+	var new_zoom: float = fit_zoom * new_user_factor
 	var mouse_world_before: Vector2 = (screen_pos - vp_size * 0.5) / old_zoom + board_camera.position
-	board_camera.zoom = Vector2(new_zoom, new_zoom)
+	board_camera.apply_user_zoom_factor_delta(new_user_factor - old_user_factor)
 	var mouse_world_after: Vector2 = (screen_pos - vp_size * 0.5) / new_zoom + board_camera.position
-	board_camera.position += mouse_world_before - mouse_world_after
+	board_camera._safe_set_position(board_camera.position + (mouse_world_before - mouse_world_after))
 	board_camera.mark_user_positioned()
 
 
@@ -424,7 +530,7 @@ func emit_tile_clicked(global_pos: Vector2) -> void:
 
 
 # M4.16+:重建建筑阵营旗。tile_data 是 Array[Dictionary](server TileOut shape),
-# 包含 terrain / owner_id / x / y。闪烁由 _update_flag_blink() 单独处理。
+# 包含 terrain / owner_id / x / y。pending_claims 用独立徽标显示,避免误读为已过户。
 func rebuild_flags(tiles: Array) -> void:
 	if flag_layer == null or metrics == null:
 		return
@@ -433,7 +539,7 @@ func rebuild_flags(tiles: Array) -> void:
 		child.queue_free()
 	if tiles.is_empty():
 		return
-	var _pending := _collect_pending_claim_tiles()
+	var pending := _collect_pending_claim_tiles()
 	for t in tiles:
 		if not t is Dictionary:
 			continue
@@ -441,18 +547,18 @@ func rebuild_flags(tiles: Array) -> void:
 		if not _BUILDING_TERRAINS.has(terrain):
 			continue
 		var owner_v: Variant = t.get("owner_id", null)
-		if owner_v == null:
-			continue  # 无归属不显示旗
-		var owner_pid: int = int(owner_v)
-		if owner_pid <= 0:
-			continue
+		var owner_pid: int = 0
+		if owner_v != null:
+			owner_pid = int(owner_v)
 		var cell := Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
 		_add_flag_at(cell, owner_pid)
+	for cell in pending.keys():
+		_add_claim_badge_at(cell, pending[cell])
 	_update_flag_blink()
 
 
-# M4.16+:从 GameState.pending_claims 收集正在占领的 (x,y) 集合。
-# 让闪烁的旗在 claim 期间视觉上突出。
+# M4.16+:从 GameState.pending_claims 收集正在占领的 (x,y) -> claim。
+# owner flag 代表当前归属;claim badge 代表正在过户。
 func _collect_pending_claim_tiles() -> Dictionary:
 	var claiming: Dictionary = {}
 	if GameState == null:
@@ -460,29 +566,101 @@ func _collect_pending_claim_tiles() -> Dictionary:
 	for c in GameState.pending_claims:
 		if not c is Dictionary:
 			continue
-		claiming[Vector2i(int(c.get("tile_x", -1)), int(c.get("tile_y", -1)))] = true
+		claiming[Vector2i(int(c.get("tile_x", -1)), int(c.get("tile_y", -1)))] = c
 	return claiming
 
 
-# M4.16+:在 cell 中心放一面阵营色三角旗(polygon)。
-# 锚点是 cell 左下角外侧 8px(避免覆盖建筑 sprite)。
-func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
-	if metrics == null:
-		return
-	var poly := Polygon2D.new()
-	poly.polygon = _FLAG_POINTS
-	# 从 GameState.players[].color 取玩家阵营色。
+func _flag_color_for_owner(owner_pid: int) -> String:
+	if owner_pid <= 0:
+		return "neutral"
 	var color_name := "red"
 	if GameState != null:
 		var owner: Dictionary = GameState.get_player(owner_pid)
 		if not owner.is_empty():
 			color_name = String(owner.get("color", "red"))
-	poly.color = Config.player_color(color_name)
-	poly.position = metrics.cell_to_local(cell)
-	# Z 索引:在 UnitLayer 之前(在 GroundLayer 之上)
-	flag_layer.add_child(poly)
-	# 存 cell → Polygon2D 引用,闪烁时 toggle visible
-	poly.set_meta("tile_cell", cell)
+	if not _OWNER_FLAG_TEXTURES.has(color_name):
+		return "neutral"
+	return color_name
+
+
+# M4.16+:在 cell 左下角放一面像素风归属旗贴图。
+# 比代码绘制的几何旗更像正式资产,同时不盖住建筑主体。
+func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
+	if metrics == null:
+		return
+	var holder := Node2D.new()
+	holder.name = "OwnerFlag"
+	holder.position = metrics.cell_to_local(cell)
+	# Z 索引:在 UnitLayer 之前(在 GroundLayer 之上)。
+	flag_layer.add_child(holder)
+	holder.set_meta("tile_cell", cell)
+
+	var key := _flag_color_for_owner(owner_pid)
+	var tex: Texture2D = TEXTURE_LOADER.load_resized(String(_OWNER_FLAG_TEXTURES.get(key, _OWNER_FLAG_TEXTURES["neutral"])), 18)
+	if tex == null:
+		return
+	var sprite := Sprite2D.new()
+	sprite.texture = tex
+	sprite.position = Vector2(-14, 8)
+	holder.add_child(sprite)
+
+
+func _claim_target_color(claim: Dictionary) -> Color:
+	if GameState != null:
+		var target: Dictionary = GameState.get_player(int(claim.get("target_player_id", -1)))
+		if not target.is_empty():
+			return Config.player_color(String(target.get("color", "red")))
+	return MenuTheme.C_GOLD
+
+
+func _claim_badge_text(claim: Dictionary) -> String:
+	var remaining: int = max(0, int(claim.get("turns_remaining", 0)))
+	var total: int = max(1, int(claim.get("total_turns", Config.CLAIM_TURNS_REQUIRED)))
+	return "%d/%d" % [remaining, total]
+
+
+func _claim_progress(claim: Dictionary) -> float:
+	var total: int = max(1, int(claim.get("total_turns", Config.CLAIM_TURNS_REQUIRED)))
+	var remaining: int = clamp(int(claim.get("turns_remaining", total)), 0, total)
+	return clamp(1.0 - float(remaining) / float(total), 0.0, 1.0)
+
+
+func _add_claim_badge_at(cell: Vector2i, claim: Dictionary) -> void:
+	if metrics == null:
+		return
+	var holder := Node2D.new()
+	holder.name = "ClaimBadge"
+	holder.position = metrics.cell_to_local(cell) + Vector2(0, -19)
+	flag_layer.add_child(holder)
+
+	var bg := Polygon2D.new()
+	bg.polygon = PackedVector2Array([
+		Vector2(-15, -6), Vector2(15, -6), Vector2(15, 6), Vector2(-15, 6),
+	])
+	bg.color = Color(0.05, 0.06, 0.07, 0.72)
+	holder.add_child(bg)
+
+	var fill_w: float = max(3.0, 30.0 * _claim_progress(claim))
+	var fill := Polygon2D.new()
+	fill.polygon = PackedVector2Array([
+		Vector2(-15, -6), Vector2(-15 + fill_w, -6),
+		Vector2(-15 + fill_w, 6), Vector2(-15, 6),
+	])
+	fill.color = _claim_target_color(claim)
+	holder.add_child(fill)
+
+	var label := Label.new()
+	label.text = _claim_badge_text(claim)
+	label.position = Vector2(-15, -8)
+	label.size = Vector2(30, 16)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 8)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	holder.add_child(label)
 
 
 # M4.16+:让属于 pending_claims 的旗闪烁(其他静态显示)。
@@ -490,15 +668,45 @@ func _add_flag_at(cell: Vector2i, owner_pid: int) -> void:
 # 频繁 Tween 创建/销毁。
 var _flag_blink_t: float = 0.0
 const _FLAG_BLINK_HALF_PERIOD := 0.45
+# 2026-08-09:棋盘光标脉动(呼吸效果,sin 波)— 让玩家在棋盘上一眼看见光标位置
+var _cursor_visible: bool = false
+var _cursor_pulse_phase: float = 0.0
+const _CURSOR_PULSE_PERIOD := 0.9
 
 func _process(delta: float) -> void:
-	if flag_layer == null:
+	if flag_layer != null:
+		_flag_blink_t += delta
+		# 每隔 _FLAG_BLINK_HALF_PERIOD 秒翻转一次 modulate.a
+		if _flag_blink_t >= _FLAG_BLINK_HALF_PERIOD:
+			_flag_blink_t = 0.0
+			_update_flag_blink()
+	# 光标脉动:在 board_focused 时才绘制
+	if InputState != null and InputState.board_focused and InputState.cursor_cell.x >= 0:
+		_cursor_pulse_phase += delta
+		_update_cursor_render()
+	# 2026-08-09:持续按住方向键 / 摇杆时光标持续移动
+	_tick_cursor_repeat(delta)
+
+
+# 2026-08-09:根据 InputState.cursor_cell 渲染光标。
+# 复用 highlights.show_cursor_at + 脉动 alpha(0.65 ~ 1.0)。
+func _update_cursor_render() -> void:
+	if highlights == null:
 		return
-	_flag_blink_t += delta
-	# 每隔 _FLAG_BLINK_HALF_PERIOD 秒翻转一次 modulate.a
-	if _flag_blink_t >= _FLAG_BLINK_HALF_PERIOD:
-		_flag_blink_t = 0.0
-		_update_flag_blink()
+	if InputState == null:
+		return
+	var cell: Vector2i = InputState.cursor_cell
+	if cell.x < 0 or cell.y < 0 or cell.x >= map_size.x or cell.y >= map_size.y:
+		_cursor_visible = false
+		highlights.clear_mode(Highlights.Mode.CURSOR)
+		return
+	# 脉动 alpha:0.65 ~ 1.0,周期 0.9s
+	var phase01: float = 0.5 + 0.5 * sin(_cursor_pulse_phase * TAU / _CURSOR_PULSE_PERIOD)
+	var alpha: float = lerp(0.65, 1.0, phase01)
+	var base_color: Color = Highlights._COLORS[Highlights.Mode.CURSOR]
+	var pulsed: Color = Color(base_color.r, base_color.g, base_color.b, alpha)
+	highlights.show_cursor_at(cell, pulsed)
+	_cursor_visible = true
 
 
 func _update_flag_blink() -> void:
@@ -506,7 +714,7 @@ func _update_flag_blink() -> void:
 		return
 	var claiming := _collect_pending_claim_tiles()
 	for child in flag_layer.get_children():
-		if not child is Polygon2D:
+		if String(child.name) != "OwnerFlag":
 			continue
 		var cell_v: Variant = child.get_meta("tile_cell", null)
 		if cell_v == null:
@@ -626,3 +834,214 @@ func _rebuild_units(units_data: Array) -> void:
 		if not (unit_data is Dictionary):
 			continue
 		_add_unit_node(unit_data)
+
+
+# ============================================================
+# 2026-08-09:棋盘虚拟光标 + 键盘/手柄操作路由
+# 设计:光标 cell 走 InputState.cursor_cell,确认 / 取消 / 缩放走专属 action
+#   (Switch 反转 B=确认 A=取消)。所有现有"点击 cell" / "右键 cell"逻辑
+#   全部复用,不绕过。
+# ============================================================
+
+const _CURSOR_REPEAT_DELAY := 0.18  # 持续按方向键时光标移动间隔
+const _CURSOR_REPEAT_INITIAL := 0.32  # 第一次重复前等待
+var _cursor_hold_dir: Vector2i = Vector2i.ZERO
+var _cursor_hold_t: float = 0.0
+var _cursor_initial_t: float = 0.0
+var _cursor_hold_axis: Vector2 = Vector2.ZERO
+
+
+func _handle_cursor_input(event: InputEvent) -> void:
+	if InputState == null:
+		return
+	# board_focused == false 时,光标不动(玩家在 UI 面板里)
+	if not InputState.board_focused:
+		return
+	if map_size.x <= 0 or map_size.y <= 0:
+		return
+	# 只在 GameView 顶层(没被 modal 锁)时响应
+	if InputState.is_input_locked():
+		return
+
+	# === 光标移动:方向键 / 摇杆(单次 + 持续) ===
+	if event.is_action_pressed("board_cursor_up"):
+		_move_cursor(Vector2i(0, -1))
+		_begin_cursor_repeat(Vector2i(0, -1))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_down"):
+		_move_cursor(Vector2i(0, 1))
+		_begin_cursor_repeat(Vector2i(0, 1))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_left"):
+		_move_cursor(Vector2i(-1, 0))
+		_begin_cursor_repeat(Vector2i(-1, 0))
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_cursor_right"):
+		_move_cursor(Vector2i(1, 0))
+		_begin_cursor_repeat(Vector2i(1, 0))
+		get_viewport().set_input_as_handled()
+		return
+	# 摇杆持续按住 → 持续移动
+	if event is InputEventJoypadMotion:
+		var jm: InputEventJoypadMotion = event
+		if jm.axis == 0 or jm.axis == 1:
+			_update_cursor_hold_axis(jm.axis, jm.axis_value)
+	# 方向键松开 → 停掉 repeat
+	if event is InputEventKey:
+		var k: InputEventKey = event
+		if not k.pressed:
+			match k.keycode:
+				KEY_UP, KEY_W:    _end_cursor_repeat_if_dir(Vector2i(0, -1))
+				KEY_DOWN, KEY_S:  _end_cursor_repeat_if_dir(Vector2i(0, 1))
+				KEY_LEFT, KEY_A:  _end_cursor_repeat_if_dir(Vector2i(-1, 0))
+				KEY_RIGHT, KEY_D: _end_cursor_repeat_if_dir(Vector2i(1, 0))
+	if event is InputEventJoypadMotion:
+		var jm2: InputEventJoypadMotion = event
+		if jm2.axis == 0 or jm2.axis == 1:
+			_update_cursor_hold_axis(jm2.axis, jm2.axis_value)
+
+	# === 缩放 ===
+	if event.is_action_pressed("board_zoom_in"):
+		_zoom_at_viewport_center(ZOOM_STEP)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("board_zoom_out"):
+		_zoom_at_viewport_center(-ZOOM_STEP)
+		get_viewport().set_input_as_handled()
+		return
+
+	# === 确认(Switch 反转:B = 确认)===
+	# 复用 _unhandled_input 在 main.gd 里的"左键点击"分支:把光标 cell 当成"鼠标点的那格"。
+	# 通过 emit_unit_clicked / emit_tile_clicked 走现成路径。
+	if event.is_action_pressed("board_confirm"):
+		_confirm_cursor()
+		get_viewport().set_input_as_handled()
+		return
+
+	# === 取消(Switch 反转:A = 取消)===
+	# 复用"右键空地"分支 — 取消行动模式 + 清高亮。
+	if event.is_action_pressed("board_cancel"):
+		_cancel_cursor()
+		get_viewport().set_input_as_handled()
+		return
+
+
+# 持续按住方向键 / 摇杆时光标持续移动
+func _tick_cursor_repeat(delta: float) -> void:
+	if _cursor_hold_dir == Vector2i.ZERO:
+		return
+	if InputState == null or not InputState.board_focused:
+		_cursor_hold_dir = Vector2i.ZERO
+		return
+	_cursor_hold_t += delta
+	# 第一次重复等 _CURSOR_REPEAT_INITIAL,之后 _CURSOR_REPEAT_DELAY 间隔
+	if _cursor_initial_t < _CURSOR_REPEAT_INITIAL:
+		_cursor_initial_t += delta
+		return
+	if _cursor_hold_t < _CURSOR_REPEAT_DELAY:
+		return
+	_cursor_hold_t = 0.0
+	_move_cursor(_cursor_hold_dir)
+
+
+func _begin_cursor_repeat(dir: Vector2i) -> void:
+	_cursor_hold_dir = dir
+	_cursor_hold_t = 0.0
+	_cursor_initial_t = 0.0
+
+
+func _end_cursor_repeat_if_dir(dir: Vector2i) -> void:
+	if _cursor_hold_dir == dir:
+		_cursor_hold_dir = Vector2i.ZERO
+
+
+func _update_cursor_hold_axis(axis: int, value: float) -> void:
+	# 轴 0=X,轴 1=Y;每个轴独立评估。
+	# 简单策略:哪个轴的 |value| > deadzone 就 update hold dir 对应方向。
+	if axis == 0:
+		if absf(value) < 0.3:
+			_cursor_hold_axis.x = 0.0
+		else:
+			_cursor_hold_axis.x = value
+	elif axis == 1:
+		if absf(value) < 0.3:
+			_cursor_hold_axis.y = 0.0
+		else:
+			_cursor_hold_axis.y = value
+	# 决定 hold_dir
+	var new_dir := Vector2i.ZERO
+	if absf(_cursor_hold_axis.x) > 0.4:
+		new_dir.x = 1 if _cursor_hold_axis.x > 0.0 else -1
+	if absf(_cursor_hold_axis.y) > 0.4:
+		new_dir.y = 1 if _cursor_hold_axis.y > 0.0 else -1
+	# 同一行只 hold 一个方向(避免斜着走时光标走对角线 — 战棋是 4 方向)
+	if new_dir.x != 0 and new_dir.y != 0:
+		# 哪个轴的绝对值更大,留哪个
+		if absf(_cursor_hold_axis.x) > absf(_cursor_hold_axis.y):
+			new_dir.y = 0
+		else:
+			new_dir.x = 0
+	if new_dir != _cursor_hold_dir:
+		_cursor_hold_dir = new_dir
+		_cursor_hold_t = 0.0
+		_cursor_initial_t = 0.0
+
+
+func _move_cursor(delta: Vector2i) -> void:
+	if InputState == null:
+		return
+	var cur: Vector2i = InputState.cursor_cell
+	if cur.x < 0:
+		cur = Vector2i(0, 0)
+	var next := Vector2i(
+		clamp(cur.x + delta.x, 0, map_size.x - 1),
+		clamp(cur.y + delta.y, 0, map_size.y - 1),
+	)
+	if next == cur:
+		return
+	InputState.cursor_cell = next
+	# 同步 hover_tile(让现有的"hover 显示 info / 画 path dots"白嫖)
+	InputState.hover_tile = next
+	# 主动触发 main.gd 的 path-dots 更新(若在 move 模式)
+	var main_node := get_node_or_null("/root/Main")
+	if main_node != null and main_node.has_method("_update_path_dots_at_cell"):
+		main_node.call("_update_path_dots_at_cell", next)
+
+
+func _confirm_cursor() -> void:
+	# 复用现成"鼠标左键点击 cell"逻辑 — emit unit_clicked / tile_clicked
+	if InputState == null:
+		return
+	var cell: Vector2i = InputState.cursor_cell
+	if cell.x < 0:
+		return
+	var unit_id: int = _unit_id_at_cell(cell)
+	if unit_id > 0:
+		emit_unit_clicked(unit_id)
+		return
+	# 没单位:走 tile 点击逻辑(行动模式时是落点,非模式时是清高亮)
+	emit_tile_clicked(tile_to_screen(cell))
+
+
+func _cancel_cursor() -> void:
+	# 复用"右键"路径:取消行动模式 / 清高亮
+	var main_node := get_node_or_null("/root/Main")
+	if main_node != null and main_node.has_method("_cursor_cancel_action"):
+		main_node.call("_cursor_cancel_action")
+		return
+	# 退路:自己清高亮
+	if highlights != null:
+		highlights.clear()
+
+
+func _zoom_at_viewport_center(delta: float) -> void:
+	# 屏幕中心而不是鼠标位置(手柄玩家没鼠标)
+	if board_camera == null:
+		return
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var center: Vector2 = vp_size * 0.5
+	# _zoom_at_point 内部会读 board_camera 当前位置,直接复用即可
+	_zoom_at_point(center, delta)

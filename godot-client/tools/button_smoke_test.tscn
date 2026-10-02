@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b7smoke_buttons_xx"]
+
+[ext_resource type="Script" path="res://tools/button_smoke_test.gd" id="1_smoke_btn"]
+
+[node name="ButtonSmokeTest" type="Node"]
+script = ExtResource("1_smoke_btn")

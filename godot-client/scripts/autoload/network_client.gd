@@ -435,9 +435,21 @@ func action_end_turn(game_id: int, player_id: int) -> void:
 		{"player_id": player_id})
 
 
-func action_co_power(game_id: int, player_id: int, callback: Callable = Callable()) -> void:
+func action_co_power(
+	game_id: int,
+	player_id: int,
+	center: Vector2i = Vector2i(-1, -1),
+	callback: Callable = Callable(),
+) -> void:
+	## 激活玩家的 CO power。
+	##
+	## 大多数 CO(yun / anna)不需中心,center 留默认 (-1, -1) 即可。
+	## 鸢影(yuanying)的沉默领域需 5×5 中心,此时传实际坐标。
+	var body: Dictionary = {"player_id": player_id}
+	if center.x >= 0 and center.y >= 0:
+		body["center"] = {"x": center.x, "y": center.y}
 	request("POST", _ACTIONS_GAME_BASE.format({"id": game_id}) + "/co-power",
-		{"player_id": player_id}, callback)
+		body, callback)
 
 
 # ============================================================

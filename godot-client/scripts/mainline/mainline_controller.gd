@@ -17,6 +17,7 @@ const SectionHeader = preload("res://scripts/ui/_components/section_header.gd")
 
 const _DEFAULT_MAINLINE_ID := "chapter_01_steel_rebellion"
 const _MANUAL_SLOT_COUNT := 3
+const _SLOT_LOAD_TIMEOUT_SEC := 3.0
 
 var _main: Node = null
 
@@ -72,6 +73,7 @@ var _active_slot_index: int = -1
 # T:#16 — 章节 cleared 标注(join /saves → 算 mainline_id → "✓ 已通关" badge)
 var _mainline_list_cache: Array = []  # 缓存 /mainlines 响应,等 /saves 回来后统一渲染
 var _cleared_mainline_ids: Dictionary = {}  # { mainline_id: true }
+var _slot_request_id: int = 0
 
 
 func _ready() -> void:
@@ -220,6 +222,8 @@ func _apply_mainline_visual_theme() -> void:
 
 
 func open() -> void:
+	_slot_request_id += 1
+	var request_id := _slot_request_id
 	_main._show_view("mainline")
 	_set_mainline_page("slot_select")
 	ml_title.text = "主线存档 · 加载中..."
@@ -243,6 +247,7 @@ func open() -> void:
 		ml_commander_status.text = "指挥官: 正在加载..."
 	# The save response drives the entry screen, so it must be first in the
 	# serialized request queue. The other data can arrive afterwards.
+	_start_slot_load_timeout(request_id)
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_ml_slots_response"))
 	if DialogManager._heroes.is_empty():
 		NetworkClient.list_heroes(Callable(DialogManager, "_on_heroes_response"))
@@ -285,6 +290,7 @@ func _set_mainline_page(page: String) -> void:
 
 # FE8-style entry: mainline starts from the three formal save slots.
 func _on_ml_slots_response(body: Variant, code: int = 0) -> void:
+	_slot_request_id += 1
 	if code < 200 or code >= 300 or not (body is Dictionary):
 		ml_title.text = "主线存档 · 读取失败"
 		_main._update_status("读取主线存档失败")
@@ -301,6 +307,22 @@ func _on_ml_slots_response(body: Variant, code: int = 0) -> void:
 			rec["slot_index"] = int(rec.get("slot_index", i))
 			_manual_slot_records[i] = rec
 	ml_title.text = "主线存档"
+	_render_mainline_slots()
+
+
+func _start_slot_load_timeout(request_id: int) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	tree.create_timer(_SLOT_LOAD_TIMEOUT_SEC).timeout.connect(_on_slot_load_timeout.bind(request_id))
+
+
+func _on_slot_load_timeout(request_id: int) -> void:
+	if request_id != _slot_request_id:
+		return
+	ml_title.text = "主线存档 · 读取超时"
+	_main._update_status("主线存档读取超时，可返回主菜单或重试")
+	_manual_slot_records = [{}, {}, {}]
 	_render_mainline_slots()
 
 

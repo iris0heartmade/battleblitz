@@ -1,4 +1,4 @@
-extends Control
+﻿extends Control
 ## editor_controller.gd — 地图编辑器视图控制器(P2 从 main.gd 抽离)。
 ## 挂在场景 EditorView 节点上,自管面板内部逻辑;view 可见性仍由 main._show_view 控制。
 ## 对外接口:
@@ -18,29 +18,29 @@ var unit_label_fn: Callable = Callable()
 const _EDITOR_HISTORY_LIMIT := 50
 
 @onready var editor_board = $EditorBoard
-@onready var editor_map_name_input: LineEdit = $EditorPanel/EditorMapNameInput
-@onready var editor_biome_option: OptionButton = $EditorPanel/EditorBiomeOption
-@onready var editor_apply_biome_btn: Button = $EditorPanel/EditorApplyBiomeBtn
-@onready var editor_terrain_option: OptionButton = $EditorPanel/EditorTerrainOption
-@onready var editor_surface_option: OptionButton = $EditorPanel/EditorSurfaceOption
-@onready var editor_map_select_option: OptionButton = $EditorPanel/EditorMapSelectOption
-@onready var editor_load_btn: Button = $EditorPanel/EditorLoadBtn
-@onready var editor_mode_option: OptionButton = $EditorPanel/EditorModeOption
-@onready var editor_unit_tool_option: OptionButton = $EditorPanel/EditorUnitToolOption
-@onready var editor_unit_option: OptionButton = $EditorPanel/EditorUnitOption
-@onready var editor_unit_color_option: OptionButton = $EditorPanel/EditorUnitColorOption
-@onready var editor_surface_owner_option: OptionButton = $EditorPanel/EditorSurfaceOwnerOption
-@onready var editor_unit_level_option: OptionButton = $EditorPanel/EditorUnitLevelOption
-@onready var editor_width_option: OptionButton = $EditorPanel/EditorWidthOption
-@onready var editor_height_option: OptionButton = $EditorPanel/EditorHeightOption
-@onready var editor_resize_btn: Button = $EditorPanel/EditorResizeBtn
-@onready var editor_undo_btn: Button = $EditorPanel/EditorUndoBtn
-@onready var editor_redo_btn: Button = $EditorPanel/EditorRedoBtn
-@onready var editor_status: Label = $EditorPanel/EditorStatus
-@onready var editor_new_btn: Button = $EditorPanel/EditorNewBtn
-@onready var editor_save_btn: Button = $EditorPanel/EditorSaveBtn
-@onready var editor_delete_btn: Button = $EditorPanel/EditorDeleteBtn
-@onready var editor_back_btn: Button = $EditorPanel/EditorBackBtn
+@onready var editor_map_name_input: LineEdit = $EditorHud/EditorPanel/EditorMapNameInput
+@onready var editor_biome_option: OptionButton = $EditorHud/EditorPanel/EditorBiomeOption
+@onready var editor_apply_biome_btn: Button = $EditorHud/EditorPanel/EditorApplyBiomeBtn
+@onready var editor_terrain_option: OptionButton = $EditorHud/EditorPanel/EditorTerrainOption
+@onready var editor_surface_option: OptionButton = $EditorHud/EditorPanel/EditorSurfaceOption
+@onready var editor_map_select_option: OptionButton = $EditorHud/EditorPanel/EditorMapSelectOption
+@onready var editor_load_btn: Button = $EditorHud/EditorPanel/EditorLoadBtn
+@onready var editor_mode_option: OptionButton = $EditorHud/EditorPanel/EditorModeOption
+@onready var editor_unit_tool_option: OptionButton = $EditorHud/EditorPanel/EditorUnitToolOption
+@onready var editor_unit_option: OptionButton = $EditorHud/EditorPanel/EditorUnitOption
+@onready var editor_unit_color_option: OptionButton = $EditorHud/EditorPanel/EditorUnitColorOption
+@onready var editor_surface_owner_option: OptionButton = $EditorHud/EditorPanel/EditorSurfaceOwnerOption
+@onready var editor_unit_level_option: OptionButton = $EditorHud/EditorPanel/EditorUnitLevelOption
+@onready var editor_width_option: OptionButton = $EditorHud/EditorPanel/EditorWidthOption
+@onready var editor_height_option: OptionButton = $EditorHud/EditorPanel/EditorHeightOption
+@onready var editor_resize_btn: Button = $EditorHud/EditorPanel/EditorResizeBtn
+@onready var editor_undo_btn: Button = $EditorHud/EditorPanel/EditorUndoBtn
+@onready var editor_redo_btn: Button = $EditorHud/EditorPanel/EditorRedoBtn
+@onready var editor_status: Label = $EditorHud/EditorPanel/EditorStatus
+@onready var editor_new_btn: Button = $EditorHud/EditorPanel/EditorNewBtn
+@onready var editor_save_btn: Button = $EditorHud/EditorPanel/EditorSaveBtn
+@onready var editor_delete_btn: Button = $EditorHud/EditorPanel/EditorDeleteBtn
+@onready var editor_back_btn: Button = $EditorHud/EditorPanel/EditorBackBtn
 
 var _editor_map: Dictionary = {}
 var _editor_map_ids: Array[String] = []

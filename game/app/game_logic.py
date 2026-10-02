@@ -368,6 +368,18 @@ def _attack_kind_of(unit: Unit) -> str:
     return getattr(profile, "attack_kind", "physical") or "physical"
 
 
+def _effective_tile_def_bonus(defender: Unit, tile_def_bonus: int) -> int:
+    """Apply defender passives that improve terrain defense."""
+    if tile_def_bonus <= 0:
+        return tile_def_bonus
+    from app.classes.units.skills import get_passive_for
+
+    bonus = tile_def_bonus
+    for sk in get_passive_for(defender):
+        bonus = sk.modify_terrain_def_bonus(bonus, defender)
+    return bonus
+
+
 def calculate_damage(
     attacker: Unit,
     defender: Unit,
@@ -389,6 +401,7 @@ def calculate_damage(
     damage = eff_atk * (eff_atk / (eff_atk + eff_def)) * type_adv * crit_mult
     """
     rng = rng or random.Random()
+    tile_def_bonus = _effective_tile_def_bonus(defender, tile_def_bonus)
     if crit is None:
         crit_chance = _crit_chance(attacker)
         crit = rng.random() < crit_chance
@@ -435,29 +448,41 @@ def attack_with_double_strike(
     """Attack twice at 50% damage each, when the unit has the Double-Strike skill.
 
     Returns a list of 1 or 2 DamageResults.
+
+    status effect (P+):blind — 每个 hit 概率 miss(damage=0)。
     """
-    if SKILL_DOUBLE_STRIKE not in (attacker.skills or []):
-        return [
-            calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
-        ]
+    from app.status import modify_hit_chance
     rng = rng or random.Random()
+
+    def _maybe_miss(d: DamageResult) -> DamageResult:
+        # status effect: blind — 命中率乘子,每 hit 独立判定
+        hit_chance = modify_hit_chance(attacker, base=1.0)
+        if hit_chance < 1.0 and rng.random() > hit_chance:
+            return DamageResult(
+                damage=0, is_crit=False, is_kill=False,
+                effective_atk=d.effective_atk, defense_total=d.defense_total,
+            )
+        return d
+
+    if SKILL_DOUBLE_STRIKE not in (attacker.skills or []):
+        return [_maybe_miss(calculate_damage(attacker, defender, tile_def_bonus, rng=rng))]
     first = calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
     second = calculate_damage(attacker, defender, tile_def_bonus, rng=rng)
     return [
-        DamageResult(
+        _maybe_miss(DamageResult(
             damage=max(1, first.damage // 2),
             is_crit=first.is_crit,
             is_kill=False,  # recomputed below
             effective_atk=first.effective_atk,
             defense_total=first.defense_total,
-        ),
-        DamageResult(
+        )),
+        _maybe_miss(DamageResult(
             damage=max(1, second.damage // 2),
             is_crit=second.is_crit,
             is_kill=False,
             effective_atk=second.effective_atk,
             defense_total=second.defense_total,
-        ),
+        )),
     ]
 
 
@@ -2050,7 +2075,12 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     return True
 
 
-async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> bool:
+async def _ai_attack(
+    session: AsyncSession,
+    attacker: Unit,
+    target: Unit,
+    current_turn: int = 0,
+) -> bool:
     """Perform an AI attack. Returns True if successful."""
     logger.info(f"AI attack: {attacker.name}(id={attacker.id},type={attacker.unit_type}) at ({attacker.x},{attacker.y}) -> {target.name}(id={target.id},type={target.unit_type},hp={target.hp}) at ({target.x},{target.y})")
     # 07-22 fix:_ai_attack 必须自带射程校验作为安全网,防止上游
@@ -2061,6 +2091,16 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
             "AI attack REJECTED (out of range): %s at (%d,%d) -> %s at (%d,%d), d=%d",
             attacker.name, attacker.x, attacker.y, target.name, target.x, target.y,
             manhattan((attacker.x, attacker.y), (target.x, target.y)),
+        )
+        return False
+
+    # CO power·沉默领域 (鸢影 P+):被沉默单位无法攻击。
+    from app.commanders.effects import is_unit_silenced
+    if is_unit_silenced(attacker, current_turn=current_turn):
+        logger.info(
+            "AI attack REJECTED (silenced): %s at (%d,%d) -> %s, current=%d",
+            attacker.name, attacker.x, attacker.y, target.name,
+            current_turn,
         )
         return False
     target_tile = (
@@ -2093,6 +2133,7 @@ async def _ai_attack(session: AsyncSession, attacker: Unit, target: Unit) -> boo
         target.hp > 0
         and not has_counter_immunity
         and _t_can
+        and not is_unit_silenced(target, current_turn=current_turn)
     ):
         counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
         for h in counter_hits:
@@ -2344,7 +2385,7 @@ async def _ai_try_recruit(
         hp=profile_obj.base_hp, max_hp=profile_obj.base_hp,
         atk=profile_obj.base_atk, def_=profile_obj.base_def,
         matk=profile_obj.base_matk, mdef=profile_obj.base_mdef,
-        mov=profile_obj.mp_pool, mp=0, morale=0,
+        mov=profile_obj.base_mov, mp=profile_obj.base_mov, morale=0,
         x=tile.x, y=tile.y,
         has_acted=True, has_moved=True,
         skills=list(profile_obj.default_skills),
@@ -2502,7 +2543,7 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
         # 2. Attack?
         target = _ai_pick_attack_target(unit, snap, profile)
         if target is not None:
-            if await _ai_attack(session, unit, target):
+            if await _ai_attack(session, unit, target, current_turn=game.turn_number):
                 actions += 1
                 continue
         # 3. Claim (if standing on a claimable tile).
@@ -2596,7 +2637,7 @@ async def ai_take_one_action(
     # 2. Attack?
     target = _ai_pick_attack_target(unit, snap, profile)
     if target is not None:
-        if await _ai_attack(session, unit, target):
+        if await _ai_attack(session, unit, target, current_turn=game.turn_number):
             return True
     # 3. Claim?
     if await _ai_try_claim(session, game, ai_player, unit, profile,

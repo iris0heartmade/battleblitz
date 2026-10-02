@@ -37,6 +37,7 @@ class SkillContext:
     terrain_bonus: int = 0           # defender's tile def bonus (attack skills)
     ally_units: List[Unit] = None    # for heal / aoe skills
     enemy_units: List[Unit] = None
+    game_turn_number: int = 0        # 当前 game.turn_number(status effect 施加时间戳)
 
     def __post_init__(self):
         if self.ally_units is None:
@@ -103,6 +104,10 @@ class BaseSkill(ABC):
     ) -> Dict[str, Any]:
         """Called during damage calculation.  Return {'damage': int, 'hits': int, ...}."""
         return {"damage": base_damage, "hits": 1}
+
+    def modify_terrain_def_bonus(self, tile_def_bonus: int, defender: Unit) -> int:
+        """Called before damage calculation applies terrain defense."""
+        return tile_def_bonus
 
     def modify_mp_after_action(self, mp: int, user: Unit) -> int:
         """Called after an action to adjust remaining MP."""

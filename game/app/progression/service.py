@@ -12,7 +12,7 @@ Why a class instead of free functions:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional, Union
 
@@ -79,6 +79,9 @@ class PromoteSummary:
     old_tier: int
     new_tier: int
     new_level_cap: int
+    # Per-stat bonus applied at promote() — see spec §7.3.  Empty dict
+    # when the unit's class has no promotion-bonus row (tier-2 or unconfigured).
+    promotion_bonus: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -305,24 +308,39 @@ class ProgressionService:
             )
 
         old_tier = unit.tier
+        # Capture the unit_type BEFORE the tier bump so the bonus
+        # table (keyed by tier-1 class id) can find the right row.
+        # For tier-2 unit_types, the bonus table returns an empty
+        # dict (no double-promotion bonus).
+        unit_type_before = getattr(unit, "unit_type", None)
         if force:
             # Bypass the level check inside _promote (debug/admin only).
             unit.tier += 1
         else:
             _promote(unit)
 
+        # Apply the flat promotion bonus (see spec §7.3).  Empty for
+        # tier-2 unit_types and for classes without a configured row.
+        from app.progression.leveling import apply_promotion_bonus
+        if unit_type_before is not None:
+            bonus_applied = apply_promotion_bonus(unit, unit_type_before)
+        else:
+            bonus_applied = {}
+
         from app.progression.leveling import max_level_for_tier
         new_cap = max_level_for_tier(unit.tier)
         await self.session.flush()
         logger.info(
-            "Unit promoted: id=%d %d -> %d new_cap=%d force=%s",
+            "Unit promoted: id=%d %d -> %d new_cap=%d force=%s bonus=%s",
             unit_id, old_tier, unit.tier, new_cap, force,
+            dict(bonus_applied),
         )
         return PromoteSummary(
             unit_id=unit_id,
             old_tier=old_tier,
             new_tier=unit.tier,
             new_level_cap=new_cap,
+            promotion_bonus=bonus_applied,
         )
 
     # ── Mainline (campaign) progress — Step 2 ────────────────

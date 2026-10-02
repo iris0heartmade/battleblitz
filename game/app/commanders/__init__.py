@@ -11,6 +11,7 @@ from .effects import (
     fire_co_power,
     on_player_turn_start,
 )
+from .validation import validate_center_xy
 
 __all__ = [
     "CommanderPassive",
@@ -23,4 +24,5 @@ __all__ = [
     "fire_co_power",
     "on_player_turn_start",
     "record_morale_star",
+    "validate_center_xy",
 ]
