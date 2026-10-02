@@ -28,12 +28,20 @@ async def test_start_bakes_each_players_passive_once(db_session):
     blue_units = [u for u in units if u.player_id == blue.id]
 
     assert red_units and blue_units
+    # 被动倍率契约:yun +10% ATK / anna +15% DEF。
+    # 预烘焙 stat 不一定恒等于 class base —— 地图可能带 hero_id(英雄覆盖
+    # 改基础值)或掷骰成长,所以从烘焙结果反推预烘焙值再验倍率,而不是硬编码
+    # round(base * pct)(后者在 hero 单位上会误报)。
     for unit in red_units:
-        base = get_unit_class(unit.unit_type)
-        assert unit.atk == round(base.base_atk * 1.10)
+        pre_bake_atk = round(unit.atk / 1.10)
+        assert unit.atk == round(pre_bake_atk * 1.10), (
+            f"{unit.unit_type} #{unit.id} atk={unit.atk} 不满足 yun +10% 被动"
+        )
     for unit in blue_units:
-        base = get_unit_class(unit.unit_type)
-        assert unit.def_ == round(base.base_def * 1.15)
+        pre_bake_def = round(unit.def_ / 1.15)
+        assert unit.def_ == round(pre_bake_def * 1.15), (
+            f"{unit.unit_type} #{unit.id} def={unit.def_} 不满足 anna +15% 被动"
+        )
     assert red.co_state["last_start_turn"] == 1
 
 
@@ -74,7 +82,8 @@ async def test_timeout_round_wrap_runs_commander_lifecycle(db_session, monkeypat
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 0, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 0,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": True, "last_start_turn": 1,
                  "_power_baselines": {}})
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,
@@ -133,11 +142,13 @@ async def test_power_expires_only_at_owners_next_round_start(db_session, monkeyp
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 0, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 0,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": True, "last_start_turn": 1,
                  "_power_baselines": {}})
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,
-                  commander_id="anna", co_state={"meter": 0, "threshold": 18,
+                  commander_id="anna", co_state={"stars_earned_total": 0,
+                  "threshold": 14, "power_cost": 6,
                   "is_power_active": True, "last_start_turn": 1,
                   "_power_baselines": {}})
     db_session.add_all([red, blue])
@@ -163,7 +174,8 @@ async def test_first_turn_fire_expires_at_next_round_after_real_spawn(db_session
     db_session.add(game)
     await db_session.flush()
     red = Player(game_id=game.id, user_name="red", color="red", seat=0,
-                 commander_id="yun", co_state={"meter": 22, "threshold": 22,
+                 commander_id="yun", co_state={"stars_earned_total": 18,
+                 "threshold": 18, "power_cost": 6,
                  "is_power_active": False, "last_start_turn": -1},
                  has_ended_turn=False, is_alive=True)
     blue = Player(game_id=game.id, user_name="blue", color="blue", seat=1,

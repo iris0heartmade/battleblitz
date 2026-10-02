@@ -202,6 +202,8 @@ def _apply_hero_overrides(
     # base-class unit logic.
     from app.classes.heroes import get_or_none as _get_hero
     from app.classes.units import get_or_none as _get_unit_class
+    from app.progression.policies import ClassBaseline, RolledGrowthPolicy, STAT_CAPS
+    import random
 
     color_to_pid = {p.color: p.id for p in real_players if p.color}
     # Track which units have been claimed so color-only matches don't
@@ -309,7 +311,7 @@ def _apply_hero_overrides(
             candidate.matk = hero_base.base_matk
             candidate.mdef = hero_base.base_mdef
             candidate.mov = hero_base.base_mov
-            candidate.mp = hero_base.mp_pool
+            candidate.mp = hero_base.base_mov
             candidate.skills = list(hero_base.default_skills)
 
         # Stat overrides — None means inherit from base class.  The
@@ -329,12 +331,53 @@ def _apply_hero_overrides(
             candidate.mdef = hero.mdef_override
         if hero.mov_override is not None:
             candidate.mov = hero.mov_override
-        # mp_pool_override is applied independently of mov_override so
-        # designers can keep MP distinct from movement (e.g. a slow
-        # caster with deep MP).  When mp_pool_override is unset, MP
-        # already inherited from the base class.
-        if hero.mp_pool_override is not None:
-            candidate.mp = hero.mp_pool_override
+            candidate.mp = hero.mov_override
+        if not isinstance(override.get("campaign_state"), dict) and candidate.level > 1:
+            base_stats = {
+                "hp": int(candidate.max_hp),
+                "atk": int(candidate.atk),
+                "def": int(candidate.def_),
+                "matk": int(candidate.matk),
+                "mdef": int(candidate.mdef),
+                "mov": int(candidate.mov),
+            }
+            rates = (
+                dict(hero.character_growth_rates)
+                if hero.character_growth_rates
+                else dict(hero_base.class_growth_rates)
+            )
+            rates["mov"] = 0
+            baseline = ClassBaseline(
+                type_id=hero.hero_id,
+                label_cn=hero.display_cn,
+                label_en=hero.hero_id.title(),
+                tier=1,
+                attack_kind=hero_base.attack_kind,
+                is_hero=True,
+                base_class_id=hero.base_class_id,
+                base_stats=base_stats,
+                class_growth_rates=rates,
+                stat_caps=dict(STAT_CAPS),
+                formula_note="free hero standard growth",
+            )
+            policy = RolledGrowthPolicy()
+            seed = getattr(candidate, "growth_seed", 0) or 0
+            rng = random.Random(f"hero:{hero.hero_id}:{seed}")
+            grown = dict(base_stats)
+            for _ in range(2, int(candidate.level) + 1):
+                grown = policy.roll_level_up(
+                    current_stats=grown,
+                    baseline_=baseline,
+                    rng=rng,
+                )
+            candidate.hp = grown["hp"]
+            candidate.max_hp = grown["hp"]
+            candidate.atk = grown["atk"]
+            candidate.def_ = grown["def"]
+            candidate.matk = grown["matk"]
+            candidate.mdef = grown["mdef"]
+            candidate.mov = grown["mov"]
+            candidate.mp = min(candidate.mp, candidate.mov)
         # Skill union: base class default_skills + hero active + hero
         # passive, deduped while preserving order.  Done AFTER the
         # base-class reconciliation above (which may have rewritten
@@ -422,6 +465,17 @@ def _apply_hero_overrides(
             candidate.hp, candidate.atk, candidate.def_,
             candidate.matk, candidate.mdef, candidate.mov, candidate.mp,
         )
+
+
+def _spawn_growth_seed(
+    game_id: int,
+    player_seat: int,
+    unit_index: int,
+    unit_type: str,
+) -> int:
+    """Deterministic seed for generated battle units."""
+    raw = f"{int(game_id)}:{int(player_seat)}:{int(unit_index)}:{unit_type}"
+    return sum((idx + 1) * ord(ch) for idx, ch in enumerate(raw))
 
 
 def _apply_hq_commander_spawns(
@@ -625,6 +679,12 @@ async def _start_battle_internal(
         pid = target_player.id
         name_idx = existing_count_by_player.get(pid, 0)
         existing_count_by_player[pid] = name_idx + 1
+        growth_seed = _spawn_growth_seed(
+            game_id,
+            int(getattr(target_player, "seat", 0)),
+            name_idx,
+            unit_type,
+        )
         units.append(Unit(
             player_id=pid,
             unit_type=unit_type,
@@ -640,7 +700,7 @@ async def _start_battle_internal(
             max_hp=int(u["hp"]) if u.get("hp") is not None else uc.base_hp,
             atk=uc.base_atk, def_=uc.base_def,
             matk=uc.base_matk, mdef=uc.base_mdef,
-            mov=uc.mp_pool, mp=uc.mp_pool,
+            mov=uc.base_mov, mp=uc.base_mov,
             # New units start at 0 stars of morale; the gold-star UI
             # is preserved as three empty ★☆☆ indicators and the
             # engine bumps it by 1 per kill up to MORALE_MAX (3).
@@ -648,6 +708,7 @@ async def _start_battle_internal(
             x=int(u["x"]), y=int(u["y"]),
             has_acted=False, has_moved=False,
             skills=list(uc.default_skills),
+            growth_seed=growth_seed,
         ))
         # Phase 2 §6.5.3 — Generic units go through spawn_generic_stats
         # so chapter / free-mode multipliers and Boss-autolevel rates apply.
@@ -660,6 +721,7 @@ async def _start_battle_internal(
                 units[-1],
                 unit_type,
                 start_level=int(u.get("level") or start_level),
+                growth_seed=growth_seed,
             )
     if units:
         session.add_all(units)
@@ -692,8 +754,10 @@ async def _start_battle_internal(
             units=[u for u in units if u.player_id == first_player.id],
             co_state=first_player.co_state,
         )
+        # 全场 units,沉默领域 (鸢影 P+) 清空需要
+        all_units = list(units)
         from app.commanders.effects import on_player_turn_start
-        on_player_turn_start(target, game.turn_number)
+        on_player_turn_start(target, game.turn_number, all_units=all_units)
         first_player.co_state = target.co_state
 
     seat_to_player = {p.seat: p for p in players}
@@ -1329,8 +1393,13 @@ async def start_game(
             player.commander_id = commander_id
             player.co_state = {
                 "commander_id": commander_id,
-                "meter": 0,
+                # 累计上限来自 hero 注册表(anna=14, yun=18, 默认 20)
                 "threshold": get_power_threshold(commander_id),
+                # 新机制字段
+                "stars_earned_total": 0,
+                "power_cost": 6,
+                # 旧字段(过渡期保留)
+                "meter": 0,
                 "is_power_active": False,
                 "last_start_turn": -1,
             }
@@ -1576,7 +1645,6 @@ async def list_unit_classes():
             "base_mdef": u.base_mdef,
             "attack_kind": u.attack_kind,
             "base_mov": u.base_mov,
-            "mp_pool": u.mp_pool,
             "attack_range": u.attack_range,
             "can_move_after_action": u.can_move_after_action,
             "default_skills": list(u.default_skills),
@@ -1838,8 +1906,12 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
                 seat=p.seat,
                 color=p.color,
                 commander_id=p.commander_id,
-                meter=(p.co_state or {}).get("meter", 0),
+                # 新机制字段
+                stars_earned_total=(p.co_state or {}).get("stars_earned_total", 0),
                 threshold=(p.co_state or {}).get("threshold", 20),
+                power_cost=(p.co_state or {}).get("power_cost", 6),
+                # 旧字段(过渡期保留)
+                meter=(p.co_state or {}).get("meter", 0),
                 is_power_active=(p.co_state or {}).get("is_power_active", False),
                 can_fire=(
                     can_player_fire_now(p, game, players)

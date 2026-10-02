@@ -66,7 +66,7 @@ colors to the actual joined players and applies `Tile.owner_id`.
 
 ---
 
-## First-run setup
+## First-run setup and asset refresh
 
 Tile pixel art lives in `../game/app/web/assets/tiles/`. Sync it once into
 the Godot project before opening the editor:
@@ -79,14 +79,32 @@ Then open
 `D:\PyCharm Community Edition 2024.3.3\PycharmProjects\Godot_v4.7-stable_win64\Godot_v4.7-stable_win64.exe`,
 choose `Import`, and point it at `godot-client/`.
 
+The generated UI artwork under `assets/ui/` is runtime source material and is
+committed to Git. Godot's `.godot/` directory is only a machine-local import
+cache and must not be committed.
+
+After pulling a commit that adds or changes PNG assets, close every running
+Godot editor/game process and run one editor import pass before launching the
+client:
+
+```bash
+"<godot_exe>" --headless --editor --path godot-client --quit
+"<godot_exe>" --path godot-client
+```
+
+If a screen falls back to plain dark panels and thin borders while the PNG
+files exist under `assets/ui/`, treat it as a stale import cache first. Repeat
+the import pass above from the repository root; do not add `.godot/imported`
+or `*.ctex` files to Git.
+
 ---
 
 ## Headless sanity check
 
-Import assets without opening the editor:
+Import assets and rebuild the editor resource cache without opening the editor:
 
 ```bash
-"<godot_exe>" --headless --path godot-client --import --quit
+"<godot_exe>" --headless --editor --path godot-client --quit
 ```
 
 Run the smoke test:
@@ -102,6 +120,24 @@ Run the smoke test:
 > dependent assertions are skipped via local guard variables. Always use
 > the scene-based entry above; the legacy `godot --script smoke_test.gd`
 > form is no longer reliable because autoloads only register on scene load.
+
+Scan Chinese UI text (fails on unlocalized English in `scenes/` and `scripts/`):
+
+```bash
+python3 godot-client/tools/check_chinese_ui.py
+```
+
+Generate the three-resolution UI review screenshots (GPU required, not headless):
+
+```bash
+for res in 1280x720 1600x900 1920x1080; do
+  BB_REVIEW_RES="$res" "<godot_exe>" --rendering-method gl_compatibility \
+    --resolution "$res" --path godot-client res://tools/ui_review_screenshot.tscn
+done
+```
+
+UI change acceptance criteria (scorecard) live in
+`../docs/validation/godot-ui-scorecard.md`.
 
 Verify the two critical GUI entry flows against a running backend:
 
@@ -127,16 +163,21 @@ godot-client/
 │   ├── tiles/                 # legacy 48x48 per-terrain fallback tiles
 │   └── tilesets/              # preferred 48px-grid atlas sheets + same-name .txt label maps
 ├── scripts/
-│   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings
-│   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, types
+│   ├── autoload/              # Config, GameState, InputState, NetworkClient, UserSettings, AudioManager, DialogManager
+│   ├── core/                  # map_metrics, map_theme, tile_set_builder, map_loader, map_logic, portrait_loader, texture_loader, types
 │   ├── board/                 # board, board_camera, highlights, unit_node
+│   ├── mainline/              # mainline_controller, mainline_responses, mainline_session
+│   ├── ui/                    # lobby/saves/editor controllers, cn_labels, theme modules, _components
 │   └── main.gd
 ├── scenes/
 │   ├── main.tscn
-│   └── board.tscn
+│   ├── board.tscn
+│   └── ui/                    # mainline_campaign_panel, mainline_prepare_panel
 └── tools/
     ├── sync_assets.py
-    ├── smoke_test.gd
+    ├── check_chinese_ui.py    # 中文 UI 文案扫描
+    ├── smoke_test.gd          # headless 烟测
+    ├── ui_review_screenshot.gd # 三档分辨率截图
     └── entry_flow_e2e.gd
 ```
 

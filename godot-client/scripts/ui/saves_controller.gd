@@ -22,6 +22,7 @@ const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 # (preload on a script with class_name returns GDScript resource without .new())
 
 const _MANUAL_SLOT_COUNT := 3
+const _LOAD_TIMEOUT_SEC := 3.0
 
 var _main: Node = null
 
@@ -43,6 +44,7 @@ var _status_filled_badge: StatusBadge
 var _status_auto_badge: StatusBadge
 var _status_suspend_badge: StatusBadge
 var _status_timestamp_label: Label
+var _load_request_id: int = 0
 
 
 func _ready() -> void:
@@ -170,6 +172,8 @@ func _build_manual_rows() -> void:
 # ── Data fetch ─────────────────────────────────────────────
 
 func _refresh_saves() -> void:
+	_load_request_id += 1
+	var request_id := _load_request_id
 	if save_status != null and is_instance_valid(save_status):
 		save_status.text = "加载存档..."
 	# 同步重置,以防响应慢时旧数据仍在
@@ -179,10 +183,12 @@ func _refresh_saves() -> void:
 	_render_manual_rows()
 	_render_auto_row()
 	_render_suspend_row()
+	_start_load_timeout(request_id)
 	NetworkClient.list_saves(_main._user_name, Callable(self, "_on_saves_response"))
 
 
 func _on_saves_response(body: Variant, code: int = 0) -> void:
+	_load_request_id += 1
 	if code < 200 or code >= 300:
 		# A stalled or stopped backend used to leave this screen labelled
 		# "加载存档..." forever. Keep the empty-slot controls visible, but make
@@ -222,6 +228,21 @@ func _on_saves_response(body: Variant, code: int = 0) -> void:
 	if save_status != null and is_instance_valid(save_status):
 		save_status.text = "三存档槽"
 	_update_status_row(latest_ts)
+
+
+func _start_load_timeout(request_id: int) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	tree.create_timer(_LOAD_TIMEOUT_SEC).timeout.connect(_on_load_timeout.bind(request_id))
+
+
+func _on_load_timeout(request_id: int) -> void:
+	if request_id != _load_request_id:
+		return
+	if save_status != null and is_instance_valid(save_status):
+		save_status.text = "存档读取超时，可点击刷新存档重试"
+	_update_status_row(0)
 
 
 # T:V5 — 更新 3 个 StatusBadge + 时间戳
@@ -326,7 +347,7 @@ func _render_suspend_row() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.bbcode_enabled = true
 	info.fit_content = true
-	info.text = "[b]中断存档[/b] game #%d\n[color=#d8c48a]%s · 触发点: %s[/color]" % [
+	info.text = "[b]中断存档[/b] 对局 #%d\n[color=#d8c48a]%s · 触发点: %s[/color]" % [
 		game_id, mid if mid != "" else "自由战", str(_suspend_record.get("suspend_point", "manual"))
 	]
 	hbox.add_child(info)

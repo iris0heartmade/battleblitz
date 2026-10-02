@@ -9,10 +9,9 @@ class Knight(BaseUnitClass):
     glyph = "骑"
 
     base_hp = 55
-    base_atk = 22
+    base_atk = 20
     base_def = 8
-    base_mov = 5
-    mp_pool = 8
+    base_mov = 6
 
     # Magic stats — physical unit, low magic offense/defense.
     base_matk = 4
@@ -24,3 +23,6 @@ class Knight(BaseUnitClass):
     can_move_after_action = True
 
     strong_against = ["archer"]
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 80, 'atk': 35, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

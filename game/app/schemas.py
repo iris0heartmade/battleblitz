@@ -209,6 +209,11 @@ class UnitOut(APIModel):
     has_acted: bool
     has_moved: bool = False
     skills: List[str]
+    # 通用 status effect 列表 (P+):
+    #   [{"type": "poison"|"paralyze"|"blind"|"slow"|"silence", ...}, ...]
+    # 详情见 game/app/status/engine.py。silence 状态读这里,不再有
+    # 单独的 silence_until_turn 字段。
+    status_effects: List[dict] = []
     # Class-level combat stats the client needs to render attack range /
     # threat-area overlays without hard-coding values per unit type.
     attack_range: int = 1
@@ -297,8 +302,14 @@ class PlayerCOStateOut(APIModel):
     seat: int
     color: str
     commander_id: Optional[str] = None
-    meter: int = 0
+    # 新机制:全队累计获得的士气星(含已消耗)
+    stars_earned_total: int = 0
+    # 累计上限(达此值后 record_morale_star 停止增加)
     threshold: int = 20
+    # 每次 power 扣减的固定星数
+    power_cost: int = 6
+    # 旧字段(过渡期保留,后续可弃用)
+    meter: int = 0
     is_power_active: bool = False
     can_fire: bool = False
 

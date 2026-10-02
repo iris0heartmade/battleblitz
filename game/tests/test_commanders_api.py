@@ -143,7 +143,8 @@ async def test_free_mode_battle_config_commander_spawns_on_host(commander_client
         )
         assert host.commander_id == "anna"
         assert host.co_state["commander_id"] == "anna"
-        assert host.co_state["threshold"] == 18
+        # 新机制:anna 阈值 14
+        assert host.co_state["threshold"] == 14
         assert guest.commander_id is None
         host_hq = await session.scalar(
             select(Tile).where(
@@ -163,6 +164,58 @@ async def test_free_mode_battle_config_commander_spawns_on_host(commander_client
         assert hq_unit is not None
         assert hq_unit.unit_type == "healer"
         assert hq_unit.hero_id == "anna"
+
+
+@pytest.mark.integration
+async def test_free_mode_yuanying_commander_spawns_as_warlock_hero(commander_client):
+    from sqlalchemy import select
+    from app.models import Player, Tile, Unit
+
+    c, sessions = commander_client
+    created = await c.post("/games", json={
+        "name": "free yuanying commander",
+        "map_preset": "balanced_2p_15",
+        "mode": "free",
+        "battle_config": {"commander": "yuanying"},
+    })
+    assert created.status_code == 201, created.text
+    game_id = created.json()["id"]
+
+    joined_host = await c.post(f"/games/{game_id}/join", json={"user_name": "host"})
+    assert joined_host.status_code == 201, joined_host.text
+    joined_guest = await c.post(f"/games/{game_id}/join", json={"user_name": "guest"})
+    assert joined_guest.status_code == 201, joined_guest.text
+
+    started = await c.post(f"/games/{game_id}/start")
+    assert started.status_code == 200, started.text
+
+    async with sessions() as session:
+        host = await session.scalar(
+            select(Player).where(Player.game_id == game_id, Player.seat == 0)
+        )
+        assert host.commander_id == "yuanying"
+        assert host.co_state["commander_id"] == "yuanying"
+        assert host.co_state["threshold"] == 16
+
+        host_hq = await session.scalar(
+            select(Tile).where(
+                Tile.game_id == game_id,
+                Tile.owner_id == host.id,
+                Tile.terrain == "castle",
+            )
+        )
+        assert host_hq is not None
+        hq_unit = await session.scalar(
+            select(Unit).where(
+                Unit.player_id == host.id,
+                Unit.x == host_hq.x,
+                Unit.y == host_hq.y,
+            )
+        )
+        assert hq_unit is not None
+        assert hq_unit.unit_type == "warlock"
+        assert hq_unit.hero_id == "yuanying"
+        assert "poison_burst" in hq_unit.skills
 
 
 @pytest.mark.integration
@@ -309,7 +362,9 @@ async def test_prebattle_selection_is_isolated_consumed_and_locked(commander_cli
     async with sessions() as session:
         spawned = await session.get(Player, started.json()["player_id"])
         assert spawned.commander_id == "yun"
-        spawned.co_state = {**spawned.co_state, "meter": 22, "threshold": 22}
+        # 新机制:yun 阈值 18,power_cost 6;stars_earned_total=18 可放
+        spawned.co_state = {**spawned.co_state, "stars_earned_total": 18,
+                            "threshold": 18, "power_cost": 6}
         unit = await session.scalar(select(Unit).where(Unit.player_id == spawned.id).order_by(Unit.id))
         atk_before = unit.atk
         await session.commit()
@@ -357,7 +412,9 @@ async def test_concurrent_co_power_requests_only_fire_once(commander_client):
     )).json()
     async with sessions() as session:
         player = await session.get(Player, started["player_id"])
-        player.co_state = {**player.co_state, "meter": 22, "threshold": 22}
+        # 新机制:yun stars_earned_total=18 / threshold=18 / power_cost=6
+        player.co_state = {**player.co_state, "stars_earned_total": 18,
+                           "threshold": 18, "power_cost": 6}
         await session.commit()
 
     url = f"/games/{started['game_id']}/co-power"

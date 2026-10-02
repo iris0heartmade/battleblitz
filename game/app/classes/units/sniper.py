@@ -12,7 +12,6 @@ class Sniper(BaseUnitClass):
     base_atk = 26
     base_def = 10
     base_mov = 4
-    mp_pool = 6
 
     base_matk = 5
     base_mdef = 7
@@ -25,3 +24,6 @@ class Sniper(BaseUnitClass):
     ignores_line_of_sight = True
 
     strong_against = ["warlock"]
+
+    # Per-stat growth rates (%).  See app.progression.policies.RolledGrowthPolicy.
+    class_growth_rates = {'hp': 70, 'atk': 60, 'def': 35, 'matk': 35, 'mdef': 35, 'mov': 0}

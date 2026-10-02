@@ -4,6 +4,7 @@ const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
 const CnLabels = preload("res://scripts/ui/cn_labels.gd")
 const HudTheme = preload("res://scripts/ui/hud_theme.gd")
 const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
+const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 ## main.gd — top-level UI state machine for the BattleBlitz Godot client.
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
@@ -20,6 +21,14 @@ const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
 ## and add a real [create] / [join] form with map/biome pickers.
 
 @onready var menu_panel: Control = $Menu
+@onready var title_cover: TextureRect = $Menu/TitleCover
+@onready var submenu_title_covers: Array[TextureRect] = [
+	$Lobby/LobbyTitleCover,
+	$SavesView/SavesViewTitleCover,
+	$InProgressView/InProgressViewTitleCover,
+	$MainlineView/MainlineViewTitleCover,
+]
+@onready var title_cover_dev_picker: OptionButton = $Menu/TitleCoverDevPicker
 @onready var connecting_panel: Control = $Connecting
 @onready var game_view: Control = $GameView
 @onready var status_label: Label = $StatusLabel
@@ -47,6 +56,9 @@ var _pending_attack_target_id: int = -1
 # 技能模式状态机(heal 选友军 / arcane_strike 选敌军,通用)
 var _skill_mode_unit_id: int = -1
 var _skill_targets: Dictionary = {}
+# 鸢影·沉默领域选中心模式 (P+):玩家选 5×5 中心后 fire。
+# -1 = 未进入模式,>=0 = 该 player_id 的 commander 等待选中心。
+var _silence_pick_center_for_pid: int = -1
 var _pending_skill_id: String = ""
 const _ACTION_CONTEXT_INITIAL := "initial"
 const _ACTION_CONTEXT_POST_MOVE := "post_move"
@@ -143,13 +155,16 @@ var _unit_info_portrait_tex: TextureRect = null
 # T:4 RecruitPanel — 真 modal(替换 status 凑合)
 @onready var recruit_panel: Panel = $GameView/HUD/RecruitPanel
 @onready var recruit_status_label: Label = $GameView/HUD/RecruitPanel/RecruitStatusLabel
-@onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitList
+@onready var recruit_list: VBoxContainer = $GameView/HUD/RecruitPanel/RecruitScroll/RecruitList
 @onready var recruit_close_btn: Button = $GameView/HUD/RecruitPanel/CloseBtn
 var _recruit_pending_tile: Vector2i = Vector2i(-1, -1)
+@onready var dialog_overlay: ColorRect = $GameView/HUD/DialogOverlay
+@onready var dialog_panel: Panel = $GameView/HUD/DialogPanel
 @onready var tutorial_bubble: Panel = $GameView/HUD/TutorialBubble
 @onready var tutorial_text: RichTextLabel = $GameView/HUD/TutorialBubble/TutorialText
 @onready var tutorial_got_it_btn: Button = $GameView/HUD/TutorialBubble/GotItBtn
 @onready var battle_result_panel: Panel = $GameView/HUD/BattleResultPanel
+@onready var battle_result_overlay: ColorRect = $GameView/HUD/BattleResultOverlay
 @onready var battle_result_winner: RichTextLabel = $GameView/HUD/BattleResultPanel/WinnerBanner
 @onready var battle_result_stats: RichTextLabel = $GameView/HUD/BattleResultPanel/StatsList
 @onready var battle_detail_btn: Button = $GameView/HUD/BattleResultPanel/ResultBtnRow/DetailBtn
@@ -198,6 +213,15 @@ const _STATE_POLL_INTERVAL_SEC: float = 1.0
 var _state_poll_timer: Timer = null
 
 # Main menu widgets (GBA 风 V2)
+@export var title_cover_default_path: String = "res://assets/ui/title_cover_v5_party_dawn.png"
+@export var title_cover_paths: Array[String] = [
+	"res://assets/ui/title_cover_v1_undead_king.png",
+	"res://assets/ui/title_cover_v2_snow_farewell.png",
+	"res://assets/ui/title_cover_v3_leviathan_market.png",
+	"res://assets/ui/title_cover_v4_cathedral_prayer.png",
+	"res://assets/ui/title_cover_v5_party_dawn.png",
+	"res://assets/ui/title_cover_v6_bard_market.png",
+]
 @onready var mainline_button: Button = $Menu/CenterContainer/GroupRow/SoloCard/MainlineButton
 @onready var editor_button: Button = $Menu/CenterContainer/FooterRow/EditorButton
 
@@ -246,6 +270,7 @@ var _resume_kind: String = ""
 
 # T:3 基础大厅视图
 @onready var editor_view = $EditorView  # -> editor_controller.gd (P2)
+@onready var editor_hud: CanvasLayer = $EditorView/EditorHud
 
 @onready var lobby_view: Control = $Lobby
 # 大厅子控件引用已搬到 lobby_controller.gd(相对 $LobbyFrame 路径)
@@ -260,6 +285,7 @@ var _death_event_seq: int = 0  # 阵亡事件单调序列号,去重 DialogManage
 @onready var connecting_label: Label = $Connecting/ConnectingInner/ConnectingLabel
 @onready var connecting_title: Label = $Connecting/ConnectingInner/ConnectingTitle
 @onready var reconnect_button: Button = $Connecting/ConnectingInner/ReconnectButton
+@onready var connecting_abort_btn: Button = $Connecting/ConnectingInner/AbortButton
 
 # 框架面板(灌主题用) — 改用 ColorRect + ReferenceRect 组合更稳
 @onready var backdrop: ColorRect = $Backdrop
@@ -302,6 +328,99 @@ var _mainline_mercenary_payload: Dictionary = {}
 var _mainline_auto_retry_pending: bool = false
 
 
+func _setup_title_cover() -> void:
+	if title_cover == null or not is_instance_valid(title_cover):
+		return
+	title_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	for cover in submenu_title_covers:
+		if cover != null and is_instance_valid(cover):
+			cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+
+	var selected_path := _configured_title_cover_path()
+	_apply_title_cover(selected_path)
+	_setup_title_cover_dev_picker(selected_path)
+
+
+func _configured_title_cover_path() -> String:
+	var configured := str(ProjectSettings.get_setting(
+		"battleblitz/title_cover/default_path",
+		title_cover_default_path
+	))
+	var env_path := OS.get_environment("BB_TITLE_COVER")
+	if env_path != "":
+		configured = env_path
+	if title_cover_paths.has(configured):
+		return configured
+	return title_cover_default_path
+
+
+func _setup_title_cover_dev_picker(selected_path: String) -> void:
+	if title_cover_dev_picker == null or not is_instance_valid(title_cover_dev_picker):
+		return
+	title_cover_dev_picker.clear()
+	for path in title_cover_paths:
+		title_cover_dev_picker.add_item(path.get_file().get_basename())
+		title_cover_dev_picker.set_item_metadata(title_cover_dev_picker.item_count - 1, path)
+	var selected_index := title_cover_paths.find(selected_path)
+	title_cover_dev_picker.selected = max(0, selected_index)
+	title_cover_dev_picker.visible = _title_cover_dev_preview_enabled()
+	if not title_cover_dev_picker.item_selected.is_connected(_on_title_cover_dev_selected):
+		title_cover_dev_picker.item_selected.connect(_on_title_cover_dev_selected)
+
+
+func _title_cover_dev_preview_enabled() -> bool:
+	if OS.get_environment("BB_TITLE_COVER_DEV") == "1":
+		return true
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--title-cover-dev":
+			return true
+	return false
+
+
+func _on_title_cover_dev_selected(index: int) -> void:
+	if title_cover_dev_picker == null or not is_instance_valid(title_cover_dev_picker):
+		return
+	var path := str(title_cover_dev_picker.get_item_metadata(index))
+	_apply_title_cover(path)
+
+
+func _apply_title_cover(path: String) -> void:
+	if title_cover == null or not is_instance_valid(title_cover):
+		return
+	var tex := _load_title_cover_texture(path)
+	title_cover.texture = tex
+	for cover in submenu_title_covers:
+		if cover != null and is_instance_valid(cover):
+			cover.texture = tex
+	if tex == null:
+		push_warning("Title cover failed to load: %s" % path)
+
+
+func _load_title_cover_texture(path: String) -> Texture2D:
+	var global_path := ProjectSettings.globalize_path(path)
+	var file := FileAccess.open(global_path, FileAccess.READ)
+	if file != null:
+		var bytes := file.get_buffer(file.get_length())
+		file.close()
+		if bytes.size() >= 3 and bytes[0] == 0xff and bytes[1] == 0xd8 and bytes[2] == 0xff:
+			var jpg := Image.new()
+			var jpg_err := jpg.load_jpg_from_buffer(bytes)
+			if jpg_err == OK and not jpg.is_empty():
+				return ImageTexture.create_from_image(jpg)
+	var img := Image.new()
+	var err := img.load(global_path)
+	if err == OK and not img.is_empty():
+		return ImageTexture.create_from_image(img)
+	var tex := load(path) as Texture2D
+	if tex != null:
+		return tex
+	return null
+
+
 func _ready() -> void:
 	# Try to restore the last player_name from disk.
 	var saved: Variant = UserSettings.get_value("settings.v1.player_name", "")
@@ -319,6 +438,7 @@ func _ready() -> void:
 
 	# === GBA 火纹风主题注入(V2 第 1+2 轮:主菜单 + HUD 4 角) ===
 	_apply_gba_theme()
+	_setup_title_cover()
 
 	_show_view("menu")
 	mainline_button.pressed.connect(_on_mainline_pressed)
@@ -374,13 +494,18 @@ func _ready() -> void:
 		AudioManager.set_muted(saved_mute)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
+	# 2026-08-09:Connecting 面板「放弃,返回主菜单」按钮
+	if connecting_abort_btn != null and is_instance_valid(connecting_abort_btn):
+		connecting_abort_btn.pressed.connect(_on_connecting_abort_pressed)
 	war_report_button.pressed.connect(_on_war_report_pressed)
 	war_report_close_btn.pressed.connect(_on_war_report_close_pressed)
 
 	# V2 第 4 轮:行动气泡 5 按钮
 	for btn in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn]:
-		if btn != null and is_instance_valid(btn):
-			MenuTheme.apply_button_theme(btn, 16)
+		# Style is owned by HudTheme/BattleTheme. This loop only wires signals;
+		# applying MenuTheme here used to erase the image-backed battle skin.
+		if btn == null or not is_instance_valid(btn):
+			continue
 	move_btn.pressed.connect(_on_move_pressed)
 	attack_btn.pressed.connect(_on_attack_pressed)
 	skill_btn.pressed.connect(_on_skill_pressed)
@@ -484,6 +609,13 @@ func _ready() -> void:
 	if board != null and is_instance_valid(board) \
 			and not board.tile_clicked.is_connected(_on_board_tile_clicked):
 		board.tile_clicked.connect(_on_board_tile_clicked)
+	# 2026-08-09:棋盘地图真正加载完成后进入光标模式。
+	# _show_view("game") 里 deferred 的 _enter_board_focus 常因棋盘还没加载
+	# (WS 快照未到,map_size == 0)提前 return,之后无人重试 → board_focused
+	# 永远 false,光标不画、方向键/摇杆无效。这里在 load_map 完成后补一次。
+	if board != null and is_instance_valid(board) \
+			and not board.map_loaded.is_connected(_on_board_map_loaded):
+		board.map_loaded.connect(_on_board_map_loaded)
 
 	# NetworkClient status
 	NetworkClient.ws_connected.connect(func():
@@ -510,14 +642,6 @@ func _ready() -> void:
 			_on_state_poll_response(body)
 	)
 
-	# P1:Reparent SettingsPanel to root so 主菜单 SettingsButton 可直接打开它
-	# (SettingsPanel 默认挂在 GameView/HUD 下,主菜单时 GameView 不可见)。
-	# reparent() 保留节点对象,@onready 引用继续有效。
-	if settings_panel != null and is_instance_valid(settings_panel) \
-			and settings_panel.get_parent() != self:
-		settings_panel.reparent(self)
-		settings_panel.visible = false
-
 	# ----- Dev hook: BB_AUTO_PLAY=1 or --auto-play opens the lobby
 	# session immediately. Used by tools/ws_e2e.gd and headless smoke runs
 	# to validate the WS pipeline end-to-end without manual clicks.
@@ -536,6 +660,11 @@ func _ready() -> void:
 		await _maybe_screenshot_menu()
 	elif OS.get_environment("BB_SCREENSHOT_VIEWS") != "":
 		await _maybe_screenshot_views()
+	# 响应式 P0 #3:窗口宽度 ≤ 1366 时折叠左翼并加大字号密度。
+	_update_hud_layout_for_viewport()
+	var win: Window = get_window()
+	if win != null:
+		win.size_changed.connect(_update_hud_layout_for_viewport)
 	if quit_sec > 0.0:
 		await get_tree().create_timer(quit_sec).timeout
 		_update_status("测试自动流程结束,退出")
@@ -626,6 +755,8 @@ func _show_view(name: String) -> void:
 	mainline_view.visible = (name == "mainline")
 	saves_view.visible = (name == "saves")
 	editor_view.visible = (name == "editor")
+	if editor_hud != null and is_instance_valid(editor_hud):
+		editor_hud.visible = (name == "editor")
 	in_progress_view.visible = (name == "in_progress")
 	# HUD 是 CanvasLayer,不受 GameView.visible 控制 — 手动同步显隐
 	if name == "game":
@@ -646,6 +777,8 @@ func _show_view(name: String) -> void:
 		# 使用不抢地图视觉权重的深海军蓝，和金边面板保持同一套色阶。
 		if backdrop != null and is_instance_valid(backdrop):
 			backdrop.color = Color(0.018, 0.035, 0.055, 1.0)
+		# P1-3:进入战斗视图时填充左翼"战术指令"卡片的回合号 / 玩家名。
+		_refresh_tactical_hints()
 	else:
 		_stop_state_polling()
 		# 恢复主题背景色
@@ -666,6 +799,18 @@ func _show_view(name: String) -> void:
 	if name != "game" and name != "editor":
 		_reset_board_cameras()
 	_current_view = name
+	# 2026-08-09:view 切换时同步 InputState.board_focused + grab focus
+	# menu/lobby/mainline 等"非棋盘 view":board_focused = false,默认 focus 到该 view 的主按钮
+	# game view:board_focused = true,光标可被方向键 / 摇杆控制
+	# 切到 game 前先解掉 board_focused(防上一次没关),然后 view 真正显示后再 enter
+	if name == "game":
+		# 切到棋盘:延迟到下一帧再 enter,等 Board 加载完
+		call_deferred("_enter_board_focus")
+	else:
+		InputState.board_focused = false
+		InputState.cursor_cell = Vector2i(-1, -1)
+		# 给当前 view 一个默认 focus 目标
+		_focus_default_for_view(name)
 
 
 func _reset_board_cameras() -> void:
@@ -692,6 +837,118 @@ func _reset_board_cameras() -> void:
 		_post_frame_retry_count = 0
 		_viewport_safety_reset_pending = true
 		call_deferred("_post_frame_viewport_reset")
+
+
+# === 2026-08-09:键盘 + 手柄 view 切换的 focus 管理 ===
+# game view:进入 board_focus(光标模式);其它 view:grab focus 到该 view 主按钮
+func _enter_board_focus() -> void:
+	if board == null or not is_instance_valid(board):
+		return
+	if board.map_size.x <= 0 or board.map_size.y <= 0:
+		return
+	# 光标初始化:第一个我方单位 > 地图中心 > (0,0)
+	var initial_cell: Vector2i = _find_cursor_initial_cell()
+	InputState.cursor_cell = initial_cell
+	InputState.board_focused = true
+	# 释放所有 Control 的 focus(否则 ui_accept 会被某个 Button 抢走)
+	get_viewport().gui_release_focus()
+
+
+func _safe_int(value: Variant, fallback: int = -1) -> int:
+	if value == null:
+		return fallback
+	match typeof(value):
+		TYPE_INT:
+			return value
+		TYPE_FLOAT:
+			return int(value)
+		TYPE_STRING:
+			var text := (value as String).strip_edges()
+			if text.is_valid_int():
+				return text.to_int()
+	return fallback
+
+
+func _find_local_hq_cell() -> Vector2i:
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
+		return Vector2i(-1, -1)
+	if GameState == null:
+		return Vector2i(-1, -1)
+	var my_pid: int = _safe_int(GameState.local_player_id, -1)
+	for t in GameState.tiles:
+		if typeof(t) != TYPE_DICTIONARY:
+			continue
+		var terrain: String = str(t.get("terrain", ""))
+		var subtype: String = str(t.get("subtype", ""))
+		if _safe_int(t.get("owner_id", null), -1) == my_pid \
+				and (terrain == "castle" or subtype == "castle_throne"):
+			return Vector2i(_safe_int(t.get("x", 0), 0), _safe_int(t.get("y", 0), 0))
+	return Vector2i(-1, -1)
+
+
+func _find_cursor_initial_cell() -> Vector2i:
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0:
+		return Vector2i(0, 0)
+	var hq_cell := _find_local_hq_cell()
+	if hq_cell.x >= 0:
+		return hq_cell
+	# 找第一个当前玩家的单位
+	if GameState != null:
+		var my_pid: int = _safe_int(GameState.local_player_id, -1)
+		for u in GameState.latest_snapshot.get("units", []):
+			if typeof(u) != TYPE_DICTIONARY:
+				continue
+			if _safe_int(u.get("player_id", null), -1) == my_pid:
+				return Vector2i(_safe_int(u.get("x", 0), 0), _safe_int(u.get("y", 0), 0))
+	# 退而求其次:地图中心
+	return Vector2i(board.map_size.x / 2, board.map_size.y / 2)
+
+
+# 2026-08-09:board.load_map 完成后由 map_loaded 信号触发。
+# 覆盖"新建/重连/续档"里 _show_view("game") 的 deferred _enter_board_focus
+# 因棋盘未加载而空跑的场景;已在焦点中则不动(避免打断进行中的移动/攻击模式)。
+func _on_board_map_loaded(_width: int, _height: int, _biome: String) -> void:
+	if _current_view != "game":
+		return
+	if InputState == null:
+		return
+	if InputState.board_focused:
+		return
+	_enter_board_focus()
+
+
+func _focus_default_for_view(view_name: String) -> void:
+	# 给常见 view 落默认 focus(避免玩家连按 Tab 才能进菜单)
+	match view_name:
+		"menu":
+			# 主菜单:ResumeButton 优先(如有),否则 MainlineButton
+			if resume_button != null and is_instance_valid(resume_button) and resume_button.is_visible_in_tree() and not resume_button.disabled:
+				resume_button.grab_focus()
+			elif mainline_button != null and is_instance_valid(mainline_button):
+				mainline_button.grab_focus()
+		"lobby":
+			# lobby 内部子控件太多,留给 lobby_controller 自己管
+			pass
+		"mainline":
+			# mainline 内部子控件也很多,留给 mainline_controller
+			pass
+		"editor":
+			# editor 内部有自己的 focus
+			pass
+		"saves":
+			pass
+		"in_progress":
+			pass
+		"connecting":
+			# 2026-08-09:Connecting 面板默认 focus 落「放弃」按钮
+			# 玩家进入这个面板通常已经卡住,默认要"退出"的概率高于"再试一次"。
+			# 没新增 AbortButton 时,fallback 到 ReconnectButton(老行为)。
+			if connecting_abort_btn != null and is_instance_valid(connecting_abort_btn):
+				connecting_abort_btn.grab_focus()
+			elif reconnect_button != null and is_instance_valid(reconnect_button):
+				reconnect_button.grab_focus()
+		_:
+			pass
 
 
 # P2+: 帧末兜底 reset。同帧内 _tween_killed_too_early / state_updated 回调可能
@@ -948,7 +1205,7 @@ func _show_first_tutorial_deferred() -> void:
 	if tutorial_text != null and is_instance_valid(tutorial_text):
 		tutorial_text.bbcode_enabled = true
 		tutorial_text.text = (
-			"[color=#f0c75e][b]📖 BattleBlitz · 玩法说明[/b][/color]\n\n"
+			"[color=#f0c75e][b]📖 BIPOLAR · 玩法说明[/b][/color]\n\n"
 			+ "1. [color=#a8c9ff]点击己方单位[/color] → 浮出 5 按钮气泡\n"
 			+ "2. [color=#5fa8e8]蓝色高亮[/color]是可移动的范围\n"
 			+ "3. [color=#e85a6a]红色高亮[/color]是攻击的范围\n"
@@ -962,6 +1219,27 @@ func _show_first_tutorial_deferred() -> void:
 func _on_reconnect_pressed() -> void:
 	if _game_id > 0 and _player_id > 0:
 		NetworkClient.connect_to_game(_game_id, _player_id)
+
+
+# 2026-08-09:Connecting 面板的"放弃重连,返回主菜单"按钮 handler。
+# 关键:disconnect WS,重置 _game_id / _player_id / _resume_* 状态,
+# 切回 menu。否则下次进游戏会从上次的中断存档续上,不是玩家预期。
+func _on_connecting_abort_pressed() -> void:
+	# 1) 关 WS
+	if NetworkClient != null and NetworkClient.has_method("ws_close"):
+		NetworkClient.ws_close()
+	# 2) 切回 menu
+	_show_view("menu")
+	# 3) 状态清理(主菜单要的"白纸"状态)
+	_game_id = 0
+	_player_id = 0
+	_resume_game_id = 0
+	_resume_player_id = 0
+	_resume_kind = ""
+	# 4) 顺手清 connecting label 文字(下次进别留尾巴)
+	if connecting_label != null and is_instance_valid(connecting_label):
+		connecting_label.text = "已断开,正在返回主菜单..."
+	_update_status("已放弃重连,返回主菜单")
 
 
 func _on_exit_pressed() -> void:
@@ -1392,9 +1670,10 @@ func _refresh_co_roster() -> void:
 		var color_name: String = "" if color_v == null else str(color_v)
 		var commander_v: Variant = c.get("commander_id", null)
 		var commander_id: String = "" if commander_v == null else str(commander_v)
-		var meter: int = int(c.get("meter", 0))
+		var stars: int = int(c.get("stars_earned_total", 0))
 		var threshold: int = max(1, int(c.get("threshold", 100)))
-		var pct: float = clamp(float(meter) / float(threshold) * 100.0, 0.0, 100.0)
+		var power_cost: int = int(c.get("power_cost", 6))
+		var pct: float = clamp(float(stars) / float(threshold) * 100.0, 0.0, 100.0)
 		var is_active: bool = bool(c.get("is_power_active", false))
 		var can_fire: bool = bool(c.get("can_fire", false))
 		var is_local: bool = pid == _player_id
@@ -1422,18 +1701,19 @@ func _refresh_co_roster() -> void:
 		var side_name := _team_cn(color_name)
 		if side_name == "":
 			side_name = "阵营"
-		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "未任命"
+		# Keep the compact top roster legible at 1280px without clipping the team name.
+		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "待命"
 		lbl.text = side_name if compact else "%s · %s" % [side_name, commander_name_text]
 		lbl.custom_minimum_size = Vector2(40 if compact else 92, 0)
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", roundi((12 if compact else 14) * density))
+		lbl.add_theme_font_size_override("font_size", roundi((14 if compact else 15) * density))
 		row_inner.add_child(lbl)
 		# 3) ProgressBar(meter / threshold)
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(30 if compact else 48, 14)
 		bar.value = pct
 		bar.show_percentage = false
-		bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+		bar.tooltip_text = "指挥官士气星: %d / %d(放 power 消耗 %d 颗)" % [stars, threshold, power_cost]
 		var bar_bg := StyleBoxFlat.new()
 		bar_bg.bg_color = Color(0.025, 0.05, 0.075, 0.96)
 		bar_bg.border_color = Color(0.31, 0.27, 0.18, 1.0)
@@ -1450,20 +1730,20 @@ func _refresh_co_roster() -> void:
 			var active_lbl := Label.new()
 			active_lbl.text = "⚡ 生效中"
 			active_lbl.add_theme_color_override("font_color", Color(0.96, 0.78, 0.18))
-			active_lbl.add_theme_font_size_override("font_size", roundi(11 * density))
+			active_lbl.add_theme_font_size_override("font_size", roundi(13 * density))
 			row_inner.add_child(active_lbl)
 		elif can_fire and is_local:
 			var btn := Button.new()
 			btn.text = "发动"
 			btn.custom_minimum_size = Vector2(36, 20)
 			btn.add_theme_font_size_override("font_size", roundi(10 * density))
-			btn.tooltip_text = "激活指挥官技(消耗全部能量)"
+			btn.tooltip_text = "激活指挥官技(消耗 %d 颗士气星)" % power_cost
 			# 用 Callable.bind 把 pid 绑到 pressed 信号
 			btn.pressed.connect(_on_co_power_pressed.bind(pid))
 			row_inner.add_child(btn)
 		else:
 			var meter_lbl := Label.new()
-			meter_lbl.text = "%d/%d" % [meter, threshold]
+			meter_lbl.text = "%d/%d" % [stars, threshold]
 			meter_lbl.add_theme_font_size_override("font_size", roundi((10 if compact else 12) * density))
 			row_inner.add_child(meter_lbl)
 
@@ -1541,18 +1821,21 @@ func _refresh_commander_section() -> void:
 	commander_name.text = "%s [color=%s][b]%s[/b][/color]  ·  %d 单位 · 💰 %d" % [
 		emoji, color_godot, name, units, gold
 	]
-	# CO meter from co_states array
-	var meter: int = 0
+	# CO 进度 from co_states array
+	# 新机制:进度 = stars_earned_total / threshold(累计士气星 / 累计上限)
+	var stars: int = 0
 	var threshold: int = 100
+	var power_cost: int = 6
 	for c in GameState.co_states:
 		if c is Dictionary and int(c.get("player_id", -1)) == (int(cur_pid) if cur_pid != null else -1):
-			meter = int(c.get("meter", 0))
+			stars = int(c.get("stars_earned_total", 0))
 			threshold = max(1, int(c.get("threshold", 100)))
+			power_cost = int(c.get("power_cost", 6))
 			break
-	var pct: float = float(meter) / float(threshold) * 100.0
+	var pct: float = float(stars) / float(threshold) * 100.0
 	if commander_co_bar != null and is_instance_valid(commander_co_bar):
 		commander_co_bar.value = pct
-		commander_co_bar.tooltip_text = "指挥官能量: %d / %d" % [meter, threshold]
+		commander_co_bar.tooltip_text = "指挥官士气星: %d / %d(消耗 %d 颗放 power)" % [stars, threshold, power_cost]
 
 
 # M4.13/14 行动后气泡:单位 move/attack 后弹出可再行动气泡
@@ -1575,6 +1858,15 @@ func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 		return
 	var local: Vector2 = layer.to_local(global_pos)
 	var target_cell: Vector2i = layer.local_to_map(local)
+	_update_path_dots_at_cell(target_cell)
+
+
+# 2026-08-09:键盘/手柄光标模式 — 玩家光标移到哪格,这里直接收 cell。
+# 复用 _update_path_dots_on_hover 内部的 path 计算 + dots 渲染逻辑,
+# 把"screen pos → cell"这一步在外面完成。
+func _update_path_dots_at_cell(target_cell: Vector2i) -> void:
+	if board == null or _move_reachable_set.is_empty():
+		return
 	if target_cell == _path_hover_last:
 		return
 	_path_hover_last = target_cell
@@ -1635,6 +1927,9 @@ func _show_post_action_bubble(unit_id: int, action_name: String) -> void:
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
 	var context := _ACTION_CONTEXT_POST_MOVE if action_name == "移动" else _ACTION_CONTEXT_POST_ACTION
+	if context == _ACTION_CONTEXT_POST_MOVE:
+		# 移动后立即用剩余移动力重建可达缓存,保证可见的"继续移动"始终可用。
+		_move_reachable_set = _compute_reachable_tiles_full(ud) if _can_continue_move(ud) else {}
 	_show_action_bubble(unit_id, marker_pos, context)
 	_update_status("已%s,请选择后续指令" % ("移动" if action_name == "移动" else "行动"))
 
@@ -1746,6 +2041,15 @@ func _on_unit_recruited(new_unit_id: int, unit_type: String, tile_x: int, tile_y
 func _on_co_power_pressed(pid: int) -> void:
 	if _game_id <= 0:
 		return
+	# 鸢影·沉默领域:需要先选 5×5 中心,不立即 fire。
+	var co_id: String = ""
+	for co_entry in GameState.co_states:
+		if co_entry is Dictionary and int(co_entry.get("player_id", -1)) == pid:
+			co_id = String(co_entry.get("commander_id", "") or "")
+			break
+	if co_id == "yuanying":
+		_enter_silence_pick_center_mode(pid)
+		return
 	# 8c: 可选 pre-action 对话(默认关闭,设置开关)
 	if UserSettings.get_value("dialog.v1.co_power_confirm", false):
 		await DialogManager.play([{
@@ -1755,11 +2059,56 @@ func _on_co_power_pressed(pid: int) -> void:
 		}])
 	NetworkClient.action_co_power(
 		_game_id, pid,
+		Vector2i(-1, -1),  # 无中心
 		Callable(self, "_on_co_power_response"),
 	)
 	_update_status("⚡ 指挥官技激活中 (#%d)..." % pid)
 	# 视觉反馈:屏幕中央大飘字 + 屏幕震动
 	_play_co_power_fx()
+
+
+# 鸢影·沉默领域:进入"选中心"模式,玩家点格子选 5×5 中心。
+func _enter_silence_pick_center_mode(pid: int) -> void:
+	_silence_pick_center_for_pid = pid
+	_update_status("沉默领域:点选 5×5 中心(右键取消)")
+	if board != null:
+		board.highlight_silence_pick_mode(true)
+
+
+# 鸢影·沉默领域:玩家点格子 → 设 center → fire。
+func _handle_silence_center_pick(tile: Vector2i) -> void:
+	var pid: int = _silence_pick_center_for_pid
+	if pid <= 0:
+		return
+	if tile.x < 0 or tile.y < 0:
+		return
+	_silence_pick_center_for_pid = -1
+	if board != null:
+		board.highlight_silence_pick_mode(false)
+	# 8c: 可选 pre-action 对话
+	if UserSettings.get_value("dialog.v1.co_power_confirm", false):
+		await DialogManager.play([{
+			"speaker": "",
+			"text": "沉默领域即将发动(中心 (%d, %d)),确认?" % [tile.x, tile.y],
+			"type": "narration",
+		}])
+	NetworkClient.action_co_power(
+		_game_id, pid,
+		tile,
+		Callable(self, "_on_co_power_response"),
+	)
+	_update_status("⚡ 沉默领域激活中 (中心 (%d, %d))..." % [tile.x, tile.y])
+	_play_co_power_fx()
+
+
+# 鸢影·沉默领域:右键 / ESC 取消。
+func _cancel_silence_pick() -> void:
+	if _silence_pick_center_for_pid <= 0:
+		return
+	_silence_pick_center_for_pid = -1
+	if board != null:
+		board.highlight_silence_pick_mode(false)
+	_update_status("已取消沉默领域选择")
 
 
 ## 8c: CO power 响应 — 成功后播一句旁白
@@ -1852,12 +2201,16 @@ func _apply_theme(theme_name: String) -> void:
 
 
 # M6.13 Help / 玩法说明 — 显示游戏规则静态指南
-var _help_panel: Panel = null
+#
+# 实现用 ColorRect 当背景(不是 Panel),因为 Panel 是 Control 容器,
+# 没有 .color 属性 —— 用 Panel.color 会在第一次调用时 SCRIPT ERROR。
+# (Found via headless button smoke test on 2026-08-09.)
+var _help_panel: ColorRect = null
 
 
 func show_help() -> void:
 	if _help_panel == null:
-		_help_panel = Panel.new()
+		_help_panel = ColorRect.new()
 		_help_panel.anchor_left = 0.5
 		_help_panel.anchor_top = 0.5
 		_help_panel.anchor_right = 0.5
@@ -1868,6 +2221,11 @@ func show_help() -> void:
 		_help_panel.offset_bottom = 240.0
 		_help_panel.color = Color(0.06, 0.13, 0.10, 0.96)
 		get_tree().root.add_child(_help_panel)
+		# 内容容器(Panel 不会挡事件也不画背景,只用来 group)
+		var content := Panel.new()
+		content.anchor_right = 1.0
+		content.anchor_bottom = 1.0
+		_help_panel.add_child(content)
 		var title := Label.new()
 		title.text = "📖 玩 法 说 明"
 		title.anchor_right = 1.0
@@ -1876,7 +2234,7 @@ func show_help() -> void:
 		title.horizontal_alignment = 1
 		title.add_theme_font_size_override("font_size", 22)
 		title.add_theme_color_override("font_color", MenuTheme.C_GOLD)
-		_help_panel.add_child(title)
+		content.add_child(title)
 		var body := RichTextLabel.new()
 		body.bbcode_enabled = true
 		body.anchor_right = 1.0
@@ -1897,7 +2255,7 @@ func show_help() -> void:
 			+ "[color=#f4e8c1][b]胜利条件[/b][/color]\n"
 			+ "  消灭所有敌方单位,或占领对方总部(通用规则)"
 		)
-		_help_panel.add_child(body)
+		content.add_child(body)
 		var close := Button.new()
 		close.text = "关 闭"
 		close.anchor_left = 0.5
@@ -1910,7 +2268,7 @@ func show_help() -> void:
 		close.offset_bottom = -16.0
 		close.pressed.connect(hide_help)
 		close.add_theme_font_size_override("font_size", 14)
-		_help_panel.add_child(close)
+		content.add_child(close)
 	_help_panel.visible = true
 
 
@@ -2079,6 +2437,59 @@ func _on_ai_thinking(thinking: bool) -> void:
 	ai_thinking_label.modulate.a = 1.0
 	_ai_pulse_tween = create_tween().set_loops()
 	_ai_pulse_tween.set_trans(Tween.TRANS_SINE)
+
+
+# 2026-08-09:全局返回上一级 — LIFO 关掉最上层 modal。
+# 返回:true 表示关掉了某 modal(让 caller 调 set_input_as_handled);
+#       false 表示没 modal 在最上层,让其它逻辑继续走(棋盘 cancel / 暂停 toggle)。
+func _try_close_topmost_modal() -> bool:
+	# LIFO 顺序:后开的先关。最靠"玩家"的最先关。
+	# 顺序按 panel 显隐的常见 LIFO 路径调:
+	#   ConfirmDialog(顶层) > BattleResult(终局) > AttackConfirm(战斗中)
+	#   > Recruit(选中空兵营后) > WarReport(终局后) > Settings(任何时候)
+	#   > Pause(战斗中) > TutorialBubble(任何时候)
+	# 注意:ActionBubble 不接 ui_cancel(玩家按 ui_cancel 时通常是要退出行动模式,
+	# ActionBubble 跟 board.cancel_cursor 同语义,留给 board._handle_cursor_input 处理)。
+	if _is_visible(confirm_dialog):
+		# Confirm 弹窗 Esc = 选 No(默认焦点,更安全)
+		_on_confirm_no_pressed()
+		return true
+	if _is_visible(battle_result_panel):
+		# BattleResult Esc = 关闭面板(玩家可能想看棋盘)
+		hide_battle_result()
+		return true
+	if _is_visible(attack_confirm_panel):
+		# 攻击确认 Esc = 取消攻击
+		_on_attack_cancel_pressed()
+		return true
+	if _is_visible(recruit_panel):
+		_on_recruit_close_pressed()
+		return true
+	if _is_visible(war_report_panel):
+		war_report_panel.visible = false
+		return true
+	if _is_visible(tutorial_bubble):
+		_on_tutorial_got_it_pressed()
+		return true
+	if _is_visible(settings_panel):
+		_hide_settings_panel()
+		return true
+	if _is_visible(pause_panel):
+		# pause 在 board_focused 已被让给 board.cancel(我们在 _unhandled_input 顶部分流)
+		# 这里 pause.visible 时一律关暂停
+		_toggle_pause()
+		return true
+	if _is_visible(connecting_panel):
+		# 重连卡住 → 放弃,回主菜单
+		_on_connecting_abort_pressed()
+		return true
+	return false
+
+
+func _is_visible(panel: Control) -> bool:
+	if panel == null or not is_instance_valid(panel):
+		return false
+	return panel.visible
 	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 0.4, 0.8)
 	_ai_pulse_tween.tween_property(ai_thinking_label, "modulate:a", 1.0, 0.8)
 
@@ -2106,11 +2517,156 @@ func _update_status(text: String) -> void:
 	status_label.text = text
 
 
+## 响应式布局:物理窗口宽 ≤ 1366 时折叠左翼 + 半透明右翼 + 触发 hud_theme 的字号补偿分支。
+## 关键:Godot 4 canvas_items stretch 下 get_visible_rect 永远返回 1920,DisplayServer.window_get_size
+## 在 headless 下返回 (0,0)。可靠来源是 OS.get_cmdline_args() 里的 --resolution 参数。
+func _physical_window_width() -> int:
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for i in args.size():
+		if args[i] == "--resolution" and i + 1 < args.size():
+			var parts: PackedStringArray = args[i + 1].split("x")
+			if parts.size() == 2:
+				return int(parts[0])
+	# fallback:BB_REVIEW_RES 环境变量(截图工具专用)
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "":
+		var parts2: PackedStringArray = env.split("x")
+		if parts2.size() == 2:
+			return int(parts2[0])
+	# 终极 fallback:DisplayServer 窗口尺寸(非 headless 时有效)
+	var sz: Vector2i = DisplayServer.window_get_size()
+	if sz.x > 0:
+		return sz.x
+	return 1920  # 默认
+
+
+func _update_hud_layout_for_viewport() -> void:
+	var window_width: int = _physical_window_width()
+	var small: bool = window_width > 0 and window_width <= 1366
+	# P0-4 修复:大视口(>=1600)右翼与 InfoPanel 显式加宽并左移锚点,
+	# 避免 1920x1080 下侧栏保持 1280 宽度留下大块黑边。
+	# ⚠ InfoPanel 宽度不能超过 smoke_test.gd 硬限制 460(inspect_card.size.x <= 460)。
+	var wide: bool = window_width >= 1600
+	var left_wing_anchor := 0.235 if wide else (0.22 if small else 0.215)
+	var right_wing_anchor := 0.755 if wide else 0.755
+	var right_wing_min_w := 440.0 if wide else 0.0
+	var top_status_art := hud_layer.get_node_or_null("TopStatusArt") as Control
+	var top_left := turn_badge.get_parent() as Control
+	var top_right := current_player_badge.get_parent() as Control
+	var bottom_left := gold_panel.get_parent() as Control
+	var bottom_right := war_report_button.get_parent() as Control
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		# Compact mode is still a real three-column layout: a narrow instruction
+		# card, the board, and the inspector. Hiding the left wing made the board
+		# look accidentally offset inside a large empty gutter.
+		left_hud_wing.visible = true
+		left_hud_wing.anchor_right = left_wing_anchor
+		left_hud_wing.offset_left = 18.0 if small else 24.0
+		left_hud_wing.offset_top = 150.0
+		left_hud_wing.offset_right = -18.0
+		left_hud_wing.offset_bottom = 470.0 if small else 600.0
+	if right_hud_wing != null and is_instance_valid(right_hud_wing):
+		right_hud_wing.anchor_left = right_wing_anchor
+		right_hud_wing.modulate.a = 0.94 if small else 1.0
+		right_hud_wing.custom_minimum_size.x = right_wing_min_w
+		right_hud_wing.offset_left = 8.0 if small else 12.0
+		right_hud_wing.offset_right = -12.0
+		right_hud_wing.offset_bottom = 720.0 if small else 736.0
+	if info_panel != null and is_instance_valid(info_panel):
+		info_panel.anchor_left = right_wing_anchor
+		info_panel.custom_minimum_size.x = right_wing_min_w
+		info_panel.offset_left = 8.0 if small else 12.0
+		info_panel.offset_right = -12.0
+		info_panel.offset_bottom = 704.0 if small else 720.0
+	# The top rail has three independent groups. Give the corner groups enough
+	# width so a four-character Chinese action never collapses under the frame.
+	# P0-3 修复:大视口(>=1600)下让 TopStatusArt 拉到全宽 + 抬高顶栏基线,
+	# 避免 1920×1080 下顶部金属装饰带被裁窄、看不出"横梁"。
+	if top_status_art != null:
+		var rail_w: float = 1080.0 if wide else 1040.0
+		top_status_art.offset_left = -rail_w * 0.5
+		top_status_art.offset_right = rail_w * 0.5
+		# P2:小屏(<=1366)顶栏横条贴边呼吸感不足,offset_top 提 6px → 40px,
+		# 大屏(>=1600)用更激进的 26px 把横条紧贴顶端、给下方 4 段中文更多垂直空间。
+		top_status_art.offset_top = (26.0 if wide else (40.0 if small else 32.0))
+		top_status_art.offset_bottom = 116.0 if wide else 109.0
+	if top_left != null:
+		top_left.offset_left = -500.0
+		top_left.offset_right = -250.0
+		top_left.offset_top = 38.0 if wide else 45.0
+	if top_right != null:
+		top_right.offset_left = 250.0
+		top_right.offset_right = 500.0
+		top_right.offset_top = 38.0 if wide else 45.0
+	turn_badge.custom_minimum_size = Vector2(80.0, 46.0 if small else 42.0)
+	phase_badge.custom_minimum_size = Vector2(130.0, 46.0 if small else 42.0)
+	current_player_badge.custom_minimum_size = Vector2(100.0, 46.0 if small else 42.0)
+	end_turn_button.custom_minimum_size = Vector2(140.0, 54.0 if small else 46.0)
+	# P1-4:宽屏(>=1600)下"结束回合"按钮紧贴金属框,显式多留 32px 内边距,
+	# 让按钮不再压住 top_status_art(rail_w=1080)右沿,在 1920 下视觉呼吸感更舒适。
+	if wide:
+		end_turn_button.offset_right = -32.0
+	else:
+		end_turn_button.offset_right = 0.0
+	# Button styleboxes already provide the battle skin. The legacy child plate
+	# narrowed the text-safe area to only 22 logical pixels and hid the label.
+	var end_legacy_plate := end_turn_button.get_node_or_null("OrnatePlaque") as CanvasItem
+	if end_legacy_plate != null:
+		end_legacy_plate.visible = false
+	var report_legacy_plate := war_report_button.get_node_or_null("OrnatePlaque") as CanvasItem
+	if report_legacy_plate != null:
+		report_legacy_plate.visible = false
+	gold_panel.custom_minimum_size = Vector2(160.0 if small else 145.0, 54.0 if small else 46.0)
+	war_report_button.custom_minimum_size = Vector2(160.0 if small else 150.0, 54.0 if small else 46.0)
+	if bottom_left != null:
+		bottom_left.offset_top = -92.0 if small else -84.0
+	if bottom_right != null:
+		bottom_right.offset_top = -92.0 if small else -84.0
+	# Compact inspector uses the frame's actual safe area rather than the
+	# desktop 44 px inset, recovering enough width for two-column stats.
+	if small and info_panel != null:
+		for node in [commander_title, commander_name, commander_co_bar, unit_info_title, unit_info_subtitle, unit_info]:
+			if node != null and is_instance_valid(node):
+				node.offset_left = 32.0
+				node.offset_right = -32.0
+		commander_title.offset_top = 58.0
+		commander_title.offset_bottom = 84.0
+		commander_name.offset_top = 88.0
+		commander_name.offset_bottom = 114.0
+		commander_co_bar.offset_top = 120.0
+		commander_co_bar.offset_bottom = 144.0
+		var divider := info_panel.get_node_or_null("CommanderDivider") as Control
+		if divider != null:
+			divider.offset_left = 32.0
+			divider.offset_right = -32.0
+			divider.offset_top = 152.0
+			divider.offset_bottom = 154.0
+		unit_info_title.offset_top = 160.0
+		unit_info_title.offset_bottom = 186.0
+		unit_info_subtitle.offset_top = 188.0
+		unit_info_subtitle.offset_bottom = 212.0
+		unit_info.offset_top = 220.0
+		unit_info.offset_bottom = -34.0
+	# 重灌字号密度补偿(由 hud_theme.gd:apply_hud 的分支决定)
+	if HudTheme != null:
+		HudTheme.apply_hud(self)
+
+
 # ============================================================
 # V2 第 6 轮:设置 + 暂停面板 — 输入 + handlers
 # ============================================================
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 2026-08-09:全局返回上一级(模态 LIFO)— Esc / 手柄 A 先关最上层 modal
+	# 优先级(从上到下,先匹配先关):
+	#   ConfirmDialog → BattleResultPanel → AttackConfirmPanel → RecruitPanel
+	#   → WarReportPanel → SettingsPanel → PausePanel → ConnectingPanel(放弃重连)
+	# 命中即 set_input_as_handled,后续 board / ui_cancel / ui_back 不再处理。
+	# 注意:board_focused 棋盘模式让位给 modal(玩家开的 modal 优先于棋盘微观操作)。
+	if event.is_action_pressed("ui_cancel"):
+		if _try_close_topmost_modal():
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if editor_view != null and is_instance_valid(editor_view) and editor_view.visible and event.ctrl_pressed:
 			if event.keycode == KEY_Z:
@@ -2123,6 +2679,18 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	# ESC 键暂停 / 关闭上层面板(只在 game view)
 	if event.is_action_pressed("pause"):
+# Dialogue lives on a higher CanvasLayer and owns input while active.
+		# Opening pause below it creates a visible dimmer whose buttons cannot be
+		# reached, so Esc becomes an explicit "finish dialogue first" response.
+		if DialogManager != null and DialogManager.is_playing():
+			_update_status("请先完成当前对话")
+			get_viewport().set_input_as_handled()
+			return
+		# 2026-08-09:board_focused 时(棋盘光标模式)Esc 走"取消行动模式",
+		# 不触发暂停。玩家按 Start(手柄)/ 主动点暂停按钮才暂停。
+		if InputState != null and InputState.board_focused \
+				and not (settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible):
+			return
 		# 优先级:settings_panel 打开 → 关 settings;否则 toggle pause
 		if settings_panel != null and is_instance_valid(settings_panel) and settings_panel.visible:
 			_hide_settings_panel()
@@ -2136,6 +2704,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		if _move_mode_unit_id > 0 and board != null:
 			_update_path_dots_on_hover(event.global_position)
+		# 鸢影·沉默领域:跟踪 hover cell,显示 5×5 outline
+		if _silence_pick_center_for_pid > 0 and board != null:
+			board.update_silence_pick_hover(event.global_position)
 		return
 	# M4.10:鼠标左键 → 选中单位 / 行动目标
 	# 右键:有面板→关面板;行动模式→取消;点单位→显示射程;空地→清除
@@ -2158,6 +2729,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		# ② 行动模式 → 取消
+		if _silence_pick_center_for_pid > 0:
+			_cancel_silence_pick()
+			get_viewport().set_input_as_handled()
+			return
 		if _move_mode_unit_id > 0 or _attack_mode_unit_id > 0 or _skill_mode_unit_id > 0:
 			_cancel_action_mode()
 			_hide_action_bubble()
@@ -2228,23 +2803,23 @@ func _pick_empty_my_barracks_at_cell(cell: Vector2i) -> Dictionary:
 	if board == null or GameState == null:
 		return {}
 	if not GameState.is_local_turn:
-		_update_status("Not your turn...")
+		_update_status("当前不是你的回合。")
 		return {}
 	var tile := GameState.get_tile(cell.x, cell.y)
 	if tile.is_empty() and board.tile_lookup != null:
 		tile = board.tile_lookup.get(cell, {})
 	if tile.is_empty():
-		_update_status("Map data not loaded")
+		_update_status("地图数据尚未加载。")
 		return {}
 	if str(tile.get("terrain", "")) != "barracks":
 		return {}
 	var owner_id := int(tile.get("owner_id", -1))
 	if owner_id != _player_id:
-		_update_status("This barracks is not yours (owner=%d)" % owner_id)
+		_update_status("这座兵营不属于你（归属玩家 %d）。" % owner_id)
 		return {}
 	var occ_v: Variant = tile.get("occupied_unit_id", null)
 	if occ_v != null and int(occ_v) > 0:
-		_update_status("Barracks occupied; move the unit away first")
+		_update_status("兵营已被占用，请先将单位移开。")
 		return {}
 	var me: Dictionary = GameState.get_player(_player_id)
 	return {"x": cell.x, "y": cell.y, "gold": int(me.get("gold", 0))}
@@ -2279,6 +2854,8 @@ func _show_recruit_at(info: Dictionary) -> void:
 		btn.pressed.connect(_on_recruit_button_pressed.bind(unit_type))
 		recruit_list.add_child(btn)
 	recruit_panel.visible = true
+	# 2026-08-09:grab focus 到第一个可点按钮(动态列表,用 first focusable)
+	UIPanelFocus.grab_first_focusable(recruit_panel)
 
 
 func _on_recruit_button_pressed(unit_type: String) -> void:
@@ -2327,6 +2904,10 @@ func _on_board_unit_clicked(unit_id: int) -> void:
 
 # M4.1:点击地图格子(空白区 / 落点)→ 处理
 func _on_board_tile_clicked(tile: Vector2i) -> void:
+	# 鸢影·沉默领域选中心:任何 tile 点击都优先处理(玩家选 center)
+	if _silence_pick_center_for_pid > 0:
+		_handle_silence_center_pick(tile)
+		return
 	if _move_mode_unit_id <= 0:
 		if tile.x >= 0 and tile.y >= 0 and _try_open_recruit_at_tile(tile):
 			return
@@ -2344,6 +2925,35 @@ func _on_board_tile_clicked(tile: Vector2i) -> void:
 		return
 	# 提交动作
 	_move_unit_to(_move_mode_unit_id, tile.x, tile.y)
+
+
+# P1-3:左翼"战术指令"卡片的内容填充 helper。
+# 在 _show_view("game") 期间被调用一次,把动态信息写到 TurnHint/CancelHint。
+# 字号 / 行距 / 颜色由 .tscn 默认值定;这里只负责换文本。
+func _refresh_tactical_hints() -> void:
+	var turn_node := get_node_or_null("GameView/HUD/LeftHudWing/TurnHint") as Label
+	if turn_node != null and is_instance_valid(turn_node):
+		var turn_num: int = 1
+		var total_turns: int = 9
+		# GameState 没有顶层 turn_number — turn 信息可能在 latest_snapshot / game_summary 里。
+		# 取不到就保持"回合 1 / 9"的占位,不影响 P1-3 视觉补强。
+		if GameState != null:
+			var summary_v: Variant = GameState.game_summary
+			if summary_v is Dictionary:
+				var snap_turn: int = int(summary_v.get("turn_number", 0))
+				if snap_turn > 0:
+					turn_num = snap_turn
+				var max_turn: int = int(summary_v.get("max_turns", 0))
+				if max_turn > 0:
+					total_turns = max_turn
+		var cp_id: int = int(GameState.current_player_id) if GameState != null and GameState.current_player_id != null else 1
+		var owner_name: String = "云"
+		if GameState != null:
+			for p_v in GameState.players:
+				if p_v is Dictionary and int(p_v.get("id", -1)) == cp_id:
+					owner_name = str(p_v.get("user_name", "云"))
+					break
+		turn_node.text = "回合 %d / %d · %s先手" % [turn_num, total_turns, owner_name]
 
 
 # M4.1:取消移动模式
@@ -2419,9 +3029,12 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 	_selected_unit_id = unit_id
 	var cell := Vector2i(int(ud.get("x", 0)), int(ud.get("y", 0)))
 	var marker_pos: Vector2 = board.tile_to_viewport(cell) if board != null else Vector2.ZERO
-	_show_action_bubble(unit_id, marker_pos, _ACTION_CONTEXT_INITIAL)
+	# 已移动但仍有剩余移动力的单位:重选后保持 POST_MOVE 语境(继续移动),不塌缩为 wait/cancel。
+	var moved_with_mp: bool = bool(ud.get("has_moved", false)) and _can_continue_move(ud)
+	var context: String = _ACTION_CONTEXT_POST_MOVE if moved_with_mp else _ACTION_CONTEXT_INITIAL
+	_show_action_bubble(unit_id, marker_pos, context)
 	var is_mine: bool = (owner_pid == _player_id and owner_pid == cur_pid)
-	if is_mine and not bool(ud.get("has_acted", false)) and not bool(ud.get("has_moved", false)):
+	if is_mine and not bool(ud.get("has_acted", false)):
 		var reach_dict: Dictionary = _compute_reachable_tiles_full(ud)
 		var tiles: Array = reach_dict.keys()
 		_move_reachable_set = reach_dict
@@ -2436,7 +3049,8 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
 func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
-	var mp: int = int(unit_data.get("mov", int(unit_data.get("move_points", int(unit_data.get("mp", 5))))))
+	# 优先用剩余移动力 mp;已移动单位(mp < mov)必须按剩余 MP 预览可达格。
+	var mp: int = int(unit_data.get("mp", int(unit_data.get("mov", int(unit_data.get("move_points", 5))))))
 	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
@@ -2526,14 +3140,20 @@ func _toggle_pause() -> void:
 	if open:
 		pause_overlay.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 		pause_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+		# The tree is paused below, so the dimmer is visual-only. Letting it
+		# consume GUI input can starve the higher pause menu on some layouts.
+		pause_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pause_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		pause_overlay.visible = true
 		pause_panel.visible = true
 		# 暂停时关闭行动气泡 + 战报面板
 		if action_bubble != null and is_instance_valid(action_bubble):
-			action_bubble.visible = false
+			_hide_action_bubble()
 		if war_report_panel != null and is_instance_valid(war_report_panel):
 			war_report_panel.visible = false
 		get_tree().paused = true
+		# 2026-08-09:grab focus 到默认按钮(resume),手柄/键盘可立即点
+		UIPanelFocus.grab_on_show(pause_panel, pause_resume_btn)
 	else:
 		_hide_pause_panel()
 
@@ -2547,15 +3167,60 @@ func _hide_pause_panel() -> void:
 func _show_settings_panel() -> void:
 	if settings_panel == null or not is_instance_valid(settings_panel):
 		return
+	_prepare_modal_layer("settings")
 	# 同步当前玩家名到 input
 	if settings_name_input != null and is_instance_valid(settings_name_input):
 		settings_name_input.text = _user_name
 	settings_panel.visible = true
+	# 2026-08-09:grab focus 到关闭按钮(玩家可能想直接退),手柄/键盘可立即按
+	UIPanelFocus.grab_on_show(settings_panel, settings_close_btn)
 
 
 func _hide_settings_panel() -> void:
 	if settings_panel != null and is_instance_valid(settings_panel):
 		settings_panel.visible = false
+
+
+func _prepare_modal_layer(active_modal: String) -> void:
+	# Keep modal presentation deterministic: CanvasLayer state is independent
+	# from GameView.visible, so every modal entry point normalizes it first.
+	if hud_layer != null and is_instance_valid(hud_layer):
+		hud_layer.visible = true
+		hud_layer.transform = Transform2D.IDENTITY
+	if battle_backdrop_layer != null and is_instance_valid(battle_backdrop_layer):
+		battle_backdrop_layer.visible = true
+		battle_backdrop_layer.transform = Transform2D.IDENTITY
+	if settings_panel != null and is_instance_valid(settings_panel):
+		_center_panel_in_viewport(settings_panel, Vector2(720, 630))
+		settings_panel.visible = active_modal == "settings"
+	if battle_result_panel != null and is_instance_valid(battle_result_panel):
+		_center_panel_in_viewport(battle_result_panel, Vector2(900, 600))
+		battle_result_panel.visible = active_modal == "battle_result"
+	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		tutorial_bubble.visible = active_modal == "tutorial"
+	if war_report_panel != null and is_instance_valid(war_report_panel) and active_modal != "war_report":
+		war_report_panel.visible = false
+	if pause_panel != null and is_instance_valid(pause_panel) and active_modal != "pause":
+		pause_panel.visible = false
+	if dialog_panel != null and is_instance_valid(dialog_panel):
+		dialog_panel.visible = active_modal == "dialog"
+	if dialog_overlay != null and is_instance_valid(dialog_overlay):
+		dialog_overlay.visible = active_modal == "dialog"
+
+
+func _center_panel_in_viewport(panel: Control, panel_size: Vector2) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	var vp_size := get_viewport().get_visible_rect().size
+	var safe_size := Vector2(min(panel_size.x, vp_size.x - 96.0), min(panel_size.y, vp_size.y - 96.0))
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -safe_size.x * 0.5
+	panel.offset_top = -safe_size.y * 0.5
+	panel.offset_right = safe_size.x * 0.5
+	panel.offset_bottom = safe_size.y * 0.5
 
 
 func _on_settings_open_pressed() -> void:
@@ -2798,6 +3463,7 @@ func _on_capture_suspend_response(body: Variant, code: int) -> void:
 
 func show_tutorial() -> void:
 	if tutorial_bubble != null and is_instance_valid(tutorial_bubble):
+		_prepare_modal_layer("tutorial")
 		tutorial_bubble.visible = true
 
 
@@ -2809,29 +3475,51 @@ func hide_tutorial() -> void:
 func show_battle_result(winner_name: String, winner_color: String, stats: Dictionary) -> void:
 	if battle_result_panel == null or not is_instance_valid(battle_result_panel):
 		return
+	# Battle result is the terminal modal for a match. It must never compete
+	# with an unfinished dialogue panel or inherit its board-blocking mask.
+	if DialogManager != null:
+		# P0-5 修复:hide_dialog() 已经负责把 DialogOverlay 置 false(_enforce_dialog_mask(false)),
+		# 不需要再二次取节点。这里只确保 hide_dialog 被同步调用,避免 race。
+		DialogManager.hide_dialog()
+	_prepare_modal_layer("battle_result")
 	if battle_mainline_next_btn != null and is_instance_valid(battle_mainline_next_btn):
 		battle_mainline_next_btn.visible = false
+	if battle_back_lobby_btn != null and is_instance_valid(battle_back_lobby_btn):
+		var has_lobby_return := _active_mainline_id == ""
+		battle_back_lobby_btn.disabled = not has_lobby_return
+		battle_back_lobby_btn.text = "返回联机大厅" if has_lobby_return else "联机大厅（主线不可用）"
+		battle_back_lobby_btn.tooltip_text = "" if has_lobby_return else "当前是主线战斗，没有可返回的联机房间"
 	var color_godot: String = _color_name_to_godot(winner_color)
 	battle_result_winner.bbcode_enabled = true
 	battle_result_winner.text = "🎉 [color=%s][b]%s[/b][/color] 获胜!" % [color_godot, winner_name]
 	var detail_lines: Array = (stats.get("detail_lines", []) as Array)
 	var detail_text: String = ""
 	if detail_lines.size() > 0:
-		detail_text = "\n\n[color=#c9a14a]📜 最近战报[/color]\n" + "\n".join(detail_lines)
-	var stats_text: String = "[color=#c9a14a]📊 战 报 统 计[/color]\n\n" \
-		+ "[color=#f4e8c1]击杀:[/color] [color=#f0c75e]%d[/color]      [color=#f4e8c1]被击杀:[/color] [color=#c63a3a]%d[/color]\n" % [int(stats.get("kills", 0)), int(stats.get("deaths", 0))] \
-		+ "[color=#f4e8c1]占领建筑:[/color] [color=#f0c75e]%d[/color]   [color=#f4e8c1]CO 峰值:[/color] [color=#c9a14a]%d/100[/color]\n" % [int(stats.get("captures", 0)), int(stats.get("co_peak", 0))] \
-		+ "[color=#f4e8c1]持续回合:[/color] [color=#f0c75e]%d[/color]    [color=#f4e8c1]技能使用:[/color] [color=#f0c75e]%d[/color]\n\n" % [int(stats.get("turns", 0)), int(stats.get("skills", 0))] \
-		+ "[color=#a89878]胜利原因: %s[/color]" % str(stats.get("reason", "—")) \
-		+ detail_text
+		detail_text = "\n[color=#a89878]详细行动记录可在「详细战报」中查看[/color]"
+	var stats_text: String = "[center][color=#c9a14a][font_size=22]战役成果[/font_size][/color]\n\n" \
+		+ "[table=3][cell][center][color=#f4e8c1]击溃[/color]\n[font_size=30][color=#f0c75e]%d[/color][/font_size][/center][/cell]" % int(stats.get("kills", 0)) \
+		+ "[cell][center][color=#f4e8c1]战损[/color]\n[font_size=30][color=#c63a3a]%d[/color][/font_size][/center][/cell]" % int(stats.get("deaths", 0)) \
+		+ "[cell][center][color=#f4e8c1]据点[/color]\n[font_size=30][color=#f0c75e]%d[/color][/font_size][/center][/cell]" % int(stats.get("captures", 0)) \
+		+ "[cell][center][color=#f4e8c1]回合[/color]\n[color=#f0c75e]%d[/color][/center][/cell]" % int(stats.get("turns", 0)) \
+		+ "[cell][center][color=#f4e8c1]技能[/color]\n[color=#f0c75e]%d[/color][/center][/cell]" % int(stats.get("skills", 0)) \
+		+ "[cell][center][color=#f4e8c1]统御峰值[/color]\n[color=#c9a14a]%d/100[/color][/center][/cell][/table]\n\n" % int(stats.get("co_peak", 0)) \
+		+ "[color=#a89878]胜利原因  ·  %s[/color]" % str(stats.get("reason", "—")) \
+		+ detail_text + "[/center]"
 	battle_result_stats.bbcode_enabled = true
 	battle_result_stats.text = stats_text
 	battle_result_panel.visible = true
+	if battle_result_overlay != null and is_instance_valid(battle_result_overlay):
+		battle_result_overlay.visible = true
+	# 2026-08-09:grab focus 到主按钮(看情况,优先 DetailBtn,否则 BackLobbyBtn)
+	var default_btn: Button = battle_detail_btn if battle_detail_btn != null else battle_back_lobby_btn
+	UIPanelFocus.grab_on_show(battle_result_panel, default_btn)
 
 
 func hide_battle_result() -> void:
 	if battle_result_panel != null and is_instance_valid(battle_result_panel):
 		battle_result_panel.visible = false
+	if battle_result_overlay != null and is_instance_valid(battle_result_overlay):
+		battle_result_overlay.visible = false
 
 
 func _on_tutorial_got_it_pressed() -> void:
@@ -2843,6 +3531,8 @@ func _on_battle_detail_pressed() -> void:
 	# 直接弹出战报面板(复用)
 	if war_report_panel != null and is_instance_valid(war_report_panel):
 		war_report_panel.visible = true
+		# 2026-08-09:grab focus 到关闭按钮(战报面板只读,默认落 close)
+		UIPanelFocus.grab_on_show(war_report_panel, war_report_close_btn)
 
 
 func _on_battle_back_menu_pressed() -> void:
@@ -2877,13 +3567,18 @@ func _on_battle_back_lobby_pressed() -> void:
 
 func _apply_gba_theme() -> void:
 	HudTheme.apply_gba(self)
+	# 设置/暂停/战报/结算面板底色由 apply_theme 唯一接管,启动即应用默认主题。
+	HudTheme.apply_theme(self, "deep_gba")
+	# apply_theme intentionally owns generic settings surfaces. Re-apply the
+	# battle layer last so it remains the final owner of image-backed HUD parts.
+	HudTheme.apply_hud(self)
 
 
 func _hud_density_scale() -> float:
-	var window_width := float(DisplayServer.window_get_size().x)
+	var window_width := float(_physical_window_width())
 	if window_width <= 0.0:
 		return 1.0
-	return clampf(1920.0 / window_width, 1.0, 1.4)
+	return clampf(1920.0 / window_width, 1.0, 1.5)
 
 
 func _apply_hud_theme() -> void:
@@ -3115,13 +3810,20 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 			"right_gutter", "right":
 				action_pointer.position = Vector2(-12.0, bubble_size.y * 0.5 - 10.0)
 	action_bubble.visible = true
+	# 紧凑布局的行动菜单会占满左侧翼板；临时收起静态说明，避免两个
+	# 信息层互相穿透。关闭菜单时由 _hide_action_bubble 恢复。
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		left_hud_wing.visible = false
 	# Keyboard/gamepad users receive an explicit default action. The marker is
 	# deliberately non-color-only and remains readable when focus glow is subtle.
+	if InputState != null:
+		InputState.board_focused = false
 	for button in [move_btn, attack_btn, skill_btn, wait_btn, claim_btn, cancel_btn]:
 		if button != null and is_instance_valid(button) and button.visible and not button.disabled:
 			button.text = "▶ %s" % button.text
 			button.grab_focus()
 			break
+	UIPanelFocus.grab_first_focusable(action_bubble)
 
 
 func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
@@ -3149,22 +3851,31 @@ func _refresh_action_bubble_buttons(unit_id: int, context: String) -> void:
 		can_attack = false
 		can_skill = false
 		can_claim = false
-	_set_action_button(move_btn, can_move)
-	_set_action_button(attack_btn, can_attack)
-	_set_action_button(skill_btn, can_skill)
-	_set_action_button(wait_btn, has_unit)
-	_set_action_button(claim_btn, can_claim)
+	# 先重置 base text(清除上一轮的 " · 原因" 后缀),再调 _set_action_button 追加新原因
+	# 修复第二轮 P1:之前先 _set_action_button 再 reassign text 会覆盖原因后缀。
 	if skill_btn != null and is_instance_valid(skill_btn):
 		skill_btn.text = _skill_cn(active_skill) if active_skill != "" else "技能"
 	if claim_btn != null and is_instance_valid(claim_btn):
 		claim_btn.text = "占领"
+	_set_action_button(move_btn, can_move, "已行动" if not can_move else "")
+	_set_action_button(attack_btn, can_attack, "无目标" if not can_attack else "")
+	_set_action_button(skill_btn, can_skill, "MP 不足" if not can_skill else "")
+	_set_action_button(wait_btn, has_unit, "")
+	_set_action_button(claim_btn, can_claim, "无目标" if not can_claim else "")
 
 
-func _set_action_button(btn: Button, can_show: bool) -> void:
+func _set_action_button(btn: Button, can_show: bool, reason: String = "") -> void:
 	if btn == null or not is_instance_valid(btn):
 		return
-	btn.visible = can_show
 	btn.disabled = not can_show
+	btn.modulate.a = 0.4 if not can_show else 1.0
+	# 不可用时追加原因,可用时去掉之前留下的原因后缀
+	if not can_show and reason != "":
+		var base_text: String = btn.text.split(" · ", true, 1)[0] if " · " in btn.text else btn.text
+		btn.text = "%s · %s" % [base_text, reason]
+	else:
+		if " · " in btn.text:
+			btn.text = btn.text.split(" · ", true, 1)[0]
 
 
 func _can_initial_move(ud: Dictionary) -> bool:
@@ -3225,7 +3936,23 @@ func _available_active_skill(ud: Dictionary) -> String:
 
 func _hide_action_bubble() -> void:
 	action_bubble.visible = false
+	if left_hud_wing != null and is_instance_valid(left_hud_wing):
+		left_hud_wing.visible = true
 	_selected_unit_id = -1
+	_return_focus_to_board_if_game_active()
+
+
+func _return_focus_to_board_if_game_active() -> void:
+	if _current_view != "game":
+		return
+	if InputState == null:
+		return
+	if action_bubble != null and is_instance_valid(action_bubble) and action_bubble.visible:
+		return
+	if board == null or not is_instance_valid(board) or board.map_size.x <= 0 or board.map_size.y <= 0:
+		return
+	InputState.board_focused = true
+	get_viewport().gui_release_focus()
 
 
 func _on_move_pressed() -> void:
@@ -3285,6 +4012,19 @@ func _cancel_action_mode() -> void:
 		if board != null:
 			board.clear_selection_marks()
 		_update_status("已取消行动模式")
+
+
+# 2026-08-09:board.gd 棋盘光标按取消(A / Esc)时调。
+# 包装 _cancel_action_mode + _hide_action_bubble + 清光标,
+# 行为对齐 main.gd 里"右键空地"的分支(也调这俩)。
+func _cursor_cancel_action() -> void:
+	_cancel_action_mode()
+	_hide_action_bubble()
+	if board != null and board.has_method("clear_selection_marks"):
+		board.clear_selection_marks()
+	# 重置光标到第一个我方单位,避免"取消完光标停在地块上看起来像死锁"
+	if board != null and is_instance_valid(board) and board.map_size.x > 0:
+		InputState.cursor_cell = _find_cursor_initial_cell()
 
 
 # 行动气泡的"取消"按钮 + 右键取消都走这里
@@ -3371,6 +4111,8 @@ func _show_confirm(title: String, body: String, on_yes: Callable, on_no: Callabl
 		confirm_body_label.text = body
 	if confirm_dialog != null and is_instance_valid(confirm_dialog):
 		confirm_dialog.visible = true
+		# 2026-08-09:grab focus 到默认按钮 = No(更安全,误按不会真退出)
+		UIPanelFocus.grab_on_show(confirm_dialog, confirm_no_btn)
 
 
 func _hide_confirm() -> void:
@@ -3407,6 +4149,8 @@ func _show_attack_confirm(attacker_id: int, target_id: int) -> void:
 		attack_confirm_body.text = _build_attack_confirm_text(attacker, info)
 	if attack_confirm_panel != null and is_instance_valid(attack_confirm_panel):
 		attack_confirm_panel.visible = true
+		# 2026-08-09:grab focus 到 Cancel(默认取消更安全,等 forecast 出来再确认)
+		UIPanelFocus.grab_on_show(attack_confirm_panel, attack_cancel_btn)
 	_show_attack_forecast_loading(attacker, info)
 	if _game_id > 0 and _player_id > 0 and NetworkClient != null:
 		NetworkClient.forecast_attack(
@@ -3427,11 +4171,48 @@ func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -
 	var tx := int(target_info.get("x", 0))
 	var ty := int(target_info.get("y", 0))
 	var dist: int = abs(ax - tx) + abs(ay - ty)
-	var hp_text: String = ""
-	if target_info.has("hp"):
-		hp_text = " · 生命 %d" % int(target_info.get("hp", 0))
-	return "[b]%s[/b] → [color=#f0c75e][b]%s[/b][/color]\n距离 %d%s\n确认后将提交攻击指令。" % [
-		attacker_name, target_name, dist, hp_text
+
+	# 双方基础信息(取自 GameState 已有字段,后端无需扩 schema)
+	var attacker_lv := int(attacker.get("level", 1))
+	var target_lv := int(target_info.get("level", 1))
+	var attacker_morale := int(attacker.get("morale", 0))
+	var target_morale := int(target_info.get("morale", 0))
+	var attacker_hp := int(attacker.get("hp", 0))
+	var attacker_max_hp := int(attacker.get("max_hp", attacker_hp))
+	if attacker_max_hp <= 0:
+		attacker_max_hp = max(1, attacker_hp)
+	var target_hp := int(target_info.get("hp", 0))
+	var target_max_hp := int(target_info.get("max_hp", target_hp))
+	if target_max_hp <= 0:
+		target_max_hp = max(1, target_hp)
+	var attacker_atk := int(attacker.get("atk", 0))
+	var attacker_matk := int(attacker.get("matk", 0))
+	var target_def := int(target_info.get("def_", 0))
+	var target_mdef := int(target_info.get("mdef", 0))
+	var atk_min := int(attacker.get("min_attack_range", 0))
+	var atk_range := int(attacker.get("attack_range", 1))
+	var in_range := dist > atk_min and dist <= atk_range
+
+	var attacker_stars := "★".repeat(max(0, attacker_morale)) + "☆".repeat(max(0, 3 - attacker_morale))
+	var target_stars := "★".repeat(max(0, target_morale)) + "☆".repeat(max(0, 3 - target_morale))
+
+	var attacker_card := "[color=#f4e8c1][b]⚔ 攻击方[/b][/color]\n[b]%s[/b] · Lv.%d · %s\n[color=#c9a14a]攻 %d[/color] · [color=#c9a14a]魔攻 %d[/color]\n[color=#5fa8e8]生命 %d/%d[/color]" % [
+		attacker_name, attacker_lv, attacker_stars,
+		attacker_atk, attacker_matk, attacker_hp, attacker_max_hp,
+	]
+	var target_card := "[color=#f4e8c1][b]🛡 目标[/b][/color]\n[b]%s[/b] · Lv.%d · %s\n[color=#c9a14a]防 %d[/color] · [color=#c9a14a]魔防 %d[/color]\n[color=#5fa8e8]生命 %d/%d[/color]" % [
+		target_name, target_lv, target_stars,
+		target_def, target_mdef, target_hp, target_max_hp,
+	]
+
+	var range_text: String
+	if in_range:
+		range_text = "距离 %d · 攻击范围 %d < d ≤ %d" % [dist, atk_min, atk_range]
+	else:
+		range_text = "[color=#c63a3a]距离 %d 超出攻击范围(需 %d < d ≤ %d)[/color]" % [dist, atk_min, atk_range]
+
+	return "%s\n\n%s\n\n%s\n\n[color=#a89878]等待战斗预测…[/color]" % [
+		attacker_card, target_card, range_text
 	]
 
 
@@ -3489,8 +4270,16 @@ func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary
 			attacker_max_hp,
 			"  可能被击倒" if counter_will_kill else "",
 		])
+	elif is_kill:
+		lines.append("目标已被击杀,无反击")
 	else:
-		lines.append("目标无法反击")
+		# COUNTER_IMMUNE_SKILLS 暂为空,只能因距离过远无法反击
+		var ax := int(attacker.get("x", 0))
+		var ay := int(attacker.get("y", 0))
+		var tx := int(target_info.get("x", 0))
+		var ty := int(target_info.get("y", 0))
+		var dist: int = abs(ax - tx) + abs(ay - ty)
+		lines.append("目标无法反击(距离 %d,超出反击范围)" % dist)
 	lines.append("地形防御: +%d" % def_bonus)
 	return "\n".join(lines)
 
@@ -3715,7 +4504,7 @@ func _on_skill_pressed() -> void:
 	if skill_id == "sing":
 		var sing_out: Dictionary = _sing_targets(ud)
 		if sing_out.is_empty():
-			_update_status("Sing: no adjacent acted ally")
+			_update_status("歌唱：相邻位置没有已行动的友军。")
 			return
 		_pending_skill_id = "sing"
 		_skill_mode_unit_id = _selected_unit_id
@@ -3725,7 +4514,7 @@ func _on_skill_pressed() -> void:
 			for k in sing_out.keys():
 				sing_tiles.append(Vector2i(int(sing_out[k].get("x", 0)), int(sing_out[k].get("y", 0))))
 			board.show_attack_marks(sing_tiles)
-		_update_status("Sing: choose acted ally (%d)" % sing_out.size())
+		_update_status("歌唱：请选择已行动的友军（%d 名）。" % sing_out.size())
 		_hide_action_bubble()
 		return
 	var out: Dictionary = _heal_targets(ud)
@@ -3829,9 +4618,27 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	# 显式判断 Variant 类型后再 stringify。
 	var hero_id_v: Variant = ud.get("hero_id", null)
 	var hero_id: String = "" if hero_id_v == null else str(hero_id_v)
+	var compact_hud := _physical_window_width() <= 1366
 	_set_unit_info_portrait(ud)
+	if hero_portrait_panel != null and is_instance_valid(hero_portrait_panel):
+		if compact_hud and hero_portrait_panel.visible:
+			hero_portrait_panel.offset_left = 44.0
+			hero_portrait_panel.offset_top = 210.0
+			hero_portrait_panel.offset_right = 116.0
+			hero_portrait_panel.offset_bottom = 286.0
+		else:
+			hero_portrait_panel.offset_left = 40.0
+			hero_portrait_panel.offset_top = 210.0
+			hero_portrait_panel.offset_right = 160.0
+			hero_portrait_panel.offset_bottom = 370.0
 	if unit_info != null and is_instance_valid(unit_info):
-		unit_info.offset_left = 172.0 if hero_portrait_panel.visible else 44.0
+		unit_info.offset_left = 44.0 if compact_hud or not hero_portrait_panel.visible else 172.0
+		unit_info.offset_top = 294.0 if compact_hud and hero_portrait_panel.visible else 210.0
+		if compact_hud:
+			# 1280 窗口使用 1920 设计视口缩放；密度补偿后保持约 14px 物理字号。
+			unit_info.add_theme_font_size_override("normal_font_size", roundi(14.0 * _hud_density_scale()))
+		else:
+			unit_info.remove_theme_font_size_override("normal_font_size")
 	if hero_portrait_caption != null and is_instance_valid(hero_portrait_caption):
 		hero_portrait_caption.text = "%s · %s" % [name, "未行动" if can_act else "已行动"]
 	if unit_info_title != null and is_instance_valid(unit_info_title):
@@ -3843,17 +4650,26 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var skill_names: Array[String] = []
 	for skill in skills:
 		skill_names.append(_skill_cn(str(skill)))
-	var compact_hud := DisplayServer.window_get_size().x <= 1366
 	var stat_gap := " · " if compact_hud else "       "
-	var lines: Array = [
-		"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
-		("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
-		"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
-		"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
-		"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
-		"[color=#a89878]士气[/color] %d/3" % morale,
-		"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
-	]
+	var lines: Array = []
+	if compact_hud:
+		lines = [
+			"[color=#a89878](%d,%d)[/color] %s" % [pos.x, pos.y, owner_str],
+			("[color=#f4e8c1]HP[/color] %d/%d%s[color=#5fa8e8]MP[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]HP[/color] %d/%d" % [hp, max_hp]),
+			"[color=#c9a14a]攻[/color]%d [color=#c9a14a]防[/color]%d%s[color=#c9a14a]魔[/color]%d [color=#c9a14a]魔防[/color]%d" % [atk, def, stat_gap, matk, mdef],
+			"[color=#a89878]移[/color]%d [color=#a89878]射[/color]%d-%d%s[color=#a89878]士[/color]%d/3" % [mov, range_min + 1, range_max, stat_gap, morale],
+			"[color=#a89878]技[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
+		]
+	else:
+		lines = [
+			"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
+			("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
+			"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
+			"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
+			"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
+			"[color=#a89878]士气[/color] %d/3" % morale,
+			"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
+		]
 
 	# ── 战斗加成 / Buffs 区段(P2.6+ 用户要的逐条列出) ──
 	# 每条描述一个 buff 来源:地形 / 士气 / 指挥官 / 装备 / 技能 /
@@ -3874,7 +4690,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		var move_cost_x2: int = int(Config.TERRAIN_MOVE_COST.get(terrain_name, 9999))
 		var move_cost_text := "不可通行" if move_cost_x2 >= 9999 else ("%.1f" % (float(move_cost_x2) / 2.0))
 		var bonus_color := "#7ec97e" if def_bonus > 0 else "#c8baa0"
-		buffs.append("[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d" % [bonus_color, terrain_cn, move_cost_text, def_bonus])
+		buffs.append(("[color=%s]▦ %s[/color] 消耗%s/防御%+d" if compact_hud else "[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d") % [bonus_color, terrain_cn, move_cost_text, def_bonus])
 		if terrain_name == "castle" or terrain_name == "village" or terrain_name == "barracks":
 			buffs.append("[color=#a89878]驻守设施 · 可占领或执行设施行动[/color]")
 	# 2) 士气加成(MORALE_ATK_PER_STAR / MORALE_DEF_PER_STAR)
@@ -3883,13 +4699,19 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		var def_pct: int = int(round(morale * Config.MORALE_DEF_PER_STAR * 100))
 		buffs.append("[color=#fad855]⭐ 士气 %d[/color] → +%d%% 攻击 +%d%% 防御" % [morale, atk_pct, def_pct])
 	# 3) 玩家指挥官统御 Power 是否启动(仅自己单位)
-	if is_mine:
-		var my_player: Dictionary = GameState.get_player(_player_id) if GameState != null else {}
-		var co_state_d: Dictionary = my_player.get("co_state", {}) if my_player is Dictionary else {}
-		if co_state_d is Dictionary and co_state_d.get("is_power_active", false):
-			var co_id: String = str(co_state_d.get("commander_id", ""))
+	# 修 Bug:之前读 GameState.players[].co_state,这个字段不在 PlayerOut schema
+	# 里,通常拿到空 dict。改为读顶层 GameState.co_states[] 找本玩家。
+	if is_mine and GameState != null:
+		var is_power_active: bool = false
+		var co_id: String = ""
+		for co_entry in GameState.co_states:
+			if co_entry is Dictionary and int(co_entry.get("player_id", -1)) == _player_id:
+				is_power_active = bool(co_entry.get("is_power_active", false))
+				co_id = str(co_entry.get("commander_id", "") or "")
+				break
+		if is_power_active:
 			var co_name_cn := _commander_cn(co_id) if co_id != "" else "指挥官"
-			buffs.append("[color=#f2666b]🔥 %s 统御 Power 启动中[/color] → 全军 buff" % co_name_cn)
+			buffs.append("[color=#f2666b]🔥 %s 统御发动中[/color] → 全军增益" % co_name_cn)
 	# 4) 转职加成(高等级 → 转职后等级加成)
 	if lvl >= 10:
 		buffs.append("[color=#5fa8e8]📈 等级 %d 已解锁转职[/color]" % lvl)

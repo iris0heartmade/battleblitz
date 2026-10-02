@@ -110,8 +110,15 @@ def apply_allocation_to_unit(unit, upgrades: Mapping[str, Mapping[str, int]]) ->
     unit.mdef += applied.get("mdef", 0)
     mov = applied.get("mov", 0)
     if mov:
-        unit.mov += mov
-        unit.mp += mov
+        # Clamp mov against STAT_CAPS["mov"] to prevent equipment / talent
+        # exploits that would let a unit exceed the cap (spec §12).
+        from app.progression.policies import STAT_CAPS
+        new_mov = max(0, min(STAT_CAPS["mov"], unit.mov + mov))
+        # Apply the same delta to mp (max-per-turn) so the runtime
+        # `unit.mp` stays in sync.
+        applied_delta = new_mov - unit.mov
+        unit.mov = new_mov
+        unit.mp = max(0, unit.mp + applied_delta)
     return applied
 
 

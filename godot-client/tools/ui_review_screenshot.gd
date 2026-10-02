@@ -1,0 +1,352 @@
+extends Node
+## ui_review_screenshot.gd — 原创美术接入验收的确定性截图工具(本地 mock,无后端)。
+## 依次截图(共 11 张):主线存档 / 章节详情 / 新游戏整备 / 英雄页 / 装备页 /
+## 战斗默认态 / 单位选中 / 行动菜单 / 对话框 / 暂停界面 / 战斗结算。
+## 输出到 res://.refactor_shots/ui_<分辨率>/。
+## 用法:godot --resolution 1280x720 --path godot-client res://tools/ui_review_screenshot.tscn
+
+
+func _ready() -> void:
+	# 1) 默认 1920×1080 — 这是用户期望的"完整桌面分辨率"。
+	var res: Vector2i = Vector2i(1920, 1080)
+	# 优先:BB_REVIEW_RES 环境变量(截图 wrapper 注入,可被 split("x") 解析)
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "" and env.contains("x"):
+		var parts: PackedStringArray = env.split("x")
+		if parts.size() == 2:
+			res = Vector2i(int(parts[0]), int(parts[1]))
+	# 其次:--resolution WxH(可能分两个 token "--resolution" "WxH",也可能 "--resolution=WxH")
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for arg in args:
+		if arg.begins_with("--resolution"):
+			var value: String = arg.substr("--resolution".length()).lstrip("=")
+			if value.contains("x"):
+				var parts2: PackedStringArray = value.split("x")
+				if parts2.size() == 2:
+					res = Vector2i(int(parts2[0]), int(parts2[1]))
+	# 2) 强制 root viewport 尺寸 = 目标分辨率(默认窗口对 1920×1080 太小)
+	get_viewport().size = res
+	DisplayServer.window_set_size(res)
+	OS.set_environment("BB_REVIEW_RES", "%dx%d" % [res.x, res.y])
+	_review_size = res
+	print("[ui-review] res=", res, " viewport=", get_viewport().size)
+	await _frames(6)
+	var main := get_node("Main")
+	main._game_id = 1
+	main._player_id = 1
+
+	# ── 主线:存档/章节/英雄/装备 ─────────────────────────────
+	main._show_view("mainline")
+	var mainline_view: Node = main.get_node("MainlineView")
+	var campaign: Node = mainline_view.get_node("CampaignPanel")
+	var prepare: Node = mainline_view.get_node("PreparePanel")
+	# 显式同时把"另一个 panel"整体及其所有 CanvasItem 后代隐藏。
+	# 否则 PreparePanel 的 ActionBar 会作为"绘制残留"出现在 CampaignPanel 截图里。
+	campaign.visible = true
+	prepare.visible = false
+	_hide_prepare_action_bar(prepare)
+	await _frames(4)
+
+	# 1) 主线存档(空槽 + 已有档混合)— record 字段喂 PreviewColumn 多行内容
+	var slots: Array[Dictionary] = [
+		{
+			"title": "钢铁起义", "summary": "第 1 章 · 继续当前主线进度",
+			"chapter": "第 1 章 · 边境风云",
+			"progress": "进度: 32% (3/9 战)",
+			"heroes_line": "队伍英雄: 云 / 安娜 / 卢克",
+			"enemy_preview": "敌人预览: 边境守军 ×4 + 骑士 ×2",
+			"next_mission": "下一战: 攻占北隘口",
+			"recommend": "推荐等级: Lv.3~5",
+			"save_time": "保存: 2026-07-31 22:14",
+			"intel": "章节：钢铁起义\n进度：第 1 章\n选择继续以进入战前整备。",
+		},
+		{},
+		{
+			"title": "测试章节 2：双场残血战", "summary": "第 2 章 · 继续当前主线进度",
+			"chapter": "第 2 章 · 双场残血",
+			"progress": "进度: 78% (7/9 战)",
+			"heroes_line": "队伍英雄: 云 / 安娜 / 卢克 + 雇佣 2",
+			"enemy_preview": "敌人预览: 暗影骑士团 ×6 + 弓手 ×3",
+			"next_mission": "下一战: 决战堡垒",
+			"recommend": "推荐等级: Lv.7~9",
+			"save_time": "保存: 2026-07-31 23:02",
+			"intel": "章节：测试章节 2\n进度：第 2 章\n选择继续以进入战前整备。",
+		},
+	]
+	campaign.set_slots(slots)
+	campaign.select_slot(0)
+	await _frames(4)
+	_save("mainline_slots.png")
+
+	# 2) 章节详情(选中已有档 → 预览信息)
+	campaign.select_slot(2)
+	await _frames(4)
+	_save("mainline_chapter_detail.png")
+
+	# 2.5) 空槽按下"开始新游戏"后切到 PreparePanel(controller mock payload)
+	#     用 slot_index=1(空槽)模拟玩家点开始新游戏按钮的完整视觉流程。
+	campaign.select_slot(1)
+	# 模拟 controller._on_slot_new_game_pressed 行为(无后端 fallback 路径):
+	mainline_view.visible = true
+	campaign.visible = false
+	prepare.visible = true
+	_show_prepare_action_bar(prepare)
+	# Mock 整备数据(对应 _build_minimal_prepare_payload)
+	var offline_heroes: Array[Dictionary] = [
+		{"hero_id": "yun", "name": "云", "level": 1, "hp": "53", "equipment_summary": "未装备"},
+		{"hero_id": "anna", "name": "安娜", "level": 1, "hp": "47", "equipment_summary": "未装备"},
+		{"hero_id": "luke", "name": "卢克", "level": 1, "hp": "55", "equipment_summary": "未装备"},
+	]
+	prepare.set_heroes(offline_heroes)
+	prepare.set_active_tab("heroes")
+	prepare.set_mission("钢铁起义 · 战役情报", "当前战役：第 1/9 战\n胜利条件：击败敌军或夺取敌方据点。\n推荐：先确认英雄装备与可部署部队。\n奖励：完成战斗后获得金币与成长经验。\n可部署部队：4\n\n⚠ 离线模式 · 后端未连接 · 使用默认整备数据")
+	prepare.show_content("云 · 术士", "等级 1\n生命 53  攻击 20  防御 11\n速度 14  魔攻 29  魔防 13\n技能：奥术爆裂\n\n✦ 武器: 未装备\n✦ 防具: 未装备\n✦ 饰品: 未装备")
+	prepare.set_choices("", [])
+	# 恢复 CampaignPanel 按钮文字(模拟 controller finish_primary_action)
+	if campaign.has_method("finish_primary_action"):
+		campaign.call("finish_primary_action", "▶  开始新战役")
+	await _frames(4)
+	_save("mainline_new_game_after.png")
+
+	# 3) 英雄页(战前整备英雄摘要)
+	campaign.visible = false
+	prepare.visible = true
+	_show_prepare_action_bar(prepare)
+	var heroes: Array[Dictionary] = [
+		{"hero_id": "yun", "name": "云", "level": 3, "hp": "53", "equipment_summary": "橡木法杖"},
+		{"hero_id": "anna", "name": "安娜", "level": 2, "hp": "47", "equipment_summary": "守卫圆盾"},
+		{"hero_id": "luke", "name": "卢克", "level": 1, "hp": "55", "equipment_summary": "未装备"},
+	]
+	prepare.set_heroes(heroes)
+	prepare.set_active_tab("heroes")
+	prepare.set_mission("钢铁起义 · 战役情报", "当前战役：第 1/2 战\n胜利条件：击败敌军或夺取敌方据点。\n推荐：先确认英雄装备与可部署部队。\n奖励：完成战斗后获得金币与成长经验。\n可部署部队：4")
+	prepare.show_content("云 · 术士", "等级 3 · 经验 45\n生命 53  攻击 20  防御 11\n速度 14  魔攻 29  魔防 13\n技能：奥术爆裂")
+	prepare.set_choices("", [])
+	await _frames(4)
+	_save("mainline_heroes.png")
+
+	# 4) 装备页(装备清单 + 物品/数值预览)
+	prepare.set_active_tab("equipment")
+	prepare.set_choices("equipment", ["橡木法杖 · 2 件", "守卫圆盾 · 1 件", "红宝石戒指 · 1 件"], 0,
+		"选择仓库物品，再使用「整备操作」确认装备。")
+	prepare.show_content("装备整备 · 云", "当前武器：橡木法杖\n当前防具：守卫圆盾\n当前饰品：红宝石戒指\n\n仓库选中：橡木法杖（2 件）\n选择装备后可使用旧整备操作确认。")
+	await _frames(4)
+	_save("mainline_equipment.png")
+
+	# ── 战斗 HUD ─────────────────────────────────────────────
+	main._show_view("game")
+	var hero := {
+		"id": 901, "hero_id": "yun", "name": "云", "unit_type": "warlock",
+		"level": 1, "hp": 53, "max_hp": 53, "mp": 4, "max_mp": 8,
+		"mov": 4, "atk": 20, "def_": 11, "matk": 29, "mdef": 13,
+		"attack_range": 2, "min_attack_range": 0, "morale": 2,
+		"x": 2, "y": 8, "player_id": 1, "color": "red",
+		"skills": ["arcane_blast"], "has_acted": false, "has_moved": false,
+	}
+	var map_path := _resolve_map_path()
+	if map_path == "":
+		printerr("[ui-review] map not found: balanced_2p_15.json")
+		get_tree().quit(1)
+		return
+	var map_data: Variant = JSON.parse_string(FileAccess.open(map_path, FileAccess.READ).get_as_text())
+	if not (map_data is Dictionary):
+		printerr("[ui-review] invalid map json")
+		get_tree().quit(1)
+		return
+	main.board.load_map(map_data)
+	var red_units: Array = [hero]
+	var blue_units: Array = []
+	var next_id := 902
+	for placed_v in map_data.get("initial_units", []):
+		var placed: Dictionary = placed_v
+		if int(placed.get("x", -1)) == 2 and int(placed.get("y", -1)) == 8 and str(placed.get("color", "")) == "red":
+			continue
+		red_units.append({
+			"id": next_id, "name": str(placed.get("type", "unit")),
+			"unit_type": str(placed.get("type", "swordsman")),
+			"level": 1, "hp": 45, "max_hp": 45, "mp": 5, "max_mp": 5, "mov": 5,
+			"atk": 12, "def_": 8, "matk": 4, "mdef": 5, "attack_range": 1,
+			"min_attack_range": 0, "morale": 0, "x": int(placed.get("x", 0)),
+			"y": int(placed.get("y", 0)),
+			"player_id": 1 if str(placed.get("color", "red")) == "red" else 2,
+			"color": str(placed.get("color", "red")), "skills": [],
+			"has_acted": false, "has_moved": false,
+		})
+		next_id += 1
+	for placed_v in map_data.get("initial_units", []):
+		var placed2: Dictionary = placed_v
+		if str(placed2.get("color", "red")) != "blue":
+			continue
+		blue_units.append({
+			"id": next_id, "name": str(placed2.get("type", "unit")),
+			"unit_type": str(placed2.get("type", "swordsman")),
+			"level": 1, "hp": 45, "max_hp": 45, "mp": 5, "max_mp": 5, "mov": 5,
+			"atk": 12, "def_": 8, "matk": 4, "mdef": 5, "attack_range": 1,
+			"min_attack_range": 0, "morale": 0, "x": int(placed2.get("x", 0)),
+			"y": int(placed2.get("y", 0)), "player_id": 2, "color": "blue",
+			"skills": [], "has_acted": false, "has_moved": false,
+		})
+		next_id += 1
+	GameState.players = [
+		{"id": 1, "color": "red", "user_name": "云", "gold": 1000, "units": red_units},
+		{"id": 2, "color": "blue", "user_name": "边境守军", "gold": 800, "units": blue_units},
+	]
+	GameState.current_player_id = 1
+	GameState.local_player_id = 1
+	GameState.co_states = [
+		{"player_id": 1, "color": "red", "commander_id": "yun", "meter": 8, "threshold": 20},
+		{"player_id": 2, "color": "blue", "commander_id": null, "meter": 0, "threshold": 20},
+	]
+	main._refresh_co_roster()
+	main._refresh_commander_section()
+	main.turn_badge_label.text = "回合 1"
+	main.phase_badge_label.text = "● 我方阶段"
+	main.current_player_label.text = "→ 云"
+	main.gold_label.text = "金币 1000"
+	main.end_turn_button.disabled = false
+	# 显式触发一次响应式断点,让窗口宽度(由 --resolution 覆盖)被正确读取。
+	main.call("_update_hud_layout_for_viewport")
+	await _frames(8)
+
+	# 5) 战斗默认态(无选中)
+	# Round 3 修复:state poll 期间 DialogManager 偶尔会触发回合开始旁白,
+	# 先显式 hide_dialog 保证截图干净(不影响业务路径)。
+	DialogManager.hide_dialog()
+	await _frames(2)
+	_save("battle_default.png")
+
+	# 6) 单位选中(InfoPanel 显示指挥官 + 单位详情)
+	main._handle_unit_click(901, Vector2.ZERO)
+	await _frames(4)
+	main._hide_action_bubble()
+	DialogManager.hide_dialog()
+	await _frames(2)
+	_save("battle_unit_selected.png")
+
+	# 7) 行动菜单(ActionBubble 弹出 5 按钮)
+	# Round 3 fix:headless 连续 click 同一单位触发 _hide_action_bubble 兜底。
+	# 解决方法:用真实 _handle_unit_click + 紧接 await 0 帧,然后强制 bubble.visible=true,
+	# 配合 ActionList.mouse_filter = 0 让 5 按钮兜底可见。
+	main._handle_unit_click(901, Vector2.ZERO)
+	await get_tree().process_frame
+	var bubble_node := main.get_node("GameView/HUD/ActionBubble") as Panel
+	if bubble_node != null and is_instance_valid(bubble_node):
+		bubble_node.visible = true
+		bubble_node.position = Vector2(420, 360)
+		# 把 list 上每个按钮都打开并 un-disabled,让 5 按钮兜底可见。
+		for btn_path in ["ActionList/MoveBtn", "ActionList/AttackBtn", "ActionList/SkillBtn",
+				"ActionList/WaitBtn", "ActionList/ClaimBtn", "ActionList/CancelBtn"]:
+			var btn: Button = main.get_node("GameView/HUD/ActionBubble/" + btn_path) as Button
+			if btn != null and is_instance_valid(btn):
+				btn.disabled = false
+				btn.modulate.a = 1.0
+				btn.visible = true
+		# 标题也固定
+		var title: Label = bubble_node.get_node_or_null("ActionTitle") as Label
+		if title != null:
+			title.text = "云 · 行动"
+	await _frames(4)
+	_save("battle_action_menu.png")
+
+	# 8) 对话框(DialogManager 全屏阻断遮罩)
+	main._hide_action_bubble()
+	DialogManager.register_hero_speaker("云", "res://assets/heroes/portrait_yun.png")
+	DialogManager.show_dialog({
+		"speaker": "云", "text": "「这片土地饱受战火蹂躏,我们必须夺回城堡!」",
+	})
+	await _frames(6)
+	_save("battle_dialogue.png")
+	DialogManager.hide_dialog()
+	await _frames(2)
+
+	# 9) 暂停界面(全屏半透遮罩 + 中央面板)
+	main.get_node("GameView/HUD/PauseOverlay").visible = true
+	main.get_node("GameView/HUD/PausePanel").visible = true
+	await _frames(4)
+	_save("battle_pause.png")
+	main.get_node("GameView/HUD/PauseOverlay").visible = false
+	main.get_node("GameView/HUD/PausePanel").visible = false
+	await _frames(2)
+
+	# 10) 战斗结算(章节结果标题板 + 胜利统计)— 走真实路径 show_battle_result,
+	# 否则遮罩不会触发,评审看到的是裸 panel 而不是压暗棋盘。
+	# P0-5 修复:show_battle_result 之前显式 hide_dialog + 等一帧,否则对话框残影会
+	# 留在 battle_result 截图里。
+	DialogManager.hide_dialog()
+	await _frames(2)
+	main.call("show_battle_result", "云", "red", {
+		"kills": 4, "deaths": 1, "captures": 1, "co_peak": 18, "turns": 6, "skills": 2,
+		"reason": "占领敌方据点", "detail_lines": ["云 击杀了 敌方骑士", "云 占领了 城堡"],
+	})
+	await _frames(6)
+	_save("battle_result.png")
+	main.call("hide_battle_result")
+
+	print("[ui-review] done")
+	get_tree().quit(0)
+
+
+var _review_size: Vector2i = Vector2i(1920, 1080)
+
+
+func _resolve_map_path() -> String:
+	# 与 smoke_test.gd 保持一致的多候选路径,避免重定位 godot-client 后截图工具失效。
+	var candidates: Array[String] = [
+		"res://../../game/maps/balanced_2p_15.json",
+		"res://../game/maps/balanced_2p_15.json",
+		"res://game/maps/balanced_2p_15.json",
+	]
+	for c in candidates:
+		if FileAccess.file_exists(c):
+			return c
+	return ""
+
+
+func _save(name: String) -> void:
+	var vp_texture := get_viewport().get_texture()
+	if vp_texture == null:
+		print("  WARN: %s viewport texture null (headless 无法读取 viewport)" % name)
+		return
+	var img: Image = vp_texture.get_image()
+	if img == null:
+		print("  WARN: %s viewport image null" % name)
+		return
+	# 输出 dir 用 _review_size(从 BB_REVIEW_RES / --resolution 解析)而非 image 实际像素:
+	# Godot 4 canvas_items stretch 下 headless 不会缩放到 --resolution,image 永远是 1920,
+	# 但用户期望按"启动分辨率"分组文件。
+	var size_str := "%dx%d" % [_review_size.x, _review_size.y]
+	var dir := "res://.refactor_shots/ui_%s/" % size_str
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	var err := img.save_png(dir + name)
+	print("  saved: %s (%s) err=%d" % [name, size_str, err])
+
+
+func _frames(count: int) -> void:
+	for _i in count:
+		# P0-A 修复:不要用 RenderingServer.force_draw().
+		# gl_compatibility 下,如果场景里有任何 broken shader 或 missing texture,
+		# force_draw() 会死等到下一帧 vsync,在某些分辨率下永远不到 → 截图工具挂死。
+		# process_frame 单触足够让 layout/controller 完成最新一轮 deferred call。
+		await get_tree().process_frame
+
+
+# PreparePanel 的底部 ActionBar 单独显隐,不影响它的其它 children。
+# propagate_call 会把所有 CanvasItem 改 false → 切回去时容易把 panel 内容也藏掉。
+const _PREPARE_BAR_BUTTONS: Array[String] = [
+	"BackAction", "RefreshAction", "StartAction", "CompleteAction", "AbandonAction",
+]
+
+
+func _hide_prepare_action_bar(prepare: Node) -> void:
+	for name in _PREPARE_BAR_BUTTONS:
+		var btn := prepare.find_child(name, true, false)
+		if btn != null:
+			btn.visible = false
+
+
+func _show_prepare_action_bar(prepare: Node) -> void:
+	for name in _PREPARE_BAR_BUTTONS:
+		var btn := prepare.find_child(name, true, false)
+		if btn != null:
+			# 刷新是诊断动作，生产场景默认隐藏；评审截图也不能让它抢主操作权重。
+			btn.visible = name != "RefreshAction"

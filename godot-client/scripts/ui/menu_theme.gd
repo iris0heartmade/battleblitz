@@ -160,13 +160,13 @@ static func apply_panel_theme(panel: Control, fill: Color = C_BG_PANEL) -> void:
 ## 用于关键确认操作:创建房间、启动游戏、添加 AI、改队伍等。
 static func apply_primary_button_theme(btn: Button, font_size: int = FS_BTN) -> void:
 	btn.add_theme_font_size_override("font_size", font_size)
-	btn.add_theme_color_override("font_color", Color("#1a1208"))
-	btn.add_theme_color_override("font_hover_color", Color("#1a1208"))
-	btn.add_theme_color_override("font_pressed_color", Color("#1a1208"))
+	btn.add_theme_color_override("font_color", C_TEXT_WARM)
+	btn.add_theme_color_override("font_hover_color", C_GOLD_BRIGHT)
+	btn.add_theme_color_override("font_pressed_color", C_TEXT_WARM)
 	btn.add_theme_color_override("font_disabled_color", Color(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.6))
 	# 烫金填充(跟 web "创建并进入大厅"按钮一致)
 	var sb_normal := StyleBoxFlat.new()
-	sb_normal.bg_color = C_GOLD
+	sb_normal.bg_color = Color(C_BTN_BLUE.r * 1.08, C_BTN_BLUE.g * 1.08, C_BTN_BLUE.b * 1.08, 1.0)
 	sb_normal.border_color = C_GOLD_BRIGHT
 	sb_normal.set_border_width_all(2)
 	sb_normal.set_corner_radius_all(3)
@@ -175,13 +175,13 @@ static func apply_primary_button_theme(btn: Button, font_size: int = FS_BTN) -> 
 	sb_normal.content_margin_top = 8
 	sb_normal.content_margin_bottom = 8
 	var sb_hover := sb_normal.duplicate()
-	sb_hover.bg_color = C_GOLD_BRIGHT
+	sb_hover.bg_color = C_BTN_BLUE_HOVER
 	hover_soft_glow(sb_hover)
 	var sb_press := sb_normal.duplicate()
 	sb_press.bg_color = C_BTN_BLUE_PRESS
 	press_dim(sb_press)
 	var sb_disabled := sb_normal.duplicate()
-	sb_disabled.bg_color = Color(C_GOLD.r * 0.6, C_GOLD.g * 0.6, C_GOLD.b * 0.6, 0.6)
+	sb_disabled.bg_color = Color(C_BTN_BLUE.r * 0.55, C_BTN_BLUE.g * 0.55, C_BTN_BLUE.b * 0.55, 0.55)
 	sb_disabled.border_color = C_TEXT_DIM
 	btn.add_theme_stylebox_override("normal", sb_normal)
 	btn.add_theme_stylebox_override("hover", sb_hover)

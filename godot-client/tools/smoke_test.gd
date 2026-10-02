@@ -41,8 +41,7 @@ func _init_autoloads() -> bool:
 		and _network_client != null \
 		and _user_settings != null
 	if not ok:
-		print("  FAIL  Missing required autoload(s): "
-			% _missing_autoload_names())
+		print("  FAIL  Missing required autoload(s): %s" % _missing_autoload_names())
 	return ok
 
 
@@ -169,6 +168,27 @@ func _ready() -> void:
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	var main_check = main_scene.instantiate()
 	add_child(main_check)
+	var title_cover: TextureRect = main_check.get_node_or_null("Menu/TitleCover")
+	var title_cover_picker: OptionButton = main_check.get_node_or_null("Menu/TitleCoverDevPicker")
+	_assert_true("Menu has TitleCover", title_cover != null,
+		"title page should render a full-screen configurable cover image behind existing controls")
+	if title_cover != null:
+		_assert_eq("Menu TitleCover stretch mode", title_cover.stretch_mode, TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+			"title cover should fill the viewport and crop overflow without distorting the image")
+		_assert_eq("Menu TitleCover mouse filter", title_cover.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+			"title cover should not intercept existing title button interactions")
+		_assert_true("Menu TitleCover default loaded", title_cover.texture != null,
+			"title cover should load the configured default asset during _ready")
+		_assert_true("Menu TitleCover default path is in candidates",
+			main_check.title_cover_paths.has(main_check.title_cover_default_path),
+			"default title cover must be one of the five previewable title_cover assets")
+	_assert_true("Menu has dev cover picker", title_cover_picker != null,
+		"title page should expose a development-only cover preview switcher")
+	if title_cover_picker != null:
+		_assert_eq("Menu dev cover picker count", title_cover_picker.item_count, 6,
+			"development preview should include the six title_cover images")
+		_assert_true("Menu dev cover picker hidden by default", not title_cover_picker.visible,
+			"development preview controls should stay hidden unless explicitly enabled")
 	# P2:大厅逻辑已搬到 lobby_controller.gd(挂 $Lobby),断言改指控制器
 	var lobby_check = main_check.get_node("Lobby")
 	var lobby_join_col := "Lobby/LobbyFrame/LobbyDualCol/LeftCol"
@@ -293,7 +313,7 @@ func _ready() -> void:
 	_assert_true("HUD top status art is wired", battle_top_art != null and battle_top_art.texture != null,
 		"the always-visible battle header must render its production art asset")
 	_assert_true("HUD top status art uses clean center rail",
-		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_status_rail_clean"),
+		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_battle_status_bar"),
 		"team meters need a center-safe rail without an overlapping emblem")
 	var compact_plaque_paths: Array[String] = [
 		"GameView/HUD/TopLeft/TurnBadge/OrnatePlaque",
@@ -690,7 +710,7 @@ func _ready() -> void:
 	var roster_text := ""
 	for roster_label in main_check.get_node("GameView/HUD/CORoster").find_children("*", "Label", true, false):
 		roster_text += str((roster_label as Label).text)
-	_assert_true("CO roster localizes missing commander", roster_text.contains("未任命") and not roster_text.contains("<null>"),
+	_assert_true("CO roster localizes missing commander", roster_text.contains("待命") and not roster_text.contains("<null>"),
 		"top status must replace nullable backend ids with player-facing copy")
 	_game_state.co_states = previous_co_states
 	main_check.call("_refresh_co_roster")
@@ -707,17 +727,38 @@ func _ready() -> void:
 		tactical_portrait != null and tactical_portrait.size.x <= main_check.hero_portrait_panel.size.x
 			and tactical_portrait.size.y <= main_check.hero_portrait_panel.size.y,
 		"portrait art must not recreate the removed full-height sidebar")
-	main_check.call("_set_unit_info_portrait", "")
+	main_check.call("_set_unit_info_portrait", {})
 	_assert_true("Non-hero selection hides portrait", not main_check.hero_portrait_panel.visible,
 		"ordinary units must not leave stale hero art visible")
-	main_check.call("show_dialog", "旁白", "对话遮罩应阻止棋盘输入。")
-	_assert_true("Dialog overlay becomes visible", main_check.dialog_overlay.visible,
+	DialogManager.show_dialog({"speaker": "旁白", "text": "对话遮罩应阻止棋盘输入。"})
+	_assert_true("Dialog overlay becomes visible", DialogManager._root != null and DialogManager._root.visible,
 		"opening dialogue should enable the input-blocking overlay")
-	_assert_eq("Dialog overlay blocks mouse input", main_check.dialog_overlay.mouse_filter, Control.MOUSE_FILTER_STOP,
+	_assert_eq("Dialog overlay blocks mouse input", DialogManager._root.mouse_filter, Control.MOUSE_FILTER_STOP,
 		"dialogue overlay must intercept pointer input before it reaches the board")
-	main_check.call("hide_dialog")
-	_assert_true("Dialog overlay hides with dialogue", not main_check.dialog_overlay.visible,
-		"closing dialogue should restore board interaction")
+	var dialogue_pause_event := InputEventAction.new()
+	dialogue_pause_event.action = "pause"
+	dialogue_pause_event.pressed = true
+	main_check.call("_unhandled_input", dialogue_pause_event)
+	_assert_true("Pause waits for active dialogue",
+		not main_check.get_node("GameView/HUD/PausePanel").visible and not get_tree().paused,
+		"Esc during dialogue must not open an unreachable pause panel below DialogManager")
+	_assert_true("Dialogue pause guard explains next action",
+		str(main_check.get_node("StatusLabel").text).contains("完成当前对话"),
+		"the player should be told to finish the dialogue before pausing")
+	DialogManager.call("_advance")
+	_assert_true("Dialogue overlay hides after normal completion",
+		DialogManager._root == null or not DialogManager._root.visible,
+		"finishing the last dialogue entry must restore board interaction")
+	_assert_true("Dialogue normal completion releases playback state", not DialogManager.is_playing(),
+		"finishing the last dialogue entry must release the dialogue input lock")
+	DialogManager.show_dialog({"speaker": "旁白", "text": "结算出现前应关闭本段对话。"})
+	main_check.call("show_battle_result", "云", "red", {"kills": 1})
+	_assert_true("Battle result closes active dialogue",
+		DialogManager._root == null or not DialogManager._root.visible,
+		"the terminal result modal must not stack above an active dialogue panel")
+	_assert_true("Battle result releases dialogue state", not DialogManager.is_playing(),
+		"result presentation must clear the dialogue input lock")
+	main_check.call("hide_battle_result")
 	main_check.queue_free()
 
 	_assert_eq("BBTypes.UNIT_DEF_KEY", BBTypes.UNIT_DEF_KEY, "def_",
@@ -1185,6 +1226,43 @@ func _ready() -> void:
 	_assert_true("Lobby team response updates status", lobby_status.text.contains("红队"),
 		"team update response should show selected team in Chinese")
 
+	main_check.call("_toggle_pause")
+	var pause_overlay_check := main_check.get_node("GameView/HUD/PauseOverlay") as ColorRect
+	var pause_panel_check := main_check.get_node("GameView/HUD/PausePanel") as Panel
+	var pause_resume_check := main_check.get_node("GameView/HUD/PausePanel/PauseList/ResumeBtn") as Button
+	_assert_true("Pause freezes the scene tree", get_tree().paused,
+		"opening pause must prevent the battlefield from accepting gameplay input")
+	_assert_eq("Pause dimmer does not starve menu input", pause_overlay_check.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"the dimmer is visual-only while the paused tree blocks the battlefield")
+	_assert_true("Pause menu remains visible above dimmer", pause_panel_check.visible and pause_panel_check.z_index > pause_overlay_check.z_index,
+		"pause controls must stay above the blackout layer")
+	pause_resume_check.pressed.emit()
+	_assert_true("Pause resume button restores input", not get_tree().paused and not pause_panel_check.visible,
+		"resume must close the modal and unpause the scene tree")
+
+	var prepare_scene: PackedScene = load("res://scenes/ui/mainline_prepare_panel.tscn")
+	var prepare_check := prepare_scene.instantiate()
+	add_child(prepare_check)
+	await get_tree().process_frame
+	var requested_actions: Array[String] = []
+	prepare_check.action_requested.connect(func(action: String) -> void: requested_actions.append(action))
+	for action_case in [
+		["StartAction", "start"],
+		["CompleteAction", "complete"],
+		["AbandonAction", "abandon"],
+	]:
+		var action_button := prepare_check.find_child(str(action_case[0]), true, false) as Button
+		_assert_true("Prepare %s button exists" % str(action_case[0]), action_button != null,
+			"responsive prepare actions must remain addressable after art layers are applied")
+		if action_button != null:
+			action_button.pressed.emit()
+			_assert_true("Prepare %s emits action" % str(action_case[0]), requested_actions.has(str(action_case[1])),
+				"responsive action buttons must emit their controller-facing action")
+	var prepare_status := prepare_check.find_child("ActionStatus", true, false) as Label
+	_assert_true("Prepare action feedback is visible", prepare_status != null and not prepare_status.text.is_empty(),
+		"a clicked prepare action must provide feedback inside the visible panel")
+	prepare_check.queue_free()
+
 	print("---")
 	print("Passed: %d   Failed: %d" % [_passed, _failed])
 	if _failed > 0:
@@ -1420,9 +1498,11 @@ func _setup_action_bubble_state(main_check: Node) -> void:
 	board.set("tile_lookup", lookup)
 
 
-func _assert_action_button(label: String, main_check: Node, button_name: String, expected_visible: bool, msg: String) -> void:
+func _assert_action_button(label: String, main_check: Node, button_name: String, expected_active: bool, msg: String) -> void:
 	var btn: Button = main_check.get_node("GameView/HUD/ActionBubble/ActionList/" + button_name)
-	_assert_eq(label, btn.visible, expected_visible, msg)
+	# 不可用按钮现在以 disabled + modulate.a=0.4 显示,而非隐藏 — 契约改为检查激活态
+	var active: bool = not btn.disabled and btn.modulate.a >= 0.9
+	_assert_eq(label, active, expected_active, msg)
 
 
 func _map_path_for_id(map_id: String) -> String:

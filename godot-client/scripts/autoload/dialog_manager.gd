@@ -26,6 +26,7 @@ extends CanvasLayer
 
 const PortraitLoader = preload("res://scripts/core/portrait_loader.gd")
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
+const SkinAssets = preload("res://scripts/ui/skin_assets.gd")
 
 # --- 公共信号 ---
 signal scene_advanced(scene_index: int)
@@ -79,6 +80,98 @@ func _ready() -> void:
 	_build_subtree()
 	if _continue_btn != null:
 		_continue_btn.pressed.connect(_on_continue_pressed)
+	_clamp_dialog_width()
+	var win: Window = get_window()
+	if win != null:
+		win.size_changed.connect(_clamp_dialog_width)
+
+
+## 让对话框宽度符合规范 min(physical_window × 0.78, 1050)。
+## headless 下 DisplayServer.window_get_size() 返回 (0,0),从 OS.get_cmdline_args() 拿 --resolution
+## 或 fallback 到环境变量 BB_REVIEW_RES / 默认 1920。
+func _physical_window_size() -> Vector2i:
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for i in args.size():
+		if args[i] == "--resolution" and i + 1 < args.size():
+			var parts: PackedStringArray = args[i + 1].split("x")
+			if parts.size() == 2:
+				return Vector2i(int(parts[0]), int(parts[1]))
+	var env: String = OS.get_environment("BB_REVIEW_RES")
+	if env != "":
+		var parts2: PackedStringArray = env.split("x")
+		if parts2.size() == 2:
+			return Vector2i(int(parts2[0]), int(parts2[1]))
+	var sz: Vector2i = DisplayServer.window_get_size()
+	if sz.x > 0:
+		return sz
+	return Vector2i(1920, 1080)
+
+
+func _clamp_dialog_width() -> void:
+	if _root == null:
+		return
+	var sz: Vector2i = _physical_window_size()
+	var w: float = minf(float(sz.x) * 0.74, 1040.0)
+	var h: float = clampf(float(sz.y) * 0.29, 208.0, 282.0)
+	_root.offset_left = -w * 0.5
+	_root.offset_right = w * 0.5
+	_root.offset_top = -h - 22.0
+	_root.offset_bottom = -22.0
+	_apply_responsive_layout(sz)
+
+
+func _apply_responsive_layout(sz: Vector2i) -> void:
+	if _name_label == null:
+		return
+	var compact := sz.x <= 1366 or sz.y <= 768
+	var density: float = clampf(1920.0 / float(maxi(sz.x, 1)), 1.0, 1.5)
+	var inset := 62.0 if compact else 92.0
+	var name_top := 30.0 if compact else 38.0
+	_name_label.offset_left = inset
+	_name_label.offset_top = name_top
+	_name_label.offset_right = -inset
+	_name_label.offset_bottom = name_top + 34.0
+	_name_label.add_theme_font_size_override("font_size", roundi(22.0 * density))
+
+	var body := _root.get_node_or_null("DialogBody") as HBoxContainer
+	if body != null:
+		body.offset_left = inset
+		body.offset_top = name_top + 42.0
+		body.offset_right = -inset
+		body.offset_bottom = -62.0
+		body.add_theme_constant_override("separation", 16 if compact else 22)
+	if _portrait_panel != null:
+		_portrait_panel.custom_minimum_size = Vector2(102.0 if compact else 138.0, 0.0)
+	if _text != null:
+		_text.add_theme_font_size_override("normal_font_size", roundi(20.0 * density))
+		_text.add_theme_constant_override("line_separation", 4)
+	if _continue_btn != null:
+		_continue_btn.offset_left = -174.0 if compact else -190.0
+		_continue_btn.offset_top = -56.0
+		_continue_btn.offset_right = -26.0
+		_continue_btn.offset_bottom = -16.0
+		_continue_btn.add_theme_font_size_override("font_size", roundi(17.0 * density))
+		_continue_btn.custom_minimum_size.y = 48.0 if compact else 42.0
+
+
+## 取得场景里的 DialogOverlay 节点(.tscn:2542),负责压暗棋盘。
+## 截图工具场景结构是 UIReviewScreenshot/Main/...,而正常运行是 Main/...。
+## 用 find_child 递归搜,既能命中 wrapper 也能命中 main.tscn 原生节点,
+## 避免修 wrapper 路径后又在生产环境失效。find_child 的 owned=false 表示不
+## 要求返回值必须是当前 scene tree 的 own 子树,跨 wrapper / 实际两个场景都搜得到。
+func _overlay() -> ColorRect:
+	var root: Window = get_tree().root
+	if root == null:
+		return null
+	# 递归搜,先精确找 DialogOverlay,再退到名字包含 overlay 的第一个 ColorRect
+	# (兼容 mock 测试场景)。
+	var node: Node = root.find_child("DialogOverlay", true, false)
+	if node == null:
+		# Fallback:第一次出现的 ColorRect 当 overlay(测试场景缺 DialogOverlay 时)
+		node = root.find_child("@ColorRect@*", true, false)
+	if node is ColorRect:
+		return node
+	return null
 
 
 ## 程序构建 UI 子树 — 镜像原 scenes/main.tscn 2098–2155 的 anchor/offset/text
@@ -99,35 +192,41 @@ func _build_subtree() -> void:
 
 	_name_label = Label.new()
 	_name_label.name = "CharacterName"
-	_name_label.offset_left = 24.0
-	_name_label.offset_top = 18.0
-	_name_label.offset_right = -24.0
-	_name_label.offset_bottom = 54.0
+	# 让开 dialogue_panel 顶部钢轨(safe_area y≈70),姓名牌压在内容区上沿。
+	_name_label.offset_left = 132.0
+	_name_label.offset_top = 58.0
+	_name_label.offset_right = -520.0
+	_name_label.offset_bottom = 102.0
 	_name_label.text = "👤 指挥官 艾莉卡"
-	_name_label.add_theme_font_size_override("font_size", 27)
+	_name_label.add_theme_font_size_override("font_size", 24)
+	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_root.add_child(_name_label)
 
 	var body := HBoxContainer.new()
 	body.name = "DialogBody"
 	body.anchor_right = 1.0
 	body.anchor_bottom = 1.0
-	body.offset_left = 24.0
-	body.offset_top = 66.0
-	body.offset_right = -24.0
-	body.offset_bottom = -84.0
+	body.offset_left = 128.0
+	body.offset_top = 118.0
+	body.offset_right = -128.0
+	body.offset_bottom = -88.0
 	body.add_theme_constant_override("separation", 24)
 	_root.add_child(body)
 
 	_portrait_panel = Panel.new()
 	_portrait_panel.name = "Portrait"
-	_portrait_panel.custom_minimum_size = Vector2(180, 165)
+	_portrait_panel.custom_minimum_size = Vector2(138, 0)
+	_portrait_panel.clip_contents = true
+	_portrait_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(_portrait_panel)
 
 	_portrait_label = Label.new()
 	_portrait_label.name = "PortraitLabel"
 	_portrait_label.anchor_right = 1.0
 	_portrait_label.anchor_bottom = 1.0
-	_portrait_label.text = "👤"
+	# 留空 — 真实立绘由 _load_portrait_for(speaker) 在 _start() 时按 hero_id 加载到 _portrait_tex。
+	# 原 emoji 占位在无中文字体时渲染成蓝色人形剪影,改为空字符串避免误导。
+	_portrait_label.text = ""
 	_portrait_label.horizontal_alignment = 1
 	_portrait_label.vertical_alignment = 1
 	_portrait_label.add_theme_font_size_override("font_size", 96)
@@ -138,7 +237,9 @@ func _build_subtree() -> void:
 	_portrait_tex.name = "PortraitTex"
 	_portrait_tex.anchor_right = 1.0
 	_portrait_tex.anchor_bottom = 1.0
+	_portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_portrait_tex.visible = false
 	_portrait_panel.add_child(_portrait_tex)
 
@@ -147,6 +248,7 @@ func _build_subtree() -> void:
 	_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text.bbcode_enabled = true
 	_text.text = "「这片土地饱受战火蹂躏,我们必须夺回城堡!」"
+	_text.add_theme_font_size_override("normal_font_size", 20)
 	_text.scroll_active = false
 	body.add_child(_text)
 
@@ -156,12 +258,12 @@ func _build_subtree() -> void:
 	_continue_btn.anchor_top = 1.0
 	_continue_btn.anchor_right = 1.0
 	_continue_btn.anchor_bottom = 1.0
-	_continue_btn.offset_left = -180.0
-	_continue_btn.offset_top = -66.0
-	_continue_btn.offset_right = -24.0
-	_continue_btn.offset_bottom = -18.0
+	_continue_btn.offset_left = -190.0
+	_continue_btn.offset_top = -126.0
+	_continue_btn.offset_right = -32.0
+	_continue_btn.offset_bottom = -84.0
 	_continue_btn.text = "继续 ▶"
-	_continue_btn.custom_minimum_size = Vector2(150, 48)
+	_continue_btn.custom_minimum_size = Vector2(150, 42)
 	_root.add_child(_continue_btn)
 
 	# 主题(GBA 火纹风 — 原 main._apply_hud_theme 给了 dialog_panel,
@@ -185,17 +287,16 @@ func _build_subtree() -> void:
 
 
 func _apply_self_theme() -> void:
-	# 风格与原 main._apply_hud_theme 末尾对 DialogPanel 的处理一致
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = MenuTheme.C_BG_PANEL
-	sb.border_color = MenuTheme.C_GOLD
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(3)
-	sb.content_margin_left = MenuTheme.PAD
-	sb.content_margin_right = MenuTheme.PAD
-	sb.content_margin_top = MenuTheme.PAD
-	sb.content_margin_bottom = MenuTheme.PAD
-	_root.add_theme_stylebox_override("panel", sb)
+	# 对话面板使用 original_v2 dialogue_panel;姓名牌用 nameplate。
+	_root.add_theme_stylebox_override("panel", SkinAssets.battle_dialogue_style())
+	if _name_label != null:
+		_name_label.add_theme_stylebox_override("normal", SkinAssets.battle_nameplate_style())
+	if _continue_btn != null:
+		_continue_btn.add_theme_stylebox_override("normal", SkinAssets.button_style("normal"))
+		_continue_btn.add_theme_stylebox_override("hover", SkinAssets.button_style("hover"))
+		_continue_btn.add_theme_stylebox_override("pressed", SkinAssets.button_style("pressed"))
+		_continue_btn.add_theme_stylebox_override("disabled", SkinAssets.button_style("disabled"))
+		_continue_btn.add_theme_stylebox_override("focus", SkinAssets.button_style("hover"))
 
 
 # ============================================================
@@ -222,6 +323,7 @@ func play(scenes: Variant, context: Dictionary = {}) -> Dictionary:
 
 ## fire-and-forget 单场景
 func show_dialog(scene: Dictionary) -> void:
+	_enforce_dialog_mask(true)
 	_enqueue_scene(scene)
 	if not _active:
 		_start()
@@ -236,12 +338,20 @@ func hide_dialog() -> void:
 	_unlock_board()
 	if _root != null:
 		_root.visible = false
+	_enforce_dialog_mask(false)
 	# 唤醒可能挂着的 awaiter(用空 choice_value 兜底)
 	_choice_value = ""
 	if _playing_depth > 0:
 		_playing_depth = 0
 		_dialog_completed.emit()
 	dialogue_aborted.emit()
+
+
+## 控制 DialogOverlay 节点可见性 — 修复响应式 P0:三个模态框缺少遮罩。
+func _enforce_dialog_mask(visible_flag: bool) -> void:
+	var overlay: ColorRect = _overlay()
+	if overlay != null and is_instance_valid(overlay):
+		overlay.visible = visible_flag
 
 
 ## 硬重置(包含 heroes 缓存)
@@ -349,6 +459,10 @@ func _advance() -> void:
 		_active = false
 		if _root != null:
 			_root.visible = false
+		# Normal completion must clear the same board-blocking mask as an
+		# explicit abort. Otherwise the dialogue disappears but the battlefield
+		# remains dimmed and cannot receive pointer input.
+		_enforce_dialog_mask(false)
 		_playing_depth = max(0, _playing_depth - 1)
 		if _playing_depth == 0:
 			_unlock_board()

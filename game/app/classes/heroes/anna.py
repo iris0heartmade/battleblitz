@@ -33,8 +33,7 @@ class Anna(BaseHero):
     def_override = 10
     matk_override = 12
     mdef_override = 14
-    mov_override = 3
-    mp_pool_override = 6
+    mov_override = 5
 
     sprite_path = "anna.png"
     portrait_path = "portrait_anna.png"
@@ -45,6 +44,15 @@ class Anna(BaseHero):
     is_commander = True
     commander_passive = AnnaCommanderPassive(id="anna_passive", def_pct=0.15, mdef_pct=0.10)
     commander_power = AnnaCommanderPower(id="anna_power", def_pct=0.30, mdef_pct=0.30, heal_pct=0.80)
-    power_threshold = 18
+    power_threshold = 14
 
     dialogue_name = "安娜"
+
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 80, 'atk': 35, 'def': 45, 'matk': 50, 'mdef': 70, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
+    personal_growth_modifier = {'def': 5, 'mdef': 5}

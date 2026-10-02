@@ -70,11 +70,6 @@ async def list_heroes() -> List[dict]:
         eff_matk = h.matk_override if h.matk_override is not None else base.base_matk
         eff_mdef = h.mdef_override if h.mdef_override is not None else base.base_mdef
         eff_mov = h.mov_override if h.mov_override is not None else base.base_mov
-        eff_mp = (
-            h.mp_pool_override
-            if h.mp_pool_override is not None
-            else base.mp_pool
-        )
         out.append({
             "hero_id": h.hero_id,
             "display_cn": h.display_cn,
@@ -85,7 +80,7 @@ async def list_heroes() -> List[dict]:
             "matk": eff_matk,
             "mdef": eff_mdef,
             "mov": eff_mov,
-            "mp": eff_mp,
+            "mp": eff_mov,
             "active_skills": list(h.active_skills),
             "passive_skills": list(h.passive_skills),
             "sprite_url": f"{HERO_ASSET_URL}/{h.sprite_path}",

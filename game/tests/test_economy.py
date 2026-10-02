@@ -336,7 +336,8 @@ class TestRecruitEndpoint:
         assert new_unit.has_moved is True
         assert new_unit.mp == 0
         # mov pool is full so it can move next turn.
-        assert new_unit.mov == 5  # archer mp_pool
+        # 2026-08-10 平衡: archer base_mov 5 -> 3(物理射手脆皮)
+        assert new_unit.mov == 3
         assert new_unit.unit_type == "archer"
 
 

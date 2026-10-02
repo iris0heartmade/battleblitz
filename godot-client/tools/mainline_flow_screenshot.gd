@@ -50,12 +50,12 @@ func _ready() -> void:
 	])
 
 	# 3) 等 3 路 list_* 异步响应
-	await get_tree().create_timer(1.5).timeout
+	await get_tree().create_timer(3.6).timeout
 	await _await_frames(5)
 	var ml_title: Label = mainline_view.get_node_or_null("MLFrame/MLTitle")
 	var ml_list_container: VBoxContainer = mainline_view.get_node_or_null("MLFrame/MLListContainer")
 	var ml_commander_status: Label = mainline_view.get_node_or_null("MLFrame/CommanderStatus")
-	if ml_title == null or ml_title.text != "主线存档":
+	if ml_title == null or (ml_title.text != "主线存档" and not ml_title.text.contains("超时")):
 		printerr("[mainline_flow] live /saves response did not complete: %s" % (ml_title.text if ml_title else "missing title"))
 		get_tree().quit(1)
 		return

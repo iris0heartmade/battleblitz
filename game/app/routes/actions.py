@@ -511,6 +511,14 @@ async def attack(
     if target.player_id == player.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能攻击己方单位")
 
+    # CO power·沉默领域 (鸢影 P+):攻击者被沉默时,无法发动攻击。
+    from app.commanders.effects import is_unit_silenced
+    if is_unit_silenced(attacker, current_turn=game.turn_number):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "attacker is silenced (status_effects contains silence)",
+        )
+
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
@@ -566,6 +574,7 @@ async def attack(
         not is_kill
         and not has_immunity
         and _t_can
+        and not is_unit_silenced(target, current_turn=game.turn_number)
     ):
         # Defender's terrain bonus is the tile the defender is on
         counter_tile = (
@@ -593,17 +602,15 @@ async def attack(
             f"（×{COUNTER_DAMAGE_MULT}）",
         )
 
-    # Award commander meter to the unit that actually dealt the killing
-    # blow.  A counter-kill belongs to the defender, not the player whose
-    # action happened to open this combat exchange.
-    from app.commanders.meter import on_kill
-    if is_kill and player.commander_id is not None:
-        on_kill(player, target.unit_type)
-        flag_modified(player, "co_state")
-    elif attacker.hp <= 0:
+    # 新机制:CO 累积槽的星只通过 award_exp → award_morale(player) → record_morale_star
+    # 单链路增加(不分玩家/AI 路径)。原 on_kill hook(在 599 行)已删除,避免与
+    # award_exp 路径双倍加星。反击击杀的星单独处理:attacker 被反击致死时,
+    # award_exp 走的是 "hit" 路径不会加星,这里直接给 target 的 owner 加 1。
+    if attacker.hp <= 0 and not is_kill:
         counter_player = await session.get(Player, target.player_id)
         if counter_player is not None and counter_player.commander_id is not None:
-            on_kill(counter_player, attacker.unit_type)
+            from app.commanders.meter import record_morale_star
+            record_morale_star(counter_player, 1)
             flag_modified(counter_player, "co_state")
 
     # Mark attacker as having acted.
@@ -617,7 +624,7 @@ async def attack(
     exp_gained = 0
     assist_ids: List[int] = []
     if is_kill:
-        level_result = award_exp(attacker, "kill")
+        level_result = award_exp(attacker, "kill", player=player)
         exp_gained = 10
     else:
         level_result = award_exp(attacker, "hit")  # small xp on hit
@@ -728,6 +735,7 @@ async def use_skill(
         user=unit, target=target,
         ally_units=[u for u in all_units if u.player_id == player.id and u.hp > 0],
         enemy_units=[u for u in all_units if u.player_id != player.id and u.hp > 0],
+        game_turn_number=game.turn_number,
     )
 
     if not sk.can_use(ctx):
@@ -1050,7 +1058,7 @@ async def recruit_unit(
         # Fire-Emblem summon timing: new unit cannot act this turn —
         # mov gets the full pool so next turn it can move, but mp and
         # has_acted/has_moved are 0/True so it can't act or move now.
-        mov=profile.mp_pool, mp=0,
+        mov=profile.base_mov, mp=0,
         morale=0,
         x=tile.x, y=tile.y,
         has_acted=True,    # can't act this turn

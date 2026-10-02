@@ -37,6 +37,9 @@ const _KNOWN_TYPES := [
 const _HERO_SPRITES := {
 	"anna": "anna.png",
 	"yun":  "yun.png",
+	"yuanying": "yuanying.png",
+	"lin_yilan": "lin_yilan.png",
+	"baiyu": "baiyu.png",
 }
 # team_id → 右上角字母(team_a=A / team_b=B / team_c=C / team_d=D)。
 # 1V1 free-for-all(team=None)→ 不显示字母,只显示阵营色块。
@@ -76,6 +79,19 @@ var _mp_badge_label: Label = null
 var _team_badge: ColorRect = null
 var _team_badge_label: Label = null
 var _acted_overlay: ColorRect = null
+# 通用 status effect (P+):glyphs(☠⚡◌❄🔇)徽标,显示在单位右下角
+# unit_data.status_effects 是 list[dict],每个 dict 含 type / remaining_turns / glyph
+var _status_label: Label = null
+
+# status effect type → 显示 glyph(对齐后端 app/status/effects.py EFFECT_DEFS)。
+# 后端没暴露 glyph 时本地兜底,避免空字符串渲染。
+const _STATUS_GLYPH := {
+	"poison":   "☠",
+	"paralyze": "⚡",
+	"blind":    "◌",
+	"slow":     "❄",
+	"silence":  "🔇",
+}
 
 
 func setup(data: Dictionary, color: Color, team_id: Variant = null) -> void:
@@ -280,6 +296,25 @@ func _build_pieces(team_color: Color) -> void:
 	_acted_overlay.visible = false
 	add_child(_acted_overlay)
 
+	# ---- status effect glyph badge(右下角)----
+	# 通用 status_effects 列表里有任意 effect 时显示;过去单一 silence 现在
+	# 跟 poison / paralyze / blind / slow 共享同一渲染路径。
+	_status_label = Label.new()
+	_status_label.text = ""
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var status_icon_sz := Vector2(30, 16)
+	_status_label.size = status_icon_sz
+	_status_label.position = Vector2(-6, 6)
+	_status_label.add_theme_font_size_override("font_size", 11)
+	_status_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	_status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	_status_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_label.add_theme_constant_override("shadow_offset_y", 1)
+	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_label.visible = false
+	add_child(_status_label)
+
 
 func _refresh() -> void:
 	if unit_data.is_empty():
@@ -324,6 +359,32 @@ func _refresh() -> void:
 	# 已行动
 	var has_acted: bool = bool(unit_data.get("has_acted", false))
 	_acted_overlay.visible = has_acted
+	# 通用 status effect (P+):unit_data.status_effects 是 list[dict],
+# 每个 dict 含 type / remaining_turns / glyph。任一 effect 非空时显示。
+	var status_effects: Array = unit_data.get("status_effects", [])
+	if not (status_effects is Array):
+		status_effects = []
+	# 同时读旧 silence_until_turn(过渡期 fallback),有值也算被沉默
+	var legacy_silence: int = int(unit_data.get("silence_until_turn", 0))
+	var has_status: bool = status_effects.size() > 0 or legacy_silence > 0
+	if has_status:
+		var glyphs: Array = []
+		for eff in status_effects:
+			if not (eff is Dictionary):
+				continue
+			var t: String = String(eff.get("type", ""))
+			if t == "":
+				continue
+			var g: String = String(_STATUS_GLYPH.get(t, "?"))
+			glyphs.append(g)
+		# 过渡期:旧字段非空但新字段空 → 显示 🔇
+		if glyphs.is_empty() and legacy_silence > 0:
+			glyphs.append("🔇")
+		_status_label.text = "".join(glyphs).substr(0, 2)
+		_status_label.visible = true
+	else:
+		_status_label.text = ""
+		_status_label.visible = false
 
 
 func has_hero_badge() -> bool:

@@ -14,7 +14,10 @@ _ALIVE = _sqltext("SELECT u.id,u.player_id,u.name,u.hp,u.x,u.y FROM units u JOIN
 _DEAD  = _sqltext("SELECT u.id,u.player_id,u.name,u.hp,u.x,u.y FROM units u JOIN players pl ON u.player_id=pl.id WHERE pl.game_id=:g AND u.hp<=0")
 _KILLR = _sqltext("SELECT u.id,u.player_id,u.name FROM units u JOIN players pl ON u.player_id=pl.id WHERE pl.game_id=:g AND u.hp>0 LIMIT 1")
 _PLR   = _sqltext("SELECT id FROM players WHERE game_id=:g AND color=:c LIMIT 1")
-_INSERT = _sqltext("INSERT INTO units (player_id,unit_type,name,level,exp,hp,max_hp,atk,def_,matk,mdef,mov,mp,morale,x,y,has_acted,has_moved,skills) VALUES (:p,:t,:n,1,0,20,20,10,5,0,0,3,3,5,:x,:y,0,0,'[]')")
+# growth-redesign 后 units.growth_seed / status_effects 都是 NOT NULL;原始 INSERT
+# 绕过了 ORM 的 python 侧 default,必须显式给默认值(growth_seed=0 "无种子"、
+# status_effects='[]' 空状态,见 models.py 对应列注释)。
+_INSERT = _sqltext("INSERT INTO units (player_id,unit_type,name,level,exp,hp,max_hp,atk,def_,matk,mdef,mov,mp,morale,x,y,has_acted,has_moved,skills,status_effects,growth_seed) VALUES (:p,:t,:n,1,0,20,20,10,5,0,0,3,3,5,:x,:y,0,0,'[]','[]',0)")
 
 
 async def _spawn(session, game, spec):

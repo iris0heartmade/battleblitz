@@ -20,11 +20,14 @@ Adding a new unit type is a one-file change:
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from app.classes.units.base import BaseUnitClass, UnitClassProfile
+
+logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------------
 # Auto-discovery
@@ -64,11 +67,39 @@ def _discover() -> None:
             profile = attr.compile()
             _registry[profile.type_id] = attr
             _profiles[profile.type_id] = profile
+            _validate_class_growth_rates(profile)
 
     # Build type-advantage table (bidirectional: A→B = 1.20, B→A = 1.0)
     for pid, cls in _registry.items():
         for target in getattr(cls, "strong_against", []):
             _advantage_table[(pid, target)] = 1.20
+
+
+def _validate_class_growth_rates(profile: UnitClassProfile) -> None:
+    """Warn (loud, but non-fatal) on missing or out-of-range growth keys."""
+    # Local import: STAT_KEYS lives in app.progression.policies, which
+    # imports this module transitively. Defer to break the cycle.
+    from app.progression.policies import STAT_KEYS
+    expected = set(STAT_KEYS)
+    have = set(profile.class_growth_rates.keys())
+    missing = expected - have
+    extra = have - expected
+    if missing:
+        logger.warning(
+            "UnitClassProfile[%s] missing growth-rate keys: %s",
+            profile.type_id, sorted(missing),
+        )
+    if extra:
+        logger.warning(
+            "UnitClassProfile[%s] has unknown growth-rate keys: %s",
+            profile.type_id, sorted(extra),
+        )
+    for k, v in profile.class_growth_rates.items():
+        if k in expected and not (0 <= v <= 100):
+            logger.warning(
+                "UnitClassProfile[%s].class_growth_rates[%s] = %s not in [0, 100]",
+                profile.type_id, k, v,
+            )
 
 
 # ── Public API ──────────────────────────────────────────────

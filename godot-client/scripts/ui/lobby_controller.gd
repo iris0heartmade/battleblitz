@@ -25,6 +25,7 @@ extends Control
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
 const CnLabels = preload("res://scripts/ui/cn_labels.gd")
+const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 
 var _main: Node = null
 
@@ -245,8 +246,9 @@ func _on_lobby_pressed() -> void:
 
 func _on_lobby_list_saves_for_suspend_check(body: Variant, _code: int = 0) -> void:
 	if not (body is Dictionary):
-		# 拉失败兜底:不进 lobby,避免在用户不知情的情况下与 suspend 冲突。
-		_main._update_status("无法检查中断存档,请稍后重试")
+		# 中断存档检查失败时不能卡死主页入口;允许先进入大厅,后续创房仍走正常流程。
+		_main._update_status("无法检查中断存档,已进入联机大厅")
+		_enter_lobby_view()
 		return
 	var suspend: Variant = body.get("suspend", null)
 	if not (suspend is Dictionary):
@@ -320,6 +322,7 @@ func _show_lobby_choose() -> void:
 	_restore_lobby_default_layout()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_create_view() -> void:
@@ -343,6 +346,7 @@ func _show_lobby_create_view() -> void:
 	_refresh_lobby_create_start_gate()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_join_view() -> void:
@@ -363,6 +367,7 @@ func _show_lobby_join_view() -> void:
 	_layout_lobby_entry_form()
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回模式选择"
+	_grab_focus_for_mode()
 
 
 func _show_lobby_in_room() -> void:
@@ -390,6 +395,38 @@ func _show_lobby_in_room() -> void:
 			player_count_label.text = "—"
 	if lobby_back_btn != null and is_instance_valid(lobby_back_btn):
 		lobby_back_btn.text = "返回主菜单"
+	_grab_focus_for_mode()
+
+
+# 2026-08-09:手柄/键盘导航 — 每个大厅子视图抢默认焦点。
+# Godot 手柄导航依赖某个 Control 先 grab_focus,否则十字键/确认键全无响应
+# (主菜单能用是因为 main._focus_default_for_view("menu") 抢了焦点;大厅此前
+# 是空 pass,所以建房/加入表单完全无法用十字键操作)。
+func _grab_focus_for_mode() -> void:
+	if not is_inside_tree():
+		return
+	var target: Button = null
+	match _lobby_mode:
+		"choose":
+			target = create_card_btn
+		"create":
+			# create_room_btn 可能被 start gate 禁用,禁用则退到第一个 focusable
+			if create_room_btn != null and not create_room_btn.disabled:
+				target = create_room_btn
+		"join":
+			target = join_selected_btn
+		"in_room":
+			# 房内右下角的 inline 启动按钮(in_room 视图时 BottomBar 的 lobby_start_btn 已隐藏)
+			target = start_game_inline_btn if (start_game_inline_btn != null and start_game_inline_btn.visible) else lobby_start_btn
+		_:
+			target = null
+	if target != null and is_instance_valid(target) and target.is_visible_in_tree() and not target.disabled:
+		target.grab_focus()
+		return
+	# 兜底:第一个可见可 focus 的 Button
+	var frame: Control = get_node_or_null("LobbyFrame") as Control
+	if frame != null:
+		UIPanelFocus.grab_first_focusable(frame)
 
 
 func _set_lobby_detail_visible(v: bool) -> void:
@@ -804,7 +841,7 @@ func _setup_lobby_commander_options(unlocked: Array = []) -> void:
 		ai_commander_option.clear()
 		ai_commander_option.add_item("电脑自动选择指挥官")
 	# 如果 API 返回空(新玩家无解锁),fallback 到硬编码默认指挥官(等同 webui 行为)
-	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna"]
+	var pool: Array = unlocked if unlocked.size() > 0 else ["yun", "anna", "yuanying"]
 	for item in pool:
 		var commander_id := str(item)
 		if commander_id == "" or _lobby_commander_ids.has(commander_id):
@@ -1073,10 +1110,10 @@ func _render_lobby_map_preview() -> void:
 		_refresh_lobby_create_start_gate()
 		return
 	var summary: Dictionary = MapPreviewSummary.summarize_map(map_data)
-	var title := str(summary.get("name", summary.get("id", "Map")))
+	var title := str(summary.get("name", summary.get("id", "地图")))
 	var size_text := "%dx%d" % [int(summary.get("width", 0)), int(summary.get("height", 0))]
 	var players := int(summary.get("recommended_players", 0))
-	map_faction_summary.text = "[b]%s[/b]  %s  %dP\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
+	map_faction_summary.text = "[b]%s[/b]  %s  %d 人\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
 	if map_preview_texture != null and is_instance_valid(map_preview_texture):
 		map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data, 9)
 	_render_lobby_seat_columns(summary)
@@ -1434,6 +1471,7 @@ func _lobby_seat_commander_ability_text(seat_index: int) -> String:
 	match commander_id:
 		"yun": return "能力：稳健推进"
 		"anna": return "能力：快速抢点"
+		"yuanying": return "能力：5x5 沉默领域，术士压制"
 		"": return "能力：默认规则"
 		_: return "能力：专属指挥"
 

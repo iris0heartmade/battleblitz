@@ -11,8 +11,7 @@ class Youko(BaseHero):
     def_override = 8
     matk_override = 12
     mdef_override = 15
-    mov_override = 4
-    mp_pool_override = 6
+    mov_override = 5
 
     sprite_path = "youko.png"
     portrait_path = "portrait_youko.png"
@@ -22,3 +21,12 @@ class Youko(BaseHero):
     passive_skills = []
 
     dialogue_name = "洋子"
+
+    # Independent character growth rates. Heroes do not inherit class
+    # growth rates; this table is the growth source of truth.
+    character_growth_rates = {
+        'hp': 75, 'atk': 35, 'def': 35, 'matk': 55, 'mdef': 65, 'mov': 0,
+    }
+    # Legacy fallback kept for old fixtures; production policy uses
+    # character_growth_rates above.
+    personal_growth_modifier = {'matk': 10, 'mdef': 5}

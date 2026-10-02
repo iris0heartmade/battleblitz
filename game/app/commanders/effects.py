@@ -61,23 +61,49 @@ def can_fire_co_power(player) -> bool:
     if commander_id is None:
         return False
     co = player.co_state or {}
+    # 新机制:stars_earned_total 累计达到 power_cost 即可放
     return (
         not co.get("is_power_active", False)
-        and co.get("meter", 0) >= co.get("threshold", 20)
+        and co.get("stars_earned_total", 0) >= co.get("power_cost", 6)
         and get_commander_power(commander_id) is not None
     )
 
 
-def fire_co_power(player):
+def fire_co_power(player, *, center_xy=None, current_turn=0, all_units=None):
+    """激活玩家 CO power。
+
+    Args:
+        center_xy: 沉默领域等的中心坐标 (x, y)。silence_radius > 0 时必传。
+        current_turn: 当前 game.turn_number(silence_until_turn 用)。
+        all_units: 全场 unit 列表(silence 区域选取用)。silence_radius > 0 时必传。
+    """
     if not can_fire_co_power(player):
         if getattr(player, "commander_id", None) is None:
             raise ValueError("no commander selected")
         co = player.co_state or {}
         if co.get("is_power_active"):
             raise ValueError("power already active")
-        if co.get("meter", 0) < co.get("threshold", 20):
-            raise ValueError("meter not full")
+        if co.get("stars_earned_total", 0) < co.get("power_cost", 6):
+            raise ValueError("insufficient stars")
         raise ValueError("commander has no power")
+
+    power = get_commander_power(player.commander_id)
+    silence_radius = int(getattr(power, "silence_radius", 0))
+    silence_turns = int(getattr(power, "silence_duration_turns", 0))
+    if silence_radius > 0:
+        if center_xy is None or all_units is None:
+            raise ValueError(
+                f"silence_radius={silence_radius} requires center_xy and all_units"
+            )
+        apply_silence_aura(
+            all_units,
+            center_xy=center_xy,
+            radius=silence_radius,
+            duration_turns=silence_turns,
+            current_turn=current_turn,
+            owner_player_id=getattr(player, "id", None),
+            owner_player=player,
+        )
 
     power = get_commander_power(player.commander_id)
     baselines = {}
@@ -107,9 +133,120 @@ def fire_co_power(player):
 
     co = dict(player.co_state or {})
     co["is_power_active"] = True
-    co["meter"] = 0
     co["_power_baselines"] = baselines
     player.co_state = co
+    # 新机制:扣 power_cost 颗星(默认 6),放 power 后剩余继续累计。
+    # 放在最后 — 避免"星已扣但 is_power_active 还没设"的中间状态被任何
+    # 钩子(reader)看见;同时让 SQLAlchemy 只 flag_modified 一次(player.co_state = co)。
+    from app.commanders.meter import consume_power_stars
+    consume_power_stars(player)
+
+
+def apply_silence_aura(
+    units,
+    *,
+    center_xy,
+    radius,
+    duration_turns,
+    current_turn,
+    owner_player_id,
+    owner_player=None,
+) -> list:
+    """沉默领域:在 (center_x ± radius, center_y ± radius) 范围内,标记
+    非 owner_team、且攻击类型为 magic 的单位 silence_until_turn。
+
+    设计:文档约定"非同 team 的魔法单位",而不是"非同 player"。
+    2v2 / FFA 团队模式下,同 team_id 但不同 player_id 的友军魔法单位
+    不会被误沉默(参见 game/app/classes/heroes/yuanying.py:9,43)。
+
+    走通用 status_effects 框架(详见 app/status/engine.py)。
+    `silence_until_turn` 字段已废弃,本函数不再写入。
+
+    Args:
+        units: 全场 unit 列表(已 dead 的也会被传入,但会被 hp <= 0 过滤)
+        center_xy: (x, y) 元组
+        radius: 整数半径(2 = 5×5 方形)
+        duration_turns: 持续大回合数(1 = 持续到下次自己回合开始)
+        current_turn: 当前 game.turn_number
+        owner_player_id: 沉默施放者(自己人不沉默)
+        owner_player: 施放者 Player 对象(可选,用于 team_id 比对;
+                     1v1 模式可省,只按 player_id 过滤即可)
+
+    Returns:
+        被沉默的单位列表(供 _log / 反馈用)
+    """
+    if radius <= 0 or duration_turns <= 0:
+        return []
+    from app.status import add_effect
+    cx, cy = center_xy
+    expire_at = current_turn + duration_turns
+    owner_team_id = getattr(owner_player, "team_id", None) if owner_player is not None else None
+    silenced: list = []
+    for unit in units:
+        if unit.hp <= 0:
+            continue
+        if unit.player_id == owner_player_id:
+            continue
+        # 团队模式:同 team_id 的友军魔法单位也跳过。
+        # 1v1 模式没有 team_id(None == None)会落空,等价于不过滤。
+        if (
+            owner_team_id is not None
+            and getattr(unit, "team_id", None) is not None
+            and unit.team_id == owner_team_id
+        ):
+            continue
+        if unit.x < cx - radius or unit.x > cx + radius:
+            continue
+        if unit.y < cy - radius or unit.y > cy + radius:
+            continue
+        # 只沉默魔法单位(attack_kind == "magic")
+        # 从 unit class 注册表查;查不到默认 non-magic(避免误沉默物理单位)。
+        # 只吞 KeyError:未知 unit_type 是真实数据错误,要打 warning;其他异常让它冒。
+        from app.classes.units import get as get_unit_class
+        try:
+            attack_kind = get_unit_class(unit.unit_type).attack_kind
+        except KeyError:
+            import logging
+            logging.getLogger(__name__).warning(
+                "apply_silence_aura: unknown unit_type=%r, treating as physical (no silence)",
+                getattr(unit, "unit_type", None),
+            )
+            attack_kind = "physical"
+        if attack_kind != "magic":
+            continue
+        # 写入 status_effects(通用框架);silence_until_turn 字段已废弃不再写。
+        add_effect(
+            unit,
+            "silence",
+            applied_turn=current_turn,
+            applied_by=owner_player_id,
+            remaining_turns=duration_turns,
+        )
+        silenced.append(unit)
+    return silenced
+
+
+def is_unit_silenced(unit, *, current_turn) -> bool:
+    """检查单位当前是否被沉默(全局工具,供 attack / counter 拦截使用)。
+
+    只读通用 status_effects 新机制。silence_until_turn 字段已废弃,不再
+    作为 fallback 来源;若发现老存档里有非零值,迁移代码
+    (database._migrate_legacy_silence_until_turn)会在读出时把它转写到
+    status_effects 并清零。
+    """
+    from app.status import is_silenced as _is_silenced_new
+    return _is_silenced_new(unit)
+
+
+def clear_expired_silences(units, *, current_turn) -> int:
+    """兼容期保留的清理入口。
+
+    新机制下,通用 tick_effects_at_turn_start 已经把 status_effects 里
+    silence 的 remaining_turns 减到 0 自动过期(详见 app.status.engine)。
+    本函数现在是个 no-op(silence_until_turn 字段已废弃),保留是为了
+    旧调用方不会因为删函数而崩;返回 0。
+    """
+    return 0
 
 
 def expire_power(player):
@@ -135,13 +272,48 @@ def expire_power(player):
     player.co_state = co
 
 
-def on_player_turn_start(player, game_turn_number: int):
-    co = dict(player.co_state or {})
+def _refresh_mov_debuff(unit):
+    """turn_start 时刷新 unit.mov:slow 临时减半,过期恢复。
+
+    第一次调用时把 unit.mov 当作 _base_mov 存档;之后每次按
+    modify_mov(unit, base) 重算。
+    """
+    from app.status import modify_mov
+    base = getattr(unit, "_base_mov", None)
+    if base is None:
+        unit._base_mov = int(getattr(unit, "mov", 0))
+        base = unit._base_mov
+    unit.mov = modify_mov(unit, base=base)
+
+
+def on_player_turn_start(player, game_turn_number: int, all_units=None):
+    # 用 _ensure_co_state 把 co_state 字段补齐(含 stars_earned_total 等)
+    from app.commanders.meter import _ensure_co_state
+    from app.status import should_skip_action, tick_effects_at_turn_start
+    co = dict(_ensure_co_state(player))  # 强制新建 dict(避免与旧引用同一对象)
     last = co.get("last_start_turn", -1)
     if last != -1 and game_turn_number > last:
         if co.get("is_power_active"):
             expire_power(player)
-            co = dict(player.co_state or {})
-        co["meter"] = 0
-    co["last_start_turn"] = game_turn_number
+            co = dict(_ensure_co_state(player))
+        # 新机制:每回合不重置 stars_earned_total(累计型,放 power 才扣)
+# 沉默领域 (鸢影 P+) 持续 N 大回合:game_turn_number 推进到 N 时清空。
+        if all_units is not None:
+            clear_expired_silences(all_units, current_turn=game_turn_number)
+            # status effects (P+):tick 倒计时,poison 扣 HP,paralyze skip,slow 调 mov
+            # 玩家的所有 unit(同 team + 自己) 走这条路径:
+            owner_units = [u for u in all_units if u.player_id == player.id]
+            for u in owner_units:
+                if u.hp <= 0:
+                    continue
+                # paralyze 在 tick 前判断:剩余 0 → tick 后过期清理 → 查不到
+                skip, reason = should_skip_action(u)
+                if skip:
+                    u.has_acted = True  # 本回合无法主动行动(仍可被攻击)
+                    u.paralyzed_until_turn = game_turn_number
+                # slow 的 mov 调整在 tick 前读(slow effect 还在生效)
+                _refresh_mov_debuff(u)
+                # 最后 tick:扣 remaining_turns,过期清理
+                tick_effects_at_turn_start(u, game_turn_number=game_turn_number)
+        co["last_start_turn"] = game_turn_number
     player.co_state = co

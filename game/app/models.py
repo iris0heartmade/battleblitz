@@ -214,12 +214,29 @@ class Unit(Base):
     # each of the unit owner's turns.
     mp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Deterministic RNG seed used by RolledGrowthPolicy when a generic
+    # unit is spawned at L>1.  Without this seed, save-and-reload would
+    # produce different L10 stats on each load.  Set by the spawn
+    # path; legacy rows default to 0 (which the spawn path treats as
+    # "no seed, use a fresh non-deterministic RNG").
+    growth_seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Morale (0..MORALE_MAX). Awards +1 per kill, capped. Persistent across
     # turns — represents the unit's battle experience.
     morale: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # 通用 status effect 列表 (P+):
+    #   [{"type": "poison"|"paralyze"|"blind"|"slow"|"silence",
+    #     "remaining_turns": int,
+    #     "applied_turn": int,
+    #     "applied_by": int|None,
+    #     ...type-specific params...}, ...]
+    # 钩子在 game/app/status/engine.py 集中实现。silence 也走这里,
+    # 不再有独立的 silence_until_turn 字段。
+    status_effects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     has_acted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # True if the unit has moved this turn. Separate from has_acted so

@@ -5,6 +5,7 @@ tests AND the renderer.
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Mapping
 
@@ -99,8 +100,24 @@ def _curve_from_baseline(
     if max_level < 1:
         raise ValueError(f"max_level must be >= 1, got {max_level}")
     values: Dict[int, Dict[str, int]] = {}
-    for lv in range(1, max_level + 1):
-        values[lv] = dict(policy.stat_at_level(baseline_=baseline, level=lv))
+    if hasattr(policy, "roll_level_up"):
+        # Rolled growth (RolledGrowthPolicy): roll INCREMENTALLY from L1 so the
+        # curve is monotonic non-decreasing (deltas are 0/1/2 — stats never
+        # dip) and deterministic per subject.  Mirrors the runtime spawn path
+        # in app.modes.spawn_generic_stats.  Previously we re-rolled from base
+        # for every level, which produced two independent random sequences for
+        # L5 vs L6 and caused spurious "descent" sawtooths in the charts.
+        rng = random.Random(f"{baseline.type_id}:{policy.name}")
+        values[1] = dict(baseline.base_stats)
+        for lv in range(2, max_level + 1):
+            values[lv] = dict(policy.roll_level_up(
+                current_stats=values[lv - 1], baseline_=baseline, rng=rng,
+            ))
+    else:
+        # Linear / curve policies are pure functions of (base, level): each
+        # level is independent and already monotonic.
+        for lv in range(1, max_level + 1):
+            values[lv] = dict(policy.stat_at_level(baseline_=baseline, level=lv))
     return ClassGrowthCurve(baseline=baseline, max_level=max_level, values=values)
 
 

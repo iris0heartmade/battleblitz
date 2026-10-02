@@ -29,6 +29,7 @@ from app.config import (
     INCOME_PER_TURN,
     INCOME_TERRAINS,
     LOBBY_CLEANUP_INTERVAL_SECONDS,
+    MAP_SIZE,
     TERRAIN_BARRACKS,
     TERRAIN_VILLAGE,
     CASTLE_VAULT,
@@ -255,7 +256,7 @@ async def end_turn(
                 # otherwise mark as 'player' so the human can act.
                 first_player = next(p for p in players if p.seat == alive_seats[0])
                 await session.refresh(first_player, ["units"])
-                on_player_turn_start(first_player, game.turn_number)
+                on_player_turn_start(first_player, game.turn_number, all_units=all_units)
                 game.phase = "ai" if first_player.is_ai else "player"
                 # P2.4 — round resolution previously only flipped
                 # phase but never spawned the AI background chain,
@@ -310,7 +311,11 @@ async def end_turn(
     # Otherwise, just advance to the next alive player (within the same round).
     game.current_player_index = next_seat
     await session.refresh(next_player, ["units"])
-    on_player_turn_start(next_player, game.turn_number)
+    # 取全场 units,沉默领域 (鸢影 P+) 清空需要
+    all_units = (await session.execute(
+        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game_id)
+    )).scalars().all()
+    on_player_turn_start(next_player, game.turn_number, all_units=all_units)
 
     # If the next player is AI, schedule it to play automatically in the
     # background so the human user can watch without doing anything.
@@ -413,7 +418,42 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
             # decision so a stale chain cannot emit a duplicate activation.
             await session.refresh(current, ["co_state", "units"])
             if ai_should_fire_co_power(current):
-                fire_co_power(current)
+                # AI auto-fire: silence-aura commanders (yuanying) need a
+                # center_xy and the full unit list. We pick a sane default
+                # here so the AI chain never crashes on a missing arg.
+                # Default heuristic: prefer the centroid of the AI's own
+                # alive units (their likely engagement zone); fall back to
+                # the map center if the AI has no units positioned yet.
+                ai_units = list(current.units or [])
+                alive_ai = [u for u in ai_units if getattr(u, "hp", 0) > 0]
+                if alive_ai:
+                    cx = round(sum(u.x for u in alive_ai) / len(alive_ai))
+                    cy = round(sum(u.y for u in alive_ai) / len(alive_ai))
+                else:
+                    cx, cy = MAP_SIZE // 2, MAP_SIZE // 2
+                cx = max(0, min(MAP_SIZE - 1, cx))
+                cy = max(0, min(MAP_SIZE - 1, cy))
+                all_units = (
+                    await session.execute(
+                        select(Unit).where(
+                            Unit.player_id.in_([p.id for p in players])
+                        )
+                    )
+                ).scalars().all()
+                try:
+                    fire_co_power(
+                        current,
+                        center_xy=(cx, cy),
+                        current_turn=game.turn_number,
+                        all_units=list(all_units),
+                    )
+                except ValueError as e:
+                    # A single bad fire must not kill the AI chain — log and
+                    # continue with the rest of the turn's actions.
+                    logger.warning(
+                        "AI %s (commander=%s) fire_co_power failed: %s",
+                        current.user_name, current.commander_id, e,
+                    )
                 session.add(ActionLog(
                     game_id=game.id,
                     turn_number=game.turn_number,
@@ -474,7 +514,7 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
                             game.turn_number += 1
                             first_p = next(p for p in players if p.seat == new_alive[0])
                             await session.refresh(first_p, ["units"])
-                            on_player_turn_start(first_p, game.turn_number)
+                            on_player_turn_start(first_p, game.turn_number, all_units=all_units)
                             game.phase = "ai" if first_p.is_ai else "player"
                         else:
                             game.status = "finished"
@@ -482,7 +522,11 @@ async def _run_ai_turn_chain_write_locked(game_id: int) -> None:
                 else:
                     game.current_player_index = next_seat
                     await session.refresh(next_player, ["units"])
-                    on_player_turn_start(next_player, game.turn_number)
+                    # 取全场 units,沉默领域 (鸢影 P+) 清空需要
+                    turn_units = (await session.execute(
+                        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game_id)
+                    )).scalars().all()
+                    on_player_turn_start(next_player, game.turn_number, all_units=turn_units)
                     # AI turns run in the background; otherwise hand control
                     # to the next real human player.
                     if next_player.is_ai:
@@ -707,7 +751,7 @@ async def _check_stale_turns() -> None:
                                 p for p in players if p.seat == new_alive[0]
                             )
                             await session.refresh(first_player, ["units"])
-                            on_player_turn_start(first_player, game.turn_number)
+                            on_player_turn_start(first_player, game.turn_number, all_units=all_units)
                             game.phase = "ai" if first_player.is_ai else "player"
                 else:
                     idx = alive_seats.index(expected_seat)
@@ -715,7 +759,13 @@ async def _check_stale_turns() -> None:
                     next_player = next(p for p in players if p.seat == next_seat)
                     game.current_player_index = next_seat
                     await session.refresh(next_player, ["units"])
-                    on_player_turn_start(next_player, game.turn_number)
+                    # 取全场 units,沉默领域 (鸢影 P+) 清空需要
+                    # (L4 review / post-deploy:game_id was undefined in this
+                    # loop; use game.id instead.)
+                    turn_units = (await session.execute(
+                        select(Unit).join(Player, Unit.player_id == Player.id).where(Player.game_id == game.id)
+                    )).scalars().all()
+                    on_player_turn_start(next_player, game.turn_number, all_units=turn_units)
                     if next_player.is_ai:
                         game.phase = "ai"
                     else:

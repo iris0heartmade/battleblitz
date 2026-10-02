@@ -36,6 +36,7 @@
     { "x": 4, "y": 1, "type": "warlock", "color": "red", "level": 1 },
     { "x": 5, "y": 1, "type": "healer", "color": "red", "level": 1 },
     { "x": 1, "y": 2, "type": "lancer", "color": "red", "level": 1 },
+    { "x": 2, "y": 2, "type": "bard", "color": "red", "level": 1 },
     { "x": 3, "y": 2, "type": "warrior", "color": "red", "level": 1 },
     { "x": 4, "y": 2, "type": "berserker", "color": "red", "level": 1 },
     { "x": 5, "y": 2, "type": "dragon_rider", "color": "red", "level": 1 },
