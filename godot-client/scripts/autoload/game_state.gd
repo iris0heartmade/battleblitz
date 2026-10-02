@@ -229,6 +229,11 @@ func _on_event_delta(event: Dictionary) -> void:
 				_update_unit_in_cache(target_unit_id, func(u: Dictionary) -> void:
 					u["hp"] = target_hp_after
 				)
+			# Bug B 修复:即使 server 漏发 type="kill" 而只发 type="attack",仍要保证
+			# 客户端把 target 从 cache 移除并刷新 board(尤其英雄)。
+			if is_kill_v:
+				_remove_unit_from_cache(target_unit_id)
+				units_changed.emit(_flatten_units(players))
 			unit_attacked.emit(
 				actor_unit_id, target_unit_id,
 				int(context.get("damage", 0)),
@@ -239,6 +244,9 @@ func _on_event_delta(event: Dictionary) -> void:
 		"kill":
 			# M4.16+:从 players 缓存中移除死亡单位 — 否则 _all_units_including_self 还会看到尸体
 			_remove_unit_from_cache(target_unit_id)
+			# Bug B 修复:kill event 后必须发 units_changed,否则 board._on_units_changed 不触发,
+			# 单位 sprite 仍残留(尤其英雄 — 因为英雄视觉权重高,玩家明确报告"不能被击杀")。
+			units_changed.emit(_flatten_units(players))
 			unit_killed.emit(target_unit_id, actor_unit_id)
 		"level_up":
 			_update_unit_in_cache(actor_unit_id, func(u: Dictionary) -> void:

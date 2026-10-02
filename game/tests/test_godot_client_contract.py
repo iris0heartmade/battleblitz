@@ -97,6 +97,20 @@ def test_godot_hero_portrait_renders_in_info_panel_card():
     # 2) main.gd @onready 指向检视卡内的 UnitPortraitPanel
     assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel" in main_src
     # 3) _set_unit_info_portrait 把 TextureRect 挂到 hero_portrait_panel + V6 等比缩放
+    # 1) .tscn 里有 HeroPortraitPanel,挂在 GameView/HUD 下(不在 BottomLeft HBox 里)
+    assert '[node name="HeroPortraitPanel" type="Panel" parent="GameView/HUD"]' in main_tscn
+    assert "HeroPortraitPanel" in main_tscn
+    # 2) 锚定到左下角(GoldPanel 上方):anchor_top=1.0 且 offset_top 为负(向上收)
+    hp_idx = main_tscn.index('[node name="HeroPortraitPanel"')
+    hp_end = main_tscn.index("\n\n", hp_idx)
+    hp_block = main_tscn[hp_idx:hp_end]
+    assert "anchor_top = 1.0" in hp_block
+    assert "anchor_bottom = 1.0" in hp_block
+    assert "offset_left = 16.0" in hp_block
+    assert "offset_top = -278.0" in hp_block
+    # 3) main.gd @onready var 指向实际槽位(merge 后统一走 InfoPanel/UnitPortraitPanel)
+    assert "@onready var hero_portrait_panel: Panel = $GameView/HUD/InfoPanel/UnitPortraitPanel" in main_src
+    # 4) _set_unit_info_portrait 把 TextureRect 挂到 hero_portrait_panel(不再挂 info_panel)
     func_idx = main_src.index("func _set_unit_info_portrait(")
     func_end = main_src.index("\n\n", func_idx)
     func_body = main_src[func_idx:func_end]
@@ -183,17 +197,21 @@ def test_godot_lobby_commander_fetch_forwards_to_mainline_controller():
     # T:#16 — commanders 拉取统一收口在 mainline_controller._on_commanders_response,
     # 它会同时刷新主线指挥官下拉和联机大厅下拉(末尾 _main._setup_lobby_commander_options)。
     # 联机大厅 _enter_lobby_view 调 get_unlocked_commanders 时,回调必须
-    # 转发到 mainline_view,不能挂到 self(main.gd 根本没有 _on_commanders_response,
-    # 否则 lobby_commander_option 永远只剩"不选择指挥官"一项,创房时所有座位都拿不到 host commander)。
+    # 转发到 mainline_view,不能挂到 self(lobby_controller.gd / main.gd 都没有
+    # _on_commanders_response,否则 lobby_commander_option 永远只剩"不选择指挥官"一项,
+    # 创房时所有座位都拿不到 host commander)。
     main_src = _read(MAIN_GD)
+    lobby_src = _read(LOBBY_GD)
     mainline_src = _read(ROOT / "godot-client" / "scripts" / "mainline" / "mainline_controller.gd")
     # 1) mainline_controller 仍是 commander 拉取的唯一所有者
     assert "func _on_commanders_response(" in mainline_src
-    # 2) main.gd 不应有这个方法(避免重入 / 误用)
+    # 2) main.gd / lobby_controller.gd 不应有这个方法(避免重入 / 误用)
     assert "func _on_commanders_response(" not in main_src
+    assert "func _on_commanders_response(" not in lobby_src
     # 3) _enter_lobby_view 里调用 get_unlocked_commanders 时,callback 必须是
     #    Callable(mainline_view, "_on_commanders_response"),不能是 self
     #    (该函数在 lobby_controller.gd)
+    #    Callable(_main.mainline_view, "_on_commanders_response"),不能是 self
     lobby_src = _read(LOBBY_GD)
     lobby_start = lobby_src.index("func _enter_lobby_view(")
     lobby_end = lobby_src.index("\n\n", lobby_start)
@@ -282,6 +300,8 @@ def test_godot_claim_remains_available_after_moving_onto_enemy_hq():
     # action_claim 调用被格式化成了多行;断言放宽为"调用存在 + 参数一致"
     assert "NetworkClient.action_claim(" in source
     assert "_game_id, _player_id, _selected_unit_id" in source
+    # _on_claim_pressed 里的 action_claim 已是多行调用,首行后换行续参
+    assert "NetworkClient.action_claim(\n\t\t_game_id, _player_id, _selected_unit_id," in source
 
 
 def test_godot_game_over_stops_refreshing_and_polling():
