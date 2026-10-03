@@ -297,7 +297,7 @@ def on_player_turn_start(player, game_turn_number: int, all_units=None):
             expire_power(player)
             co = dict(_ensure_co_state(player))
         # 新机制:每回合不重置 stars_earned_total(累计型,放 power 才扣)
-# 沉默领域 (鸢影 P+) 持续 N 大回合:game_turn_number 推进到 N 时清空。
+        # 沉默领域 (鸢影 P+) 持续 N 大回合:game_turn_number 推进到 N 时清空。
         if all_units is not None:
             clear_expired_silences(all_units, current_turn=game_turn_number)
             # status effects (P+):tick 倒计时,poison 扣 HP,paralyze skip,slow 调 mov
@@ -315,5 +315,8 @@ def on_player_turn_start(player, game_turn_number: int, all_units=None):
                 _refresh_mov_debuff(u)
                 # 最后 tick:扣 remaining_turns,过期清理
                 tick_effects_at_turn_start(u, game_turn_number=game_turn_number)
+        co["last_start_turn"] = game_turn_number
+    else:
+        # 首次记录 last_start_turn(原本被嵌套在 if 内被首次调用跳过)
         co["last_start_turn"] = game_turn_number
     player.co_state = co

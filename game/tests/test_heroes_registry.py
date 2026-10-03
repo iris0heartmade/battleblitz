@@ -1,4 +1,4 @@
-﻿from app.classes.heroes import get, get_by_dialogue_name, hero_ids
+from app.classes.heroes import get, get_by_dialogue_name, hero_ids
 
 
 def test_anna_is_registered():

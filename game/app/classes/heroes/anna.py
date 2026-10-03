@@ -1,4 +1,4 @@
-﻿"""
+"""
 Hero: Anna - a healer heroine for the default mainline.
 
 Anna uses the healer base class and keeps the existing ``heal`` skill.

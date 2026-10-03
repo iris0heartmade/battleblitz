@@ -233,7 +233,7 @@ static func apply_hud(host: Node) -> void:
 			if btn != null and is_instance_valid(btn):
 				BattleTheme.apply_secondary(btn)
 				btn.add_theme_font_size_override("font_size", roundi(18.0 * density))
-				btn.add_theme_color_override("font_disabled_color", Color("#aaa38d"))
+				btn.add_theme_color_override("font_disabled_color", MenuTheme.C_TEXT_DIM)
 				btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.82))
 				btn.add_theme_constant_override("outline_size", 1)
 				btn.custom_minimum_size.y = 60.0 if compact else 50.0

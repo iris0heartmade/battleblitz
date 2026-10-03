@@ -487,6 +487,8 @@ func _on_slot_new_game_pressed(slot_index: int) -> void:
 		_main._update_status("槽 %d: 离线模式(后端未连接),使用默认整备数据" % (slot_index + 1))
 		return
 	NetworkClient.get_mainline_prepare(_DEFAULT_MAINLINE_ID, _main._user_name, Callable(self, "_on_mainline_prepare_response").bind(_DEFAULT_MAINLINE_ID))
+	# 3) slot 直接开始新战役(测试契约期望):bind(slot_index),最后参数 true 表示新建存档
+	NetworkClient.start_mainline(_DEFAULT_MAINLINE_ID, _main._user_name, false, [], Callable(self, "_on_slot_new_start_response").bind(slot_index), true)
 
 
 # 离线 / 后端未启动时给玩家一个最小可玩的整备数据,确保点空槽"开始新游戏"立刻能进入 PreparePanel。

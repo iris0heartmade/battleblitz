@@ -114,4 +114,8 @@ _tmp_apply_hero_growth.py
 # for visual review of the per-class / per-hero growth curves. The chart
 # tool is re-runnable; PNGs aren't tracked.
 tools/growth_charts_v1_rolled/
+tools/growth_charts_combat_pacing_v3/
+tools/growth_charts_dual_track_expected/
+tools/growth_charts_dual_track_v2_uplifted/
+tools/growth_charts_v2_balanced/
 
