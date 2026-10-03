@@ -256,41 +256,41 @@ func _ready() -> void:
 		"map editor should have a dedicated Godot view")
 	_assert_true("EditorView has EditorBoard", main_check.get_node_or_null("EditorView/EditorBoard") != null,
 		"map editor should reuse the board renderer for preview/editing")
-	_assert_true("EditorView has EditorMapNameInput", main_check.get_node_or_null("EditorView/EditorPanel/EditorMapNameInput") != null,
+	_assert_true("EditorView has EditorMapNameInput", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorMapNameInput") != null,
 		"map editor should expose a map name input")
-	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorTerrainOption") != null,
+	_assert_true("EditorView has EditorTerrainOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorTerrainOption") != null,
 		"map editor should expose a terrain brush selector")
-	_assert_true("EditorView has EditorSurfaceOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOption") != null,
+	_assert_true("EditorView has EditorSurfaceOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorSurfaceOption") != null,
 		"map editor should expose a surface/building brush selector")
-	_assert_true("EditorView has EditorSurfaceOwnerOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorSurfaceOwnerOption") != null,
+	_assert_true("EditorView has EditorSurfaceOwnerOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorSurfaceOwnerOption") != null,
 		"map editor should expose surface/building ownership selection")
-	_assert_true("EditorView has EditorApplyBiomeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorApplyBiomeBtn") != null,
+	_assert_true("EditorView has EditorApplyBiomeBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorApplyBiomeBtn") != null,
 		"map editor should expose one-click biome branch switching")
-	_assert_true("EditorView has EditorModeOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorModeOption") != null,
+	_assert_true("EditorView has EditorModeOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorModeOption") != null,
 		"map editor should expose terrain/surface/unit edit modes")
-	_assert_true("EditorView has EditorUnitOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitOption") != null,
+	_assert_true("EditorView has EditorUnitOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorUnitOption") != null,
 		"map editor should expose a unit type selector")
-	_assert_true("EditorView has EditorUnitToolOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitToolOption") != null,
+	_assert_true("EditorView has EditorUnitToolOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorUnitToolOption") != null,
 		"map editor should expose place/erase unit tools")
-	_assert_true("EditorView has EditorUnitColorOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitColorOption") != null,
+	_assert_true("EditorView has EditorUnitColorOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorUnitColorOption") != null,
 		"map editor should expose a unit color selector")
-	_assert_true("EditorView has EditorUnitLevelOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorUnitLevelOption") != null,
+	_assert_true("EditorView has EditorUnitLevelOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorUnitLevelOption") != null,
 		"map editor should expose a unit level selector")
-	_assert_true("EditorView has EditorWidthOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorWidthOption") != null,
+	_assert_true("EditorView has EditorWidthOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorWidthOption") != null,
 		"map editor should expose a width selector")
-	_assert_true("EditorView has EditorHeightOption", main_check.get_node_or_null("EditorView/EditorPanel/EditorHeightOption") != null,
+	_assert_true("EditorView has EditorHeightOption", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorHeightOption") != null,
 		"map editor should expose a height selector")
-	_assert_true("EditorView has EditorResizeBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorResizeBtn") != null,
+	_assert_true("EditorView has EditorResizeBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorResizeBtn") != null,
 		"map editor should expose a resize action")
-	_assert_true("EditorView has EditorUndoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorUndoBtn") != null,
+	_assert_true("EditorView has EditorUndoBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorUndoBtn") != null,
 		"map editor should expose undo for editing mistakes")
-	_assert_true("EditorView has EditorRedoBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorRedoBtn") != null,
+	_assert_true("EditorView has EditorRedoBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorRedoBtn") != null,
 		"map editor should expose redo after undo")
-	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorSaveBtn") != null,
+	_assert_true("EditorView has EditorSaveBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorSaveBtn") != null,
 		"map editor should expose a save action")
-	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorLoadBtn") != null,
+	_assert_true("EditorView has EditorLoadBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorLoadBtn") != null,
 		"map editor should expose a load-selected action")
-	_assert_true("EditorView has EditorDeleteBtn", main_check.get_node_or_null("EditorView/EditorPanel/EditorDeleteBtn") != null,
+	_assert_true("EditorView has EditorDeleteBtn", main_check.get_node_or_null("EditorView/EditorHud/EditorPanel/EditorDeleteBtn") != null,
 		"map editor should expose a delete-selected action")
 	_assert_true("SavesView has SaveSelectOption", main_check.get_node_or_null("SavesView/SaveFrame/SaveSelectOption") != null,
 		"save management should expose selectable saves")
@@ -334,7 +334,7 @@ func _ready() -> void:
 		"GameView/HUD/ActionBubble/OrnateFrame",
 		"GameView/HUD/AttackConfirmPanel/OrnateFrame",
 		"GameView/HUD/WarReportPanel/OrnateFrame",
-		"SettingsPanel/OrnateFrame",
+		"GameView/HUD/SettingsPanel/OrnateFrame",
 		"GameView/HUD/PausePanel/OrnateFrame",
 		"GameView/HUD/DialogPanel/OrnateFrame",
 		"GameView/HUD/TutorialBubble/OrnateFrame",
@@ -1000,19 +1000,19 @@ func _ready() -> void:
 	var editor_view: Control = main_check.get_node("EditorView")
 	_assert_true("Editor button switches to editor view", editor_view.visible,
 		"pressing the editor button should show the map editor")
-	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorTerrainOption")
+	var editor_terrain_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorTerrainOption")
 	_assert_gte("Editor terrain selector lists brushes", editor_terrain_option.item_count, 5,
 		"terrain selector should expose the initial paint brushes")
-	var editor_surface_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOption")
-	var editor_surface_owner_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorSurfaceOwnerOption")
-	var editor_apply_biome_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorApplyBiomeBtn")
-	var editor_mode_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorModeOption")
-	var editor_unit_tool_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitToolOption")
-	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitOption")
-	var editor_unit_color_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitColorOption")
-	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorUnitLevelOption")
-	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorWidthOption")
-	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorHeightOption")
+	var editor_surface_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorSurfaceOption")
+	var editor_surface_owner_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorSurfaceOwnerOption")
+	var editor_apply_biome_btn: Button = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorApplyBiomeBtn")
+	var editor_mode_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorModeOption")
+	var editor_unit_tool_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUnitToolOption")
+	var editor_unit_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUnitOption")
+	var editor_unit_color_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUnitColorOption")
+	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUnitLevelOption")
+	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorWidthOption")
+	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorHeightOption")
 	_assert_eq("Editor mode selector lists three deploy modes", editor_mode_option.item_count, 3,
 		"editor mode selector should include terrain, surface, and unit deployment")
 	_assert_eq("Editor terrain deploy mode text", editor_mode_option.get_item_text(0), "地形部署",
@@ -1037,10 +1037,10 @@ func _ready() -> void:
 		{"id": "map_alpha", "name": "Alpha", "width": 15, "height": 15, "biome": "grass"},
 		{"id": "map_beta", "name": "Beta", "width": 15, "height": 15, "biome": "snow"},
 	], 200)
-	var editor_map_select: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorMapSelectOption")
+	var editor_map_select: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorMapSelectOption")
 	_assert_eq("Editor map selector stores backend list", editor_map_select.item_count, 2,
 		"editor map response should populate saved maps")
-	var editor_delete_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorDeleteBtn")
+	var editor_delete_btn: Button = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorDeleteBtn")
 	_assert_true("Editor delete enables with saved map", not editor_delete_btn.disabled,
 		"delete should enable when a saved map is selected")
 	editor_map_select.select(1)
@@ -1100,7 +1100,7 @@ func _ready() -> void:
 	tile_owners = unit_editor_map.get("tile_owners", [])
 	_assert_eq("Editor surface unowned clears owner", tile_owners.size(), 0,
 		"painting an unowned surface should remove ownership metadata")
-	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorPanel/EditorBiomeOption")
+	var editor_biome_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorBiomeOption")
 	editor_biome_option.select(1)
 	editor_apply_biome_btn.pressed.emit()
 	unit_editor_map = editor_view.get("_editor_map")
@@ -1136,8 +1136,8 @@ func _ready() -> void:
 	var editor_layout: Array = editor_map.get("layout", [])
 	_assert_true("Editor terrain paint updates layout", str(editor_layout[1])[1] == "F",
 		"painting with the forest brush should mutate the editor layout")
-	var editor_undo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorUndoBtn")
-	var editor_redo_btn: Button = main_check.get_node("EditorView/EditorPanel/EditorRedoBtn")
+	var editor_undo_btn: Button = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUndoBtn")
+	var editor_redo_btn: Button = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorRedoBtn")
 	_assert_true("Editor undo enables after paint", not editor_undo_btn.disabled,
 		"painting should push a history entry that can be undone")
 	_assert_true("Editor redo disabled before undo", editor_redo_btn.disabled,

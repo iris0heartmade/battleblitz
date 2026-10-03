@@ -834,7 +834,7 @@ def test_godot_battle_hud_keeps_mainline_fe_ui_layout_rules():
     assert "var compact := states.size() > 2" in roster
     assert "_team_cn(color_name)" in roster
     assert "func _team_cn(team: String) -> String:" in source
-    assert '"未任命"' in roster
+    assert '"待命"' in roster
     assert '"%s:%s"' not in roster
 
     assert "Hero ID" not in info

@@ -1702,7 +1702,7 @@ func _refresh_co_roster() -> void:
 		if side_name == "":
 			side_name = "阵营"
 		# Keep the compact top roster legible at 1280px without clipping the team name.
-		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "未任命"
+		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "待命"
 		lbl.text = side_name if compact else "%s · %s" % [side_name, commander_name_text]
 		lbl.custom_minimum_size = Vector2(40 if compact else 92, 0)
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -4633,8 +4633,8 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 			hero_portrait_panel.offset_bottom = 370.0
 	if unit_info != null and is_instance_valid(unit_info):
 		unit_info.offset_left = 172.0 if hero_portrait_panel.visible else 44.0
-			if compact_hud:
-				unit_info.offset_left = 44.0
+		if compact_hud:
+			unit_info.offset_left = 44.0
 		unit_info.offset_top = 294.0 if compact_hud and hero_portrait_panel.visible else 210.0
 		if compact_hud:
 			# 1280 窗口使用 1920 设计视口缩放；密度补偿后保持约 14px 物理字号。
