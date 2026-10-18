@@ -1,5 +1,16 @@
 # Phase 2 双轨制落地 · 进展报告
 
+> 📦 **历史文档（已封档，仅作追溯）** — 记录于 2026-07-23 的阶段性快照，**不代表当前状态**。
+>
+> - 文中数值是当时的中间态，**平衡性在此之后又调整过**。例如 `berserker` 当时是 HP 30 / Atk 14 / Def 5 / Mov 4，当前代码为 HP 48 / Atk 28 / Def 8 / Mov 5；`lancer` 当时 Mov 5，当前为 6。
+> - 文中"15 个 Generic 兵种"当前已扩展到 **16 个**。
+> - 当时的分支 `refactor/extract-mainline-modules` 与基线 `fea0066` 均已不存在，成果已合入 `master`。
+>
+> **要看当前事实请读**：[`README.md`](../../README.md) · [`docs/路线/项目状态.md`](../路线/项目状态.md) · [`docs/架构/架构.md`](../架构/架构.md)
+> 双轨制**设计**本身仍然有效，见 [`双轨制单位模型设计方案.md`](双轨制单位模型设计方案.md)。
+
+---
+
 > **日期**:2026-07-23  
 > **Branch**:`refactor/extract-mainline-modules`  
 > **基线**:`master fea0066`  

@@ -1,8 +1,30 @@
 # BattleBlitz Godot 4.7 客户端 · 功能调查报告
 
-> **报告日期**:2026-07-21
-> **范围**:`D:/Python/BattleBlitz/battleblitz/godot-client/`(纯客户端,后端不动)
-> **数据源**:5 组 agent 在 2026-07-21 对 scripts/ + scenes/ + tools/ + assets/ 的实测;以 `main.gd`(7372 行)+ `network_client.gd` + `game_state.gd` + `smoke_test.gd`(73 KB)为锚点。
+> 📦 **本文是 2026-07-21 的实测快照，正文内容已过期，仅作历史对照。**（2026-10-06 标注）
+>
+> 报告写于 2026-07-21，此后 `master` 前进约 2.5 个月、40+ 次提交。
+> **下表已按 2026-10-06 实测更正**，正文其余部分（含 P0/P1 缺口结论、按钮-接口对照）仍是当时的判断。
+>
+> **当前架构请读** [`架构.md`](架构.md) · **当前状态请读** [`../路线/项目状态.md`](../路线/项目状态.md)
+>
+> ### 关键数字变化（2026-07-21 → 2026-10-06）
+
+| 指标 | 报告当时 | 2026-10-06 实测 | 变化 |
+|---|---:|---:|---|
+| `main.gd` 行数 | 7,372 | **4,869** | ⬇ 已被拆分，逻辑迁至 `ui/`、`mainline/`、`board/` 等子模块 |
+| Autoload 单例 | 6 | **8** | ⬆ 新增 `DialogManager`、`InputHints` |
+| `scenes/main.tscn` 行数 | 2,048 | **3,040** | ⬆ |
+| `tools/*.gd` 脚本 | 26 | **42** | ⬆ 测试脚本大幅增加 |
+| `scripts/` 总规模 | — | **42 个 .gd / 20,398 行** | — |
+| 兵种数 | 4 | **16** | ⬆ 兵种体系大幅扩充 |
+| Godot 冒烟测试 | — | **616 passed / 0 failed** | 当前全绿 |
+
+> ⚠️ 原报告的核心结论「`main.gd` 7372 行、几乎所有视图逻辑内联在一处」**已不再成立** —— 拆分已完成。
+> 剩余的 `main.gd` 仍有 4,869 行，拆分计划见 [`../维护/main_gd-拆分重构计划.md`](../维护/main_gd-拆分重构计划.md)（状态：待执行）。
+
+> **原始报告日期**:2026-07-21
+> **范围**:`godot-client/`(纯客户端,后端不动)
+> **数据源**:5 组 agent 在 2026-07-21 对 scripts/ + scenes/ + tools/ + assets/ 的实测;以当时的 `main.gd` + `network_client.gd` + `game_state.gd` + `smoke_test.gd` 为锚点。
 > **配套表格**:`架构/Godot客户端功能调查报告.xlsx`(同目录,10 sheet)
 
 ---
@@ -19,12 +41,12 @@ BattleBlitz Godot 客户端已实现**主路径闭环 + 主线 + 战斗 + 编辑
 
 | 维度 | 数值 | 锚点 |
 |---|---|---|
-| 主场景 | `scenes/main.tscn` | 2048 行,所有 view 都是其子 Control |
-| 主控脚本 | `scripts/main.gd` | 7372 行,**几乎所有视图逻辑都内联在这一个类里** |
-| Autoload 单例 | 6 个 | Config / UserSettings / GameState / InputState / NetworkClient / AudioManager |
-| 自有 .tscn | 2 个 | `main.tscn`(2048) + `board.tscn`(899 B,被 GameView/EditorView 各实例化 1 次) |
-| Tools 脚本 | 26 个 | 1 smoke + 5 e2e + 17 截图 + 2 辅助 + 2 启动 |
-| 资产 (PNG) | 70 tiles + 6 classic units + 5 hero portraits/crests + 2 BGM | 由 `sync_assets.py` 与 web 同步 |
+| 主场景 | `scenes/main.tscn` | **3,040 行**（2026-10-06 实测，原写 2048）,所有 view 都是其子 Control |
+| 主控脚本 | `scripts/main.gd` | **4,869 行**（2026-10-06 实测，原写 7372）。**已部分拆分**：`ui/` `mainline/` `board/` `core/` `autoload/` 五个子模块承接了大部分视图逻辑,但 `main.gd` 仍是最大单文件 |
+| Autoload 单例 | **8 个** | Config / UserSettings / GameState / InputState / NetworkClient / AudioManager / **DialogManager** / **InputHints**（后两个为 2026-07-21 之后新增）|
+| 自有 .tscn | 2 个 | `main.tscn`(3,040 行) + `board.tscn`(28 行,被 GameView/EditorView 各实例化 1 次) |
+| Tools 脚本 | **42 个** | 2026-10-06 实测,原写 26；41 个测试场景 + 12 个 .gd 测试脚本 |
+| 资产 (PNG) | 438 文件约 135 MB | 2026-10-06 实测（tiles 70 / classic 16 / heroes 19 / unit_portraits 15 / UI 90 / tilesets 4）|
 | 网络通讯 | REST(单连接串行队列)+ WS(25s 心跳 + 0.5-30s 指数退避重连 + since_seq 回放) | `network_client.gd:106-180` |
 | Bug 标记 | 1 处 `gs.set("is_connected")` 字段名错(应 `ws_connected`);`InputState` 信号未连线(M2 占位) | `network_client.gd:95-96` |
 | 自动化覆盖率 | 约 **72-78%** 可玩流程(加权综合) | smoke_test 269 断言 + e2e_one_game + chapter_06_* 等 |
@@ -921,8 +943,8 @@ NetworkClient._dispatch_ws_message
 |---|---|
 | 主场景 | `D:/Python/BattleBlitz/battleblitz/godot-client/scenes/main.tscn` |
 | 棋盘场景 | `D:/Python/BattleBlitz/battleblitz/godot-client/scenes/board.tscn` |
-| 主控脚本 | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/main.gd`(7372 行) |
-| Autoloads | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/autoload/{config,user_settings,game_state,input_state,network_client,audio_manager}.gd` |
+| 主控脚本 | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/main.gd`(4,869 行 @2026-10-06) |
+| Autoloads | `godot-client/scripts/autoload/{config,user_settings,game_state,input_state,network_client,audio_manager,dialog_manager,input_hints}.gd`（8 个 @2026-10-06）|
 | Board / Camera / Highlight / Unit | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/board/{board,board_camera,highlights,unit_node}.gd` |
 | Map | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/core/{map_metrics,map_theme,map_loader,map_logic,tile_set_builder,texture_loader,types}.gd` |
 | UI | `D:/Python/BattleBlitz/battleblitz/godot-client/scripts/ui/{menu_theme,map_preview_summary}.gd` |

@@ -71,8 +71,15 @@ claude --resume *.txt
 !godot-client/assets/**/*.png
 
 # ===== Todolist ==========
-*todo*.md
+# 2026-10-06 修正：原规则 `*todo*.md` 会匹配任意层级，把
+# docs/维护/2026-07-22-missing-initial-units-todo.md 这类**项目文档**
+# 一并排除，导致它从未被提交、clone 的人看不到。
+# 收窄为「仅忽略仓库根目录的随手 todo」：
+/*todo*.md
 todolist
+# docs/ 下的 todo 属于项目正式记录，正常纳入版本控制。
+# 依据：docs/维护/README.md ——「待办类文档必须标明是否仍未完成」
+!docs/**/*todo*.md
 # ===== Node.js dependencies for tools/ (jsdom, playwright) =====
 tools/node_modules/
 tools/package-lock.json

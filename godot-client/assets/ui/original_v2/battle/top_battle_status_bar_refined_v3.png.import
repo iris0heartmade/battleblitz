@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbde00db9783b0"
-path="res://.godot/imported/top_battle_status_bar_refined_v3.png-e8c02542e2f272534b612d382c71235b.ctex"
+uid="uid://kp6ot105f7h4"
+path="res://.godot/imported/top_battle_status_bar_refined_v3.png-bac89ea661814b44c30449e8342a565f.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/ui/original_v2/battle/top_battle_status_bar_refined_v3.png"
-dest_files=["res://.godot/imported/top_battle_status_bar_refined_v3.png-e8c02542e2f272534b612d382c71235b.ctex"]
+dest_files=["res://.godot/imported/top_battle_status_bar_refined_v3.png-bac89ea661814b44c30449e8342a565f.ctex"]
 
 [params]
 

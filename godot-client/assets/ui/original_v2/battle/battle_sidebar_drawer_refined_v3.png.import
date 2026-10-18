@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbb843bb99cd3f"
-path="res://.godot/imported/battle_sidebar_drawer_refined_v3.png-f98c9666055704c7bda92646599d9c97.ctex"
+uid="uid://jlbrr106iiaj"
+path="res://.godot/imported/battle_sidebar_drawer_refined_v3.png-03cd6fbf8e900295d13540c8dea57e2b.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/ui/original_v2/battle/battle_sidebar_drawer_refined_v3.png"
-dest_files=["res://.godot/imported/battle_sidebar_drawer_refined_v3.png-f98c9666055704c7bda92646599d9c97.ctex"]
+dest_files=["res://.godot/imported/battle_sidebar_drawer_refined_v3.png-03cd6fbf8e900295d13540c8dea57e2b.ctex"]
 
 [params]
 
