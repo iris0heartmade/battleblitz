@@ -304,7 +304,11 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
     return CustomMapOut(**data)
 
 
-@router.delete("/{map_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{map_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_custom_map(map_id: str) -> None:
     """Delete a custom map."""
     path = _map_path(map_id)

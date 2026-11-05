@@ -201,7 +201,11 @@ async def promote_unit(
     )
 
 
-@router.delete("/units/{unit_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/units/{unit_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_unit(
     unit_id: int,
     svc: ProgressionService = Depends(_service),

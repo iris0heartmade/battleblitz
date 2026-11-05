@@ -1759,7 +1759,11 @@ async def remove_player(
     return await _build_state(session, game)
 
 
-@router.delete("/{game_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{game_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_game(
     game_id: int,
     session: AsyncSession = Depends(get_session),
