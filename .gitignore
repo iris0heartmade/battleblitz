@@ -126,3 +126,6 @@ tools/growth_charts_dual_track_expected/
 tools/growth_charts_dual_track_v2_uplifted/
 tools/growth_charts_v2_balanced/
 
+# Isolated height-map Demo and formal integration test data.
+game/.tmp/height-demo/
+

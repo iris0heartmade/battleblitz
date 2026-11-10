@@ -280,6 +280,8 @@ class Tile(Base):
     x: Mapped[int] = mapped_column(Integer, nullable=False)
     y: Mapped[int] = mapped_column(Integer, nullable=False)
     terrain: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Presentation height. NULL preserves terrain-derived heights in old maps.
+    elevation: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Castle sub-feature (P0.4). NULL on legacy tiles or non-castle tiles;
     # one of CASTLE_SUBTYPES for castle_* tiles. Used for layout rules
     # (castle_wall blocks; castle_door is the entry; castle_throne is

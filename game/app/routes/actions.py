@@ -196,6 +196,47 @@ def _log(session: AsyncSession, game: Game, player: Player, action_type: str, de
 # Move
 # ============================================================
 
+@router.get("/{game_id}/movement-options")
+async def movement_options(
+    game_id: int,
+    player_id: int,
+    unit_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Read-only movement preview using the same rules and paths as move_unit."""
+    game = await _load_active_game(session, game_id)
+    player = await _ensure_current_player(session, game, player_id)
+    unit = await _load_unit(session, unit_id)
+    if unit.player_id != player.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "该单位不属于你")
+    if unit.has_acted and not _get_unit(unit.unit_type).can_move_after_action:
+        return {"unit_id": unit.id, "tiles": []}
+
+    terrain, owners, _ = await _load_tile_grid(session, game_id)
+    players = (await session.execute(select(Player).where(Player.game_id == game_id))).scalars().all()
+    units = (await session.execute(
+        select(Unit).where(Unit.player_id.in_([p.id for p in players]), Unit.hp > 0)
+    )).scalars().all()
+    blocked = {(u.x, u.y) for u in units if u.player_id != player.id}
+    no_end = {(u.x, u.y) for u in units if u.player_id == player.id and u.id != unit.id}
+    profile = resolve_movement_profile(unit)
+    size = _pathfinder_size_for_grid(terrain)
+    start = (unit.x, unit.y)
+    reachable = bfs_reachable(
+        start, terrain, owners, unit.mp, viewer_owner_id=player.id,
+        blocked_units=blocked, no_end_units=no_end, movement_profile=profile, size=size,
+    )
+    tiles = []
+    for target, cost in sorted(reachable.items()):
+        path = pathfind(
+            start, target, terrain, owners, unit.mp, viewer_owner_id=player.id,
+            blocked_units=blocked, no_end_units=no_end, movement_profile=profile, size=size,
+        )
+        if path:
+            tiles.append({"x": target[0], "y": target[1], "cost_x2": cost,
+                          "path": [{"x": x, "y": y} for x, y in path]})
+    return {"unit_id": unit.id, "tiles": tiles}
+
 @router.post("/{game_id}/move", response_model=MoveResult)
 async def move_unit(
     game_id: int,

@@ -1,0 +1,28 @@
+{
+  "source_map": "res://demos/height_map/data/balanced_2p_15.json",
+  "default_map": "standard",
+  "max_map_dimension": 40,
+  "codes": {
+    "P": {"terrain": "grass", "height": 0, "feature": "", "source_terrain": "plain"},
+    "F": {"terrain": "grass", "height": 0, "feature": "forest", "source_terrain": "forest"},
+    "M": {"terrain": "rock", "height": 3, "feature": "", "source_terrain": "mountain"},
+    "H": {"terrain": "grass", "height": 0, "feature": "castle", "source_terrain": "castle"},
+    "v": {"terrain": "grass", "height": 0, "feature": "village", "source_terrain": "village"},
+    "b": {"terrain": "grass", "height": 0, "feature": "barracks", "source_terrain": "barracks"}
+  },
+  "feature_names": {"": "无建筑", "forest": "森林", "castle": "城堡", "village": "村庄", "barracks": "佣兵站"},
+  "source_names": {"plain": "平原", "forest": "森林", "mountain": "山地", "castle": "城堡", "village": "村庄", "barracks": "佣兵站"},
+  "factions": {"red": {"name": "红方", "color": "d75b5a"}, "blue": {"name": "蓝方", "color": "5a9bd7"}, "neutral": {"name": "中立", "color": "c4b48b"}},
+  "hq_factions": ["red", "blue"],
+  "unit_names": {"warlock": "术士", "swordsman": "剑士", "archer": "弓箭手", "knight": "骑士", "healer": "治疗师"},
+  "unit_textures": {
+    "warlock": "res://assets/unit_portraits/portrait_warlock.png",
+    "swordsman": "res://assets/unit_portraits/portrait_swordsman.png",
+    "archer": "res://assets/unit_portraits/portrait_archer.png",
+    "knight": "res://assets/unit_portraits/portrait_knight.png",
+    "healer": "res://assets/unit_portraits/portrait_healer.png"
+  },
+  "unit_height": 1.15,
+  "unit_texture_limit": 512,
+  "palette": {"wall": "c4b9a0", "stone": "8d9997", "roof": "795247", "wood": "66503b", "canvas": "c8b98b", "leaves": "45664b", "leaves_light": "668258", "trunk": "6c5140", "door": "3e3934", "window": "d9b977"}
+}

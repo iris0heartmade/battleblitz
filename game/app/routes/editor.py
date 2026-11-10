@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
+import os
 import re
 import time
 import uuid
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, StrictInt
 
 from app.config import MAP_SIZE as DEFAULT_MAP_SIZE
 
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/editor/maps", tags=["editor"])
 
 # Storage: game/maps/custom/
-_CUSTOM_DIR = Path(__file__).resolve().parent.parent.parent / "maps" / "custom"
+_CUSTOM_DIR = Path(os.environ.get("BB_CUSTOM_MAP_DIR") or Path(__file__).resolve().parent.parent.parent / "maps" / "custom")
 _CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
 
 # Valid terrain chars (single-char per cell)
@@ -100,6 +101,7 @@ class CustomMapSave(BaseModel):
     layout: List[str]
     initial_units: List[InitialUnit] = []
     tile_owners: List[TileOwner] = []
+    elevations: List[List[StrictInt]] = Field(default_factory=list)
 
     @field_validator("biome")
     @classmethod
@@ -117,6 +119,7 @@ class CustomMapOut(BaseModel):
     layout: List[str]
     initial_units: List[Dict[str, Any]]
     tile_owners: List[Dict[str, Any]] = []
+    elevations: List[List[int]] = Field(default_factory=list)
     created_at: float
     updated_at: float
 
@@ -270,6 +273,13 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
     # Validate units in bounds (any terrain, including castle tiles).
     _validate_units(body.initial_units, body.size.width, body.size.height)
     _validate_tile_owners(body.tile_owners, body.size.width, body.size.height)
+    if body.elevations:
+        if len(body.elevations) != body.size.height or any(
+            len(row) != body.size.width for row in body.elevations
+        ):
+            raise HTTPException(status_code=422, detail="elevations dimensions must match map size")
+        if any(not -5 <= value <= 5 for row in body.elevations for value in row):
+            raise HTTPException(status_code=422, detail="elevations must be integers between -5 and 5")
 
     now = time.time()
 
@@ -295,6 +305,7 @@ async def save_custom_map(body: CustomMapSave) -> CustomMapOut:
         "layout": body.layout,
         "initial_units": [u.model_dump() for u in body.initial_units],
         "tile_owners": [o.model_dump() for o in body.tile_owners],
+        "elevations": body.elevations,
         "created_at": created_at,
         "updated_at": now,
     }

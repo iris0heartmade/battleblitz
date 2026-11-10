@@ -42,31 +42,32 @@ func _test_board_camera_resets_for_new_map(main: Node) -> void:
 	board.call("load_map", map_json)
 	await get_tree().process_frame
 
-	var camera: Camera2D = board.get_node_or_null("BoardCamera") as Camera2D
+	var camera: Camera3D = board.board_camera
 	if camera == null:
 		_fail("BoardCamera missing")
 		return
 
-	var fit_position := camera.position
-	var fit_zoom := camera.zoom
-	camera.position = fit_position + Vector2(240.0, -180.0)
-	camera.zoom = fit_zoom * 1.45
+	var fit_position: Vector3 = camera.focus
+	var fit_zoom := camera.size
+	camera.focus_on(fit_position + Vector3(20.0, 0, -18.0))
+	camera.size = fit_zoom * 1.45
 	if camera.has_method("mark_user_positioned"):
 		camera.call("mark_user_positioned")
 
+	map_json["__id"] = 2
 	board.call("load_map", map_json)
 	await get_tree().process_frame
 
 	_assert_vec2_close(
 		"BoardCamera new map position reset",
-		camera.position,
+		camera.focus,
 		fit_position,
 		0.01,
 		"new map loads must not inherit the previous battle pan"
 	)
 	_assert_vec2_close(
 		"BoardCamera new map zoom reset",
-		camera.zoom,
+		camera.size,
 		fit_zoom,
 		0.001,
 		"new map loads must not inherit the previous battle zoom"
@@ -117,8 +118,8 @@ func _load_map_json() -> Dictionary:
 	return {}
 
 
-func _assert_vec2_close(label: String, got: Vector2, expected: Vector2, tolerance: float, msg: String) -> void:
-	if got.distance_to(expected) <= tolerance:
+func _assert_vec2_close(label: String, got, expected, tolerance: float, msg: String) -> void:
+	if (got.distance_to(expected) if got is Vector3 else absf(got-expected)) <= tolerance:
 		_passed += 1
 	else:
 		_failed += 1

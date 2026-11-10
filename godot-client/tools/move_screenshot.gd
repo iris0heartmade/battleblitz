@@ -48,12 +48,12 @@ func _ready() -> void:
 	var unit_nodes: Dictionary = board.get("_unit_nodes_by_id") if board.get("_unit_nodes_by_id") != null else {}
 	# 找到第一个 owner_id == main_app._player_id 的单位
 	var player_id: int = int(main_app.get("_player_id"))
-	var units_layer: Node2D = board.get_node("UnitLayer") if board.has_node("UnitLayer") else null
+	var units_layer: Node3D = board.units if board.units != null else null
 	if units_layer == null or units_layer.get_child_count() == 0:
 		printerr("no unit markers on board")
 		get_tree().quit(1)
 		return
-	var target_unit: Node2D = null
+	var target_unit: Node3D = null
 	# UnitOut 用 player_id (int) 不是 color。Unit_data 是 dict
 	# 包含 id/player_id/type/level/hp/...
 	for child in units_layer.get_children():
@@ -77,7 +77,7 @@ func _ready() -> void:
 					str(ud.get("has_moved")), str(ud.get("x")), str(ud.get("y"))
 				])
 		# fallback: 取第一个 unit
-		var first: Node2D = units_layer.get_child(0) as Node2D if units_layer.get_child_count() > 0 else null
+		var first: Node3D = units_layer.get_child(0) as Node3D if units_layer.get_child_count() > 0 else null
 		if first != null:
 			target_unit = first
 			print("WARNING: no unacted unit owned by player %d; falling back to first unit (might be enemy)" % player_id)

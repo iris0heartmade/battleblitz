@@ -229,11 +229,9 @@ func _run_panel_phase() -> void:
 	var board: Node = main_app.get("board")
 	if board == null:
 		_finish(false, "no board"); return
-	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
-	if layer == null:
-		_finish(false, "no GroundLayer"); return
-	var cell_local: Vector2 = layer.map_to_local(_empty_barracks_cell)
-	var cell_global: Vector2 = layer.to_global(cell_local)
+	board.board_camera.focus_on(board.model.surface(_empty_barracks_cell))
+	await get_tree().physics_frame
+	var cell_global: Vector2 = board.tile_to_screen(_empty_barracks_cell)
 	_log(">>> 模拟点击兵营 (%d,%d) screen=(%.0f,%.0f)" %
 			[_empty_barracks_cell.x, _empty_barracks_cell.y, cell_global.x, cell_global.y])
 	# 直接调 main._pick_empty_my_barracks(等同 _unhandled_input 分支)

@@ -47,12 +47,12 @@ func _ready() -> void:
 
 	# Frame 1:"选中己方单位 — 行动气泡"
 	var board: Node = main_app.get("board") if main_app.get("board") != null else main_app.find_child("Board", true, false)
-	var units_layer: Node2D = board.get_node_or_null("UnitLayer") if board != null else null
+	var units_layer: Node3D = board.get_node_or_null("UnitLayer") if board != null else null
 	if units_layer == null or units_layer.get_child_count() == 0:
 		printerr("no units")
 		get_tree().quit(1); return
 	var player_id: int = int(main_app.get("_player_id"))
-	var attacker: Node2D = null
+	var attacker: Node3D = null
 	for child in units_layer.get_children():
 		if child == null or not child.has_method("get"): continue
 		var ud: Dictionary = child.get("unit_data") if child.get("unit_data") != null else {}
@@ -61,7 +61,7 @@ func _ready() -> void:
 			attacker = child
 			break
 	if attacker == null:
-		attacker = units_layer.get_child(0) as Node2D
+		attacker = units_layer.get_child(0) as Node3D
 	if attacker == null:
 		printerr("no attacker")
 		get_tree().quit(1); return
@@ -99,7 +99,7 @@ func _ready() -> void:
 
 	# Frame 4:"进入攻击模式 — 红框"
 	# 重新选中 attacker(可能已移动过,id 不变)
-	var new_attacker: Node2D = null
+	var new_attacker: Node3D = null
 	for child in units_layer.get_children():
 		if child == null or not child.has_method("get"): continue
 		var ud2: Dictionary = child.get("unit_data") if child.get("unit_data") != null else {}
@@ -132,9 +132,9 @@ func _ready() -> void:
 	# Frame 6:Inspect bubble — 选中敌方(已 action)单位
 	var board2: Node = main_app.get("board") if main_app.get("board") != null else main_app.find_child("Board", true, false)
 	if board2 != null:
-		var t_layer: Node2D = board2.get_node_or_null("UnitLayer")
+		var t_layer: Node3D = board2.get_node_or_null("UnitLayer")
 		if t_layer != null and t_layer.get_child_count() > 0:
-			var enemy: Node2D = null
+			var enemy: Node3D = null
 			for c in t_layer.get_children():
 				if c == null or not c.has_method("get"): continue
 				var ud2: Dictionary = c.get("unit_data") if c.get("unit_data") != null else {}

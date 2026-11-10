@@ -42,12 +42,12 @@ func _ready() -> void:
 	if board == null:
 		printerr("no board")
 		get_tree().quit(1); return
-	var units_layer: Node2D = board.get_node_or_null("UnitLayer")
+	var units_layer: Node3D = board.get_node_or_null("UnitLayer")
 	if units_layer == null or units_layer.get_child_count() == 0:
 		printerr("no units")
 		get_tree().quit(1); return
 	var player_id: int = int(main_app.get("_player_id"))
-	var attacker: Node2D = null
+	var attacker: Node3D = null
 	# 优先找 attack_range >= 2 的己方单位 — 距离 1 spawn 不一定有敌人
 	for child in units_layer.get_children():
 		if child == null or not child.has_method("get"): continue
@@ -67,7 +67,7 @@ func _ready() -> void:
 				break
 	if attacker == null:
 		# fallback: 第一个 unit(可能在地图边界) — 走 ATTACK 也是 over 范围
-		attacker = units_layer.get_child(0) as Node2D if units_layer.get_child_count() > 0 else null
+		attacker = units_layer.get_child(0) as Node3D if units_layer.get_child_count() > 0 else null
 		print("WARNING: no unacted own unit; using first unit")
 	if attacker == null:
 		printerr("no attacker picked")

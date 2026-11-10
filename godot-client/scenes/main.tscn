@@ -33,7 +33,7 @@ offset_left = 12.0
 offset_top = 6.0
 offset_right = 1896.0
 offset_bottom = 33.0
-text = "BIPOLAR 客户端 · 像素战棋风"
+text = "BattleBlitz · 立体高差战场"
 modulate = Color(0.7, 0.65, 0.5, 1)
 
 ; ============================================================
@@ -332,6 +332,7 @@ custom_minimum_size = Vector2(240, 60)
 ; ============================================================
 [node name="EditorView" type="Control" parent="."]
 visible = false
+mouse_filter = 2
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("3_editor")
@@ -1668,7 +1669,7 @@ offset_left = 36.0
 offset_top = 104.0
 offset_right = -36.0
 offset_bottom = 336.0
-text = "选择单位后显示可用行动\n右键取消 · Esc 暂停\n\n操作\n左键  选择 / 确认\n滚轮  缩放地图\n拖拽  平移视野\n\n战术标记\n蓝框  可移动范围\n红框  可攻击目标"
+text = "选择单位后显示可用行动\n右键轻点取消 · Esc 返回\n\n操作\n左键  选择 / 确认\n滚轮  缩放地图\n左键拖动  平移视野\nQ/E 或右键拖动  旋转\n\n战术标记\n蓝框  可移动范围\n红框  可攻击目标"
 theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
 

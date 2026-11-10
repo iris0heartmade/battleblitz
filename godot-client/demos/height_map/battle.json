@@ -1,0 +1,11 @@
+{
+  "base_url": "http://127.0.0.1:8766",
+  "request_timeout": 10.0,
+  "map_preset": "balanced_2p_15",
+  "mode": "mainline",
+  "win_condition": "rout",
+  "room_name": "高差地图同机试战",
+  "players": [{"user_name": "试战红方", "color": "red", "seat": 0}, {"user_name": "试战蓝方", "color": "blue", "seat": 1}],
+  "move_step_seconds": 0.14,
+  "attack_flash_seconds": 0.22
+}

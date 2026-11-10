@@ -116,7 +116,7 @@ func _test_move_feedback_is_immediate(main: Node) -> void:
 	if unit == null:
 		_fail("cannot find unit node #101")
 		return
-	var start_pos: Vector2 = unit.position
+	var start_pos: Vector3 = unit.position
 	var started_at := Time.get_ticks_msec()
 	main.call("_apply_immediate_move_feedback", 101, Vector2i(3, 1))
 	await get_tree().process_frame
@@ -126,8 +126,8 @@ func _test_move_feedback_is_immediate(main: Node) -> void:
 	_assert_true("Move preview changes unit position", unit.position != start_pos,
 		"unit presenter should begin moving during the immediate feedback window")
 	await get_tree().create_timer(0.35).timeout
-	var metrics = board.get("metrics")
-	var expected_pos: Vector2 = metrics.cell_to_local(Vector2i(3, 1)) if metrics != null else unit.position
+	var metrics = board.model
+	var expected_pos: Vector3 = metrics.surface(Vector2i(3, 1)) if metrics != null else unit.position
 	_assert_vec2_close("Move preview completes under 500ms", unit.position, expected_pos, 0.01,
 		"unit presenter should arrive at the target cell before the 500ms hand-feel budget")
 
@@ -149,12 +149,12 @@ func _test_path_preview_steps_through_cells(main: Node) -> void:
 		Vector2i(3, 2),
 	], 0.45)
 	await get_tree().create_timer(0.16).timeout
-	var metrics = board.get("metrics")
-	var target_pos: Vector2 = metrics.cell_to_local(Vector2i(3, 2)) if metrics != null else unit.position
-	_assert_true("Path preview does not jump directly to destination", unit.position.distance_to(target_pos) > 8.0,
+	var metrics = board.model
+	var target_pos: Vector3 = metrics.surface(Vector2i(3, 2)) if metrics != null else unit.position
+	_assert_true("Path preview does not jump directly to destination", unit.position.distance_to(target_pos) > 0.1,
 		"path preview should visibly traverse intermediate cells before reaching the destination")
 	await get_tree().create_timer(0.40).timeout
-	_assert_vec2_close("Path preview finishes at destination", unit.position, target_pos, 1.0,
+	_assert_vec2_close("Path preview finishes at destination", unit.position, target_pos, 0.01,
 		"path preview should finish on the final cell")
 
 
@@ -164,20 +164,20 @@ func _test_path_preview_expands_non_adjacent_points(main: Node) -> void:
 	if unit == null:
 		_fail("cannot find unit node #101 for orthogonal path preview")
 		return
-	var metrics = board.get("metrics")
-	unit.position = metrics.cell_to_local(Vector2i(1, 1))
+	var metrics = board.model
+	unit.position = metrics.surface(Vector2i(1, 1))
 	board.call("preview_unit_path", 101, [
 		Vector2i(1, 1),
 		Vector2i(3, 2),
 	], 0.45)
 	await get_tree().create_timer(0.12).timeout
-	var first_orthogonal: Vector2 = metrics.cell_to_local(Vector2i(2, 1))
-	var direct_midpoint: Vector2 = metrics.cell_to_local(Vector2i(1, 1)).lerp(metrics.cell_to_local(Vector2i(3, 2)), 0.5)
+	var first_orthogonal: Vector3 = metrics.surface(Vector2i(2, 1))
+	var direct_midpoint: Vector3 = metrics.surface(Vector2i(1, 1)).lerp(metrics.surface(Vector2i(3, 2)), 0.5)
 	_assert_true("Path preview expands non-adjacent points into grid steps",
 		unit.position.distance_to(first_orthogonal) < unit.position.distance_to(direct_midpoint),
 		"non-adjacent path input should be expanded into orthogonal tile centers, not tweened diagonally")
 	await get_tree().create_timer(0.45).timeout
-	_assert_vec2_close("Expanded path finishes at destination", unit.position, metrics.cell_to_local(Vector2i(3, 2)), 1.0,
+	_assert_vec2_close("Expanded path finishes at destination", unit.position, metrics.surface(Vector2i(3, 2)), 0.01,
 		"expanded orthogonal path should finish on the final cell")
 
 
@@ -209,12 +209,12 @@ func _test_move_feedback_consumes_path(main: Node) -> void:
 	var bubble: Control = main.get_node("GameView/HUD/ActionBubble")
 	_assert_true("Immediate move shows post-move action bubble", bubble.visible,
 		"post-move commands should be available immediately instead of waiting for the move event")
-	var metrics = board.get("metrics")
-	var target_pos: Vector2 = metrics.cell_to_local(Vector2i(4, 2)) if metrics != null else unit.position
-	_assert_true("Immediate move feedback consumes path", unit.position.distance_to(target_pos) > 8.0,
+	var metrics = board.model
+	var target_pos: Vector3 = metrics.surface(Vector2i(4, 2)) if metrics != null else unit.position
+	_assert_true("Immediate move feedback consumes path", unit.position.distance_to(target_pos) > 0.1,
 		"move feedback should use the supplied path instead of tweening directly to the destination")
 	await get_tree().create_timer(0.40).timeout
-	_assert_vec2_close("Immediate path feedback finishes at destination", unit.position, target_pos, 1.0,
+	_assert_vec2_close("Immediate path feedback finishes at destination", unit.position, target_pos, 0.01,
 		"move feedback path should finish on the final cell")
 
 
@@ -242,7 +242,7 @@ func _test_attack_feedback_is_immediate(main: Node) -> void:
 	if not main.has_method("_apply_immediate_attack_feedback"):
 		return
 	var board: Node = main.get_node("GameView/Board")
-	var effects: Node = board.get_node("EffectsLayer")
+	var effects: Node = board.effects
 	var before_count := effects.get_child_count()
 	var started_at := Time.get_ticks_msec()
 	main.call("_apply_immediate_attack_feedback", 101, 202)
@@ -254,12 +254,12 @@ func _test_attack_feedback_is_immediate(main: Node) -> void:
 		"attack feedback should create an immediate visual marker on the board")
 
 
-func _unit_node(board: Node, unit_id: int) -> Node2D:
-	var units_layer: Node = board.get_node("UnitLayer")
+func _unit_node(board: Node, unit_id: int) -> Node3D:
+	var units_layer: Node = board.units
 	for child in units_layer.get_children():
 		var data: Dictionary = child.get("unit_data") if child != null else {}
 		if int(data.get("id", -1)) == unit_id:
-			return child as Node2D
+			return child as Node3D
 	return null
 
 
@@ -295,7 +295,7 @@ func _assert_lte(label: String, got: int, maximum: int, msg: String) -> void:
 		print("  FAIL  %s: got %d > %d - %s" % [label, got, maximum, msg])
 
 
-func _assert_vec2_close(label: String, got: Vector2, expected: Vector2, tolerance: float, msg: String) -> void:
+func _assert_vec2_close(label: String, got: Vector3, expected: Vector3, tolerance: float, msg: String) -> void:
 	if got.distance_to(expected) <= tolerance:
 		_passed += 1
 	else:

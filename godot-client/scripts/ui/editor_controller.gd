@@ -57,9 +57,37 @@ var _editor_owner_colors: Array[String] = ["", "red", "blue", "green", "yellow"]
 var _editor_size_choices: Array[int] = [15, 20, 25, 30, 35, 40, 45]
 var _editor_undo_stack: Array[Dictionary] = []
 var _editor_redo_stack: Array[Dictionary] = []
+var elevation_input: SpinBox
+var elevation_apply: Button
+var elevation_selection: Label
 
 
 func _ready() -> void:
+	elevation_input = SpinBox.new()
+	elevation_input.name = "ElevationInput"
+	elevation_input.position = Vector2(246,168)
+	elevation_input.size = Vector2(234,54)
+	elevation_input.min_value = -5
+	elevation_input.max_value = 5
+	elevation_input.step = 1
+	elevation_input.prefix = "高度 "
+	elevation_input.tooltip_text = "选择高度，再点击地图格；0为水平基准，每级0.5。"
+	$EditorHud/EditorPanel.add_child(elevation_input)
+	elevation_input.hide()
+	elevation_apply = Button.new()
+	elevation_apply.position = Vector2(196,390)
+	elevation_apply.size = Vector2(284,54)
+	elevation_apply.text = "应用到选中格"
+	elevation_apply.focus_mode = Control.FOCUS_NONE
+	elevation_apply.pressed.connect(func(): _paint_elevation(editor_board.controls.editor_cursor))
+	$EditorHud/EditorPanel.add_child(elevation_apply)
+	elevation_apply.hide()
+	elevation_selection = Label.new()
+	elevation_selection.position = Vector2(24,452)
+	elevation_selection.size = Vector2(456,46)
+	elevation_selection.add_theme_font_size_override("font_size",18)
+	$EditorHud/EditorPanel.add_child(elevation_selection)
+	elevation_selection.hide()
 	editor_new_btn.pressed.connect(_on_editor_new_pressed)
 	editor_save_btn.pressed.connect(_on_editor_save_pressed)
 	editor_load_btn.pressed.connect(_on_editor_load_pressed)
@@ -119,6 +147,7 @@ func _setup_editor_options() -> void:
 		editor_mode_option.add_item("地形部署")
 		editor_mode_option.add_item("地表部署")
 		editor_mode_option.add_item("单位部署")
+		editor_mode_option.add_item("高度绘制")
 		editor_mode_option.select(0)
 	if editor_unit_tool_option != null and is_instance_valid(editor_unit_tool_option):
 		editor_unit_tool_option.clear()
@@ -266,6 +295,8 @@ func _selected_editor_mode() -> String:
 			return "surface"
 		2:
 			return "unit"
+		3:
+			return "elevation"
 		_:
 			return "terrain"
 
@@ -276,6 +307,11 @@ func _on_editor_mode_selected(_index: int) -> void:
 
 func _update_editor_mode_controls() -> void:
 	var mode := _selected_editor_mode()
+	elevation_input.visible = mode == "elevation"
+	elevation_apply.visible = mode == "elevation"
+	elevation_selection.visible = mode == "elevation"
+	if mode=="elevation":
+		show_elevation_selection(editor_board.controls.editor_cursor)
 	if editor_terrain_option != null and is_instance_valid(editor_terrain_option):
 		editor_terrain_option.visible = mode == "terrain"
 	if editor_surface_option != null and is_instance_valid(editor_surface_option):
@@ -371,6 +407,10 @@ func _render_editor_map() -> void:
 	if _editor_map.is_empty():
 		return
 	editor_board.load_map(_editor_map)
+	editor_board.board_camera.set_inspect_card_visible(true)
+	if _selected_editor_mode()=="elevation":
+		var cursor: Vector2i = editor_board.controls.editor_cursor.clamp(Vector2i.ZERO,editor_board.map_size-Vector2i.ONE)
+		editor_board.controls.select_editor_cell(cursor)
 	_update_editor_history_buttons()
 
 
@@ -522,6 +562,9 @@ func _paint_editor_surface(tile: Vector2i) -> void:
 
 
 func _on_editor_tile_clicked(tile: Vector2i) -> void:
+	if _selected_editor_mode() == "elevation":
+		_paint_elevation(tile)
+		return
 	if _is_editor_unit_mode():
 		if _is_editor_unit_erase_mode():
 			_erase_editor_unit(tile)
@@ -532,6 +575,38 @@ func _on_editor_tile_clicked(tile: Vector2i) -> void:
 		_paint_editor_surface(tile)
 		return
 	_paint_editor_tile(tile)
+
+func _materialize_elevations() -> Array:
+	var dimensions: Dictionary = _editor_map.size
+	var previous: Array = _editor_map.get("elevations",[])
+	var result: Array = []
+	for y in int(dimensions.height):
+		var row: Array = []
+		for x in int(dimensions.width):
+			var h: int = editor_board.model.elevation(Vector2i(x,y)) if editor_board.model.contains(Vector2i(x,y)) else 0
+			if y<previous.size() and x<previous[y].size():
+				h = int(previous[y][x])
+			row.append(h)
+		result.append(row)
+	return result
+
+func _paint_elevation(tile: Vector2i) -> void:
+	if not editor_board.model.contains(tile):
+		return
+	var next := int(elevation_input.value)
+	if editor_board.model.elevation(tile) == next:
+		return
+	_push_editor_history()
+	var values := _materialize_elevations()
+	values[tile.y][tile.x] = next
+	_editor_map.elevations = values
+	_render_editor_map()
+	editor_status.text = "已将 (%d,%d) 高度设为 %+d；可撤销。" % [tile.x,tile.y,next]
+	show_elevation_selection(tile)
+
+func show_elevation_selection(tile: Vector2i) -> void:
+	if editor_board.model.contains(tile):
+		elevation_selection.text = "选中 (%d,%d) · 高度 %+d\n方向键选格，空格或按钮应用高度" % [tile.x,tile.y,editor_board.model.elevation(tile)]
 
 
 func _erase_editor_unit(tile: Vector2i) -> void:
@@ -644,6 +719,8 @@ func _on_editor_resize_pressed() -> void:
 			kept_tile_owners.append(owner)
 	_push_editor_history()
 	_editor_map["size"] = {"width": new_width, "height": new_height}
+	if _editor_map.get("elevations",[]).size()>0:
+		_editor_map.elevations = _materialize_elevations()
 	_editor_map["layout"] = new_layout
 	_editor_map["initial_units"] = kept_units
 	_editor_map["tile_owners"] = kept_tile_owners

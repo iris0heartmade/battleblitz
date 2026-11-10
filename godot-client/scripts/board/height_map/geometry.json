@@ -1,0 +1,38 @@
+{
+  "width": 12,
+  "depth": 12,
+  "min_height": -5,
+  "max_height": 5,
+  "cell_size": 1.0,
+  "height_step": 0.5,
+  "base_height": -3.25,
+  "camera_size": 10.5,
+  "camera_min_size": 5.5,
+  "camera_max_size": 30.0,
+  "camera_safe_left": 330,
+  "camera_follow_margin": 65,
+  "camera_follow_smoothing": 10.0,
+  "camera_drag_threshold": 6.0,
+  "camera_frame_drop": 2.4,
+  "camera_yaw": 45.0,
+  "camera_pitch": 30.0,
+  "camera_turn_step": 45.0,
+  "camera_turn_smoothing": 12.0,
+  "camera_drag_sensitivity": 0.3,
+  "rim_depth": 0.07,
+  "rim_colors": {"grass": "536b39", "rock": "7c8d85", "sand": "b69a68", "water": "346a66"},
+  "top_tints": {"grass": "e2e8d4", "rock": "e0e5e2", "sand": "eee1c9", "water": "b8d6d1"},
+  "textures": {
+    "grass": "res://assets/terrain/handpainted/grass_top.png",
+    "rock": "res://assets/terrain/handpainted/rock_top.png",
+    "sand": "res://assets/terrain/handpainted/sand_top.png",
+    "water": "res://assets/terrain/handpainted/water_top.png"
+  },
+  "side_textures": {
+    "grass": "res://assets/terrain/handpainted/grass_side.png",
+    "rock": "res://assets/terrain/handpainted/rock_side.png",
+    "sand": "res://assets/terrain/handpainted/sand_side.png",
+    "water": "res://assets/terrain/handpainted/water_side.png"
+  },
+  "unit_texture": "res://assets/unit_portraits/portrait_warrior.png"
+}

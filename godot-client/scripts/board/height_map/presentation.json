@@ -1,0 +1,27 @@
+{
+  "camera": {"camera_size": 10.5, "camera_safe_left": 30, "camera_max_size": 90.0},
+  "team_colors": {"team_a":"d75b5a", "team_b":"5a9bd7", "team_c":"66ba89", "team_d":"e7c661"},
+  "status_labels": {"poison":"毒", "paralyze":"麻痹", "blind":"失明", "slow":"减速", "silence":"沉默"},
+  "feature_heights": {"castle":1.45, "forest":1.1, "village":0.85, "barracks":0.85, "wall":0.85, "gate":0.94, "bridge":0.11, "road":0.035, "stairs":0.32, "vault":0.36},
+  "factions": {"neutral": {"name":"中立", "color":"e2ddd2"}, "green": {"name": "绿方", "color": "66ba89"}, "yellow": {"name": "黄方", "color": "e7c661"}},
+  "unit_textures": {},
+  "terrains": {
+    "plain": {"terrain":"grass", "height":0, "feature":""},
+    "forest": {"terrain":"grass", "height":0, "feature":"forest"},
+    "mountain": {"terrain":"rock", "height":3, "feature":""},
+    "snow_peak": {"terrain":"rock", "height":5, "feature":""},
+    "river": {"terrain":"water", "height":-1, "feature":""},
+    "road": {"terrain":"sand", "height":0, "feature":"road"},
+    "bridge": {"terrain":"water", "height":0, "feature":"bridge"},
+    "castle": {"terrain":"grass", "height":0, "feature":"castle"},
+    "village": {"terrain":"grass", "height":0, "feature":"village"},
+    "barracks": {"terrain":"grass", "height":0, "feature":"barracks"},
+    "gate": {"terrain":"rock", "height":0, "feature":"gate"},
+    "castle_floor": {"terrain":"rock", "height":0, "feature":"road"},
+    "castle_wall": {"terrain":"rock", "height":0, "feature":"wall"},
+    "castle_throne": {"terrain":"rock", "height":0, "feature":"castle"},
+    "castle_door": {"terrain":"rock", "height":0, "feature":"gate"},
+    "castle_stairs": {"terrain":"rock", "height":0, "feature":"stairs"},
+    "castle_vault": {"terrain":"rock", "height":0, "feature":"vault"}
+  }
+}

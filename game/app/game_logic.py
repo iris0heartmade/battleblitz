@@ -1567,8 +1567,12 @@ def generate_map_preset(
     to procedural map generation with empty initial_units)."""
     if preset_id and preset_id in MAP_PRESETS and MAP_PRESETS[preset_id].get("layout"):
         data = MAP_PRESETS[preset_id]
+        tiles = _layout_to_tiles(data["layout"])
+        for y, row in enumerate(data.get("elevations", [])):
+            for x, elevation in enumerate(row):
+                tiles[y][x].elevation = elevation
         return MapPresetResult(
-            tiles=_layout_to_tiles(data["layout"]),
+            tiles=tiles,
             initial_units=list(data.get("initial_units", [])),
         )
     # P1.4 — route through the rich layered generator (clusters, rivers,

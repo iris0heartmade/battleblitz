@@ -1,5 +1,5 @@
 extends Node
-## Headless smoke test for the 48x48 layer-aware map presentation baseline.
+## 正式客户端回归；地图呈现检查覆盖共用3D高差舞台，保留逻辑格兼容。
 
 const MAP_METRICS_SCRIPT := preload("res://scripts/core/map_metrics.gd")
 const MAP_PREVIEW_SUMMARY_SCRIPT := preload("res://scripts/ui/map_preview_summary.gd")
@@ -98,10 +98,10 @@ func _ready() -> void:
 	var board_scene: PackedScene = load("res://scenes/board.tscn")
 	var board_check = board_scene.instantiate()
 	add_child(board_check)
-	_assert_true("Board has DecorLayer", board_check.get_node_or_null("DecorLayer") != null,
-		"board scene must expose a dedicated decor layer")
-	_assert_true("Board has BoardCamera", board_check.get_node_or_null("BoardCamera") != null,
-		"board scene must expose the dedicated camera node")
+	_assert_true("Board has 3D world", board_check.world is Node3D,
+		"formal board must own a 3D stage")
+	_assert_true("Board has orthographic camera", board_check.board_camera is Camera3D,
+		"formal board must use the height-map camera")
 
 	var map_path_check := _map_path_for_id("balanced_2p_15")
 	if map_path_check != "":
@@ -149,18 +149,18 @@ func _ready() -> void:
 		else:
 			var centre := Vector2i(7, 7)
 			var hq := Vector2i(2, 7)
-			_assert_gte("ground layer source at centre", board_check.ground_layer.get_cell_source_id(centre), 0,
-				"ground layer should receive terrain cells")
-			_assert_gte("ground layer source at HQ", board_check.ground_layer.get_cell_source_id(hq), 0,
-				"ground layer should always receive a terrain source")
-			_assert_gte("structure layer source at HQ", board_check.structure_layer.get_cell_source_id(hq), 0,
-				"structure layer should receive castle/building overlays")
+			_assert_true("ground surface at centre", board_check.model.contains(centre),
+				"3D model should receive terrain cells")
+			_assert_true("ground surface at HQ", board_check.model.contains(hq),
+				"HQ must remain a logical ground cell")
+			_assert_eq("castle feature at HQ", board_check.model.cell(hq).feature,"castle",
+				"3D structure layer should render HQ")
 			_assert_gte("unit layer child count", board_check.units.get_child_count(), 1,
 				"maps with initial_units should spawn static unit presenters")
 			_assert_true("highlight node exists", board_check.highlights != null,
 				"board should expose the highlight layer after refactor")
-			_assert_true("camera limit right positive", board_check.board_camera.limit_right > 0,
-				"camera bounds should be derived from board metrics")
+			_assert_true("camera draw distance positive", board_check.board_camera.far > 0,
+				"camera should render the complete 3D height range")
 			_assert_eq("loaded map width", int(result.get("width", 0)), 15,
 				"balanced_2p_15 should remain a 15x15 map")
 	board_check.queue_free()
@@ -1013,8 +1013,8 @@ func _ready() -> void:
 	var editor_unit_level_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorUnitLevelOption")
 	var editor_width_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorWidthOption")
 	var editor_height_option: OptionButton = main_check.get_node("EditorView/EditorHud/EditorPanel/EditorHeightOption")
-	_assert_eq("Editor mode selector lists three deploy modes", editor_mode_option.item_count, 3,
-		"editor mode selector should include terrain, surface, and unit deployment")
+	_assert_eq("Editor mode selector includes height painting", editor_mode_option.item_count, 4,
+		"editor mode selector should include terrain, surface, unit and elevation deployment")
 	_assert_eq("Editor terrain deploy mode text", editor_mode_option.get_item_text(0), "地形部署",
 		"first editor mode should be terrain deployment")
 	_assert_eq("Editor surface deploy mode text", editor_mode_option.get_item_text(1), "地表部署",
@@ -1314,27 +1314,11 @@ func _test_one_map(map_id: String) -> void:
 		"tile_lookup should have one entry per cell")
 	_assert_true("%s camera node wired" % map_id, board.board_camera != null,
 		"board camera should be present")
-	var viewport_size := board.get_viewport().get_visible_rect().size
-	# The compact inspect card is opt-in.  A fresh board must fit against the
-	# whole viewport; selecting a unit then reserves a small right-side area.
-	var usable_w: float = viewport_size.x
-	# The top status rail owns 112 px and the bottom HUD keeps 16 px clear.
-	var usable_h: float = viewport_size.y - 128.0
-	var board_pixel_w: float = float(w * MAP_METRICS_SCRIPT.TILE_SIZE.x)
-	var board_pixel_h: float = float(h * MAP_METRICS_SCRIPT.TILE_SIZE.y)
-	var expected_fit_zoom: float = min(
-		(usable_w - 16.0) / board_pixel_w,
-		(usable_h - 16.0) / board_pixel_h
-	)
-	_assert_eq("%s camera zoom matches viewport fit" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(expected_fit_zoom, 0.001),
-		"board camera should fit the full battlefield when no inspect card is open")
+	_assert_eq("%s camera uses orthographic projection" % map_id,board.board_camera.projection,Camera3D.PROJECTION_ORTHOGONAL,
+		"all maps must use the new 3D stage")
 	board.board_camera.set_inspect_card_visible(true)
-	var inspect_expected_zoom: float = min(
-		(viewport_size.x * 0.73 - 16.0) / board_pixel_w,
-		(usable_h - 16.0) / board_pixel_h
-	)
-	_assert_eq("%s camera zoom reserves inspect card" % map_id, snappedf(board.board_camera.zoom.x, 0.001), snappedf(inspect_expected_zoom, 0.001),
-		"board camera should reserve only the compact inspect-card width")
+	_assert_true("%s camera reserves inspect card" % map_id,board.board_camera.right_inset>40.0,
+		"3D camera should keep the inspect-card area clear")
 	print("  %s - %dx%d biome=%s units=%d" % [
 		map_id, w, h, biome, board.units.get_child_count()])
 	board.queue_free()

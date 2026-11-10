@@ -600,6 +600,7 @@ async def _start_battle_internal(
                     game_id=game_id,
                     x=x, y=y,
                     terrain=_char_to_terrain(ch),
+                    elevation=data["elevations"][y][x] if data.get("elevations") else None,
                 ))
             grid.append(grid_row)
         result = MapPresetResult(

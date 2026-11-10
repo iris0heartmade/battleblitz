@@ -179,6 +179,7 @@ class TileOut(APIModel):
     x: int
     y: int
     terrain: str
+    elevation: Optional[int] = Field(default=None, ge=-5, le=5)
     # P2.4 — when terrain == "castle", `subtype` may be one of
     # castle_floor / castle_wall / castle_door / castle_throne /
     # castle_stairs / castle_vault. Used by the frontend renderer

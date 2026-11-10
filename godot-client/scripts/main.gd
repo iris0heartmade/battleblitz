@@ -9,9 +9,8 @@ const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 ##
 ## M2.5 ships the minimum path: main menu → "free play" → auto-create
 ## game + add AI + start → land in the game view with a live WS
-## connection. The M1 board-rendering pipeline (Board + MapMetrics +
-## MapTheme + MapLoader + TileSetBuilder) is reused as-is for the
-## Game view's board instance.
+## connection. Board bridges the shared 3D height-map stage to the existing
+## action, HUD, mainline and network state machine.
 ##
 ## View flow (M2.5):
 ##   [menu]  ── "自由模式" ──▶  [connecting]  ──▶  [game]
@@ -1587,6 +1586,7 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 		"height": h,
 		"biome": GameState.game_summary.get("map_biome", "grass"),
 		"layout": rows,
+		"tiles": GameState.tiles.duplicate(true),
 		"initial_units": initial_units,
 	}
 
@@ -1853,11 +1853,7 @@ func _clear_move_preview_path() -> void:
 func _update_path_dots_on_hover(global_pos: Vector2) -> void:
 	if board == null or _move_reachable_set.is_empty():
 		return
-	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
-	if layer == null:
-		return
-	var local: Vector2 = layer.to_local(global_pos)
-	var target_cell: Vector2i = layer.local_to_map(local)
+	var target_cell: Vector2i = board.viewport_to_tile(global_pos)
 	_update_path_dots_at_cell(target_cell)
 
 
@@ -2153,19 +2149,9 @@ func _play_co_power_fx() -> void:
 		t.tween_property(lbl, "modulate:a", 0.0, 1.2).set_trans(Tween.TRANS_LINEAR)
 		t.set_parallel(false)
 		t.tween_callback(lbl.queue_free)
-	# 2) Camera2D 抖动 0.4s
-	var board_node: Node = get_node_or_null("GameView/Board")
-	if board_node != null:
-		var cam: Camera2D = board_node.get_node_or_null("BoardCamera") as Camera2D
-		if cam != null:
-			var orig_pos: Vector2 = cam.position
-			var t2: Tween = create_tween()
-			t2.set_loops(8)
-			var seed_amp: float = 6.0
-			t2.tween_property(cam, "position", orig_pos + Vector2(seed_amp, 0), 0.05)
-			t2.tween_property(cam, "position", orig_pos + Vector2(-seed_amp, seed_amp), 0.05)
-			t2.tween_property(cam, "position", orig_pos + Vector2(seed_amp, -seed_amp), 0.05)
-			t2.tween_property(cam, "position", orig_pos, 0.05)
+	# 震动限制在3D舞台内，HUD和菜单保持稳定。
+	if board:
+		board.shake()
 
 
 # M6.3 静音 toggle — Settings 上 toggle 按钮
@@ -2701,6 +2687,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	# T:95 — 鼠标移动 → 移动模式里画 path dots
+	if game_view != null and game_view.visible and board != null and board.controls.handle_event(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion:
 		if _move_mode_unit_id > 0 and board != null:
 			_update_path_dots_on_hover(event.global_position)
@@ -2757,6 +2746,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if InputState.is_input_locked() or recruit_panel.visible or attack_confirm_panel.visible or battle_result_panel.visible:
+			return
 		if game_view == null or not game_view.visible:
 			return
 		if board == null:
@@ -2792,11 +2783,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _pick_empty_my_barracks(global_pos: Vector2) -> Dictionary:
 	if board == null:
 		return {}
-	var layer: TileMapLayer = board.get_node_or_null("GroundLayer")
-	if layer == null:
-		return {}
-	var local: Vector2 = layer.to_local(global_pos)
-	return _pick_empty_my_barracks_at_cell(layer.local_to_map(local))
+	return _pick_empty_my_barracks_at_cell(board.viewport_to_tile(global_pos))
 
 
 func _pick_empty_my_barracks_at_cell(cell: Vector2i) -> Dictionary:
@@ -4784,9 +4771,7 @@ func _set_unit_info_portrait(unit: Dictionary) -> void:
 func _set_board_inspect_card_visible(is_visible: bool) -> void:
 	if board == null or not is_instance_valid(board):
 		return
-	var camera := board.get_node_or_null("BoardCamera")
-	if camera != null and camera.has_method("set_inspect_card_visible"):
-		camera.call("set_inspect_card_visible", is_visible)
+	board.board_camera.set_inspect_card_visible(is_visible)
 
 
 # 辅助:GameState.players 摊平所有 unit(含本方玩家)

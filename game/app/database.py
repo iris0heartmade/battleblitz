@@ -150,6 +150,9 @@ def _run_legacy_migrations(sync_conn) -> None:
         logger.info("Migration: added players.co_state")
     tile_rows = sync_conn.execute(text("PRAGMA table_info(tiles)")).fetchall()
     tile_cols = {r[1] for r in tile_rows}
+    if "elevation" not in tile_cols:
+        sync_conn.execute(text("ALTER TABLE tiles ADD COLUMN elevation INTEGER"))
+        logger.info("Migration: added tiles.elevation (legacy terrain heights preserved)")
     if "subtype" not in tile_cols:
         sync_conn.execute(text(
             "ALTER TABLE tiles ADD COLUMN subtype VARCHAR(16)"

@@ -35,14 +35,10 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	img.save_png(OUT_PATH)
-	var cam: Camera2D = board.get_node_or_null("BoardCamera") as Camera2D
+	var cam: Camera3D = board.board_camera
 	var cam_info := "none"
 	if cam != null:
-		cam_info = "pos=%s zoom=%s limits=(%d,%d,%d,%d) enabled=%s" % [
-			str(cam.position), str(cam.zoom),
-			cam.limit_left, cam.limit_top, cam.limit_right, cam.limit_bottom,
-			str(cam.enabled),
-		]
+		cam_info = "pos=%s orthographic_size=%s yaw=%s pitch=%s" % [str(cam.position),str(cam.size),str(cam.yaw),str(cam.pitch)]
 	print("saved: %s map_size=%s tile_lookup=%d camera=%s" % [OUT_PATH, str(board.map_size), board.tile_lookup.size(), cam_info])
 	get_tree().quit(0)
 
