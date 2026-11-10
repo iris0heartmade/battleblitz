@@ -191,7 +191,7 @@ func verify_lobby_preview() -> void:
 			lobby._on_lobby_map_preset_selected(index)
 			break
 	await process_frame
-	check(lobby._height_preview!=null and lobby._height_preview.preview_mode,"大厅地图预览使用正式3D舞台")
+	check(lobby.map_preview_texture.texture is ImageTexture,"大厅地图预览使用二维缩略图")
 	lobby.map_player_count_option.select(3)
 	lobby._on_lobby_map_player_count_selected(3)
 	for index in lobby._preset_options.size():
@@ -200,9 +200,10 @@ func verify_lobby_preview() -> void:
 			lobby._on_lobby_map_preset_selected(index)
 			break
 	await process_frame
-	var preview: Node = lobby._height_preview
-	check(preview.model.units.any(func(u): return u.color=="green") and preview.model.units.any(func(u): return u.color=="yellow"),"大厅四人标准图呈现绿黄阵营")
-	check(preview.stage.size==Vector2i(lobby.map_preview_texture.size),"地图预览与实际控件尺寸一致")
+	var preview_data: Dictionary = lobby._selected_lobby_map_data()
+	var preview_image: Image = lobby.map_preview_texture.texture.get_image()
+	check(preview_data.initial_units.any(func(u): return u.color=="green") and preview_data.initial_units.any(func(u): return u.color=="yellow"),"大厅四人标准图保留绿黄阵营")
+	check(preview_image.get_size()==Vector2i(180,180),"四人图二维预览与JSON格数一致")
 	await capture("lobby-4p")
 
 func verify_ai_match() -> void:

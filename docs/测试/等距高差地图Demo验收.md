@@ -10,6 +10,25 @@
 
 ## 1. 执行结果
 
+### 房间二维预览恢复（最新）
+
+按用户反馈恢复原 `MapPreviewSummary.render_preview_texture` 路径；房间预览不创建三维棋盘，正式战场和地图编辑器继续使用高差3D。规范化JSON继续作为同一份地图定义，高度矩阵不因预览回退而删除或改写。
+
+| 检查 | 实际结果 |
+|---|---|
+| 房间预览专项，1600×900 GPU | 42检查，0失败；实际实例化正式房间界面并切换地图，生成截图 |
+| 原客户端冒烟回归 | 616通过，0失败 |
+| 地图高度存读与数据驱动预设单位测试 | 25通过，0失败 |
+
+逐个核对两人图10人、四人图20人的实际缩略图像素位置与阵营色；检查地图尺寸、文字摘要、随机地图不伪造地形、预览控件下无三维视口、带−5/+5高度的输入JSON未被修改、正式战场仍为3D相机。测试使用内存中的预设列表填充真实房间界面，不依赖网络。初次测试因回调数据包装和RGBA8颜色量化精度失败，修正测试输入与比较精度后重跑通过；未修改预览颜色来迎合断言。
+
+截图 `logs/lobby-map-preview-2d.png` 已人工查看。下方三维大厅截图与检查是先前正式替换阶段的历史记录。
+
+```powershell
+$env:BB_LOBBY_SCREENSHOT = Join-Path $PWD 'logs/lobby-map-preview-2d.png'
+& '<Godot程序路径>' --path godot-client --rendering-method gl_compatibility --resolution 1600x900 --script res://tools/lobby_map_preview_test.gd
+```
+
 ### 正式地图全面替换（最新）
 
 | 检查 | 实际结果 |

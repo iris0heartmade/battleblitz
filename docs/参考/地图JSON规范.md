@@ -1,5 +1,20 @@
 # 🗺️ Map Authoring Guide — P2.6 Data-Driven Initial Units
 
+## 2026-11-10 更新：高差地图与二维房间预览
+
+地图继续由统一JSON定义，三维场景只是读取并呈现这些数据；正式地图没有改成只能在三维编辑器中保存的私有模型。房间/大厅预览恢复为二维俯视部署图，继续读取同一份JSON，不改写地图或高度。
+
+| 字段 | 当前职责 |
+|---|---|
+| `size`、`layout` | 逻辑宽高与地形/地貌编码；正式战场的逻辑坐标保持一致 |
+| `initial_units` | 初始单位的格坐标、兵种、阵营与等级 |
+| `tile_owners` | 自定义地图的建筑归属 |
+| `elevations`（可选） | `[y][x]`高度矩阵，与宽高一致；严格整数−5～+5，允许相邻10级落差 |
+
+缺少高度或空数组时沿用地形默认高度；明确保存的0就是0。自定义地图保存接口验证数组尺寸与数值，开局后状态格子返回可空 `elevation`，服务端战斗规则仍以原始地形为准。详细现行约定见[正式高差地图系统](../规范/正式高差地图系统.md)。下方P2.6指南保留历史说明，后续字段以本节及服务端实际校验为准。
+
+---
+
 **Status**: Stable since 2026-07-07 (`feat/p2.6-data-driven-initial-units`)
 **Audience**: Map designers, content creators, anyone editing `game/maps/*.json`
 

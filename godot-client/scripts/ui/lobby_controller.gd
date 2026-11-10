@@ -24,8 +24,6 @@ extends Control
 
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const MapPreviewSummary = preload("res://scripts/ui/map_preview_summary.gd")
-const HeightBoard = preload("res://scenes/board.tscn")
-var _height_preview: Node2D
 const CnLabels = preload("res://scripts/ui/cn_labels.gd")
 const UIPanelFocus = preload("res://scripts/ui/_components/ui_panel_focus.gd")
 
@@ -1105,8 +1103,6 @@ func _render_lobby_map_preview() -> void:
 		return
 	var map_data := _selected_lobby_map_data()
 	if map_data.is_empty():
-		if _height_preview:
-			_height_preview.hide()
 		map_faction_summary.text = "请选择地图查看初始部署。"
 		if map_preview_texture != null and is_instance_valid(map_preview_texture):
 			map_preview_texture.texture = null
@@ -1119,24 +1115,11 @@ func _render_lobby_map_preview() -> void:
 	var players := int(summary.get("recommended_players", 0))
 	map_faction_summary.text = "[b]%s[/b]  %s  %d 人\n%s" % [title, size_text, players, MapPreviewSummary.build_faction_lines(summary)]
 	if map_preview_texture != null and is_instance_valid(map_preview_texture):
-		map_preview_texture.texture = null
-		map_preview_texture.clip_contents = true
-		if _height_preview == null:
-			_height_preview = HeightBoard.instantiate()
-			_height_preview.name = "HeightMapPreview"
-			_height_preview.preview_mode = true
-			map_preview_texture.add_child(_height_preview)
-			map_preview_texture.resized.connect(func():
-				if _height_preview and not _height_preview.map_size==Vector2i.ZERO:
-					_height_preview.view_size = map_preview_texture.size
-					_height_preview._resize_stage()
-					_height_preview._fit_preview())
 		if map_data.get("layout",[]).is_empty():
-			_height_preview.hide()
+			map_preview_texture.texture = null
 			map_faction_summary.text += "\n随机地图将在开局时生成地形。"
 		else:
-			_height_preview.show_preview(map_data,map_preview_texture.size)
-			_height_preview.show()
+			map_preview_texture.texture = MapPreviewSummary.render_preview_texture(map_data,9)
 	_render_lobby_seat_columns(summary)
 	_refresh_lobby_create_start_gate()
 
