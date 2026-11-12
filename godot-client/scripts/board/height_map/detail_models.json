@@ -1,0 +1,34 @@
+{
+  "edge_radius": 0.33,
+  "terrains": {
+    "grass": {
+      "density": 80
+    },
+    "rock": {
+      "density": 95
+    },
+    "sand": {
+      "density": 70
+    },
+    "water": {
+      "density": 35
+    }
+  },
+  "palette": {
+    "turf": "687d45",
+    "grass": "7f9149",
+    "leaf": "42654a",
+    "leaf_light": "718650",
+    "stone": "687775",
+    "stone_light": "89978d",
+    "moss": "5e754a",
+    "sand": "c9ad77",
+    "sandstone": "ac8d62",
+    "dry_grass": "93824a",
+    "shoal": "b6b38b",
+    "reed": "7c8951",
+    "timber": "64503b",
+    "glass": "c7ba7c",
+    "roof_trim": "916951"
+  }
+}

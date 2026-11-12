@@ -2,6 +2,9 @@ extends Node3D
 ## 正式地图与试验场共用地貌、单位呈现；所有根节点锚定逻辑格顶面。
 const TextureHelper = preload("res://scripts/core/texture_loader.gd")
 const UnitAnchor = preload("res://scripts/board/height_map/unit_anchor.gd")
+const DetailModels = preload("res://scripts/board/height_map/detail_models.gd")
+var details := Node3D.new()
+var detail_models: RefCounted
 
 var model: RefCounted
 var features := Node3D.new()
@@ -13,6 +16,9 @@ var feature_counts: Dictionary = {}
 
 func setup(map_model: RefCounted) -> void:
 	model = map_model
+	detail_models = DetailModels.new(self)
+	details.name = "TerrainDetails"
+	add_child(details)
 	features.name = "Features"
 	units.name = "PresetUnits"
 	add_child(features)
@@ -24,6 +30,7 @@ func rebuild() -> void:
 	rebuild_units()
 
 func rebuild_features() -> void:
+	detail_models.rebuild(details, model)
 	for child in features.get_children():
 		child.free()
 	feature_counts.clear()
@@ -176,6 +183,7 @@ func _castle(parent: Node3D, color: Color) -> void:
 			_cylinder(parent,0.17,0.23,Vector3(x,0.75,z),_color("roof"),0)
 	_box(parent,Vector3(0.16,0.24,0.025),Vector3(0,0.2,0.15),_color("door"))
 	_flag(parent,Vector3(0,0.76,-0.12),color)
+	detail_models.castle(parent)
 
 func _house(parent: Node3D, position: Vector3, scale_factor: float) -> void:
 	var house := Node3D.new()
@@ -187,6 +195,7 @@ func _house(parent: Node3D, position: Vector3, scale_factor: float) -> void:
 	_box(house,Vector3(0.1,0.18,0.02),Vector3(0,0.09,0.225),_color("door"))
 	_box(house,Vector3(0.08,0.08,0.02),Vector3(0.14,0.23,0.225),_color("window"))
 	_box(house,Vector3(0.07,0.23,0.09),Vector3(-0.13,0.49,-0.05),_color("stone"))
+	detail_models.house(house)
 
 func _village(parent: Node3D) -> void:
 	_box(parent,Vector3(0.85,0.035,0.85),Vector3(0,0.018,0),_color("stone"))
@@ -207,9 +216,7 @@ func _forest(parent: Node3D, p: Vector2i) -> void:
 		var x := -0.19 if i == 0 else 0.2
 		var z := -0.14 if i == 0 else 0.16
 		var height := 0.62 + float((p.x+p.y+i)%3)*0.07
-		_cylinder(parent,0.045,0.35,Vector3(x,0.18,z),_color("trunk"))
-		_cylinder(parent,0.24,height,Vector3(x,0.35+height*0.3,z),_color("leaves") if i == 0 else _color("leaves_light"),0.03)
-		_cylinder(parent,0.18,height*0.7,Vector3(x,0.52+height*0.35,z),_color("leaves_light"),0)
+		detail_models.tree(parent,Vector3(x,0,z),height)
 
 func _build_unit(entry: Dictionary) -> void:
 	var p := Vector2i(int(entry.x),int(entry.y))
