@@ -47,6 +47,7 @@ const FE8_TILE_COORDS: Dictionary = {
 	# wire them into a TileSetTerrain for bitmask autotiling.
 	"plain":    Vector2i(5, 1),    # light green grass
 	"forest":   Vector2i(11, 11),  # dense tree canopy
+	"rock": Vector2i(2, 11),
 	"mountain": Vector2i(2, 11),   # brown rocky peak
 	"river":    Vector2i(18, 6),   # deep blue water surface
 	# Castle interior palette (top-left of tilemap).
@@ -70,8 +71,8 @@ const FE8_TERRAINS: Array[String] = [
 	# Terrains that read from `OverworldRegularFE8.png` (a single
 	# shared TileSetAtlasSource for all of them). Other terrains fall
 	# back to the per-terrain 48×48 PNGs under `res://assets/tiles/`.
-	"plain", "forest", "mountain", "river", "castle", "village",
-	"barracks", "road", "gate", "desert", "snow", "snow_peak", "bridge",
+	"plain", "forest", "rock", "river", "castle", "village",
+	"barracks", "road", "gate", "desert", "snow", "bridge",
 	"castle_floor", "castle_wall", "castle_throne", "castle_stairs",
 	"castle_vault", "castle_door",
 ]
@@ -144,7 +145,7 @@ const DEFAULT_BIOME: String = "grass"
 ## client BFS MUST keep this integer arithmetic to stay in sync with
 ## server judgement.
 const TERRAIN_MOVE_COST: Dictionary = {
-	"plain": 2, "forest": 4, "mountain": 6, "snow_peak": 6,
+	"plain": 2, "forest": 4, "rock": 2, "mountain": 2, "snow_peak": 2,
 	"river": 6, "castle": 2, "village": 2, "barracks": 2,
 	"road": 1, "gate": 9999, "bridge": 1,
 	# Castle sub-features use the same costs as castle_floor unless the
@@ -153,7 +154,7 @@ const TERRAIN_MOVE_COST: Dictionary = {
 	"castle_stairs": 2, "castle_vault": 2, "castle_door": 2,
 }
 const TERRAIN_DEF_BONUS: Dictionary = {
-	"plain": 0, "forest": 2, "mountain": 3, "snow_peak": 3,
+	"plain": 0, "forest": 2, "rock": 0, "mountain": 0, "snow_peak": 0,
 	"river": 0, "castle": 5, "village": 0, "barracks": 1,
 	"road": 0, "gate": 0, "bridge": 0,
 	"castle_floor": 3, "castle_wall": 99, "castle_throne": 6,
@@ -198,6 +199,7 @@ const PLAYER_COLOR_RGB: Dictionary = {
 const TERRAIN_COLOR_RGB: Dictionary = {
 	"plain":    Color("#cfe5b6"),
 	"forest":   Color("#4f8a47"),
+	"rock": Color("#8c8c8c"),
 	"mountain": Color("#8c8c8c"),
 	"river":    Color("#5fb0e8"),
 	"castle":   Color("#f0c75e"),
@@ -222,7 +224,7 @@ const WS_HEARTBEAT_SEC: int = 30              # ws_gateway heartbeat
 ## into the long terrain names used everywhere else. The lower-case chars
 ## are in-map feature toggles (village/barracks/road/gate/bridge).
 const TERRAIN_CHAR_TO_NAME: Dictionary = {
-	"P": "plain", "F": "forest", "M": "mountain", "S": "snow_peak",
+	"K": "rock", "P": "plain", "F": "forest", "M": "mountain", "S": "snow_peak",
 	"R": "river", "C": "castle",
 	"v": "village", "b": "barracks", "r": "road", "g": "gate",
 	"j": "bridge",

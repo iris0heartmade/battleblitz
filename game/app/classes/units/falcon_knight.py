@@ -10,6 +10,7 @@ from app.classes.units.base import BaseUnitClass
 
 class FalconKnight(BaseUnitClass):
     type_id = "falcon_knight"
+    flying = True
     display_cn = "天马骑士"
     display_en = "Falcon Knight"
     glyph = "鹰"

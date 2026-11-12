@@ -6,6 +6,7 @@
   "factions": {"neutral": {"name":"中立", "color":"e2ddd2"}, "green": {"name": "绿方", "color": "66ba89"}, "yellow": {"name": "黄方", "color": "e7c661"}},
   "unit_textures": {},
   "terrains": {
+    "rock": {"terrain":"rock", "height":0, "feature":""},
     "plain": {"terrain":"grass", "height":0, "feature":""},
     "forest": {"terrain":"grass", "height":0, "feature":"forest"},
     "mountain": {"terrain":"rock", "height":3, "feature":""},

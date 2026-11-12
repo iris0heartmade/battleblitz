@@ -1,0 +1,19 @@
+{
+  "max_step": 3,
+  "uphill_cost_x2": 1,
+  "melee_step": 1,
+  "attack_per_level": 1,
+  "attack_cap": 2,
+  "ranged_height": 2,
+  "ranged_bonus": 1,
+  "legacy_heights": {
+    "mountain": 3,
+    "snow_peak": 5,
+    "river": -1
+  },
+  "aliases": {
+    "mountain": "rock",
+    "snow_peak": "rock"
+  },
+  "version": 2
+}

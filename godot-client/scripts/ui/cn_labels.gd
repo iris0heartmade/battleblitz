@@ -109,6 +109,8 @@ static func terrain_cn(terrain_name: String, subtype: String = "") -> String:
 	match terrain_name:
 		"plain": return "平原"
 		"forest": return "森林"
+		"rock":
+			return "岩地"
 		"mountain": return "山地"
 		"snow_peak": return "雪峰"
 		"river": return "河流"

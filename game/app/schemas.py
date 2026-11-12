@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator, computed_field
 
 
 # ============================================================
@@ -176,6 +176,23 @@ class StartGameRequest(BaseModel):
 # ============================================================
 
 class TileOut(APIModel):
+    defense_bonus: int = 0
+    movement_cost_x2: int = 2
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_ground(cls, value):
+        from types import SimpleNamespace
+        from app.battlefield import terrain_key, tile_height, defense_bonus
+        from app.config import TERRAIN_MOVE_COST
+        data = dict(value) if isinstance(value, dict) else {name: getattr(value, name, None) for name in ["x","y","terrain","elevation","subtype","owner_id","occupied_unit_id"]}
+        tile = SimpleNamespace(**data)
+        data["elevation"] = tile_height(tile)
+        data["terrain"] = terrain_key(tile.terrain)
+        data["defense_bonus"] = defense_bonus(tile)
+        data["movement_cost_x2"] = TERRAIN_MOVE_COST.get(data.get("subtype") or data["terrain"],9999)
+        return data
+
     x: int
     y: int
     terrain: str
@@ -190,6 +207,24 @@ class TileOut(APIModel):
 
 
 class UnitOut(APIModel):
+    @computed_field
+    @property
+    def flying(self) -> bool:
+        from app.classes.units import get
+        return get(self.unit_type).flying
+
+    @computed_field
+    @property
+    def attack_kind(self) -> str:
+        from app.classes.units import get
+        return get(self.unit_type).attack_kind
+
+    @computed_field
+    @property
+    def base_attack_range(self) -> int:
+        from app.classes.units import get
+        return get(self.unit_type).attack_range
+
     id: int
     player_id: int
     unit_type: str
@@ -203,7 +238,7 @@ class UnitOut(APIModel):
     matk: int = 0
     mdef: int = 0
     mov: int
-    mp: int = 0
+    mp: float = 0
     morale: int = 0
     x: int
     y: int
@@ -317,6 +352,7 @@ class PlayerCOStateOut(APIModel):
 
 class GameStateOut(APIModel):
     """Full game state for a player's dashboard."""
+    elevation_rules: Dict = Field(default_factory=dict)
     game: GameSummaryOut
     tiles: List[TileOut]
     players: List[PlayerOut]
@@ -406,7 +442,7 @@ class RecruitResult(BaseModel):
     ok: bool = True
     new_unit_id: int
     new_unit_type: str
-    cost: int
+    cost: float
     gold_remaining: int
     description: str
 
@@ -450,7 +486,7 @@ class MoveResult(BaseModel):
     from_y: int
     to_x: int
     to_y: int
-    cost: int
+    cost: float
     castle_captured: bool = False
     description: str
 
@@ -469,6 +505,9 @@ class AttackResult(BaseModel):
 
 
 class AttackForecastOut(BaseModel):
+    height_delta: int = 0
+    height_attack_bonus: int = 0
+    range_bonus: int = 0
     ok: bool = True
     attacker_unit_id: int
     target_unit_id: int

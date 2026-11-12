@@ -15,6 +15,7 @@ class MovementProfile:
     """Resolved class + hero terrain rules for one battle unit."""
 
     rules: dict[str, dict[str, int | bool]]
+    flying: bool = False
 
     def as_dict(self) -> dict[str, dict[str, int | bool]]:
         return {terrain: dict(rule) for terrain, rule in self.rules.items()}
@@ -23,8 +24,10 @@ class MovementProfile:
 def movement_key(tile_or_terrain: Any, subtype: Optional[str] = None) -> str:
     """Return the terrain key relevant to movement, preferring tile subtype."""
     if isinstance(tile_or_terrain, str):
-        return subtype or tile_or_terrain
-    return getattr(tile_or_terrain, "subtype", None) or getattr(tile_or_terrain, "terrain")
+        from app.battlefield import terrain_key
+        return subtype or terrain_key(tile_or_terrain)
+    from app.battlefield import terrain_key
+    return getattr(tile_or_terrain, "subtype", None) or terrain_key(getattr(tile_or_terrain, "terrain"))
 
 
 def _merge_rules(*rule_maps: RuleMap) -> MovementProfile:
@@ -55,20 +58,25 @@ def resolve_movement_profile(unit: Any) -> MovementProfile:
 
     unit_profile = get_unit(unit.unit_type)
     hero_profile = get_hero(unit.hero_id) if getattr(unit, "hero_id", None) else None
-    return _merge_rules(
+    profile = _merge_rules(
         unit_profile.terrain_movement or {},
         hero_profile.terrain_movement if hero_profile else {},
     )
+    return MovementProfile(profile.rules, unit_profile.flying)
 
 
 def can_traverse_terrain(profile: MovementProfile, terrain: str) -> bool:
     rule = profile.rules.get(terrain, {})
+    if profile.flying and terrain in {"castle_wall", "gate"}:
+        return True
     default = terrain in TERRAIN_MOVE_COST and TERRAIN_MOVE_COST[terrain] < 9999
     return bool(rule.get("can_traverse", default))
 
 
 def can_end_on_terrain(profile: MovementProfile, terrain: str) -> bool:
     if not can_traverse_terrain(profile, terrain):
+        return False
+    if profile.flying and terrain in {"castle_wall", "gate"}:
         return False
     return bool(profile.rules.get(terrain, {}).get("can_end_on", True))
 
@@ -77,6 +85,8 @@ def terrain_cost_x2(profile: MovementProfile, terrain: str) -> Optional[int]:
     """Return the resolved entering cost, or None for an untraversable tile."""
     if not can_traverse_terrain(profile, terrain):
         return None
+    if profile.flying:
+        return 2
     rule = profile.rules.get(terrain, {})
     cost = int(rule.get("cost_override_x2", TERRAIN_MOVE_COST.get(terrain, 9999)))
     cost += int(rule.get("cost_delta_x2", 0))

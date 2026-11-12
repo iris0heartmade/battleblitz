@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1798,9 +1799,10 @@ def _with_combat_stats(unit: Unit) -> dict:
     from app.classes.units import get as _get_unit
     profile = _get_unit(unit.unit_type)
     from app.movement import resolve_movement_profile
+    from app.game_logic import unit_attack_range
     return {
         **unit.__dict__,
-        "attack_range": profile.attack_range,
+        "attack_range": unit_attack_range(unit),
         "min_attack_range": profile.min_attack_range,
         "terrain_movement": resolve_movement_profile(unit).as_dict(),
     }
@@ -1816,7 +1818,7 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
 
     units = (
         await session.execute(
-            select(Unit).where(Unit.player_id.in_([p.id for p in players]))
+            select(Unit).where(Unit.player_id.in_([p.id for p in players])).options(selectinload(Unit.player))
         )
     ).scalars().all() if players else []
     units_by_player: dict = {}
@@ -1874,7 +1876,9 @@ async def _build_state(session: AsyncSession, game: Game) -> GameStateOut:
             )
             current_player_id = next(p.id for p in players if p.seat == seat)
 
+    from app.battlefield import RULES
     return GameStateOut(
+        elevation_rules=RULES,
         game=GameSummaryOut.model_validate(game),
         tiles=[TileOut.model_validate(t) for t in tiles],
         players=[

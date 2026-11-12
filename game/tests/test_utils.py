@@ -180,15 +180,14 @@ class TestBfsReachable:
         # 225 tiles total, all reachable with mov >= 28 from the center
         assert len(reachable) == MAP_SIZE * MAP_SIZE
 
-    def test_mountain_costs_more(self):
-        # A line of mountains forces a longer path
+    def test_legacy_mountain_has_no_fixed_movement_penalty(self):
+        # Legacy terrain labels no longer impose a mountain surcharge.
         g = _plain_grid()
         for y in range(MAP_SIZE):
-            g[(5, y)] = TERRAIN_MOUNTAIN  # cost 3
-        # With mov=1, we can reach adjacent plains but not mountains
+            g[(5, y)] = TERRAIN_MOUNTAIN
         reachable = bfs_reachable((4, 7), g, _owners_empty(), mov=1,
                                   viewer_owner_id=None)
-        assert (5, 7) not in reachable  # mountain costs 3 > 1
+        assert reachable[(5, 7)] == 2  # one MP, same as flat rock
 
     def test_blocked_units_excluded(self):
         g = _plain_grid()

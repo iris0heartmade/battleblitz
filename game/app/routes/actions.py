@@ -42,6 +42,7 @@ from app.game_logic import (
 from app.classes.units import get as _get_unit
 from app.models import ActionLog, Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
+from app.battlefield import Battlefield, bind_battlefield, load_battlefield, defense_bonus, path_cost, high_attack, height_delta
 from app.log_format import fmt_attack, fmt_level_up, fmt_move, fmt_wait
 from app.schemas import (
     AttackForecastOut,
@@ -114,6 +115,7 @@ async def _load_unit(session: AsyncSession, unit_id: int) -> Unit:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "单位不存在")
     if unit.hp <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "单位已阵亡")
+    bind_battlefield([unit], await load_battlefield(session, unit.player.game_id))
     return unit
 
 
@@ -158,7 +160,7 @@ async def _load_tile_grid(session: AsyncSession, game_id: int) -> Tuple[Dict[Coo
     tiles = (
         await session.execute(select(Tile).where(Tile.game_id == game_id))
     ).scalars().all()
-    terrain: Dict[Coord, str] = {}
+    terrain = Battlefield(tiles)
     owners: Dict[Coord, Optional[int]] = {}
     occ: Dict[Coord, Optional[int]] = {}
     for t in tiles:
@@ -233,7 +235,8 @@ async def movement_options(
             blocked_units=blocked, no_end_units=no_end, movement_profile=profile, size=size,
         )
         if path:
-            tiles.append({"x": target[0], "y": target[1], "cost_x2": cost,
+            tiles.append({"x": target[0], "y": target[1], "cost_x2": cost, "height": terrain.heights.get(target,0),
+                          "climb_cost_x2": cost-sum(terrain_cost_x2(profile, terrain[c]) or 0 for c in path[1:]),
                           "path": [{"x": x, "y": y} for x, y in path]})
     return {"unit_id": unit.id, "tiles": tiles}
 
@@ -316,7 +319,7 @@ async def move_unit(
     # comment: "Real cost = integer_cost / 2").  We keep the doubled value
     # for the comparison / deduction so we never lose the half-MP that
     # road tiles (cost=1) consume.
-    cost_x2 = sum(terrain_cost_x2(movement_profile, terrain[c]) or 0 for c in path[1:])
+    cost_x2 = path_cost(movement_profile, terrain, path)
 
     # Enforce MP budget — double unit.mp to match the doubled cost scale.
     if cost_x2 > unit.mp * 2:
@@ -342,9 +345,8 @@ async def move_unit(
     from app.game_logic import cancel_claim_sessions_for_unit
     await cancel_claim_sessions_for_unit(session, unit.id)
     # Spend movement points (convert back from doubled to real MP).
-    # Floor division means the half-MP from road tiles is free — a small
-    # generosity that makes roads feel good without breaking balance.
-    spent_mp = cost_x2 // 2
+    # Preserve half-MP exactly: the preview cost equals the actual deduction.
+    spent_mp = cost_x2 / 2
     unit.mp = max(0, unit.mp - spent_mp)
     # Track move separately from has_acted so the unit can still attack/heal
     # this turn after moving. has_moved blocks further moves; has_acted blocks
@@ -422,7 +424,7 @@ async def _validate_attack_request(
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
-    if distance == 0 or distance <= atk_min or distance > atk_range:
+    if not can_attack_from_position(attacker, attacker.x, attacker.y, target.x, target.y):
         logger.info(
             "attack: range FAILED (game %s, att=%s at (%s,%s), tgt=%s at (%s,%s), d=%s, range=(%s,%s])",
             game_id, attacker.id, attacker.x, attacker.y, target.id, target.x, target.y,
@@ -438,7 +440,7 @@ async def _validate_attack_request(
             select(Tile).where(Tile.game_id == game_id, Tile.x == target.x, Tile.y == target.y)
         )
     ).scalars().first()
-    tile_bonus = TERRAIN_DEF_BONUS.get(def_tile.terrain if def_tile else "plain", 0)
+    tile_bonus = defense_bonus(def_tile)
     return attacker, target, tile_bonus
 
 
@@ -499,14 +501,12 @@ async def forecast_attack(
             await session.execute(
                 select(Tile).where(
                     Tile.game_id == game_id,
-                    Tile.x == target.x,
-                    Tile.y == target.y,
+                    Tile.x == attacker.x,
+                    Tile.y == attacker.y,
                 )
             )
         ).scalars().first()
-        counter_bonus = TERRAIN_DEF_BONUS.get(
-            counter_tile.terrain if counter_tile else "plain", 0
-        )
+        counter_bonus = defense_bonus(counter_tile)
         counter_hits = attack_with_double_strike(
             target, attacker, counter_bonus, rng=random.Random(2)
         )
@@ -516,6 +516,9 @@ async def forecast_attack(
 
     counter_will_kill = attacker_hp_after <= 0 and counter_damage > 0
     return AttackForecastOut(
+        height_delta=height_delta(attacker,(attacker.x,attacker.y),(target.x,target.y)),
+        height_attack_bonus=high_attack(attacker,target),
+        range_bonus=int(_get_unit(attacker.unit_type).attack_range>=2 and _get_unit(attacker.unit_type).attack_kind=='physical' and height_delta(attacker,(attacker.x,attacker.y),(target.x,target.y))>=2),
         attacker_unit_id=attacker.id,
         target_unit_id=target.id,
         damage=total_dmg,
@@ -526,10 +529,10 @@ async def forecast_attack(
         counter_damage=counter_damage,
         attacker_hp_after=attacker_hp_after,
         counter_will_kill=counter_will_kill,
-        description=_format_attack_forecast(
+        description=(f'高差 {height_delta(attacker,(attacker.x,attacker.y),(target.x,target.y)):+d}，高地攻击 +{high_attack(attacker,target)}；' + _format_attack_forecast(
             attacker, target, total_dmg, target_hp_after,
             counter_damage, attacker_hp_after, is_kill, counter_will_kill,
-        ),
+        )),
     )
 
 
@@ -563,7 +566,7 @@ async def attack(
     distance = manhattan((attacker.x, attacker.y), (target.x, target.y))
     atk_min = unit_min_attack_range(attacker)
     atk_range = unit_attack_range(attacker)
-    if distance == 0 or distance <= atk_min or distance > atk_range:
+    if not can_attack_from_position(attacker, attacker.x, attacker.y, target.x, target.y):
         logger.info(f"attack: range FAILED (game {game_id}, att={attacker.id} at ({attacker.x},{attacker.y}), tgt={target.id} at ({target.x},{target.y}), d={distance}, range=({atk_min},{atk_range}])")
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -576,7 +579,7 @@ async def attack(
             select(Tile).where(Tile.game_id == game_id, Tile.x == target.x, Tile.y == target.y)
         )
     ).scalars().first()
-    tile_bonus = TERRAIN_DEF_BONUS.get(def_tile.terrain if def_tile else "plain", 0)
+    tile_bonus = defense_bonus(def_tile)
 
     rng = random.Random()
     hits = attack_with_double_strike(attacker, target, tile_bonus, rng=rng)
@@ -622,14 +625,12 @@ async def attack(
             await session.execute(
                 select(Tile).where(
                     Tile.game_id == game_id,
-                    Tile.x == target.x,
-                    Tile.y == target.y,
+                    Tile.x == attacker.x,
+                    Tile.y == attacker.y,
                 )
             )
         ).scalars().first()
-        counter_bonus = TERRAIN_DEF_BONUS.get(
-            counter_tile.terrain if counter_tile else "plain", 0
-        )
+        counter_bonus = defense_bonus(counter_tile)
         counter_rng = random.Random()
         counter_hits = attack_with_double_strike(
             target, attacker, counter_bonus, rng=counter_rng

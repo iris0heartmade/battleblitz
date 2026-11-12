@@ -1,5 +1,6 @@
 class_name MapLogic
 extends RefCounted
+const HeightRules = preload("res://scripts/core/elevation_rules.gd")
 ## MapLogic — client-side mirror of `game/app/utils.py` (BFS / pathfind
 ## / line-of-sight). Used purely for UI previews: move-range highlight,
 ## path preview, damage prediction. The server remains the authority;
@@ -108,17 +109,18 @@ static func compute_reachable(
 	start: Vector2i,
 	terrain: Dictionary,
 	owners: Dictionary,
-	mov: int,
+	mov: float,
 	viewer_owner_id: int,
 	blocked_units: Dictionary = {},
 	no_end_units: Dictionary = {},
 	size: int = 0,
+	context: Dictionary = {},
 ) -> Dictionary:
 	if size <= 0:
 		size = _infer_size(terrain)
 	if not terrain.has(start):
 		return {}
-	var budget: int = mov * 2
+	var budget: int = int(mov * 2)
 	var dist: Dictionary = {start: 0}
 	var reachable: Dictionary = {start: 0}
 	var queue: Array = [start]
@@ -136,18 +138,18 @@ static func compute_reachable(
 				continue
 			var t: String = terrain[n]
 			var owner: int = int(owners.get(n, -1))
-			if not terrain_passable(t, owner, viewer_owner_id):
-				continue
 			if blocked_units.has(n) and not n == start:
 				continue
-			var step_cost: int = int(Config.TERRAIN_MOVE_COST.get(t, 9999))
+			var step_cost: int = HeightRules.step(terrain,cur_pos,n,context)
+			if step_cost<0:
+				continue
 			var new_cost: int = cur_cost + step_cost
 			if new_cost > budget:
 				continue
 			if not dist.has(n) or new_cost < dist[n]:
 				dist[n] = new_cost
 				queue.append(n)
-				if not no_end_units.has(n):
+				if not no_end_units.has(n) and HeightRules.can_end(t,n,context):
 					reachable[n] = new_cost
 	return reachable
 
@@ -166,11 +168,12 @@ static func pathfind(
 	goal: Vector2i,
 	terrain: Dictionary,
 	owners: Dictionary,
-	mov: int,
+	mov: float,
 	viewer_owner_id: int,
 	blocked_units: Dictionary = {},
 	no_end_units: Dictionary = {},
 	size: int = 0,
+	context: Dictionary = {},
 ) -> Array:
 	if start == goal:
 		return [start]
@@ -181,7 +184,7 @@ static func pathfind(
 	blocked.erase(start)
 	var no_end := no_end_units.duplicate()
 	no_end.erase(start)
-	var budget: int = mov * 2
+	var budget: int = int(mov * 2)
 
 	# A tiny binary-heap substitute (avoids pulling in stdlib heapq).
 	# Each entry: [cost, tiebreak_counter, coord].
@@ -207,7 +210,7 @@ static func pathfind(
 			continue
 		# Accept goal only if cost within budget (P2.5 fix: prevents
 		# `pathfind` returning teleporting paths when cost > mov).
-		if node == goal and cost <= budget and not no_end.has(node):
+		if node == goal and cost <= budget and not no_end.has(node) and HeightRules.can_end(terrain[node],node,context):
 			var path: Array = [goal]
 			while came_from.has(path[-1]):
 				path.append(came_from[path[-1]])
@@ -222,11 +225,11 @@ static func pathfind(
 				continue
 			var t: String = terrain[n]
 			var owner: int = int(owners.get(n, -1))
-			if not terrain_passable(t, owner, viewer_owner_id):
-				continue
 			if blocked.has(n):
 				continue
-			var step_cost: int = int(Config.TERRAIN_MOVE_COST.get(t, 9999))
+			var step_cost: int = HeightRules.step(terrain,node,n,context)
+			if step_cost<0:
+				continue
 			var new_cost: int = cost + step_cost
 			if new_cost > budget:
 				continue

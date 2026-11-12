@@ -22,6 +22,8 @@ from app.movement import (
 )
 
 
+from app.battlefield import step_cost
+
 logger = logging.getLogger(__name__)
 
 
@@ -154,10 +156,10 @@ def bfs_reachable(
                 continue
             if (nx, ny) in blocked_units:
                 continue
-            step_cost = terrain_cost_x2(movement_profile, t)
-            if step_cost is None:
+            edge_cost = step_cost(movement_profile, terrain, (x,y), (nx,ny))
+            if edge_cost is None:
                 continue
-            new_cost = cur + step_cost
+            new_cost = cur + edge_cost
             if new_cost > budget:
                 continue
             key = (nx, ny)
@@ -241,10 +243,10 @@ def pathfind(
                 continue
             if (nx, ny) in blocked_units:
                 continue
-            step_cost = terrain_cost_x2(movement_profile, t)
-            if step_cost is None:
+            edge_cost = step_cost(movement_profile, terrain, node, (nx,ny))
+            if edge_cost is None:
                 continue
-            new_cost = cost + step_cost
+            new_cost = cost + edge_cost
             if new_cost > budget:
                 continue
             key = (nx, ny)

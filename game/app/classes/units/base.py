@@ -38,6 +38,7 @@ class UnitClassProfile:
     default_skills: Tuple[str, ...]
     attack_range: int          # 1 = melee, 2+ = ranged (max Manhattan distance)
     can_move_after_action: bool
+    flying: bool = False
     ignores_line_of_sight: bool = False  # archer/sniper — obstacles don't block attack
     min_attack_range: int = 0 # 0 = can melee at d=1; 1 = must keep distance (ranged-only)
     strong_against: FrozenSet[str] = frozenset()  # e.g. {"knight"}
@@ -91,6 +92,7 @@ class BaseUnitClass(ABC):
     min_attack_range: ClassVar[int] = 0 # 0 = can attack d=1; 1 = ranged-only (no melee)
 
     # ── Mobility ───────────────────────────────────────────────
+    flying: ClassVar[bool] = False
     can_move_after_action: ClassVar[bool] = False
     ignores_line_of_sight: ClassVar[bool] = False  # archer: obstacles don't block attack
 
@@ -111,6 +113,7 @@ class BaseUnitClass(ABC):
     def compile(cls) -> UnitClassProfile:
         """Return an immutable snapshot for use by the engine."""
         return UnitClassProfile(
+            flying=cls.flying,
             type_id=cls.type_id,
             display_cn=cls.display_cn,
             display_en=cls.display_en,

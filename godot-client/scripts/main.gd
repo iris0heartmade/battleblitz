@@ -1425,7 +1425,7 @@ func _compute_threat_tiles() -> Array:
 			var uy: int = int(u.get("y", 0))
 			var rng: int = int(u.get("attack_range", 1))
 			var min_r: int = int(u.get("min_attack_range", 0))
-			threat.append_array(MapLogic.attack_range_tiles(Vector2i(ux, uy), rng, min_r, size))
+			threat.append_array(_get_attack_range_tiles(u))
 	return threat
 
 
@@ -1552,6 +1552,7 @@ func _snapshot_to_pseudo_map() -> Dictionary:
 				match terrain:
 					"plain": row += "P"
 					"forest": row += "F"
+					"rock": row += "K"
 					"mountain": row += "M"
 					"snow_peak": row += "S"
 					"river": row += "R"
@@ -1896,9 +1897,9 @@ func _update_path_dots_at_cell(target_cell: Vector2i) -> void:
 		for k in board.tile_lookup.keys():
 			var t: Dictionary = board.tile_lookup[k]
 			terrain[k] = str(t.get("terrain", "plain"))
-	var mov: int = int(src_unit.get("mov", int(src_unit.get("move_points", 5))))
+	var mov: float = float(src_unit.get("mp",src_unit.get("mov",5)))
 	var path: Array = MapLogic.pathfind(
-		src_cell, target_cell, terrain, owners, mov, _player_id, blocked, no_end, size_v
+		src_cell, target_cell, terrain, owners, mov, _player_id, blocked, no_end, size_v, _height_context(src_unit)
 	)
 	_move_preview_path = path.duplicate()
 	_move_preview_target = target_cell
@@ -2955,9 +2956,9 @@ func _cancel_move_mode() -> void:
 
 # M4.1:发 POST /games/{id}/move
 func _apply_immediate_move_feedback(unit_id: int, to_cell: Vector2i, path_cells: Array = []) -> void:
-	var spent_mp: int = -1
+	var spent_mp: float = -1
 	if _move_reachable_set.has(to_cell):
-		spent_mp = int(_move_reachable_set.get(to_cell, 0)) / 2
+		spent_mp = float(_move_reachable_set.get(to_cell, 0)) / 2.0
 	if GameState != null and GameState.has_method("apply_local_move_preview"):
 		GameState.apply_local_move_preview(unit_id, to_cell, spent_mp)
 	_move_mode_unit_id = -1
@@ -3035,9 +3036,26 @@ func _handle_unit_click(unit_id: int, _global_pos: Vector2) -> void:
 
 
 # 返回 full Dict {Vector2i: cost} 包括起点;供路径结果判断
+func _height_context(unit_data: Dictionary) -> Dictionary:
+	var heights: Dictionary = {}
+	if board!=null and board.model!=null:
+		for y in board.model.size().y:
+			for x in board.model.size().x:
+				heights[Vector2i(x,y)] = board.model.elevation(Vector2i(x,y))
+	return ElevationRules.context(unit_data,board.tile_lookup if board!=null else {},heights,GameState.elevation_rules)
+
+func _height_attack_tiles(unit_data: Dictionary) -> Array:
+	var ctx := _height_context(unit_data)
+	var start := Vector2i(int(unit_data.get("x",0)),int(unit_data.get("y",0)))
+	var result: Array = []
+	for point in ctx.heights:
+		if ElevationRules.can_attack(unit_data,start,point,ctx.heights,ctx.rules):
+			result.append(point)
+	return result
+
 func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 	# 优先用剩余移动力 mp;已移动单位(mp < mov)必须按剩余 MP 预览可达格。
-	var mp: int = int(unit_data.get("mp", int(unit_data.get("mov", int(unit_data.get("move_points", 5))))))
+	var mp: float = float(unit_data.get("mp",unit_data.get("mov",5)))
 	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
@@ -3058,14 +3076,14 @@ func _compute_reachable_tiles_full(unit_data: Dictionary) -> Dictionary:
 			terrain[k] = str(t.get("terrain", "plain"))
 	var owner: int = int(unit_data.get("player_id", int(unit_data.get("owner_id", int(_player_id)))))
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v, _height_context(unit_data)
 	)
 	print("DEBUG reachable: result_size=%s" % result.size())
 	return result
 
 
 func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
-	var mp: int = int(unit_data.get("move_points", int(unit_data.get("mp", 5))))
+	var mp: float = float(unit_data.get("mp",unit_data.get("mov",5)))
 	var unit_pos := Vector2i(int(unit_data.get("x", 0)), int(unit_data.get("y", 0)))
 	var size_v: int = 15
 	if board != null and board.map_size.x > 0:
@@ -3086,7 +3104,7 @@ func _compute_reachable_tiles(unit_data: Dictionary) -> Array:
 	var owner: int = int(unit_data.get("owner_id", int(_player_id)))
 	# MapLogic.compute_reachable(start, terrain, owners, mov, viewer_owner_id, blocked, no_end, size)
 	var result: Dictionary = MapLogic.compute_reachable(
-		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v
+		unit_pos, terrain, owners, mp, owner, blocked, no_end, size_v, _height_context(unit_data)
 	)
 	# 移除起点(不要把自身高亮成可达)
 	result.erase(unit_pos)
@@ -3868,17 +3886,17 @@ func _set_action_button(btn: Button, can_show: bool, reason: String = "") -> voi
 func _can_initial_move(ud: Dictionary) -> bool:
 	if bool(ud.get("has_moved", false)):
 		return false
-	if int(ud.get("mp", int(ud.get("mov", 0)))) <= 0:
+	if float(ud.get("mp", ud.get("mov", 0))) <= 0:
 		return false
 	return _compute_reachable_tiles_full(ud).size() > 1
 
 
 func _can_continue_move(ud: Dictionary) -> bool:
-	return int(ud.get("mp", 0)) > 0
+	return float(ud.get("mp", 0)) > 0
 
 
 func _can_continue_move_after_action(ud: Dictionary) -> bool:
-	return int(ud.get("mp", 0)) > 0 and _unit_can_move_after_action(ud)
+	return float(ud.get("mp", 0)) > 0 and _unit_can_move_after_action(ud)
 
 
 func _unit_can_move_after_action(ud: Dictionary) -> bool:
@@ -4065,6 +4083,8 @@ func _compute_attack_targets(attacker: Dictionary) -> Dictionary:
 
 
 func _get_attack_range_tiles(attacker: Dictionary) -> Array:
+	if board!=null and board.model!=null:
+		return _height_attack_tiles(attacker)
 	var max_range: int = int(attacker.get("attack_range", 1))
 	if (attacker.get("skills", []) as Array).has("snipe"):
 		max_range += 1
@@ -4178,7 +4198,13 @@ func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -
 	var target_mdef := int(target_info.get("mdef", 0))
 	var atk_min := int(attacker.get("min_attack_range", 0))
 	var atk_range := int(attacker.get("attack_range", 1))
-	var in_range := dist > atk_min and dist <= atk_range
+	var target_point := Vector2i(int(target_info.get("x",0)),int(target_info.get("y",0)))
+	var height_ctx := _height_context(attacker)
+	var attack_point := Vector2i(int(attacker.get("x",0)),int(attacker.get("y",0)))
+	var delta: int = int(height_ctx.heights.get(attack_point,0))-int(height_ctx.heights.get(target_point,0))
+	if str(attacker.get("attack_kind","physical"))=="physical" and int(attacker.get("base_attack_range",atk_range))>=2 and delta>=int(GameState.elevation_rules.get("ranged_height",2)):
+		atk_range+=int(GameState.elevation_rules.get("ranged_bonus",1))
+	var in_range: bool = _get_attack_range_tiles(attacker).has(target_point)
 
 	var attacker_stars := "★".repeat(max(0, attacker_morale)) + "☆".repeat(max(0, 3 - attacker_morale))
 	var target_stars := "★".repeat(max(0, target_morale)) + "☆".repeat(max(0, 3 - target_morale))
@@ -4268,6 +4294,7 @@ func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary
 		var dist: int = abs(ax - tx) + abs(ay - ty)
 		lines.append("目标无法反击(距离 %d,超出反击范围)" % dist)
 	lines.append("地形防御: +%d" % def_bonus)
+	lines.append("高差 %+d · 高地攻击 +%d · 高地射程 +%d" % [int(forecast.get("height_delta",0)),int(forecast.get("height_attack_bonus",0)),int(forecast.get("range_bonus",0))])
 	return "\n".join(lines)
 
 
@@ -4581,7 +4608,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var lvl: int = int(ud.get("level", 1))
 	var hp: int = int(ud.get("hp", 0))
 	var max_hp: int = max(1, int(ud.get("max_hp", 1)))
-	var mp: int = int(ud.get("mp", 0))
+	var mp: float = float(ud.get("mp", 0))
 	var max_mp: int = int(ud.get("max_mp", 0))
 	var mov: int = int(ud.get("mov", int(ud.get("move_points", 5))))
 	var atk: int = int(ud.get("atk", 0))
@@ -4644,7 +4671,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	if compact_hud:
 		lines = [
 			"[color=#a89878](%d,%d)[/color] %s" % [pos.x, pos.y, owner_str],
-			("[color=#f4e8c1]HP[/color] %d/%d%s[color=#5fa8e8]MP[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]HP[/color] %d/%d" % [hp, max_hp]),
+			("[color=#f4e8c1]HP[/color] %d/%d%s[color=#5fa8e8]MP[/color] %.1f/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]HP[/color] %d/%d" % [hp, max_hp]),
 			"[color=#c9a14a]攻[/color]%d [color=#c9a14a]防[/color]%d%s[color=#c9a14a]魔[/color]%d [color=#c9a14a]魔防[/color]%d" % [atk, def, stat_gap, matk, mdef],
 			"[color=#a89878]移[/color]%d [color=#a89878]射[/color]%d-%d%s[color=#a89878]士[/color]%d/3" % [mov, range_min + 1, range_max, stat_gap, morale],
 			"[color=#a89878]技[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
@@ -4652,7 +4679,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	else:
 		lines = [
 			"[color=#a89878]位置 (%d, %d)[/color] · %s" % [pos.x, pos.y, owner_str],
-			("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %d/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
+			("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %.1f/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
 			"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
 			"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
 			"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
@@ -4675,8 +4702,10 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 		var subtype: String = "" if subtype_v == null else str(subtype_v)
 		if subtype != "" and Config.TERRAIN_DEF_BONUS.has(subtype):
 			def_bonus = int(Config.TERRAIN_DEF_BONUS.get(subtype, 0))
+		def_bonus = int(tile_d.get("defense_bonus",def_bonus))
 		var terrain_cn := _terrain_cn(terrain_name, subtype)
-		var move_cost_x2: int = int(Config.TERRAIN_MOVE_COST.get(terrain_name, 9999))
+		buffs.append("高度 %+d · 上坡每级额外0.5移动力" % board.model.elevation(pos))
+		var move_cost_x2: int = int(tile_d.get("movement_cost_x2",Config.TERRAIN_MOVE_COST.get(terrain_name, 9999)))
 		var move_cost_text := "不可通行" if move_cost_x2 >= 9999 else ("%.1f" % (float(move_cost_x2) / 2.0))
 		var bonus_color := "#7ec97e" if def_bonus > 0 else "#c8baa0"
 		buffs.append(("[color=%s]▦ %s[/color] 消耗%s/防御%+d" if compact_hud else "[color=%s]▦ %s[/color] · 移动消耗 %s · 防御 %+d") % [bonus_color, terrain_cn, move_cost_text, def_bonus])

@@ -15,6 +15,7 @@ from typing import Dict, Final, Tuple
 MAP_SIZE: Final[int] = 15  # 15x15 grid
 
 # Terrain types as string constants (also stored in DB)
+TERRAIN_ROCK: Final[str] = "rock"
 TERRAIN_PLAIN: Final[str] = "plain"
 TERRAIN_FOREST: Final[str] = "forest"
 TERRAIN_MOUNTAIN: Final[str] = "mountain"
@@ -41,6 +42,7 @@ CASTLE_VAULT: Final[str] = "castle_vault"     # 金库
 CASTLE_DOOR: Final[str] = "castle_door"       # 门扉
 
 TERRAIN_TYPES: Final[Tuple[str, ...]] = (
+    TERRAIN_ROCK,
     TERRAIN_PLAIN,
     TERRAIN_FOREST,
     TERRAIN_MOUNTAIN,
@@ -71,10 +73,11 @@ CASTLE_SUBTYPES: Final[Tuple[str, ...]] = (
 #
 # Real cost = integer_cost / 2.
 TERRAIN_MOVE_COST: Final[Dict[str, int]] = {
+    TERRAIN_ROCK: 2,
     TERRAIN_PLAIN: 2,
     TERRAIN_FOREST: 4,
-    TERRAIN_MOUNTAIN: 6,
-    TERRAIN_SNOW_PEAK: 6,   # impassable, same movement cost as mountain
+    TERRAIN_MOUNTAIN: 2,
+    TERRAIN_SNOW_PEAK: 2,   # legacy input alias; flat rock has no mountain surcharge
     TERRAIN_RIVER: 6,
     TERRAIN_CASTLE: 2,
     TERRAIN_SAND: 3,        # 沙地比平原慢,比山快(P0-1)
@@ -94,10 +97,11 @@ TERRAIN_MOVE_COST: Final[Dict[str, int]] = {
 
 # Defense bonus added to a defender's DEF when calculating damage.
 TERRAIN_DEF_BONUS: Final[Dict[str, int]] = {
+    TERRAIN_ROCK: 0,
     TERRAIN_PLAIN: 0,
     TERRAIN_FOREST: 2,
-    TERRAIN_MOUNTAIN: 3,
-    TERRAIN_SNOW_PEAK: 3,   # same defensive bonus as mountain
+    TERRAIN_MOUNTAIN: 0,
+    TERRAIN_SNOW_PEAK: 0,   # legacy input alias; no fixed mountain defense
     TERRAIN_RIVER: 0,
     TERRAIN_CASTLE: 5,  # legacy; new code uses CASTLE_SUBTYPE_DEF_BONUS
     TERRAIN_SAND: 0,    # 沙地无防御加成(P0-1)

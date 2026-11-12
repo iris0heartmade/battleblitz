@@ -280,7 +280,7 @@ func _build_unit(entry: Dictionary) -> void:
 func _add_unit_badges(anchor: Node3D, entry: Dictionary) -> void:
 	var pieces: Array[String] = ["Lv%d" % int(entry.get("level",1))]
 	if entry.has("mp"):
-		pieces.append("MP%d" % int(entry.mp))
+		pieces.append("MP%.1f" % float(entry.mp))
 	if int(entry.get("morale",0))>0:
 		pieces.append("★%d" % int(entry.morale))
 	var status: Array[String] = []

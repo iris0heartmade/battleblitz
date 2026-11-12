@@ -26,6 +26,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Float,
     String,
     UniqueConstraint,
 )
@@ -212,7 +213,7 @@ class Unit(Base):
 
     # Movement points remaining this turn. Reset to `mov` at the start of
     # each of the unit owner's turns.
-    mp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mp: Mapped[float] = mapped_column(Float, nullable=False, default=0)
 
     # Deterministic RNG seed used by RolledGrowthPolicy when a generic
     # unit is spawned at L>1.  Without this seed, save-and-reload would

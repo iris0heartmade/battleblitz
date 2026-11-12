@@ -13,6 +13,7 @@ standard ``POST /skill`` path; see ``app.routes.actions``.
 """
 from __future__ import annotations
 
+from app.battlefield import high_attack, attack_allowed
 from app.classes.units.skills.base import BaseSkill, SkillContext, SkillResult
 
 
@@ -47,7 +48,7 @@ class ArcaneStrikeSkill(BaseSkill):
             return False
         # Range check (Manhattan).
         dist = abs(ctx.user.x - ctx.target.x) + abs(ctx.user.y - ctx.target.y)
-        return 1 <= dist <= self.CAST_RANGE
+        return attack_allowed(ctx.user,(ctx.user.x,ctx.user.y),(ctx.target.x,ctx.target.y),0,self.CAST_RANGE)
 
     def describe(self, ctx: SkillContext) -> str:
         if ctx.target is None:
@@ -55,14 +56,14 @@ class ArcaneStrikeSkill(BaseSkill):
         # Show the would-be damage so the player can decide.
         preview = max(
             self.MIN_DAMAGE,
-            int(ctx.user.matk * self.MATK_MULTIPLIER) - ctx.target.mdef,
+            int((ctx.user.matk + high_attack(ctx.user,ctx.target)) * self.MATK_MULTIPLIER) - ctx.target.mdef,
         )
         return f"🔮{self.display_cn} → {ctx.target.name[:4]} -{preview}HP"
 
     async def execute(self, session, ctx: SkillContext, **kwargs) -> SkillResult:
         target = ctx.target
         # Magic damage formula — see header docstring.
-        raw = int(ctx.user.matk * self.MATK_MULTIPLIER) - target.mdef
+        raw = int((ctx.user.matk + high_attack(ctx.user,ctx.target)) * self.MATK_MULTIPLIER) - target.mdef
         damage = max(self.MIN_DAMAGE, raw)
         target.hp = max(0, target.hp - damage)
         # Mirror the heal skill's post-action bookkeeping: the user

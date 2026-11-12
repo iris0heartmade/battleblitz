@@ -7,6 +7,7 @@ class DragonRider(BaseUnitClass):
     """Tier-1 flying melee class with mobility as its primary advantage."""
 
     type_id = "dragon_rider"
+    flying = True
     display_cn = "飞龙骑士"
     display_en = "Dragon Rider"
     glyph = "龙"
@@ -30,8 +31,6 @@ class DragonRider(BaseUnitClass):
     # Data only: movement.py applies these rules for player, AI, and UI.
     # Flying units may cross walls/gates, but they must not stop on them.
     terrain_movement = {
-        "mountain": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
-        "snow_peak": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
         "river": {"can_traverse": True, "can_end_on": True, "cost_override_x2": 2},
         "castle_wall": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},
         "gate": {"can_traverse": True, "can_end_on": False, "cost_override_x2": 2},

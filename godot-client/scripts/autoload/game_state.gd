@@ -49,6 +49,7 @@ var latest_snapshot: Dictionary = {}
 
 # Convenience accessors (filled in by `ingest_snapshot`).
 var game_summary: Dictionary = {}              # GameSummaryOut
+var elevation_rules: Dictionary = {}
 var tiles: Array = []                          # Array[TileOut]
 var players: Array = []                         # Array[PlayerOut]
 var current_player_id: Variant = null           # int | null
@@ -164,6 +165,7 @@ func _on_server_hello(_seq: int, payload: Dictionary) -> void:
 
 func _on_state_snapshot(snapshot: Dictionary) -> void:
 	latest_snapshot = snapshot
+	elevation_rules = snapshot.get("elevation_rules", {})
 	game_summary = snapshot.get("game", {})
 	tiles = snapshot.get("tiles", [])
 	players = snapshot.get("players", [])

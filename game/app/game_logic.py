@@ -42,6 +42,7 @@ UNIT_KNIGHT = "knight"
 
 from app.models import ActionLog, ClaimSession, Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile, terrain_cost_x2
+from app.battlefield import normalize_grid, Battlefield, bind_battlefield, load_battlefield, defense_bonus, path_cost, attack_allowed, high_attack
 from app.utils import bfs_reachable, manhattan, pathfind
 
 
@@ -253,14 +254,14 @@ def generate_map(
             use_buildings=True,
             use_hq_structure=(mode == "hq_with_struct"),
         )
-        return gen.generate()
+        return normalize_grid(gen.generate())
 
     rng = random.Random(seed)
     if mode == "castle_internal":
-        return _generate_castle_internal_map(rng, style_cfg, castles, size)
+        return normalize_grid(_generate_castle_internal_map(rng, style_cfg, castles, size))
     # Default / single_hq / hq_with_struct: outer generator (hq_with_struct
     # currently shares single_hq's body; Phase 5 will swap to a 3×3 wrapper).
-    return _generate_outer_map(rng, style_cfg, castles, size)
+    return normalize_grid(_generate_outer_map(rng, style_cfg, castles, size))
 
 
 def castle_positions(num_players: int, size: int = MAP_SIZE) -> Dict[int, Tuple[int, int]]:
@@ -334,7 +335,7 @@ def can_attack_from_position(
     blockers: Optional[set] = None,
     board_size: int = MAP_SIZE,
 ) -> bool:
-    """True if ``unit`` can attack a target by Manhattan range alone.
+    """Check horizontal range plus elevation limits and target-specific high ground.
 
     Terrain, units, and line-of-sight never block attacks. ``blockers`` and
     ``board_size`` are accepted for backwards-compatible callers but ignored.
@@ -343,7 +344,8 @@ def can_attack_from_position(
     d = manhattan((fromX, fromY), (toX, toY))
     if d == 0:
         return False
-    return unit_min_attack_range(unit) < d <= unit_attack_range(unit)
+    return attack_allowed(unit,(fromX,fromY),(toX,toY),unit_min_attack_range(unit),unit_attack_range(unit),
+                          physical_ranged=_attack_kind_of(unit)=="physical" and _get_unit(unit.unit_type).attack_range>=2)
 
 
 def _type_multiplier(attacker: Unit, defender: Unit) -> float:
@@ -401,17 +403,21 @@ def calculate_damage(
     damage = eff_atk * (eff_atk / (eff_atk + eff_def)) * type_adv * crit_mult
     """
     rng = rng or random.Random()
+    field = getattr(attacker, "_battlefield", None)
+    if field is not None:
+        tile_def_bonus = field.cover.get((defender.x,defender.y),tile_def_bonus)
     tile_def_bonus = _effective_tile_def_bonus(defender, tile_def_bonus)
+    height_attack = high_attack(attacker, defender)
     if crit is None:
         crit_chance = _crit_chance(attacker)
         crit = rng.random() < crit_chance
         logger.debug(f"Crit roll: {attacker.name}(id={attacker.id}) -> {defender.name}(id={defender.id}): {'CRIT' if crit else 'no crit'} (chance={crit_chance:.2f})")
 
     if _attack_kind_of(attacker) == "magic":
-        eff_atk = attacker.matk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+        eff_atk = (attacker.matk + height_attack) * (1 + attacker.morale * MORALE_ATK_PER_STAR)
         eff_df = (defender.mdef + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
     else:
-        eff_atk = attacker.atk * (1 + attacker.morale * MORALE_ATK_PER_STAR)
+        eff_atk = (attacker.atk + height_attack) * (1 + attacker.morale * MORALE_ATK_PER_STAR)
         eff_df = (defender.def_ + tile_def_bonus) * (1 + defender.morale * MORALE_DEF_PER_STAR)
     eff_atk = max(1, eff_atk)
     eff_df = max(1, eff_df)
@@ -1622,6 +1628,7 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
     char_to_terrain = {
         "P": TERRAIN_PLAIN,
         "F": TERRAIN_FOREST,
+        "K": "rock",
         "M": TERRAIN_MOUNTAIN,
         "S": TERRAIN_SNOW_PEAK,   # P2.4 — snow-biome silver peaks
         "R": TERRAIN_RIVER,
@@ -1696,7 +1703,7 @@ def _layout_to_tiles(layout: List[List[str]]) -> List[List[Tile]]:
             out_row.append(Tile(x=len(out_row), y=y, terrain=terrain))
             i += 1
         grid.append(out_row)
-    return grid
+    return normalize_grid(grid)
 
 
 # ============================================================
@@ -1733,7 +1740,7 @@ async def _load_ai_snapshot(session: AsyncSession, game: Game, ai_player: Player
     tiles = (
         await session.execute(select(Tile).where(Tile.game_id == game.id))
     ).scalars().all()
-    terrain = {(t.x, t.y): movement_key(t) for t in tiles}
+    terrain = Battlefield(tiles)
     owners = {(t.x, t.y): t.owner_id for t in tiles}
     occ = {(t.x, t.y): t.occupied_unit_id for t in tiles}
     players = (
@@ -1746,6 +1753,7 @@ async def _load_ai_snapshot(session: AsyncSession, game: Game, ai_player: Player
             select(Unit).where(Unit.player_id.in_(player_ids))
         )
     ).scalars().all()
+    bind_battlefield(units_rows, terrain)
     units_by_player: Dict[int, List[Unit]] = {}
     for u in units_rows:
         units_by_player.setdefault(u.player_id, []).append(u)
@@ -1892,7 +1900,7 @@ def _ai_pick_attack_target(
     candidates = []
     for e in snap.enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
-        if d == 0 or d < atk_min or d > atk_range:
+        if not can_attack_from_position(unit,unit.x,unit.y,e.x,e.y):
             continue
 
         # Score: lower hp = better kill chance; type-advantage = bonus
@@ -1948,6 +1956,7 @@ def _ai_pick_move_target(
         blocked_units=blocked,
         no_end_units=no_end,
         movement_profile=resolve_movement_profile(unit),
+        size=max((max(p) for p in snap.terrain),default=14)+1,
     )
     if not reachable:
         return None
@@ -1998,8 +2007,8 @@ def _ai_pick_move_target(
         terr = snap.terrain.get(tile)
         if terr == TERRAIN_FOREST:
             s += TERRAIN_DEF_BONUS.get(TERRAIN_FOREST, 0) * 2
-        if terr == TERRAIN_MOUNTAIN:
-            s += TERRAIN_DEF_BONUS.get(TERRAIN_MOUNTAIN, 0) * 2
+        if isinstance(snap.terrain, Battlefield):
+            s += min(2,max((max(0,snap.terrain.heights.get(tile,0)-snap.terrain.heights.get((e.x,e.y),0)) for e in snap.enemy_units), default=0))
         if terr == TERRAIN_CASTLE:
             s += 30
         # Kill-shot bonus: if moving here lets us attack-kill an enemy
@@ -2009,7 +2018,7 @@ def _ai_pick_move_target(
             atk_range = unit_attack_range(unit)
             for e in snap.enemy_units:
                 d = manhattan(tile, (e.x, e.y))
-                if 1 <= d <= atk_range and e.hp <= unit.atk:
+                if can_attack_from_position(unit,tile[0],tile[1],e.x,e.y) and e.hp <= unit.atk:
                     s += profile.kill_bonus_move
                     break
         # Small bonus for keeping close to allies (concentration)
@@ -2038,7 +2047,7 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     tile_rows = (
         await session.execute(select(Tile).where(Tile.game_id == game.id))
     ).scalars().all()
-    terrain = {(t.x, t.y): movement_key(t) for t in tile_rows}
+    terrain = Battlefield(tile_rows)
     owners = {(t.x, t.y): t.owner_id for t in tile_rows}
     # Build blocked set from currently-alive units
     all_units = (
@@ -2052,6 +2061,7 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     path = pathfind(
         start=(unit.x, unit.y), goal=dest, terrain=terrain, owners=owners,
         mov=unit.mp, viewer_owner_id=unit.player_id, blocked_units=blocked,
+        size=max((max(p) for p in terrain),default=14)+1,
         movement_profile=resolve_movement_profile(unit),
     )
     if not path or path[-1] != dest:
@@ -2065,8 +2075,8 @@ async def _ai_move(session: AsyncSession, game: Game, unit: Unit, dest: Tuple[in
     unit.x, unit.y = dest
     # Deduct movement cost — same logic as the human route (actions.py).
     movement_profile = resolve_movement_profile(unit)
-    cost_x2 = sum(terrain_cost_x2(movement_profile, terrain[c]) or 0 for c in path[1:])
-    spent_mp = cost_x2 // 2
+    cost_x2 = path_cost(movement_profile, terrain, path)
+    spent_mp = cost_x2 / 2
     unit.mp = max(0, unit.mp - spent_mp)
     # AI: a unit that has moved may still attack this turn (matches the
     # human player rules), but it must NOT be picked up for another move
@@ -2086,6 +2096,8 @@ async def _ai_attack(
     current_turn: int = 0,
 ) -> bool:
     """Perform an AI attack. Returns True if successful."""
+    field = await load_battlefield(session, attacker.player.game_id)
+    bind_battlefield([attacker,target], field)
     logger.info(f"AI attack: {attacker.name}(id={attacker.id},type={attacker.unit_type}) at ({attacker.x},{attacker.y}) -> {target.name}(id={target.id},type={target.unit_type},hp={target.hp}) at ({target.x},{target.y})")
     # 07-22 fix:_ai_attack 必须自带射程校验作为安全网,防止上游
     # (LLM 行动选择 / 规则 AI 评分 / 未来新增快捷路径)漏过滤而
@@ -2139,7 +2151,7 @@ async def _ai_attack(
         and _t_can
         and not is_unit_silenced(target, current_turn=current_turn)
     ):
-        counter_hits = attack_with_double_strike(target, attacker, bonus, rng=random.Random())
+        counter_hits = attack_with_double_strike(target, attacker, field.cover.get((attacker.x,attacker.y),0), rng=random.Random())
         for h in counter_hits:
             counter_dmg += max(1, int(h.damage * COUNTER_DAMAGE_MULT))
         apply_damage(attacker, counter_dmg)
@@ -2517,6 +2529,7 @@ async def ai_take_turn(session: AsyncSession, game: Game, ai_player: Player) -> 
                 viewer_owner_id=None, blocked_units=blocked,
                 no_end_units=no_end,
                 movement_profile=resolve_movement_profile(unit),
+                size=max((max(p) for p in snap.terrain),default=14)+1,
             )
             if reachable:
                 # Score each reachable tile by distance-to-castle
@@ -2622,6 +2635,7 @@ async def ai_take_one_action(
             viewer_owner_id=None, blocked_units=blocked,
             no_end_units=no_end,
             movement_profile=resolve_movement_profile(unit),
+            size=max((max(p) for p in snap.terrain),default=14)+1,
         )
         if reachable:
             def flee_score(t):

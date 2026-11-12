@@ -35,6 +35,8 @@ from app.game_logic import (
 from app.models import Game, Player, Tile, Unit
 from app.movement import movement_key, resolve_movement_profile
 from app.utils import bfs_reachable, manhattan
+from app.battlefield import Battlefield, bind_battlefield
+from app.game_logic import can_attack_from_position
 
 
 # Cap the number of move targets we list. AI doesn't need to know about every
@@ -57,7 +59,7 @@ async def enumerate_legal_actions(
     tiles = (await session.execute(
         select(Tile).where(Tile.game_id == game.id)
     )).scalars().all()
-    terrain: dict = {(t.x, t.y): movement_key(t) for t in tiles}
+    terrain = Battlefield(tiles)
     owners: dict = {(t.x, t.y): t.owner_id for t in tiles}
 
     players = (await session.execute(
@@ -72,6 +74,8 @@ async def enumerate_legal_actions(
 
     occupied: dict = {(u.x, u.y): u.id for u in all_units if u.hp > 0}
 
+    if isinstance(terrain, Battlefield):
+        bind_battlefield([unit, *enemy_units, *ally_units], terrain)
     actions: list[LegalAction] = []
 
     for u in my_units:
@@ -140,6 +144,8 @@ def _legal_actions_for_unit(
             mov=unit.mp,
             viewer_owner_id=None,  # AI can pass through anywhere its units can
             blocked_units=blocked,
+            no_end_units=no_end,
+            size=max((max(p) for p in terrain),default=14)+1,
             movement_profile=resolve_movement_profile(unit),
         )
         # Remove the current tile (no-op)
@@ -172,7 +178,7 @@ def _legal_actions_for_unit(
     atk_min = unit_min_attack_range(unit)
     for e in enemy_units:
         d = manhattan((unit.x, unit.y), (e.x, e.y))
-        if d == 0 or d < atk_min or d > atk_range:
+        if not can_attack_from_position(unit,unit.x,unit.y,e.x,e.y):
             continue
 
         # Estimate damage
