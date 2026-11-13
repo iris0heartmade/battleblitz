@@ -13,16 +13,17 @@ extends RefCounted
 ## main.gd 侧保留三个同名薄壳转发,既有调用点无需改动。
 ## 注意:不写 class_name —— headless 下跨文件 class_name 引用会撞 Parse Error。
 
+const Visual = preload("res://scripts/ui/visual_tokens.gd")
 const MenuTheme = preload("res://scripts/ui/menu_theme.gd")
 const BattleTheme = preload("res://scripts/ui/battle_theme.gd")
 
 static func apply_theme(host: Node, theme_name: String) -> void:
 	# 默认主题对齐「边境军议档案」surface/panel:近黑墨蓝 + 哑光黄铜。
-	var bg_color: Color = Color(0.03, 0.06, 0.10)   # deep_gba 兜底(近黑墨蓝)
-	var panel_color: Color = Color(0.08, 0.14, 0.24)
-	var border_color: Color = Color(0.79, 0.63, 0.29)  # 金 C_GOLD
-	var text_color: Color = Color(0.96, 0.91, 0.76)   # 暖白 C_TEXT_WARM
-	var btn_bg: Color = Color(0.12, 0.20, 0.32)       # 深蓝底 C_BTN_BLUE
+	var bg_color: Color = Visual.INK   # deep_gba 兜底(近黑墨蓝)
+	var panel_color: Color = Visual.PANEL
+	var border_color: Color = Visual.LINE  # 金 C_GOLD
+	var text_color: Color = Visual.TEXT   # 暖白 C_TEXT_WARM
+	var btn_bg: Color = Visual.RAISED       # 深蓝底 C_BTN_BLUE
 	if theme_name == "metal_silver":
 		bg_color = Color(0.10, 0.10, 0.13)
 		panel_color = Color(0.16, 0.16, 0.18)
@@ -46,9 +47,9 @@ static func apply_theme(host: Node, theme_name: String) -> void:
 		# Pause owns a framed inner surface. The result still needs an opaque
 		# reading plane: otherwise its statistics visually merge with the board.
 		if p == host.pause_panel:
-			sb.bg_color = Color(0, 0, 0, 0)
-			sb.border_color = Color(0, 0, 0, 0)
-			sb.set_border_width_all(0)
+			sb.bg_color = panel_color
+			sb.border_color = border_color
+			sb.set_border_width_all(1)
 		elif p == host.battle_result_panel:
 			sb.bg_color = Color(panel_color.r, panel_color.g, panel_color.b, 0.92)
 			sb.border_color = Color(0, 0, 0, 0)
@@ -94,9 +95,15 @@ static func apply_theme(host: Node, theme_name: String) -> void:
 	for lbl in theme_text_labels:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_color_override("font_color", text_color)
+	if theme_name not in ["metal_silver", "minimal_light"]:
+		preload("res://scripts/ui/page_style.gd").apply_root(host)
 	host._update_status("主题: %s" % theme_name)
 
 static func apply_gba(host: Node) -> void:
+	# 只移除旧相框，不隐藏地图、头像与地貌图片。
+	for node in host.find_children("*", "NinePatchRect", true, false):
+		if node.name in ["OrnateFrame", "OrnatePlaque"]:
+			node.visible = false
 	# 1) 全屏深绿背景(ColorRect 颜色已在 .tscn 设)
 	host.backdrop.color = MenuTheme.C_BG_DEEP
 	host.backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -134,6 +141,7 @@ static func apply_gba(host: Node) -> void:
 	sb_popup.content_margin_top = MenuTheme.PAD
 	sb_popup.content_margin_bottom = MenuTheme.PAD
 	host.war_report_panel.add_theme_stylebox_override("panel", sb_popup)
+	preload("res://scripts/ui/page_style.gd").apply_root(host)
 
 static func apply_hud(host: Node) -> void:
 	# Pills are ColorRect containers with ReferenceRect borders added
@@ -156,7 +164,7 @@ static func apply_hud(host: Node) -> void:
 	var secondary_size: int = roundi((14.0 if compact else 16.0) * density) + font_bump
 	if host.info_panel != null and is_instance_valid(host.info_panel):
 		# InfoPanel 常驻右翼;样式由 battle_theme.apply_floating_panel 唯一接管。
-		host.info_panel.visible = true
+		host.info_panel.visible = host.landscape_hud != null and host.landscape_hud.drawer
 	for lbl in [host.turn_badge_label, host.phase_badge_label, host.current_player_label, host.gold_label]:
 		if lbl != null and is_instance_valid(lbl):
 			lbl.add_theme_font_size_override("font_size", pill_size)

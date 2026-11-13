@@ -48,6 +48,7 @@ var _load_request_id: int = 0
 
 
 func _ready() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	# 新版按钮主题
 	var theme_btns := [save_refresh_btn, save_back_btn]
 	for btn in theme_btns:

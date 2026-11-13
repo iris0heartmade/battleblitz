@@ -1,27 +1,29 @@
 extends Node
+
+const Visual = preload("res://scripts/ui/visual_tokens.gd")
 ## Dedicated visual language for the campaign and preparation screen.
 ## Text and interaction stay in native controls; this only owns presentation.
-## 边框/按钮/页签/列表行/铭牌来自 original_v2(经 skin_assets 唯一入口)。
+## 使用轻量军议公共配置；旧贴图接口保留用于兼容。
 
 const SkinAssets = preload("res://scripts/ui/skin_assets.gd")
 
-const C_INK: Color = Color("#0b1525")
-const C_PANEL: Color = Color("#14233b")
-const C_PANEL_LIGHT: Color = Color("#1d3150")
-const C_PARCHMENT: Color = Color("#ead9ad")
-const C_GOLD: Color = Color("#c99c45")
-const C_GOLD_BRIGHT: Color = Color("#f0cf7a")
-const C_RUBY: Color = Color("#9b3142")
-const C_RUBY_DARK: Color = Color("#5b1725")
-const C_TEXT: Color = Color("#fff0cb")
-const C_TEXT_DIM: Color = Color("#b6a783")
-const C_PARCHMENT_INK: Color = Color("#35291d")
-const C_PARCHMENT_DIM: Color = Color("#665642")
-const C_PARCHMENT_ACCENT: Color = Color("#8a5a18")
+const C_INK: Color = Visual.INK
+const C_PANEL: Color = Visual.PANEL
+const C_PANEL_LIGHT: Color = Visual.RAISED
+const C_PARCHMENT: Color = Visual.PAPER
+const C_GOLD: Color = Visual.GOLD
+const C_GOLD_BRIGHT: Color = Visual.GOLD_LIGHT
+const C_RUBY: Color = Visual.DANGER
+const C_RUBY_DARK: Color = Visual.RAISED
+const C_TEXT: Color = Visual.TEXT
+const C_TEXT_DIM: Color = Visual.DIM
+const C_PARCHMENT_INK: Color = Visual.PAPER_INK
+const C_PARCHMENT_DIM: Color = Visual.PAPER_DIM
+const C_PARCHMENT_ACCENT: Color = Visual.PAPER_ACCENT
 # 旧 MLFrame 兼容路径使用的填色/边线,统一进 C_* 常量(UI V3 验证标准 #2)
-const C_OPTION_FILL: Color = Color("#0e1c31")
-const C_FRAME_INK: Color = Color("#0a1628cc")
-const C_FRAME_BORDER: Color = Color("#8b7040")
+const C_OPTION_FILL: Color = Visual.INK
+const C_FRAME_INK: Color = Visual.PANEL
+const C_FRAME_BORDER: Color = Visual.LINE
 
 
 static func _box(fill: Color, border: Color, width: int = 1, radius: int = 4) -> StyleBoxFlat:
@@ -37,11 +39,10 @@ static func _box(fill: Color, border: Color, width: int = 1, radius: int = 4) ->
 	return style
 
 
-static func _tint(style: StyleBoxTexture, tint: Color) -> StyleBoxTexture:
-	var copy: StyleBoxTexture = style.duplicate()
-	copy.modulate_color = tint
+static func _tint(style: StyleBoxFlat, tint: Color) -> StyleBoxFlat:
+	var copy: StyleBoxFlat = style.duplicate()
+	copy.border_color = tint
 	return copy
-
 
 static func _apply_button_colors(button: Button, normal: Color, hover: Color, pressed: Color, border: Color) -> void:
 	# 保留颜色入口(供 apply_danger 二次着色),主体纹理仍走 skin_assets。
@@ -62,45 +63,13 @@ static func _apply_button_colors(button: Button, normal: Color, hover: Color, pr
 
 
 static func apply_primary(button: Button) -> void:
-	button.add_theme_font_size_override("font_size", 16)
-	button.add_theme_color_override("font_color", C_TEXT)
-	button.add_theme_color_override("font_hover_color", C_GOLD_BRIGHT)
-	button.add_theme_color_override("font_pressed_color", C_TEXT)
-	button.add_theme_color_override("font_disabled_color", C_TEXT_DIM)
-	# 主操作按钮使用带暗红封签的 selected 态,作为常态强调。
-	button.add_theme_stylebox_override("normal", SkinAssets.button_style("selected"))
-	button.add_theme_stylebox_override("hover", SkinAssets.button_style("hover"))
-	button.add_theme_stylebox_override("pressed", SkinAssets.button_style("pressed"))
-	button.add_theme_stylebox_override("disabled", SkinAssets.button_style("disabled"))
-	button.add_theme_stylebox_override("focus", SkinAssets.button_style("selected"))
-
+	Visual.button(button, true, 17, false)
 
 static func apply_danger(button: Button) -> void:
-	button.add_theme_font_size_override("font_size", 15)
-	button.add_theme_color_override("font_color", C_TEXT)
-	button.add_theme_color_override("font_hover_color", C_GOLD_BRIGHT)
-	button.add_theme_color_override("font_pressed_color", C_TEXT)
-	button.add_theme_color_override("font_disabled_color", C_TEXT_DIM)
-	var danger := Color(C_RUBY.r, C_RUBY.g, C_RUBY.b, 1.0)
-	button.add_theme_stylebox_override("normal", _tint(SkinAssets.button_style("normal"), danger))
-	button.add_theme_stylebox_override("hover", _tint(SkinAssets.button_style("hover"), danger))
-	button.add_theme_stylebox_override("pressed", _tint(SkinAssets.button_style("pressed"), danger))
-	button.add_theme_stylebox_override("disabled", SkinAssets.button_style("disabled"))
-	button.add_theme_stylebox_override("focus", _tint(SkinAssets.button_style("hover"), danger))
-
+	Visual.button(button, false, 17, true)
 
 static func apply_secondary(button: Button) -> void:
-	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_color_override("font_color", C_TEXT)
-	button.add_theme_color_override("font_hover_color", C_GOLD_BRIGHT)
-	button.add_theme_color_override("font_pressed_color", C_TEXT)
-	button.add_theme_color_override("font_disabled_color", C_TEXT_DIM)
-	button.add_theme_stylebox_override("normal", SkinAssets.button_style("normal"))
-	button.add_theme_stylebox_override("hover", SkinAssets.button_style("hover"))
-	button.add_theme_stylebox_override("pressed", SkinAssets.button_style("pressed"))
-	button.add_theme_stylebox_override("disabled", SkinAssets.button_style("disabled"))
-	button.add_theme_stylebox_override("focus", SkinAssets.button_style("hover"))
-
+	Visual.button(button, false, 17, false)
 
 static func apply_tab(button: Button) -> void:
 	button.add_theme_font_size_override("font_size", 14)
@@ -113,7 +82,7 @@ static func apply_tab(button: Button) -> void:
 	button.add_theme_stylebox_override("hover", SkinAssets.tab_style("hover"))
 	button.add_theme_stylebox_override("pressed", SkinAssets.tab_style("active"))
 	button.add_theme_stylebox_override("disabled", SkinAssets.tab_style("active"))
-	button.add_theme_stylebox_override("focus", SkinAssets.tab_style("hover"))
+	button.add_theme_stylebox_override("focus", Visual.state_box("focus"))
 
 
 static func apply_row(button: Button, selected: bool = false) -> void:
@@ -149,27 +118,18 @@ static func apply_option(option: OptionButton) -> void:
 	option.add_theme_stylebox_override("normal", normal_style)
 	option.add_theme_stylebox_override("hover", hover_style)
 	option.add_theme_stylebox_override("pressed", pressed_style)
-	option.add_theme_stylebox_override("disabled", normal_style)
-	option.add_theme_stylebox_override("focus", hover_style)
+	option.add_theme_stylebox_override("disabled", Visual.state_box("disabled"))
+	option.add_theme_stylebox_override("focus", Visual.state_box("focus"))
 
 
 # 二级面板:二级框(中心透明)+ 平铺底纹子节点。kind ∈ "navy","paper","steel"。
 # 唯一样式所有者 = 本函数。
 static func apply_section_panel(panel: Control, kind: String = "navy") -> void:
-	var patch := SkinAssets.FRAME_SECONDARY_PATCH
-	var sb := StyleBoxTexture.new()
-	sb.texture = SkinAssets.secondary_panel_frame()
-	sb.texture_margin_left = patch
-	sb.texture_margin_top = patch
-	sb.texture_margin_right = patch
-	sb.texture_margin_bottom = patch
-	sb.content_margin_left = patch + 8
-	sb.content_margin_top = patch + 6
-	sb.content_margin_right = patch + 8
-	sb.content_margin_bottom = patch + 6
-	panel.add_theme_stylebox_override("panel", sb)
-	_ensure_tiled_background(panel, kind)
-
+	var fill := Visual.PAPER if kind == "paper" else Visual.PANEL
+	panel.add_theme_stylebox_override("panel", Visual.surface(fill))
+	var old := panel.get_node_or_null("PageBackground")
+	if old != null:
+		old.hide()
 
 static func apply_chapter_button(button: Button) -> void:
 	apply_row(button)
@@ -180,19 +140,7 @@ static func apply_chapter_button(button: Button) -> void:
 
 # 页面一级框:一级框(中心透明)+ 墨蓝织纹子节点。patch 越大,中心内容区越向内收。
 static func apply_page_frame(panel: Control, patch: int = SkinAssets.FRAME_PRIMARY_PATCH) -> void:
-	var sb := StyleBoxTexture.new()
-	sb.texture = SkinAssets.primary_page_frame()
-	sb.texture_margin_left = patch
-	sb.texture_margin_top = patch
-	sb.texture_margin_right = patch
-	sb.texture_margin_bottom = patch
-	sb.content_margin_left = patch + 8
-	sb.content_margin_top = patch + 6
-	sb.content_margin_right = patch + 8
-	sb.content_margin_bottom = patch + 6
-	panel.add_theme_stylebox_override("panel", sb)
-	_ensure_tiled_background(panel, "navy")
-
+	panel.add_theme_stylebox_override("panel", Visual.surface(Visual.INK, Visual.LINE, 24))
 
 # 标题铭牌:在 label 下方垫一块宽铭牌纹理。
 static func apply_title_plate(label: Control, wide: bool = true) -> void:
@@ -200,7 +148,7 @@ static func apply_title_plate(label: Control, wide: bool = true) -> void:
 	label.add_theme_font_size_override("font_size", 26)
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
 	label.add_theme_color_override("font_outline_color", Color("#111723"))
-	label.add_theme_constant_override("outline_size", 4)
+	label.add_theme_constant_override("outline_size", 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
@@ -211,7 +159,7 @@ static func apply_page_heading(label: Label) -> void:
 	label.add_theme_font_size_override("font_size", 27)
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
 	label.add_theme_color_override("font_outline_color", Color("#111723"))
-	label.add_theme_constant_override("outline_size", 3)
+	label.add_theme_constant_override("outline_size", 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
@@ -222,12 +170,13 @@ static func apply_section_title(label: Label) -> void:
 	label.add_theme_font_size_override("font_size", 18)
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
 	label.add_theme_color_override("font_outline_color", Color("#111723"))
-	label.add_theme_constant_override("outline_size", 2)
+	label.add_theme_constant_override("outline_size", 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 # 羊皮纸区域不能复用深色面板的浅色正文，否则在纹理高光处对比度不足。
 static func apply_paper_text(label: Label, heading: bool = false) -> void:
+	label.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
 	label.add_theme_color_override("font_color", C_PARCHMENT_ACCENT if heading else C_PARCHMENT_INK)
 	if heading:
 		label.add_theme_font_size_override("font_size", 22)
@@ -235,25 +184,12 @@ static func apply_paper_text(label: Label, heading: bool = false) -> void:
 
 # 角色摘要卡:4:5 立框,透明中心。用于英雄页的专注卡。
 static func apply_character_card(panel: Control) -> void:
-	panel.add_theme_stylebox_override("panel", _card_style(SkinAssets.character_summary_card(), SkinAssets.CARD_CHAR_PATCH))
-
+	panel.add_theme_stylebox_override("panel", Visual.surface(Visual.PANEL, Visual.LINE, 8))
 
 # 战前整备的立绘锚点只有约 100px 宽，不能复用 48px 的角色摘要卡切片。
 # 保留同一套原创边框纹理，但缩小九宫格切片并让立绘占据主体面积。
 static func apply_portrait_anchor(panel: Control) -> void:
-	var sb := StyleBoxTexture.new()
-	sb.texture = SkinAssets.character_summary_card()
-	var patch := 18
-	sb.texture_margin_left = patch
-	sb.texture_margin_top = patch
-	sb.texture_margin_right = patch
-	sb.texture_margin_bottom = patch
-	sb.content_margin_left = 7
-	sb.content_margin_top = 7
-	sb.content_margin_right = 7
-	sb.content_margin_bottom = 7
-	panel.add_theme_stylebox_override("panel", sb)
-
+	panel.add_theme_stylebox_override("panel", Visual.surface(Visual.PANEL, Visual.LINE, 8))
 
 # 槽位卡:Panel 底板(墨蓝+ 内描边)+ 选中态 2px 金边。空槽和已占据同尺寸,
 # 只是内容文字变灰 — 让玩家立刻能感知"位置一样,内容不同"。
@@ -293,8 +229,7 @@ static func apply_slot_card_panel(panel: Control, occupied: bool, selected: bool
 
 # 物品/数值摘要卡:32:15 横框。
 static func apply_item_card(panel: Control) -> void:
-	panel.add_theme_stylebox_override("panel", _card_style(SkinAssets.item_value_summary_card(), SkinAssets.CARD_ITEM_PATCH))
-
+	panel.add_theme_stylebox_override("panel", Visual.surface(Visual.PAPER.darkened(0.05), Visual.LINE, 8))
 
 static func _card_style(tex: Texture2D, patch: int) -> StyleBoxTexture:
 	var sb := StyleBoxTexture.new()
@@ -335,7 +270,7 @@ static func _ensure_tiled_background(panel: Control, kind: String) -> TextureRec
 
 # 旧 MLFrame 兼容入口。主框架已拆分面板,这里只保留接口并取消 ArtSkin 清理。
 static func apply_frame(frame: Panel, border: ReferenceRect, title: Label, summary: RichTextLabel, content: RichTextLabel) -> void:
-	var frame_style := _box(C_PANEL, C_GOLD, 3, 8)
+	var frame_style := _box(C_PANEL, C_FRAME_BORDER, 1, 4)
 	frame_style.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
 	frame_style.shadow_size = 16
 	frame_style.shadow_offset = Vector2(0, 6)

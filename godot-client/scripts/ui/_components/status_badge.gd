@@ -34,7 +34,7 @@ func _init() -> void:
 		_COLOR = {
 			Kind.OK: MenuTheme.C_HEAL_GREEN,
 			Kind.EMPTY: MenuTheme.C_TEXT_DIM,
-			Kind.WARNING: MenuTheme.C_FIRE_RED,
+			Kind.WARNING: MenuTheme.C_GOLD_BRIGHT,
 			Kind.LOADING: MenuTheme.C_LOADING,
 			Kind.ERROR: MenuTheme.C_ERROR,
 		}

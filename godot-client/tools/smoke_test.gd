@@ -310,11 +310,11 @@ func _ready() -> void:
 	_assert_true("HUD has AttackConfirmPanel", main_check.get_node_or_null("GameView/HUD/AttackConfirmPanel") != null,
 		"attack flow should expose a confirm panel before POSTing")
 	var battle_top_art := main_check.get_node_or_null("GameView/HUD/TopStatusArt") as TextureRect
-	_assert_true("HUD top status art is wired", battle_top_art != null and battle_top_art.texture != null,
-		"the always-visible battle header must render its production art asset")
-	_assert_true("HUD top status art uses clean center rail",
-		battle_top_art != null and battle_top_art.texture.resource_path.contains("top_battle_status_bar"),
-		"team meters need a center-safe rail without an overlapping emblem")
+	_assert_true("HUD top status art is retired", battle_top_art != null and battle_top_art.texture == null,
+		"the lightweight header must not restore the old metal backdrop")
+	_assert_true("HUD top controls remain reachable",
+		main_check.end_turn_button != null and main_check.turn_badge_label != null,
+		"removing decoration must preserve the turn controls")
 	var compact_plaque_paths: Array[String] = [
 		"GameView/HUD/TopLeft/TurnBadge/OrnatePlaque",
 		"GameView/HUD/TopLeft/PhaseBadge/OrnatePlaque",
@@ -326,9 +326,9 @@ func _ready() -> void:
 	]
 	for plaque_path in compact_plaque_paths:
 		var plaque := main_check.get_node_or_null(plaque_path) as NinePatchRect
-		_assert_true("Compact HUD art wired: %s" % plaque_path,
-			plaque != null and plaque.texture != null and not plaque.draw_center,
-			"always-visible corner controls must keep their compact plaque art")
+		_assert_true("Compact HUD decoration retired: %s" % plaque_path,
+			plaque != null and not plaque.visible,
+			"compact controls must not restore heavy plaque decorations")
 	var ornate_panel_paths: Array[String] = [
 		"GameView/HUD/InfoPanel/OrnateFrame",
 		"GameView/HUD/ActionBubble/OrnateFrame",
@@ -342,9 +342,9 @@ func _ready() -> void:
 	]
 	for ornate_path in ornate_panel_paths:
 		var ornate_frame := main_check.get_node_or_null(ornate_path) as NinePatchRect
-		_assert_true("Battle art wired: %s" % ornate_path,
-			ornate_frame != null and ornate_frame.texture != null and not ornate_frame.draw_center,
-			"battle panels must keep their non-blocking nine-slice ornament")
+		_assert_true("Battle decoration retired: %s" % ornate_path,
+			ornate_frame != null and not ornate_frame.visible,
+			"the new reading surfaces must not be overlaid by legacy ornate frames")
 	var battle_backdrop := main_check.get_node_or_null("GameView/BattleBackdrop/Background") as ColorRect
 	_assert_true("Battle backdrop is camera independent",
 		battle_backdrop != null and battle_backdrop.get_parent() is CanvasLayer and battle_backdrop.color.a >= 0.99,

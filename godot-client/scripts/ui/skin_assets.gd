@@ -1,12 +1,9 @@
 extends RefCounted
-## skin_assets.gd — Frontier Council Archive 原创资产唯一入口。
-##
-## original_v2 全部纹理与派生 StyleBoxTexture 的唯一所有权在这里。
-## 场景/主题脚本一律通过本模块取资源,禁止各自散落 load()。
-## 只引用 base/ controls/ battle/ 的透明成品,不触碰 sources/。
-##
-## 与菜单不同,这是纯静态资源层:不持有任何 Node 引用,headless 安全。
-## 区域常量来自 2026-07-31 的 alpha 边界实测(见 original_v2/README.md 接入说明)。
+
+const Visual = preload("res://scripts/ui/visual_tokens.gd")
+## skin_assets.gd — UI 资源入口。
+## 公共控件以原生细线样式绘制，旧素材读取接口保持兼容。
+## 不持有 Node 引用，headless 安全。
 
 const DIR := "res://assets/ui/original_v2"
 
@@ -167,88 +164,25 @@ static func secondary_frame_style(content_margin: int = 14) -> StyleBoxTexture:
 
 
 # 按钮五态。state ∈ "normal","hover","pressed","disabled","selected"。
-static func button_style(state: String) -> StyleBoxTexture:
-	var region := Rect2()
-	match state:
-		"hover":
-			region = Rect2(426, 275, 423, 179)
-		"pressed":
-			region = Rect2(882, 275, 369, 179)
-		"disabled":
-			region = Rect2(1292, 275, 370, 179)
-		"selected":
-			region = Rect2(1705, 275, 372, 180)
-		_:
-			region = Rect2(56, 275, 370, 179)
-	var sb := _stbox(button_sheet(), region, [48, 48, 48, 48])
-	sb.content_margin_left = 20
-	sb.content_margin_top = 8
-	sb.content_margin_right = 20
-	sb.content_margin_bottom = 8
-	return sb
-
+static func button_style(state: String) -> StyleBoxFlat:
+	return Visual.state_box(state, "button")
 
 # 页签四态。state ∈ "inactive","hover","active","disabled"。
-static func tab_style(state: String) -> StyleBoxTexture:
-	var region := Rect2()
-	match state:
-		"hover":
-			region = Rect2(571, 232, 484, 233)
-		"active":
-			region = Rect2(1114, 232, 485, 233)
-		"disabled":
-			region = Rect2(1658, 232, 484, 233)
-		_:
-			region = Rect2(28, 232, 484, 233)
-	var sb := _stbox(tab_sheet(), region, [36, 28, 64, 48])
-	sb.content_margin_left = 18
-	sb.content_margin_top = 6
-	sb.content_margin_right = 18
-	sb.content_margin_bottom = 8
-	return sb
-
+static func tab_style(state: String) -> StyleBoxFlat:
+	return Visual.state_box(state, "tab")
 
 # 列表行四态。state ∈ "neutral","hover","selected","disabled"。
-static func row_style(state: String) -> StyleBoxTexture:
-	var region := Rect2()
-	match state:
-		"hover":
-			region = Rect2(565, 286, 499, 127)
-		"selected":
-			region = Rect2(1104, 286, 502, 127)
-		"disabled":
-			region = Rect2(1651, 286, 498, 127)
-		_:
-			region = Rect2(24, 286, 498, 127)
-	var sb := _stbox(row_sheet(), region, [24, 24, 24, 24])
-	sb.content_margin_left = 16
-	sb.content_margin_top = 8
-	sb.content_margin_right = 16
-	sb.content_margin_bottom = 8
-	return sb
-
+static func row_style(state: String) -> StyleBoxFlat:
+	return Visual.state_box(state, "row")
 
 # 标题铭牌。wide=true 用宽板,false 用窄板。用于页面/分节标题底。
 # 区域裁剪到 full-alpha 铭牌带(去掉上下透明 padding),保证 9-slice 边距不超半高。
-static func title_plate_style(wide: bool = true) -> StyleBoxTexture:
-	var region := Rect2(17, 329, 861, 216) if wide else Rect2(896, 348, 860, 192)
-	var sb := _stbox(title_nameplates(), region, [48, 40, 48, 40])
-	sb.content_margin_left = 44
-	sb.content_margin_top = 12
-	sb.content_margin_right = 44
-	sb.content_margin_bottom = 12
-	return sb
-
+static func title_plate_style(wide: bool = true) -> StyleBoxFlat:
+	return Visual.surface(Visual.PANEL, Visual.LINE, 16)
 
 # 分节标题条(section_title_bar)。
-static func section_title_bar_style() -> StyleBoxTexture:
-	var sb := _stbox(section_divider_sheet(), Rect2(75, 285, 946, 150), [56, 40, 56, 40])
-	sb.content_margin_left = 36
-	sb.content_margin_top = 8
-	sb.content_margin_right = 36
-	sb.content_margin_bottom = 8
-	return sb
-
+static func section_title_bar_style() -> StyleBoxFlat:
+	return Visual.surface(Visual.PANEL, Visual.LINE, 16)
 
 # 状态框。kind ∈ "focus","error","success"(仅描边,中心透明)。
 static func status_frame_style(kind: String) -> StyleBoxTexture:
@@ -330,24 +264,12 @@ static func battle_action_menu_style() -> StyleBoxTexture:
 
 
 # 对话框。
-static func battle_dialogue_style() -> StyleBoxTexture:
-	var sb := _stbox(dialogue_panel(), Rect2(), [115, 70, 155, 75])
-	sb.content_margin_left = 84
-	sb.content_margin_top = 56
-	sb.content_margin_right = 84
-	sb.content_margin_bottom = 56
-	return sb
-
+static func battle_dialogue_style() -> StyleBoxFlat:
+	return Visual.surface(Visual.PANEL, Visual.LINE, 16)
 
 # 姓名牌。
-static func battle_nameplate_style() -> StyleBoxTexture:
-	var sb := _stbox(nameplate(), Rect2(), [42, 18, 48, 18])
-	sb.content_margin_left = 36
-	sb.content_margin_top = 8
-	sb.content_margin_right = 36
-	sb.content_margin_bottom = 8
-	return sb
-
+static func battle_nameplate_style() -> StyleBoxFlat:
+	return Visual.surface(Visual.PANEL, Visual.LINE, 16)
 
 # 紧凑状态牌。
 static func battle_compact_plate_style() -> StyleBoxTexture:
@@ -356,14 +278,8 @@ static func battle_compact_plate_style() -> StyleBoxTexture:
 
 
 # 章节结果标题。
-static func battle_result_title_style() -> StyleBoxTexture:
-	var sb := _stbox(chapter_result_title(), Rect2(), [145, 48, 200, 54])
-	sb.content_margin_left = 96
-	sb.content_margin_top = 40
-	sb.content_margin_right = 96
-	sb.content_margin_bottom = 40
-	return sb
-
+static func battle_result_title_style() -> StyleBoxFlat:
+	return Visual.surface(Visual.PANEL, Visual.LINE, 16)
 
 # 可平铺底纹(StyleBoxTexture 的 axis_stretch 支持 tile)。
 static func tile_style(kind: String) -> StyleBoxTexture:

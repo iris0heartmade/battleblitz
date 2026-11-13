@@ -31,6 +31,7 @@ const TILE_SIZE := MAP_METRICS_SCRIPT.TILE_SIZE
 const TILES_DIR := "res://assets/tiles"
 const TILESETS_DIR := "res://assets/tilesets"
 const _TERRAIN_ASSET_FALLBACKS := {
+	"rock": ["mountain"],
 	"bridge": ["road", "river"],
 	"snow_peak": ["mountain"],
 	"castle": ["castle_floor"],
@@ -110,7 +111,13 @@ static func build() -> TileSet:
 
 ## Look up the source_id for (terrain, biome). Returns -1 if unknown.
 static func source_id_for(terrain: String, biome: String) -> int:
-	return int(SOURCE_IDS.get("%s|%s" % [terrain, biome], -1))
+	var key := "%s|%s" % [terrain, biome]
+	if SOURCE_IDS.has(key):
+		return int(SOURCE_IDS[key])
+	# 与 atlas_coord_for 一致：未指定生态时使用默认生态的实际图源。
+	if biome == "":
+		return int(SOURCE_IDS.get("%s|%s" % [terrain, Config.DEFAULT_BIOME], -1))
+	return int(SOURCE_IDS.get("%s|" % terrain, -1))
 
 static func uses_fe8_atlas() -> bool:
 	return _using_fe8_atlas

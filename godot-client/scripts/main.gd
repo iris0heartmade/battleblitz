@@ -420,7 +420,10 @@ func _load_title_cover_texture(path: String) -> Texture2D:
 	return null
 
 
+var landscape_hud: Control
+
 func _ready() -> void:
+	call_deferred("_setup_landscape_hud")
 	# Try to restore the last player_name from disk.
 	var saved: Variant = UserSettings.get_value("settings.v1.player_name", "")
 	if typeof(saved) == TYPE_STRING and (saved as String) != "":
@@ -543,7 +546,7 @@ func _ready() -> void:
 		settings_yellow_btn.pressed.connect(_on_yellow_color_pressed)
 	if settings_theme_dropdown != null and is_instance_valid(settings_theme_dropdown):
 		# 填充 3 主题(web CSS 主题)
-		settings_theme_dropdown.add_item("深绿像素", 0)
+		settings_theme_dropdown.add_item("轻量军议", 0)
 		settings_theme_dropdown.add_item("金属银", 1)
 		settings_theme_dropdown.add_item("极简明亮", 2)
 		settings_theme_dropdown.item_selected.connect(_on_theme_dropdown_item_selected)
@@ -2606,9 +2609,15 @@ func _update_hud_layout_for_viewport() -> void:
 	gold_panel.custom_minimum_size = Vector2(160.0 if small else 145.0, 54.0 if small else 46.0)
 	war_report_button.custom_minimum_size = Vector2(160.0 if small else 150.0, 54.0 if small else 46.0)
 	if bottom_left != null:
-		bottom_left.offset_top = -92.0 if small else -84.0
+		bottom_left.anchor_top = 0.0
+		bottom_left.anchor_bottom = 0.0
+		bottom_left.offset_top = 116.0
+		bottom_left.offset_bottom = 174.0
 	if bottom_right != null:
-		bottom_right.offset_top = -92.0 if small else -84.0
+		bottom_right.anchor_top = 0.0
+		bottom_right.anchor_bottom = 0.0
+		bottom_right.offset_top = 116.0
+		bottom_right.offset_bottom = 174.0
 	# Compact inspector uses the frame's actual safe area rather than the
 	# desktop 44 px inset, recovering enough width for two-column stats.
 	if small and info_panel != null:
@@ -2897,6 +2906,8 @@ func _on_board_tile_clicked(tile: Vector2i) -> void:
 		_handle_silence_center_pick(tile)
 		return
 	if _move_mode_unit_id <= 0:
+		# 空格结束攻击/技能选取，底栏同步退出活动单位。
+		_cancel_action_mode()
 		if tile.x >= 0 and tile.y >= 0 and _try_open_recruit_at_tile(tile):
 			return
 		if board != null:
@@ -3736,7 +3747,7 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 	# gets pushed into the ornamental bottom border.
 	var bubble_size := Vector2(300.0, 94.0 + actions_height + float(max(0, visible_actions - 1)) * 4.0)
 	action_bubble.size = bubble_size
-	var viewport_safe := Rect2(Vector2(14.0, 108.0), Vector2(vp_size.x - 28.0, vp_size.y - 196.0))
+	var viewport_safe := Rect2(Vector2(14.0, 108.0), Vector2(vp_size.x - 28.0, vp_size.y - 108.0 - preload("res://scripts/ui/landscape_hud.gd").HEIGHT))
 	var safe_rect := viewport_safe
 	var board_screen := Rect2()
 	if board != null and board.has_method("screen_rect"):
@@ -3754,12 +3765,12 @@ func _show_action_bubble(unit_id: int, viewport_pos: Vector2, context: String = 
 	# On wide layouts the tactical menu belongs to the left HUD wing rather than
 	# floating over the map. This creates a stable reading path and preserves the
 	# selected unit and movement grid underneath.
-	if left_hud_wing != null and is_instance_valid(left_hud_wing) and left_hud_wing.size.x >= bubble_size.x + 40.0:
+	if left_hud_wing != null and is_instance_valid(left_hud_wing) and left_hud_wing.visible and left_hud_wing.size.x >= bubble_size.x + 40.0:
 		raw_candidates["left_gutter"] = Vector2(
 			left_hud_wing.position.x + left_hud_wing.size.x - bubble_size.x - 20.0,
 			left_hud_wing.position.y + 150.0
 		)
-	if right_hud_wing != null and is_instance_valid(right_hud_wing) and right_hud_wing.size.x >= bubble_size.x + 40.0:
+	if right_hud_wing != null and is_instance_valid(right_hud_wing) and right_hud_wing.visible and right_hud_wing.size.x >= bubble_size.x + 40.0:
 		raw_candidates["right_gutter"] = Vector2(
 			right_hud_wing.position.x + 20.0,
 			viewport_pos.y - bubble_size.y * 0.5
@@ -4230,6 +4241,8 @@ func _build_attack_confirm_text(attacker: Dictionary, target_info: Dictionary) -
 
 
 func _show_attack_forecast_loading(attacker: Dictionary, target_info: Dictionary) -> void:
+	if landscape_hud != null:
+		landscape_hud.compact_forecast = ""
 	if unit_info_title != null and is_instance_valid(unit_info_title):
 		unit_info_title.text = "战斗预测"
 	if unit_info != null and is_instance_valid(unit_info):
@@ -4254,6 +4267,8 @@ func _on_attack_forecast_response(body: Variant, code: int = 0, attacker_id: int
 		unit_info.text = "无法预测本次攻击。\n仍可手动确认攻击，后端会校验真实结果。"
 		return
 	unit_info.text = _build_attack_forecast_info_text(body, attacker, target_info)
+	if landscape_hud != null:
+		landscape_hud.show_forecast(body, attacker, target_info)
 
 
 func _build_attack_forecast_info_text(forecast: Dictionary, attacker: Dictionary, target_info: Dictionary) -> String:
@@ -4320,8 +4335,11 @@ func _on_attack_confirm_pressed() -> void:
 
 
 func _on_attack_cancel_pressed() -> void:
+	var inspect_id := _pending_attack_attacker_id
 	_hide_attack_confirm()
 	_cancel_action_mode()
+	# 取消预测恢复攻击者概览；主动点击空地仍会清理锁定。
+	_selected_unit_id = inspect_id
 
 
 # M4.2:发 POST /games/{id}/attack
@@ -4336,6 +4354,7 @@ func _apply_immediate_attack_feedback(attacker_id: int, target_id: int) -> void:
 			board.spawn_floating_text_at_cell(cell, "!", "#f0c75e", "attack_preview")
 		board.clear_selection_marks()
 	_hide_action_bubble()
+	_selected_unit_id = attacker_id
 	_update_status("攻击指令已下达: #%d -> #%d" % [attacker_id, target_id])
 
 
@@ -4610,7 +4629,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 	var max_hp: int = max(1, int(ud.get("max_hp", 1)))
 	var mp: float = float(ud.get("mp", 0))
 	var max_mp: int = int(ud.get("max_mp", 0))
-	var mov: int = int(ud.get("mov", int(ud.get("move_points", 5))))
+	var mov: float = float(ud.get("mp", ud.get("mov", 0)))
 	var atk: int = int(ud.get("atk", 0))
 	var def: int = int(ud.get("def_", 0))
 	var matk: int = int(ud.get("matk", 0))
@@ -4673,7 +4692,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 			"[color=#a89878](%d,%d)[/color] %s" % [pos.x, pos.y, owner_str],
 			("[color=#f4e8c1]HP[/color] %d/%d%s[color=#5fa8e8]MP[/color] %.1f/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]HP[/color] %d/%d" % [hp, max_hp]),
 			"[color=#c9a14a]攻[/color]%d [color=#c9a14a]防[/color]%d%s[color=#c9a14a]魔[/color]%d [color=#c9a14a]魔防[/color]%d" % [atk, def, stat_gap, matk, mdef],
-			"[color=#a89878]移[/color]%d [color=#a89878]射[/color]%d-%d%s[color=#a89878]士[/color]%d/3" % [mov, range_min + 1, range_max, stat_gap, morale],
+			"[color=#a89878]移[/color]%.1f [color=#a89878]射[/color]%d-%d%s[color=#a89878]士[/color]%d/3" % [mov, range_min + 1, range_max, stat_gap, morale],
 			"[color=#a89878]技[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
 		]
 	else:
@@ -4682,7 +4701,7 @@ func _refresh_unit_info(ud: Dictionary) -> void:
 			("[color=#f4e8c1]生命[/color] %d/%d%s[color=#5fa8e8]能量[/color] %.1f/%d" % [hp, max_hp, stat_gap, mp, max_mp]) if max_mp > 0 else ("[color=#f4e8c1]生命[/color] %d/%d" % [hp, max_hp]),
 			"[color=#c9a14a]攻[/color] %d%s[color=#c9a14a]防[/color] %d" % [atk, stat_gap, def],
 			"[color=#c9a14a]魔攻[/color] %d%s[color=#c9a14a]魔防[/color] %d" % [matk, stat_gap, mdef],
-			"[color=#a89878]移动[/color] %d%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
+			"[color=#a89878]移动[/color] %.1f%s[color=#a89878]射程[/color] %d-%d" % [mov, stat_gap, range_min + 1, range_max],
 			"[color=#a89878]士气[/color] %d/3" % morale,
 			"[color=#a89878]技能[/color] %s" % (", ".join(skill_names) if skill_names.size() > 0 else "—"),
 		]
@@ -4881,3 +4900,10 @@ func _dev_auto_play_enabled() -> bool:
 		if a == "--auto-play":
 			return true
 	return false
+
+
+# 底栏只消费既有状态，不参与行动结算。
+func _setup_landscape_hud() -> void:
+	landscape_hud = preload("res://scripts/ui/landscape_hud.gd").new()
+	hud_layer.add_child(landscape_hud)
+	landscape_hud.setup(self)

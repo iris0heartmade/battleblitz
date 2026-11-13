@@ -56,6 +56,8 @@ def test_no_inline_color_literals_outside_menu_theme():
     pattern = re.compile(r'Color\("#[0-9a-fA-F]{6,8}"\)')
     exempt = {
         MENU_THEME,
+        # 新公共视觉配置拥有跨页面颜色字面量。
+        ROOT / "godot-client" / "scripts" / "ui" / "visual_tokens.gd",
         # 主题模块各自拥有调色板(与 menu_theme.gd 同类)—— 战斗/主线主题
         ROOT / "godot-client" / "scripts" / "ui" / "battle_theme.gd",
         ROOT / "godot-client" / "scripts" / "ui" / "mainline_theme.gd",

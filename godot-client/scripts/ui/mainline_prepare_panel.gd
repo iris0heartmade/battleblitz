@@ -268,7 +268,7 @@ func _apply_responsive_layout() -> void:
 	%CouncilTitle.custom_minimum_size.y = 42 if compact_height else 48
 	%CouncilTitle.add_theme_font_size_override("font_size", 25 if compact_height else 27)
 	$Layout.add_theme_constant_override("separation", 6 if compact_height else 10)
-	$Layout/Columns.add_theme_constant_override("separation", 8 if compact_width else 14)
+	$Layout/Columns.add_theme_constant_override("separation", 12 if compact_width else 20)
 	$Layout/Columns/ContentPanel/ContentMargin.add_theme_constant_override("margin_top", 6 if equipment_page or compact_height else 18)
 	$Layout/Columns/ContentPanel/ContentMargin.add_theme_constant_override("margin_bottom", 6 if equipment_page or compact_height else 18)
 	$Layout/Columns/ContentPanel/ContentMargin/ContentLayout.add_theme_constant_override("separation", 4 if equipment_page else (6 if compact_height else 10))
@@ -276,7 +276,7 @@ func _apply_responsive_layout() -> void:
 	$Layout/Columns/MissionPanel/MissionMargin.add_theme_constant_override("margin_bottom", 10 if compact_height else 16)
 	$Layout/Columns/MissionPanel/MissionMargin/MissionLayout.add_theme_constant_override("separation", 8 if compact_height else 12)
 	$Layout/ActionSafe.add_theme_constant_override("margin_top", 8)
-	$Layout/ActionSafe.add_theme_constant_override("margin_bottom", 42 if compact_height else 32)
+	$Layout/ActionSafe.add_theme_constant_override("margin_bottom", 16 if compact_height else 20)
 	_content_title.add_theme_font_size_override("font_size", 25 if compact_height else 24)
 	_content_body.add_theme_font_size_override("font_size", (18 if compact_height else 16) if equipment_page else (19 if compact_height else 18))
 	_mission_body.add_theme_font_size_override("font_size", 21 if compact_height else 16)
@@ -324,6 +324,7 @@ func _apply_responsive_layout() -> void:
 
 
 func _apply_theme() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	MainlineTheme.apply_page_frame(self)
 	# 三栏:名册 / 内容 / 任务摘要;内容栏用档案纸底,任务栏用墨蓝织纹。
 	MainlineTheme.apply_section_panel(%RosterPanel, "navy")
@@ -349,6 +350,7 @@ func _apply_theme() -> void:
 	MainlineTheme.apply_paper_text(_content_title, true)
 	MainlineTheme.apply_paper_text(_content_body)
 	MainlineTheme.apply_paper_text(%ContentKicker)
+	MainlineTheme.apply_paper_text(%ChoiceHint)
 	# P1-1 / P1-2:响应式字号补偿,在 _apply_theme 末尾批处理 mainline 区
 	# 所有 Label / Button / RichTextLabel,小屏/宽屏各 +1。
 	MainlineTheme.adjust_font_sizes_for_viewport(

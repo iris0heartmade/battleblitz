@@ -106,6 +106,7 @@ var _lobby_poll_timer: Timer = null
 
 
 func _ready() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	if ai_player_option != null and is_instance_valid(ai_player_option):
 		ai_player_option.item_selected.connect(_on_ai_player_selected)
 	if lobby_remove_ai_btn != null and is_instance_valid(lobby_remove_ai_btn):
@@ -1222,7 +1223,7 @@ func _build_lobby_seat_card(index: int, color_id: String) -> Panel:
 	card.name = "Seat%d" % (index + 1)
 	card.custom_minimum_size = Vector2(0, 190)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	MenuTheme.apply_panel_theme(card, Color(0.08, 0.13, 0.1, 0.96))
+	MenuTheme.apply_panel_theme(card, MenuTheme.C_BG_PANEL)
 	var box := VBoxContainer.new()
 	box.name = "SeatBox"
 	box.anchor_right = 1.0

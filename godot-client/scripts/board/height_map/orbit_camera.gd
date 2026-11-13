@@ -9,6 +9,8 @@ var target_yaw := 45.0
 var target_focus := Vector3.ZERO
 var top_inset := 80.0
 var right_inset := 40.0
+var bottom_inset := 60.0
+var left_inset := -1.0
 
 func _process(delta: float) -> void:
 	if is_equal_approx(yaw, target_yaw) and focus.is_equal_approx(target_focus):
@@ -24,7 +26,8 @@ func _process(delta: float) -> void:
 
 func safe_rect() -> Rect2:
 	var viewport_size := get_viewport().get_visible_rect().size
-	return Rect2(Vector2(float(defaults.camera_safe_left), top_inset), viewport_size - Vector2(float(defaults.camera_safe_left) + right_inset, top_inset+60))
+	var left := float(defaults.camera_safe_left) if left_inset < 0 else left_inset
+	return Rect2(Vector2(left, top_inset), viewport_size - Vector2(left + right_inset, top_inset + bottom_inset))
 
 func set_inspect_card_visible(enabled: bool) -> void:
 	right_inset = get_viewport().get_visible_rect().size.x*0.27 if enabled else 40.0
@@ -81,6 +84,8 @@ func update_view() -> void:
 	# 把镜头中心移到编辑面板右侧的可用区域。
 	var viewport_size := get_viewport().get_visible_rect().size
 	h_offset = -(safe_rect().get_center().x - viewport_size.x * 0.5) * size / maxf(1, viewport_size.y)
+	# 战斗底栏占用下方空间时，也将棋盘视觉中心移入上方安全区域。
+	v_offset = (safe_rect().get_center().y - viewport_size.y * 0.5) * size / maxf(1, viewport_size.y) if bottom_inset > 0 else 0.0
 	var direction := Vector3(sin(deg_to_rad(yaw))*cos(deg_to_rad(pitch)), sin(deg_to_rad(pitch)), cos(deg_to_rad(yaw))*cos(deg_to_rad(pitch)))
 	position = focus + direction * 40.0
 	look_at(focus, Vector3.UP)

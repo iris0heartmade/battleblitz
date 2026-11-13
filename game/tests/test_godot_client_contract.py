@@ -655,17 +655,36 @@ def test_godot_editor_tools_are_on_canvas_layer_not_board_canvas():
 
 
 def test_godot_primary_buttons_use_blue_gold_outline_not_solid_gold():
-    theme = _read(ROOT / "godot-client" / "scripts" / "ui" / "menu_theme.gd")
+    theme = _read(ROOT / "godot-client/scripts/ui/menu_theme.gd")
     start = theme.index("static func apply_primary_button_theme")
     end = theme.index("static func hover_soft_glow", start)
-    body = theme[start:end]
-
-    assert 'Color("#1a1208")' not in body
-    assert "sb_normal.bg_color = C_GOLD" not in body
-    assert "sb_hover.bg_color = C_GOLD_BRIGHT" not in body
-    assert "sb_normal.border_color = C_GOLD_BRIGHT" in body
-    assert "sb_normal.bg_color = Color(C_BTN_BLUE.r * 1.08" in body
-    assert "sb_hover.bg_color = C_BTN_BLUE_HOVER" in body
+    assert "Visual.button(btn, true, font_size)" in theme[start:end]
+    executable = os.environ.get("GODOT_EXE") or shutil.which("godot") or shutil.which("godot4")
+    if not executable:
+        candidates = sorted(ROOT.parent.glob("Godot_v*_win64/*_console.exe"))
+        executable = str(candidates[-1]) if candidates else None
+    if not executable:
+        pytest.skip("Godot executable required for actual button state checks")
+    run = subprocess.run([executable, "--headless", "--path", str(ROOT / "godot-client"),
+                          "--script", "res://tools/visual_theme_contract_test.gd"],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "SCRIPT ERROR" not in run.stderr, run.stderr
+    line = next(line for line in run.stdout.splitlines() if line.startswith("CONTRACT_RESULT="))
+    states = json.loads(line.split("=", 1)[1])
+    normal = states["normal"]
+    assert normal["fill"] == states["tokens"]["blue"]
+    assert normal["border"] == states["tokens"]["gold"]
+    # Keep a narrow selected accent; the remaining border stays one pixel.
+    assert normal["left"] <= 3 and normal["right"] == 1
+    assert normal["fill"] != normal["border"]
+    assert int(normal["fill"][4:6], 16) > int(normal["fill"][:2], 16)  # blue surface
+    assert int(normal["border"][:2], 16) > int(normal["border"][4:6], 16)  # warm gold line
+    assert states["hover"]["border"] == states["tokens"]["focus"]
+    assert states["pressed"]["fill"] != normal["fill"]
+    assert states["disabled"]["fill"] != normal["fill"]
+    assert states["focus"]["fill"].endswith("00")
+    assert states["focus"]["border"] == states["tokens"]["focus"]
 
 
 def test_godot_modal_buttons_do_not_use_colored_emoji_as_style():

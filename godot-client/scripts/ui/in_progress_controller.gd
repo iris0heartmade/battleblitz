@@ -31,6 +31,7 @@ var _mainline_save_records: Array = []  # Array[Dictionary] from /saves manual_s
 
 
 func _ready() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	if ip_back_btn != null and is_instance_valid(ip_back_btn):
 		ip_back_btn.pressed.connect(_on_back_pressed)
 		MenuTheme.apply_button_theme(ip_back_btn, MenuTheme.FS_BTN)

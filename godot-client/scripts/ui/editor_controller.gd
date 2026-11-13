@@ -63,6 +63,7 @@ var elevation_selection: Label
 
 
 func _ready() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	elevation_input = SpinBox.new()
 	elevation_input.name = "ElevationInput"
 	elevation_input.position = Vector2(246,168)

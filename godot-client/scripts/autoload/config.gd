@@ -26,7 +26,7 @@ const TERRAIN_VARIANT_COUNTS: Dictionary = {
 	# `add_terrain_set()` + bitmask autotiling using the surrounding 15
 	# transition tiles — the autotile bitmask layout is already baked
 	# into the FE8 tilemap (it's a GBA-standard 16-state autotile).
-	"plain": 1, "forest": 1, "mountain": 1, "river": 1,
+	"plain": 1, "forest": 1, "rock": 1, "mountain": 1, "river": 1,
 	"snow_peak": 1,
 	"castle": 1, "desert": 1, "snow": 1,
 	"village": 1, "barracks": 1, "road": 1, "gate": 1,

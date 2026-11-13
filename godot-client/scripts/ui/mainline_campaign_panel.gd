@@ -258,7 +258,7 @@ func _apply_responsive_typography() -> void:
 	$Layout/Columns/IntelColumn/IntelMargin.add_theme_constant_override("margin_top", 10 if compact_height else 20)
 	$Layout/Columns/IntelColumn/IntelMargin.add_theme_constant_override("margin_bottom", 10 if compact_height else 20)
 	$Layout/FooterSafe.add_theme_constant_override("margin_top", 2 if compact_height else 6)
-	$Layout/FooterSafe.add_theme_constant_override("margin_bottom", 34 if compact_height else 24)
+	$Layout/FooterSafe.add_theme_constant_override("margin_bottom", 16 if compact_height else 20)
 	_preview_title.add_theme_font_size_override("font_size", 28 if compact_height else 32)
 	_preview_body.add_theme_font_size_override("font_size", 22 if compact_height else 19)
 	%PreviewBody.custom_minimum_size.y = 116 if compact_height else 190
@@ -293,6 +293,7 @@ func _physical_viewport_size() -> Vector2:
 
 
 func _apply_theme() -> void:
+	preload("res://scripts/ui/page_style.gd").apply(self)
 	MainlineTheme.apply_page_frame(self)
 	# 三栏:存档列表 / 预览 / 出征情报;预览用档案纸底,其余用墨蓝织纹。
 	MainlineTheme.apply_section_panel(%SlotColumn, "navy")
