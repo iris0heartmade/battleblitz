@@ -117,16 +117,21 @@ func _build_manual_rows() -> void:
 		var row := PanelContainer.new()
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.custom_minimum_size = Vector2(0, 110)
+		var row_surface := preload("res://scripts/ui/visual_tokens.gd").surface()
+		row_surface.border_width_left = 3
+		row_surface.border_color = MenuTheme.C_GOLD
+		row.add_theme_stylebox_override("panel", row_surface)
 		var hbox := HBoxContainer.new()
 		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(hbox)
 		# Slot badge
 		var badge := Label.new()
-		badge.custom_minimum_size = Vector2(70, 0)
-		badge.text = "槽 %d" % (slot_index + 1)
+		badge.custom_minimum_size = Vector2(80, 0)
+		badge.text = "%02d" % (slot_index + 1)
 		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		badge.add_theme_font_size_override("font_size", 22)
+		badge.add_theme_font_size_override("font_size", 32)
+		badge.add_theme_color_override("font_color", MenuTheme.C_GOLD)
 		hbox.add_child(badge)
 		# Status RichTextLabel
 		var status := RichTextLabel.new()
@@ -145,7 +150,7 @@ func _build_manual_rows() -> void:
 		var resume_btn := Button.new()
 		resume_btn.text = "▶ 继续"
 		resume_btn.custom_minimum_size = Vector2(0, 36)
-		MenuTheme.apply_button_theme(resume_btn, MenuTheme.FS_BTN)
+		MenuTheme.apply_primary_button_theme(resume_btn, MenuTheme.FS_BTN)
 		resume_btn.pressed.connect(_on_manual_resume_pressed.bind(slot_index))
 		btn_box.add_child(resume_btn)
 		var action_row := ButtonRow.new()
@@ -357,7 +362,7 @@ func _render_suspend_row() -> void:
 	var resume_btn := Button.new()
 	resume_btn.text = "▶ 继续"
 	resume_btn.custom_minimum_size = Vector2(180, 36)
-	MenuTheme.apply_button_theme(resume_btn, MenuTheme.FS_BTN)
+	MenuTheme.apply_primary_button_theme(resume_btn, MenuTheme.FS_BTN)
 	resume_btn.pressed.connect(_on_suspend_resume_pressed)
 	btn_box.add_child(resume_btn)
 	var discard_btn := Button.new()

@@ -1664,7 +1664,7 @@ func _refresh_co_roster() -> void:
 	var states: Array = GameState.co_states if GameState != null else []
 	if states.is_empty():
 		return
-	var compact := states.size() > 2
+	var compact := states.size() > 2 or _physical_window_width() <= 1366
 	var density := _hud_density_scale()
 	for c in states:
 		if not (c is Dictionary):
@@ -1707,7 +1707,8 @@ func _refresh_co_roster() -> void:
 			side_name = "阵营"
 		# Keep the compact top roster legible at 1280px without clipping the team name.
 		var commander_name_text := _commander_cn(commander_id) if commander_id != "" else "待命"
-		lbl.text = side_name if compact else "%s · %s" % [side_name, commander_name_text]
+		lbl.text = side_name.left(1) if compact else "%s · %s" % [side_name, commander_name_text]
+		lbl.tooltip_text = "%s · %s" % [side_name, commander_name_text]
 		lbl.custom_minimum_size = Vector2(40 if compact else 92, 0)
 		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		lbl.add_theme_font_size_override("font_size", roundi((14 if compact else 15) * density))
@@ -2591,6 +2592,10 @@ func _update_hud_layout_for_viewport() -> void:
 	turn_badge.custom_minimum_size = Vector2(80.0, 46.0 if small else 42.0)
 	phase_badge.custom_minimum_size = Vector2(130.0, 46.0 if small else 42.0)
 	current_player_badge.custom_minimum_size = Vector2(100.0, 46.0 if small else 42.0)
+	current_player_label.clip_text = true
+	current_player_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	current_player_badge.tooltip_text = current_player_label.text
+	phase_badge.visible = not small
 	end_turn_button.custom_minimum_size = Vector2(140.0, 54.0 if small else 46.0)
 	# P1-4:宽屏(>=1600)下"结束回合"按钮紧贴金属框,显式多留 32px 内边距,
 	# 让按钮不再压住 top_status_art(rail_w=1080)右沿,在 1920 下视觉呼吸感更舒适。

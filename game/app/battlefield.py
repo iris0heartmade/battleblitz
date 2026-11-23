@@ -57,6 +57,12 @@ def height_delta(unit, start, end) -> int:
     return heights.get(start, 0) - heights.get(end, 0)
 
 def high_attack(unit, target) -> int:
+    """Unbound damage calculations have no elevation bonus or coordinate requirement."""
+    if getattr(unit, "_battlefield", None) is None:
+        return 0
+    coords = [getattr(actor, axis, None) for actor in (unit, target) for axis in ("x", "y")]
+    if any(value is None for value in coords):
+        return 0
     return min(RULES["attack_cap"],max(0,height_delta(unit,(unit.x,unit.y),(target.x,target.y))) * RULES["attack_per_level"])
 
 def attack_allowed(unit, start, end, minimum, maximum, *, physical_ranged=False):

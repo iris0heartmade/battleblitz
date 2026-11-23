@@ -24,6 +24,7 @@ var _selected_hero_id := ""
 # P0-6:整备确认状态。未确认时 StartAction 视觉降档(disabled 态),
 # 让"完成整备 → 开始战斗"两步顺序在视觉上可读。
 var _prepare_confirmed: bool = false
+var _mission_expanded := false
 
 
 func _ready() -> void:
@@ -39,8 +40,18 @@ func _ready() -> void:
 	%CompleteAction.pressed.connect(_request_action.bind("complete"))
 	%AbandonAction.pressed.connect(_request_action.bind("abandon"))
 	%ChoiceSelect.item_selected.connect(func(index: int) -> void:
+		if index < %ChoiceList.item_count:
+			%ChoiceList.select(index)
 		_refresh_content_insight(index)
 		choice_requested.emit(str(%ChoiceSelect.get_meta("choice_kind", "")), index)
+	)
+	%MissionToggle.pressed.connect(func():
+		_mission_expanded = not _mission_expanded
+		_apply_responsive_layout()
+	)
+	%ChoiceList.item_selected.connect(func(index: int):
+		%ChoiceSelect.select(index)
+		%ChoiceSelect.item_selected.emit(index)
 	)
 	_on_tab_pressed("heroes")
 
@@ -92,10 +103,23 @@ func set_heroes(heroes: Array[Dictionary]) -> void:
 		margin.add_theme_constant_override("margin_right", 16)
 		margin.add_theme_constant_override("margin_bottom", 10)
 		card.add_child(margin)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		margin.add_child(row)
+		var face := TextureRect.new()
+		face.custom_minimum_size = Vector2(48, 64)
+		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var path := "res://assets/heroes/portrait_%s.png" % hero_id
+		if ResourceLoader.exists(path):
+			face.texture = load(path)
+		row.add_child(face)
 		var layout := VBoxContainer.new()
 		layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		layout.add_theme_constant_override("separation", 4)
-		margin.add_child(layout)
+		row.add_child(layout)
 		var name_label := Label.new()
 		name_label.text = "%s  ·  Lv.%s" % [str(hero.get("name", "英雄")), str(hero.get("level", 1))]
 		name_label.add_theme_font_size_override("font_size", 20)
@@ -169,14 +193,18 @@ func set_prepare_ready(ready: bool) -> void:
 func set_choices(kind: String, entries: Array, selected_index: int = 0, hint: String = "") -> void:
 	%EquipmentIconRow.visible = kind == "equipment"
 	%ChoiceSelect.clear()
+	%ChoiceList.clear()
 	for entry in entries:
 		%ChoiceSelect.add_item(entry)
-	%ChoiceSelect.visible = not entries.is_empty()
+		%ChoiceList.add_item(str(entry))
+	%ChoiceSelect.visible = false
+	%ChoiceList.visible = not entries.is_empty()
 	%ChoiceHint.visible = not hint.is_empty()
 	%ChoiceHint.text = hint
 	%ChoiceSelect.set_meta("choice_kind", kind)
 	if not entries.is_empty():
 		%ChoiceSelect.select(clampi(selected_index, 0, entries.size() - 1))
+		%ChoiceList.select(%ChoiceSelect.selected)
 	_refresh_content_insight(%ChoiceSelect.selected)
 
 
@@ -217,8 +245,8 @@ func _refresh_content_insight(choice_index: int = -1) -> void:
 	match _active_tab:
 		"heroes":
 			%ContentKicker.text = "英雄档案 · 当前配置"
-			%InsightTitle.text = "出征流程与状态"
-			%InsightBody.text = "1  核对英雄等级、生命与技能\n2  前往装备页确认三个装备槽\n3  检查部队与佣兵部署数量\n4  点击「完成整备」保存配置\n5  点击「开始战斗」进入地图\n\n当前英雄可在左侧切换；选中态以红底金框标识。"
+			%InsightTitle.text = "整备备忘"
+			%InsightBody.text = "选择上方装备页核对武器、防具与饰品。\n英雄及部队配置确认后，完成整备即可出征。"
 		"equipment":
 			%ContentKicker.text = "装备工房 · 变更预览"
 			%InsightTitle.text = "装备前后对照"
@@ -227,7 +255,7 @@ func _refresh_content_insight(choice_index: int = -1) -> void:
 			var selected_item := "尚未选择候选物品"
 			if choice_index >= 0 and choice_index < %ChoiceSelect.item_count:
 				selected_item = %ChoiceSelect.get_item_text(choice_index)
-			%InsightBody.text = "当前：%s\n候选：%s\n\n变更规则\n◆ 候选物品必须匹配当前槽位\n◆ 选择后仍需完成整备才会保存\n◆ 最终属性与库存由服务器确认" % [current_block, selected_item]
+			%InsightBody.text = "已装备  %s\n\n候选物品  %s\n\n选择物品后，使用整备操作确认替换。" % [current_block, selected_item]
 		"roster":
 			%ContentKicker.text = "部队名册 · 部署检查"
 			%InsightTitle.text = "编成建议"
@@ -263,10 +291,12 @@ func _apply_responsive_layout() -> void:
 	var compact_height := viewport_size.y <= 800.0
 	var equipment_page := _active_tab == "equipment"
 	var hero_page := _active_tab == "heroes"
-	%RosterPanel.custom_minimum_size.x = 250 if compact_width else 270
+	%RosterPanel.custom_minimum_size.x = 260 if compact_width else 300
+	%MissionPanel.visible = _mission_expanded
+	%MissionToggle.text = "收起任务摘要 −" if _mission_expanded else "任务摘要 ＋"
 	%MissionPanel.custom_minimum_size.x = 310 if compact_width else 320
 	%CouncilTitle.custom_minimum_size.y = 42 if compact_height else 48
-	%CouncilTitle.add_theme_font_size_override("font_size", 25 if compact_height else 27)
+	%CouncilTitle.add_theme_font_size_override("font_size", 30 if compact_height else 38)
 	$Layout.add_theme_constant_override("separation", 6 if compact_height else 10)
 	$Layout/Columns.add_theme_constant_override("separation", 12 if compact_width else 20)
 	$Layout/Columns/ContentPanel/ContentMargin.add_theme_constant_override("margin_top", 6 if equipment_page or compact_height else 18)
@@ -287,11 +317,14 @@ func _apply_responsive_layout() -> void:
 	%MissionChecklist.add_theme_font_size_override("font_size", 17 if compact_height else 16)
 	%ContentBody.custom_minimum_size.y = 0 if compact_height or equipment_page else 72
 	%HeroPortraitFrame.visible = hero_page
-	%HeroPortraitFrame.custom_minimum_size = Vector2(132, 144) if compact_height else Vector2(118, 142)
+	%HeroPortraitFrame.custom_minimum_size = Vector2(190, 220) if compact_height else Vector2(250, 310)
 	%HeroHeaderRow.add_theme_constant_override("separation", 12 if compact_width else 18)
 	# 英雄页承载流程，装备页承载当前→候选差异；两者都是核心信息而非装饰。
 	%ContentInsightPanel.visible = hero_page or equipment_page
-	%ContentInsightPanel.custom_minimum_size.y = (150 if compact_height else 210) if equipment_page else (170 if compact_height else 230)
+	%ContentInsightPanel.custom_minimum_size.y = (120 if compact_height else 160) if equipment_page else 90
+	%ContentInsightPanel.size_flags_vertical = Control.SIZE_FILL
+	%ChoiceList.custom_minimum_size.y = 110 if compact_height else 170
+	%ChoiceList.add_theme_font_size_override("font_size", 20)
 	$Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin.add_theme_constant_override("margin_top", 10 if equipment_page else 16)
 	$Layout/Columns/ContentPanel/ContentMargin/ContentLayout/ContentInsightPanel/InsightMargin.add_theme_constant_override("margin_bottom", 10 if equipment_page else 16)
 	%MissionChecklist.visible = not compact_height
@@ -338,6 +371,15 @@ func _apply_theme() -> void:
 	MainlineTheme.apply_secondary(%BackAction)
 	MainlineTheme.apply_secondary(%RefreshAction)
 	MainlineTheme.apply_option(%ChoiceSelect)
+	MainlineTheme.apply_secondary(%MissionToggle)
+	%ChoiceList.add_theme_color_override("font_color", Color("273343"))
+	%ChoiceList.add_theme_color_override("font_selected_color", MainlineTheme.C_TEXT)
+	var selected_style := preload("res://scripts/ui/visual_tokens.gd").surface(Color("304358"), Color("b59b68"))
+	selected_style.border_width_left = 4
+	%ChoiceList.add_theme_stylebox_override("selected", selected_style)
+	%ChoiceList.add_theme_stylebox_override("selected_focus", selected_style)
+	%ChoiceList.add_theme_stylebox_override("hovered", preload("res://scripts/ui/visual_tokens.gd").surface(Color("c8c3b5")))
+	%ChoiceList.add_theme_stylebox_override("panel", preload("res://scripts/ui/visual_tokens.gd").surface(Color("ddd9cd")))
 	# P0-6 修复:语义顺序是「先完成整备,再开始战斗」;视觉权重应该让
 	# CompleteAction(确认)成为玩家视线第一焦点,StartAction 降为 secondary,
 	# 直到整备确认后再"激活"。这样能避免玩家直接跳过整备点开始。

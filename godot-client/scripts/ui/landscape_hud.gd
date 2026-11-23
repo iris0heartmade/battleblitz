@@ -43,7 +43,8 @@ func setup(owner_host: Node) -> void:
 	for bounds in [Vector2(0.01, 0.52), Vector2(0.54, 0.99)]:
 		var shade := TextureRect.new()
 		var gradient := Gradient.new()
-		gradient.colors = PackedColorArray([Color(0.035, 0.06, 0.09, 0), Color(0.035, 0.06, 0.09, 0.78)])
+		gradient.offsets = PackedFloat32Array([0.0, 0.18, 1.0])
+		gradient.colors = PackedColorArray([Color(0.035, 0.06, 0.09, 0), Color(0.035, 0.06, 0.09, 0.66), Color(0.035, 0.06, 0.09, 0.82)])
 		var texture := GradientTexture2D.new()
 		texture.gradient = gradient
 		texture.fill_from = Vector2(0, 0)
@@ -60,9 +61,9 @@ func setup(owner_host: Node) -> void:
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(portrait)
-	portrait.position = Vector2(28, 72)
-	portrait.size = Vector2(135, 192)
-	identity = _text(0.09, 0.27)
+	portrait.position = Vector2(20, 72)
+	portrait.size = Vector2(110, 180)
+	identity = _text(0.115, 0.27)
 	vitality = _text(0.28, 0.49)
 	stats = _text(0.53, 0.75)
 	ground = _text(0.77, 0.99)

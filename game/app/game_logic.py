@@ -404,7 +404,7 @@ def calculate_damage(
     """
     rng = rng or random.Random()
     field = getattr(attacker, "_battlefield", None)
-    if field is not None:
+    if field is not None and getattr(defender, "x", None) is not None and getattr(defender, "y", None) is not None:
         tile_def_bonus = field.cover.get((defender.x,defender.y),tile_def_bonus)
     tile_def_bonus = _effective_tile_def_bonus(defender, tile_def_bonus)
     height_attack = high_attack(attacker, defender)

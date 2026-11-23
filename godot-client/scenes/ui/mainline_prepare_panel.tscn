@@ -23,7 +23,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "战前整备"
-horizontal_alignment = 1
+horizontal_alignment = 0
 vertical_alignment = 1
 theme_override_font_sizes/font_size = 27
 
@@ -51,6 +51,12 @@ text = "佣兵"
 [node name="Shop" type="Button" parent="Layout/Tabs"]
 layout_mode = 2
 text = "商店"
+
+[node name="MissionToggle" type="Button" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 8
+text = "任务摘要 ＋"
 
 [node name="Columns" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
@@ -136,6 +142,15 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 custom_minimum_size = Vector2(0, 42)
+
+[node name="ChoiceList" type="ItemList" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 170)
+layout_mode = 2
+fixed_column_width = 0
+same_column_width = true
+allow_reselect = true
 
 [node name="ChoiceHint" type="Label" parent="Layout/Columns/ContentPanel/ContentMargin/ContentLayout"]
 unique_name_in_owner = true

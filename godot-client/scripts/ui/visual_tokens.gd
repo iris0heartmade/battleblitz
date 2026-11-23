@@ -1,6 +1,6 @@
 extends RefCounted
 ## 轻量军议：外部公共视觉配置。所有主题入口共享颜色、留白与状态。
-const INK := Color("#111d2c")
+const INK := Color("#182332")
 const PANEL := Color("#172638f2")
 const RAISED := Color("#223247")
 const HOVER := Color("#30465e")
@@ -12,7 +12,7 @@ const LINE := Color("#52607399")
 const DISABLED := Color("#788593")
 const DANGER := Color("#e48586")
 const SUCCESS := Color("#82bd99")
-const PAPER := Color("#e9e5dc")
+const PAPER := Color("#eeeadf")
 const PAPER_INK := Color("#26354a")
 const PAPER_DIM := Color("#526074")
 const PAPER_ACCENT := Color("#795f35")
@@ -24,7 +24,7 @@ static func surface(fill: Color = PANEL, border: Color = LINE, padding: int = SP
 	box.bg_color = fill
 	box.border_color = border
 	box.set_border_width_all(EDGE)
-	box.set_corner_radius_all(4)
+	box.set_corner_radius_all(2)
 	box.content_margin_left = padding
 	box.content_margin_right = padding
 	box.content_margin_top = padding

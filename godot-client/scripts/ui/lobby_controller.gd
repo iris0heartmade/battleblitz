@@ -2181,3 +2181,5 @@ func _apply_lobby_theme() -> void:
 		MenuTheme.apply_label_theme(lobby_game_id_label, 12, MenuTheme.C_TEXT_DIM)
 	if lobby_list != null and is_instance_valid(lobby_list):
 		lobby_list.add_theme_color_override("default_color", MenuTheme.C_TEXT_WARM)
+
+	preload("res://scripts/ui/page_style.gd").lobby_cards(self)

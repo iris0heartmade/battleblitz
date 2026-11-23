@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.config import (
     BUILDING_INCOME, CASTLE_VAULT, INCOME_PER_TURN, INCOME_TERRAINS,
-    MAP_STYLES, TERRAIN_BARRACKS, TERRAIN_SNOW_PEAK, TERRAIN_VILLAGE,
+    MAP_STYLES, TERRAIN_BARRACKS, TERRAIN_ROCK, TERRAIN_SNOW_PEAK, TERRAIN_VILLAGE,
     STYLE_GRASS_OUTER, STYLE_SNOW_OUTER, STYLE_DESERT_OUTER, STYLE_COMPACT_OUTER,
 )
 from app.game_logic import _layout_to_tiles, generate_map
@@ -65,14 +65,14 @@ def test_building_income_requires_owner():
 def test_snow_peak_registered_in_move_cost():
     from app.config import TERRAIN_MOVE_COST
     assert TERRAIN_SNOW_PEAK in TERRAIN_MOVE_COST
-    # Same as mountain (impassable).
-    assert TERRAIN_MOVE_COST[TERRAIN_SNOW_PEAK] == 6
+    # Legacy alias uses flat-rock movement.
+    assert TERRAIN_MOVE_COST[TERRAIN_SNOW_PEAK] == TERRAIN_MOVE_COST[TERRAIN_ROCK] == 2
 
 
 def test_snow_peak_registered_in_def_bonus():
     from app.config import TERRAIN_DEF_BONUS
     assert TERRAIN_SNOW_PEAK in TERRAIN_DEF_BONUS
-    assert TERRAIN_DEF_BONUS[TERRAIN_SNOW_PEAK] == 3
+    assert TERRAIN_DEF_BONUS[TERRAIN_SNOW_PEAK] == TERRAIN_DEF_BONUS[TERRAIN_ROCK] == 0
 
 
 def test_snow_peak_in_terrain_types():
@@ -117,15 +117,16 @@ def test_non_snow_styles_never_emit_snow_peak(style, size, players):
     )
 
 
-def test_snow_outer_can_emit_snow_peak():
-    """Across a range of seeds, at least one must produce a snow peak."""
+def test_snow_outer_normalizes_snow_peak_to_high_rock():
+    """Legacy snow weights emit rock while retaining snow-peak elevation."""
+    from app.battlefield import RULES
     found = False
-    for seed in range(50):
-        g = generate_map(seed=seed, num_castles=2, style=STYLE_SNOW_OUTER, size=20)
-        if any(t.terrain == TERRAIN_SNOW_PEAK for row in g for t in row):
-            found = True
-            break
-    assert found, "snow_outer generated 0 snow_peaks across 50 seeds"
+    for seed in range(5):
+        grid = generate_map(seed=seed, num_castles=2, style=STYLE_SNOW_OUTER, size=20)
+        assert all(t.terrain != TERRAIN_SNOW_PEAK for row in grid for t in row)
+        found |= any(t.terrain == TERRAIN_ROCK and t.elevation == RULES["legacy_heights"][TERRAIN_SNOW_PEAK]
+                     for row in grid for t in row)
+    assert found
 
 
 # ============================================================
@@ -140,6 +141,8 @@ def test_layout_parser_s_char():
         "SSSSSS",
     ]
     g = _layout_to_tiles(layout)
-    assert g[0][0].terrain == TERRAIN_SNOW_PEAK
-    assert g[1][0].terrain == TERRAIN_SNOW_PEAK
+    assert g[0][0].terrain == TERRAIN_ROCK
+    assert g[0][0].elevation == 5
+    assert g[1][0].terrain == TERRAIN_ROCK
+    assert g[1][0].elevation == 5
     assert g[1][1].terrain == TERRAIN_PLAIN  # P → plain, not village

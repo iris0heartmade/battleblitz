@@ -19,9 +19,12 @@ var _selected_slot := -1
 var _records: Array[Dictionary] = []
 var _cards: Array[PanelContainer] = []
 var _primary_action_busy := false
+var _chapter_progress: ProgressBar
+var _party_strip: HBoxContainer
 
 
 func _ready() -> void:
+	_build_archive_desk()
 	_apply_theme()
 	get_viewport().size_changed.connect(_apply_responsive_typography)
 	_apply_responsive_typography()
@@ -61,7 +64,7 @@ func select_slot(slot_index: int) -> void:
 	# P2:章节编号金色徽章 — 从 chapter 字符串里提取「第 N 章」数字,
 	# 没匹配到就用 01 占位(测试场景数据可能没有标准 chapter 字符串)。
 	var chapter_idx: int = 1
-	var total_chapters: int = 9
+	var total_chapters: int = int(record.get("total_chapters", 0))
 	var ci: int = chapter.find("第")
 	if ci >= 0:
 		var after: String = chapter.substr(ci + 1).strip_edges()
@@ -74,10 +77,10 @@ func select_slot(slot_index: int) -> void:
 		if digits != "":
 			chapter_idx = maxi(1, int(digits))
 	if _chapter_badge != null and is_instance_valid(_chapter_badge):
-		_chapter_badge.text = "%02d / %02d" % [chapter_idx, total_chapters] if occupied else "— / —"
+		_chapter_badge.text = ("第 %02d 章" % chapter_idx if total_chapters <= 0 else "%02d / %02d" % [chapter_idx, total_chapters]) if occupied else "新的旅程"
 	# 中央只讲战役进度与队伍；下一战目标放进独立简报，避免同一份元数据重复三次。
-	_preview_body.text = "%s\n\n战役进度\n◆ %s\n✦ %s\n\n队伍编成\n⚔ %s" % [
-		summary, _without_prefix(chapter), _without_prefix(progress), _without_prefix(heroes_line),
+	_preview_body.text = "%s\n\n%s   ·   %s" % [
+		summary, _without_prefix(chapter), _without_prefix(progress),
 	]
 	_briefing_body.text = "行动目标\n➤ %s\n\n敌方态势\n☠ %s\n\n建议与记录\n✧ %s    ⌚ %s" % [
 		_without_prefix(next_mission), _without_prefix(enemy_preview),
@@ -86,6 +89,7 @@ func select_slot(slot_index: int) -> void:
 	_intel_body.text = "出征流程\n1  进入战前整备\n2  检查英雄、装备与部队\n3  完成整备并开始战斗\n\n档案操作\n单击切换档案\n双击可直接进入整备"
 	_intel_status.text = "◆ 档案已同步 · 可继续" if occupied else "◇ 空白档案 · 将创建新进度"
 	_primary_action.text = "▶  进入战役" if occupied else "▶  开始新战役"
+	_update_archive_visuals(record)
 	_refresh_slot_selection()
 
 
@@ -245,7 +249,7 @@ func _apply_responsive_typography() -> void:
 	var compact_height := viewport_size.y <= 800.0
 	var compact := compact_width or compact_height
 	%ArchiveTitle.custom_minimum_size.y = 42 if compact_height else 58
-	%ArchiveTitle.add_theme_font_size_override("font_size", 27 if compact else 28)
+	%ArchiveTitle.add_theme_font_size_override("font_size", 30 if compact else 36)
 	$Layout.add_theme_constant_override("separation", 6 if compact_height else 14)
 	$Layout/Columns.add_theme_constant_override("separation", 8 if compact_width else 16)
 	%SlotColumn.custom_minimum_size.x = 310 if compact_width else 360
@@ -259,9 +263,9 @@ func _apply_responsive_typography() -> void:
 	$Layout/Columns/IntelColumn/IntelMargin.add_theme_constant_override("margin_bottom", 10 if compact_height else 20)
 	$Layout/FooterSafe.add_theme_constant_override("margin_top", 2 if compact_height else 6)
 	$Layout/FooterSafe.add_theme_constant_override("margin_bottom", 16 if compact_height else 20)
-	_preview_title.add_theme_font_size_override("font_size", 28 if compact_height else 32)
+	_preview_title.add_theme_font_size_override("font_size", 34 if compact_height else 42)
 	_preview_body.add_theme_font_size_override("font_size", 22 if compact_height else 19)
-	%PreviewBody.custom_minimum_size.y = 116 if compact_height else 190
+	%PreviewBody.custom_minimum_size.y = 80 if compact_height else 130
 	%BriefingPanel.custom_minimum_size.y = 170 if compact_height else 250
 	%BriefingTitle.add_theme_font_size_override("font_size", 21 if compact_height else 20)
 	_briefing_body.add_theme_font_size_override("font_size", 20 if compact_height else 17)
@@ -270,7 +274,7 @@ func _apply_responsive_typography() -> void:
 	_intel_body.add_theme_font_size_override("font_size", 19 if compact_height else 16)
 	_intel_status.add_theme_font_size_override("font_size", 18 if compact_height else 16)
 	%PreviewHint.add_theme_font_size_override("font_size", 17 if compact_height else 15)
-	_primary_action.custom_minimum_size.y = 66 if compact_height else 88
+	_primary_action.custom_minimum_size = Vector2(260, 54 if compact_height else 62)
 	_primary_action.add_theme_font_size_override("font_size", 23 if compact else 24)
 	%BackButton.custom_minimum_size = Vector2(220 if compact_width else 260, 48 if compact_height else 54)
 	%BackButton.add_theme_font_size_override("font_size", 18 if compact else 17)
@@ -316,3 +320,52 @@ func _apply_theme() -> void:
 	MainlineTheme.adjust_font_sizes_for_viewport(
 		[_primary_action, %BackButton, %ArchiveTitle, _intel_status]
 	)
+
+
+func _build_archive_desk() -> void:
+	# 保留原节点以维持控制器契约；主操作移到全页共享操作栏。
+	var footer := $Layout/FooterSafe/Footer
+	_primary_action.reparent(footer)
+	_intel_status.reparent(footer)
+	footer.move_child(%BackButton, 0)
+	footer.move_child(_intel_status, 1)
+	footer.move_child(_primary_action, footer.get_child_count()-1)
+	_intel_status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_intel_status.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_primary_action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	%BackButton.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	%IntelColumn.hide()
+	%PreviewHint.hide()
+	%ArchiveTitle.text = "战役 · 旅程档案"
+	%ArchiveTitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_chapter_progress = ProgressBar.new()
+	_chapter_progress.custom_minimum_size.y = 5
+	_chapter_progress.show_percentage = false
+	var layout := %PreviewTitle.get_parent()
+	layout.add_child(_chapter_progress)
+	layout.move_child(_chapter_progress, 2)
+	_party_strip = HBoxContainer.new()
+	_party_strip.custom_minimum_size.y = 74
+	_party_strip.add_theme_constant_override("separation", 12)
+	layout.add_child(_party_strip)
+	layout.move_child(_party_strip, 5)
+
+func _update_archive_visuals(record: Dictionary) -> void:
+	if _chapter_progress == null:
+		return
+	var progress := str(record.get("progress", ""))
+	var matcher := RegEx.new()
+	matcher.compile("([0-9]+)%")
+	var found := matcher.search(progress)
+	_chapter_progress.visible = found != null
+	_chapter_progress.value = float(found.get_string(1)) if found != null else 0.0
+	for child in _party_strip.get_children():
+		child.queue_free()
+	var heroes := _without_prefix(str(record.get("heroes_line", "")))
+	for hero_name in heroes.split("/"):
+		var label := Label.new()
+		label.text = hero_name.strip_edges()
+		label.add_theme_font_size_override("font_size", 22)
+		label.add_theme_color_override("font_color", MainlineTheme.C_PARCHMENT_INK)
+		label.add_theme_stylebox_override("normal", preload("res://scripts/ui/visual_tokens.gd").surface(Color("dfd9ca"), Color.TRANSPARENT, 14))
+		_party_strip.add_child(label)

@@ -133,3 +133,14 @@ async def test_http_highground_forecast_execution_and_counter_cover(forecast_app
     assert sum(h["damage"] for h in attack.json()["hits"])==preview.json()["damage"]
     assert attack.json()["counter_damage"]==preview.json()["counter_damage"]
 
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_missing_coordinates_have_no_high_ground_bonus(bound):
+    from app.battlefield import high_attack
+    attacker, target = actor(), actor(x=1)
+    if bound:
+        bind_battlefield([attacker, target], Battlefield([tile(0, height=3), tile(1)]))
+    del target.x
+    assert high_attack(attacker, target) == 0
+    assert calculate_damage(attacker, target, 0, crit=False).effective_atk == 15

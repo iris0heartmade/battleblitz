@@ -6,6 +6,13 @@ func _ready() -> void:
 	add_child(main)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	var heights := {Vector2i.ZERO: 2, Vector2i.RIGHT: 0}
+	var bow := {"attack_range": 2, "base_attack_range": 2}
+	assert(not ElevationRules.can_attack(bow, Vector2i.ZERO, Vector2i(3, 0), heights, {}), "缺规则不提供高地射程")
+	var terrain := {Vector2i.ZERO: "plain", Vector2i.RIGHT: "plain"}
+	var ctx := ElevationRules.context({}, {}, heights, {})
+	assert(ElevationRules.step(terrain, Vector2i.ZERO, Vector2i.RIGHT, ctx) == -1, "缺规则不猜测跨高度通行")
+	assert(ElevationRules.step(terrain, Vector2i.ZERO, Vector2i.RIGHT, ElevationRules.context({}, {}, {}, {})) == 2)
 	var hud = main.landscape_hud
 	assert(hud != null, "正式主界面必须创建底栏")
 	assert(hud.mouse_filter == Control.MOUSE_FILTER_STOP, "底栏必须阻挡点击穿透")

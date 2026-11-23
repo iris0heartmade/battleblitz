@@ -149,7 +149,7 @@ static func apply_title_plate(label: Control, wide: bool = true) -> void:
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
 	label.add_theme_color_override("font_outline_color", Color("#111723"))
 	label.add_theme_constant_override("outline_size", 0)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 # 页面标题使用独立排版，不与金属横梁纹理争夺同一垂直空间。
@@ -160,7 +160,7 @@ static func apply_page_heading(label: Label) -> void:
 	label.add_theme_color_override("font_color", C_GOLD_BRIGHT)
 	label.add_theme_color_override("font_outline_color", Color("#111723"))
 	label.add_theme_constant_override("outline_size", 0)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 
@@ -210,7 +210,8 @@ static func apply_slot_card_panel(panel: Control, occupied: bool, selected: bool
 		var sb_sel := StyleBoxFlat.new()
 		sb_sel.bg_color = C_RUBY_DARK
 		sb_sel.border_color = C_GOLD_BRIGHT
-		sb_sel.set_border_width_all(2)
+		sb_sel.set_border_width_all(0)
+		sb_sel.border_width_left = 4
 		sb_sel.set_corner_radius_all(6)
 		panel.add_theme_stylebox_override("panel", sb_sel)
 		var hit := panel.get_meta("hit_button") as Button
